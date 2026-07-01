@@ -1,0 +1,10 @@
+[
+  {
+    "employeeId": "TL07",
+    "date": "2026-06-05",
+    "amount": 200.0,
+    "reason": "cell phone(4:00PM)",
+    "type": "Cellphone Deduction",
+    "unit": "HS-3"
+  }
+]

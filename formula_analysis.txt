@@ -1,0 +1,3120 @@
+=== FORMULA COUNT BY SHEET ===
+Form Responses 1: 0 formulas
+Instructions: 0 formulas
+Payroll_Template_May: 6 formulas
+Attendance: 779 formulas
+OTHER PAYROLL: 4 formulas
+Employee_Database: 1 formulas
+Payroll other: 6 formulas
+Cash: 79 formulas
+Bank: 28 formulas
+Insta: 7 formulas
+Attendance HS1: 108 formulas
+Attendance HS2: 105 formulas
+Attendance HS3: 557 formulas
+Attendance PT: 51 formulas
+Attendance Back-End: 256 formulas
+Position_Rates: 0 formulas
+Payroll_June2026: 9518 formulas
+Bonus: 4599 formulas
+Deduction: 2802 formulas
+Annuals: 0 formulas
+Sheet Verification method: 0 formulas
+Bonus_HS3: 27 formulas
+Deduction_HS3: 1 formulas
+Deduction_HSBE: 8 formulas
+Deduction_HS2: 1 formulas
+Deduction_HS1: 1 formulas
+Bonus_HS1: 1 formulas
+Bonus_HSBE: 9 formulas
+Bonus_HSPT: 1 formulas
+Deduction_HSPT: 1 formulas
+Bonus_HS2: 1 formulas
+Bonus_HSTL: 1 formulas
+Deduction_HSTL: 7 formulas
+Bonus_Summary: 1026 formulas
+Commission_Types: 0 formulas
+Closed: 45 formulas
+
+=== SHEET DEPENDENCIES ===
+
+=== KEY FORMULA PATTERNS ===
+
+--- Payroll_Template_May (6 formulas) ---
+  [1x] =BN
+  [1x] =Payroll_JuneN!IN
+  [1x] =(BN/N)+(BN/N)+BN
+  [1x] =BN-BN-(BN*N)
+  [1x] =SUM(BN:BN)
+  [1x] =SUM(BN:CN)
+
+--- Attendance (779 formulas) ---
+  [60x] =VLOOKUP(AN,Employee_Database!A:I,N,FALSE)
+  [60x] =COUNTIF(PN:BGN,"Attended")+GN+HN+JN
+  [60x] =COUNTIF(PN:BEN,"Day-OFF")
+  [60x] =COUNTIF(PN:BEN,"Half Day")
+  [60x] =COUNTIF(PN:BEN,"WFH")
+  [60x] =COUNTIF(PN:BEN,"Lateness B")+COUNTIF(PN:BEN,"Lateness a")
+  [60x] =COUNTIF(PN:BEN,"NSNC")+COUNTIF(PN:BEN,"Not Approved day off")
+  [60x] =COUNTIF(PN:BEN,"paused")
+  [60x] =(COUNTIF(PN:BEN,"Lateness A")*N)+(COUNTIF(PN:BEN,"Lateness B")*N)
+  [60x] =(COUNTIF(PN:BEN,"Lateness A")& " Lateness before N:NPM" & Char(N) & (COUNTIF(PN:BEN,"Lateness B")& " Lateness After N:NPM"))
+  [59x] =COUNTIF(PN:BEN,"Quarter Day-Off")
+  [27x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))"),"HS-N")
+  [21x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))"),"#REF!")
+  [21x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"#REF!")
+  [8x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))"),"HS-Back-End")
+
+--- Employee_Database (1 formulas) ---
+  [1x] =+N
+
+--- Payroll other (6 formulas) ---
+  [2x] =BN
+  [1x] =(BN/N)+(BN/N)+BN
+  [1x] =#REF!-BN-(BN*N)
+  [1x] =SUM(BN:BN)
+  [1x] =SUM(BN:CN)
+
+--- Cash (79 formulas) ---
+  [29x] =CEILING(DN,N)
+  [15x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [9x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HSN-N")
+  [3x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"NW-N")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"OFN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+    {Payroll_JuneN!AN:AN, Payroll_JuneN!CN:CN, Payroll_JuneN!BJN:BJN},
+    (Payroll_JuneN!EN:EN = ""Cash"") * (Payroll_JuneN!BJN:BJN <> N)
+)"),"HSN-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"nour el hoda samier ahmed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Sarah Ibrahim Fathy Ali")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"hafsa mohamed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"EMAN EHAB SALEM ALI DAWOOD")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Waad Jumaa")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),-N.N)
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"amjd salaheldin babiker mahmoud")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"ADHEL YEL")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Mawada Majdi Anwar Elzin")
+
+--- Bank (28 formulas) ---
+  [9x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"QN")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"TLN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  {Payroll_JuneN!AN:AN, Payroll_JuneN!CN:CN, Payroll_JuneN!BJN:BJN},
+  (Payroll_JuneN!EN:EN = ""Bank"") * (Payroll_JuneN!BJN:BJN <> N)
+)
+"),"HR-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"hager ahmed darwish")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HSN-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Nada fisal ali ali")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"MGN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Mostafa Khaled")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"ON")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Anas Amgad")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"OPN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Mostafa Mohamed zain eldein el sayed ghaly")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"salma emad")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Esraa ali saber ali")
+
+--- Insta (7 formulas) ---
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  {Payroll_JuneN!AN:AN, Payroll_JuneN!CN:CN, Payroll_JuneN!BJN:BJN},
+  (Payroll_JuneN!EN:EN = ""Insta"")* (Payroll_JuneN!BJN:BJN <> N)
+)
+"),"HSN-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"KARIMA ELSAYED IBRAHIM KHALED MAHMOUD")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"PT-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Sondos Ahmad Refaat")
+  [1x] =SUM(DN:DN)
+
+--- Payroll_June2026 (9518 formulas) ---
+  [636x] =VLOOKUP(AN,Attendance!A:M,N,FALSE)
+  [607x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=AN, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+  [607x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(N), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=AN,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+  [607x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=AN, Deduction!G:G=""ON HOLD"")
+  ),
+"""")
+"),"")
+  [607x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(N), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=AN,
+      Deduction!G:G=""ON HOLD""
+    )
+  ),
+"""")"),"")
+  [602x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=AN, Bonus!G:G=""Training - ON Hold - Correction"")
+  ),
+"""")
+"),"")
+  [602x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(N), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=AN,
+      Bonus!G:G=""Training - ON Hold - Correction""
+    )
+  ),
+"""")
+"),"")
+  [212x] =VLOOKUP(AN,Attendance!A:BE,N,FALSE)
+  [106x] =VLOOKUP(FN,Position_Rates!A:B,N,FALSE)
+  [106x] =IN-NN+JN
+  [106x] =(IN+NN-(KN*N.N)-(LN*N.N)-(ON*N))*HN
+  [106x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=AN, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+  [106x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(N), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=AN,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+  [106x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=AN, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+  [106x] =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(N), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=AN,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+
+--- Bonus (4599 formulas) ---
+  [1533x] =VLOOKUP(HN,Employee_Database!A:I,N,FALSE)
+  [1524x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"#REF!")
+  [1524x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"#REF!")
+  [7x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"HS-N")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"DONA SAMUEL")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Heaven Lancaster")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"robertson william")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"HS-Back-End")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Ahmed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"AMY WINTERS")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"")
+
+--- Deduction (2802 formulas) ---
+  [1398x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"#REF!")
+  [1398x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"#REF!")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"HS-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Jude Butler")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"HS-Back-End")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Ahmed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"")
+
+--- Bonus_HS3 (27 formulas) ---
+  [6x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [3x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-N")
+  [3x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"TLN")
+  [3x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Tris bruce")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Sale bonus")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Bonus from TL / OP")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HSN-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Bonus!A:I, (Bonus!B:B=""HS-N"") * (Bonus!J:J=""yes""))
+"),"HSN-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"DONA SAMUEL")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Heaven Lancaster")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"robertson william")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Competition ")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Competition Bonus")
+
+--- Deduction_HS3 (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Deduction!A:I, (Deduction!B:B=""HS-N"") * (Deduction!H:H=""yes""))
+"),"#N/A")
+
+--- Deduction_HSBE (8 formulas) ---
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Deduction!A:I, (Deduction!B:B=""HS-Back-End"")
+)"),"OFN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-Back-End")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Ahmed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"متبقي N يتم خصمها مرة قادمة")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Paid")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Not on Dashboard")
+
+--- Deduction_HS2 (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Deduction!A:I, (Deduction!B:B=""HS-N"") * (Deduction!H:H=""yes""))
+"),"#N/A")
+
+--- Deduction_HS1 (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Deduction!A:I, (Deduction!B:B=""HS-N"") * (Deduction!H:H=""yes""))
+"),"#N/A")
+
+--- Bonus_HS1 (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Bonus!A:I, (Bonus!B:B=""HS-N"") * (Bonus!J:J=""yes""))
+"),"#N/A")
+
+--- Bonus_HSBE (9 formulas) ---
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Bonus!A:I, (Bonus!B:B=""HS-Back-End""))"),"OFN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-Back-End")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Ahmed")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Bonus")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Training - ON Hold - Correction")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Bonus /sickness")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"#N/A")
+
+--- Bonus_HSPT (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  Bonus!A:I,
+  ((Bonus!B:B=""HSN-PT"") + (Bonus!B:B=""HSN-PT"")) * (Bonus!J:J=""yes"")
+)
+"),"#N/A")
+
+--- Deduction_HSPT (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  Bonus!A:I,
+  ((Deduction!B:B=""HSN-PT"") + (Deduction!B:B=""HSN-PT"")) * (Deduction!H:H=""yes"")
+)
+"),"#N/A")
+
+--- Bonus_HS2 (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Bonus!A:I, (Bonus!B:B=""HS-N"") * (Bonus!J:J=""yes""))
+"),"#N/A")
+
+--- Bonus_HSTL (1 formulas) ---
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  Bonus!A:I,
+  (Bonus!J:J=""NO"") * (Bonus!B:B<>""HS-Back-End"")
+)
+"),"#N/A")
+
+--- Deduction_HSTL (7 formulas) ---
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  Deduction!A:G,
+  (Deduction!H:H=""NO"") 
+)
+"),"TLN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-N")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Jude Butler")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"cell phone(N:NPM)")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Cellphone Deduction")
+
+--- Bonus_Summary (1026 formulas) ---
+  [990x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"#REF!")
+  [8x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),N.N)
+  [7x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HSN-N")
+  [5x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Training - ON Hold - Correction")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Bonus from TL / OP")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"Heaven Lancaster")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"robertson william")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"DONA SAMUEL")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("QUERY(
+  Bonus!AN:HN,
+  ""select A, G, sum(E)
+   where A is not null
+   group by A, G
+   label sum(E) 'Total'"",
+  N
+)
+"),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Total")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"AMY WINTERS")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Competition Bonus")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"OFN")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))"),"Ahmed")
+
+--- Closed (45 formulas) ---
+  [17x] =DN*EN
+  [8x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"HS-N")
+  [4x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"#N/A")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"#N/A")
+  [2x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Steven Crawford")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Daemon Williams")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Katherine Kevin")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Tris bruce")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Kate jones")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Emelia anderson")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Jude Butler")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Justin Doe")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=AN))
+"),"")
+  [1x] =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=AN))
+"),"Billie Davis")
+
+=== PAYROLL_JUNE2026 ALL HEADERS (scanning rows 1-5) ===
+R1 A: 💼 PAYROLL CALCULATOR - March 2025
+R1 I: Working Days :
+R2 A: Instructions: Fill YELLOW cells with actual data. BLUE cells calculate automatically. - Change the working days
+R2 I: 22.0
+R4 A: Employee ID
+R4 B: Employee Name
+R4 C: Name
+R4 D: Unit
+R4 E: Payment Method
+R4 F: Position
+R4 G: Monthly Salary
+R4 H: Daily Rate
+R4 I: Total Working Days
+R4 J: Day-Off
+R4 K: Half Days
+R4 L: Quarter Days
+R4 M: WFH
+R4 N: Extra Days
+/ Annual
+R4 O: NSNC
+R4 P: NSNC Comments
+R4 Q: Actual Working Days
+R4 R: Working days Comments
+R4 S: Basic Salary
+R4 T: Closed Sales Bonus
+R4 U: Closed Sales Comments
+R4 V: Bonus from TL / OP
+R4 W: Bonus from TL / OP Comments
+R4 X: Competition Bonus
+R4 Y: Competition Bonus Comments
+R4 Z: Other Bonus
+R4 AA: Other Bonus Comments
+R4 AB: Cellphone Deduction
+R4 AC: Cellphone Deduction Comments
+R4 AD: Private Tabs
+R4 AE: Private Tabs Comments
+R4 AF: Side talks
+R4 AG: Side talks comments
+R4 AH: Not following the rules
+R4 AI: Not following the rules comments
+R4 AJ: Unclean stations / dishes
+R4 AK: Unclean stations / dishes comments
+R4 AL: Lateness Deduction
+R4 AM: Lateness Deduction Comments
+R4 AN: Missing FP
+R4 AO: Missing FP Comments
+R4 AP: Break Lateness  
+Exceeding away
+R4 AQ: Break Lateness  
+ Comments
+R4 AR: Non-Approved Day Off
+R4 AS: Non-Approved Day Off Comments
+R4 AT: Not being in the floor
+R4 AU: Not being in the floor Comments
+R4 AV: Given Bonus to Other Employee
+R4 AW: Given Bonus  Comments
+R4 AX: Other Deductions
+R4 AY: Description
+R4 AZ: Quality Deduction
+R4 BA: Description
+R4 BB: Paid Already
+R4 BC: Description
+R4 BD: Commission Type
+R4 BE: Commission Amount
+R4 BF: Commission  Comments
+R4 BG: 2 Weeks Hold
+R4 BH: Total Earnings
+R4 BI: Total deductions
+R4 BJ: Net Salary
+R4 BK: Total Payment
+R4 BL: ON HOLD
+R4 BM: ON HOLD Comments
+R4 BN: Other deductions / holds
+R4 BO: Other deductions / holds
+ Comments
+R4 BP: Earning Notes
+R4 BQ: Deductions Notes
+R4 BR: Status
+R4 BS: Confirmation
+R4 BT: Other Payments
+R4 BU: Notes
+R4 BV: Transportation Allowance
+R4 BW: Notes
+R5 A: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+    Employee_Database!A2:A611,
+    (Employee_Database!G2:G611 = ""Active"") + 
+    (Employee_Database!G2:G611 = ""OUT BUT STILL GET PAID"") + 
+    (Employee_Database!G2:G611 = ""Paused"") +
+(Employee_Database!G2:G611 = ""Paused still get paid"")
+)"),"HR-1")
+R5 B: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A5))"),"Aurora williams")
+R5 C: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!C:C, Employee_Database!B:B=B5))"),"hager ahmed darwish")
+R5 D: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B5))"),"HS-Back-End")
+R5 E: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C5))"),"Bank")
+R5 F: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C5))"),"Senior HR Officer")
+R5 G: =VLOOKUP(F5,Position_Rates!A:B,2,FALSE)
+R5 H: =G5/$I$2
+R5 I: =VLOOKUP(A5,Attendance!A:M,5,FALSE)
+R5 J: =VLOOKUP(A5,Attendance!A:M,6,FALSE)
+R5 K: =VLOOKUP(A5,Attendance!A:M,7,FALSE)
+R5 L: =VLOOKUP(A5,Attendance!A:M,8,FALSE)
+R5 N: =VLOOKUP(A5,Attendance!A:M,12,FALSE)
+R5 O: =VLOOKUP(A5,Attendance!A:M,10,FALSE)
+R5 Q: =I5-N5+J5
+R5 S: =(I5+N5-(K5*0.5)-(L5*0.25)-(O5*2))*H5
+R5 T: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A5, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+R5 U: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A5,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+R5 V: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+R5 W: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+R5 X: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+R5 Y: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+R5 Z: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+R5 AA: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+R5 AB: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+R5 AC: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+R5 AD: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+R5 AE: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+R5 AF: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+R5 AG: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+R5 AH: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+R5 AI: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+R5 AJ: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+R5 AK: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+R5 AL: =VLOOKUP(A5,Attendance!A:BE,13,FALSE)
+R5 AM: =VLOOKUP(A5,Attendance!A:BE,14,FALSE)
+R5 AN: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+R5 AO: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+R5 AP: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+R5 AQ: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+R5 AR: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+R5 AS: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+R5 AT: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+R5 AU: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+R5 AV: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A5)
+  ),
+"""")
+"),"")
+R5 AW: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A5
+    )
+  ),
+"""")
+"),"")
+R5 AX: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+R5 AY: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+R5 AZ: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+R5 BA: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+R5 BB: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+R5 BC: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A5,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+R5 BD: No Commision
+R5 BE: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+R5 BF: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+R5 BG: No
+R5 BH: =S5+T5+V5+X5+Z5+BE5+BT5+BV5
+R5 BI: =AB5+AD5+AF5+AH5+AJ5+AL5+AN5+AP5+AR5+AT5+AV5+BN5+BL5+AX5+AZ5+BB5
+R5 BJ: =S5+T5+V5+X5+Z5+BE5-AB5-AL5-AP5-AR5-AT5-AV5-AN5-AD5- IF(BG5="Yes", H5*10, 0)-BN5-AJ5-AH5-AF5-AX5-BL5-AZ5-BB5+BV5
+R5 BK: =BJ5+BB5+BT5
+R5 BL: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""ON HOLD"")
+  ),
+"""")
+"),"")
+R5 BM: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A5,
+      Deduction!G:G=""ON HOLD""
+    )
+  ),
+"""")"),"")
+R5 BT: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Training - ON Hold - Correction"")
+  ),
+"""")
+"),"")
+R5 BU: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Training - ON Hold - Correction""
+    )
+  ),
+"""")
+"),"")
+R5 BV: <openpyxl.worksheet.formula.ArrayFormula object at 0x000002B0FE8A17F0>
+
+=== PAYROLL SAMPLE FORMULAS ===
+A5: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+    Employee_Database!A2:A611,
+    (Employee_Database!G2:G611 = ""Active"") + 
+    (Employee_Database!G2:G611 = ""OUT BUT STILL GET PAID"") + 
+    (Employee_Database!G2:G611 = ""Paused"") +
+(Employee_Database!G2:G611 = ""Paused still get paid"")
+)"),"HR-1")
+B5: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A5))"),"Aurora williams")
+C5: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!C:C, Employee_Database!B:B=B5))"),"hager ahmed darwish")
+D5: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B5))"),"HS-Back-End")
+E5: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C5))"),"Bank")
+F5: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C5))"),"Senior HR Officer")
+G5: =VLOOKUP(F5,Position_Rates!A:B,2,FALSE)
+H5: =G5/$I$2
+I5: =VLOOKUP(A5,Attendance!A:M,5,FALSE)
+J5: =VLOOKUP(A5,Attendance!A:M,6,FALSE)
+K5: =VLOOKUP(A5,Attendance!A:M,7,FALSE)
+L5: =VLOOKUP(A5,Attendance!A:M,8,FALSE)
+N5: =VLOOKUP(A5,Attendance!A:M,12,FALSE)
+O5: =VLOOKUP(A5,Attendance!A:M,10,FALSE)
+Q5: =I5-N5+J5
+S5: =(I5+N5-(K5*0.5)-(L5*0.25)-(O5*2))*H5
+T5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A5, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A5,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL5: =VLOOKUP(A5,Attendance!A:BE,13,FALSE)
+AM5: =VLOOKUP(A5,Attendance!A:BE,14,FALSE)
+AN5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A5)
+  ),
+"""")
+"),"")
+AW5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A5
+    )
+  ),
+"""")
+"),"")
+AX5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A5,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A5, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A5,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A5, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF5: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A5,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A6: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS1-05")
+B6: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A6))"),"Ayla Adams")
+C6: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!C:C, Employee_Database!B:B=B6))"),"Nada fisal ali ali")
+D6: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B6))"),"HS-1")
+E6: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C6))"),"Bank")
+F6: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C6))"),"Agent")
+G6: =VLOOKUP(F6,Position_Rates!A:B,2,FALSE)
+H6: =G6/$I$2
+I6: =VLOOKUP(A6,Attendance!A:M,5,FALSE)
+J6: =VLOOKUP(A6,Attendance!A:M,6,FALSE)
+K6: =VLOOKUP(A6,Attendance!A:M,7,FALSE)
+L6: =VLOOKUP(A6,Attendance!A:M,8,FALSE)
+N6: =VLOOKUP(A6,Attendance!A:M,12,FALSE)
+O6: =VLOOKUP(A6,Attendance!A:M,10,FALSE)
+Q6: =I6-N6+J6
+S6: =(I6+N6-(K6*0.5)-(L6*0.25)-(O6*2))*H6
+T6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A6, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A6,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A6, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A6,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A6, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A6,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A6, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A6,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL6: =VLOOKUP(A6,Attendance!A:BE,13,FALSE)
+AM6: =VLOOKUP(A6,Attendance!A:BE,14,FALSE)
+AN6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A6)
+  ),
+"""")
+"),"")
+AW6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A6
+    )
+  ),
+"""")
+"),"")
+AX6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A6,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A6, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A6,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A6, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF6: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A6,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A7: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS1-10")
+B7: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A7))"),"sheila long")
+C7: =VLOOKUP(A7,Employee_Database!A:I,3,FALSE)
+D7: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B7))"),"HS-3")
+E7: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C7))"),"Cash")
+F7: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C7))"),"Agent")
+G7: =VLOOKUP(F7,Position_Rates!A:B,2,FALSE)
+H7: =G7/$I$2
+I7: =VLOOKUP(A7,Attendance!A:M,5,FALSE)
+J7: =VLOOKUP(A7,Attendance!A:M,6,FALSE)
+K7: =VLOOKUP(A7,Attendance!A:M,7,FALSE)
+L7: =VLOOKUP(A7,Attendance!A:M,8,FALSE)
+N7: =VLOOKUP(A7,Attendance!A:M,12,FALSE)
+O7: =VLOOKUP(A7,Attendance!A:M,10,FALSE)
+Q7: =I7-N7+J7
+S7: =(I7+N7-(K7*0.5)-(L7*0.25)-(O7*2))*H7
+T7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A7, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A7,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A7, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A7,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A7, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A7,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A7, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A7,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL7: =VLOOKUP(A7,Attendance!A:BE,13,FALSE)
+AM7: =VLOOKUP(A7,Attendance!A:BE,14,FALSE)
+AN7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A7)
+  ),
+"""")
+"),"")
+AW7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A7
+    )
+  ),
+"""")
+"),"")
+AX7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A7,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A7, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A7,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A7, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF7: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A7,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A8: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS1-12")
+B8: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A8))"),"Sarah Gonzàlez")
+C8: =VLOOKUP(A8,Employee_Database!A:I,3,FALSE)
+D8: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B8))"),"HS-1")
+E8: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C8))"),"Cash")
+F8: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C8))"),"Agent")
+G8: =VLOOKUP(F8,Position_Rates!A:B,2,FALSE)
+H8: =G8/$I$2
+I8: =VLOOKUP(A8,Attendance!A:M,5,FALSE)
+J8: =VLOOKUP(A8,Attendance!A:M,6,FALSE)
+K8: =VLOOKUP(A8,Attendance!A:M,7,FALSE)
+L8: =VLOOKUP(A8,Attendance!A:M,8,FALSE)
+N8: =VLOOKUP(A8,Attendance!A:M,12,FALSE)
+O8: =VLOOKUP(A8,Attendance!A:M,10,FALSE)
+Q8: =I8-N8+J8
+S8: =(I8+N8-(K8*0.5)-(L8*0.25)-(O8*2))*H8
+T8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A8, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A8,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A8, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A8,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A8, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A8,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A8, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A8,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL8: =VLOOKUP(A8,Attendance!A:BE,13,FALSE)
+AM8: =VLOOKUP(A8,Attendance!A:BE,14,FALSE)
+AN8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A8)
+  ),
+"""")
+"),"")
+AW8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A8
+    )
+  ),
+"""")
+"),"")
+AX8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A8,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A8, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A8,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A8, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF8: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A8,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A9: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-08")
+B9: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A9))"),"KAY RIDDLE")
+C9: =VLOOKUP(A9,Employee_Database!A:I,3,FALSE)
+D9: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B9))"),"HS-3")
+E9: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C9))"),"Insta")
+F9: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C9))"),"Agent")
+G9: =VLOOKUP(F9,Position_Rates!A:B,2,FALSE)
+H9: =G9/$I$2
+I9: =VLOOKUP(A9,Attendance!A:M,5,FALSE)
+J9: =VLOOKUP(A9,Attendance!A:M,6,FALSE)
+K9: =VLOOKUP(A9,Attendance!A:M,7,FALSE)
+L9: =VLOOKUP(A9,Attendance!A:M,8,FALSE)
+N9: =VLOOKUP(A9,Attendance!A:M,12,FALSE)
+O9: =VLOOKUP(A9,Attendance!A:M,10,FALSE)
+Q9: =I9-N9+J9
+S9: =(I9+N9-(K9*0.5)-(L9*0.25)-(O9*2))*H9
+T9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A9, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A9,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A9, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A9,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A9, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A9,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A9, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A9,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL9: =VLOOKUP(A9,Attendance!A:BE,13,FALSE)
+AM9: =VLOOKUP(A9,Attendance!A:BE,14,FALSE)
+AN9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A9)
+  ),
+"""")
+"),"")
+AW9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A9
+    )
+  ),
+"""")
+"),"")
+AX9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A9,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A9, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A9,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A9, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF9: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A9,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A10: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-13")
+B10: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A10))"),"jennie willer")
+C10: =VLOOKUP(A10,Employee_Database!A:I,3,FALSE)
+D10: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B10))"),"HS-3")
+E10: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C10))"),"Cash")
+F10: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C10))"),"Agent")
+G10: =VLOOKUP(F10,Position_Rates!A:B,2,FALSE)
+H10: =G10/$I$2
+I10: =VLOOKUP(A10,Attendance!A:M,5,FALSE)
+J10: =VLOOKUP(A10,Attendance!A:M,6,FALSE)
+K10: =VLOOKUP(A10,Attendance!A:M,7,FALSE)
+L10: =VLOOKUP(A10,Attendance!A:M,8,FALSE)
+N10: =VLOOKUP(A10,Attendance!A:M,12,FALSE)
+O10: =VLOOKUP(A10,Attendance!A:M,10,FALSE)
+Q10: =I10-N10+J10
+S10: =(I10+N10-(K10*0.5)-(L10*0.25)-(O10*2))*H10
+T10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A10, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A10,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A10, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A10,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A10, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A10,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A10, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A10,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL10: =VLOOKUP(A10,Attendance!A:BE,13,FALSE)
+AM10: =VLOOKUP(A10,Attendance!A:BE,14,FALSE)
+AN10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A10)
+  ),
+"""")
+"),"")
+AW10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A10
+    )
+  ),
+"""")
+"),"")
+AX10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A10,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A10, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A10,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A10, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF10: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A10,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+A11: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-18")
+B11: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A11))"),"AMY WINTERS")
+C11: =VLOOKUP(A11,Employee_Database!A:I,3,FALSE)
+D11: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!B:B=B11))"),"HS-3")
+E11: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!L:L, Employee_Database!C:C=C11))"),"Cash")
+F11: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!H:H, Employee_Database!C:C=C11))"),"Agent")
+G11: =VLOOKUP(F11,Position_Rates!A:B,2,FALSE)
+H11: =G11/$I$2
+I11: =VLOOKUP(A11,Attendance!A:M,5,FALSE)
+J11: =VLOOKUP(A11,Attendance!A:M,6,FALSE)
+K11: =VLOOKUP(A11,Attendance!A:M,7,FALSE)
+L11: =VLOOKUP(A11,Attendance!A:M,8,FALSE)
+N11: =VLOOKUP(A11,Attendance!A:M,12,FALSE)
+O11: =VLOOKUP(A11,Attendance!A:M,10,FALSE)
+Q11: =I11-N11+J11
+S11: =(I11+N11-(K11*0.5)-(L11*0.25)-(O11*2))*H11
+T11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Closed!F:F, Closed!A:A=A11, Closed!G:G=""Closed Sales Bonus"")
+  ),
+"""")
+"),"")
+U11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Closed!E:E & "" Closed Sales * "" & Closed!D:D,
+      Closed!A:A=A11,
+      Closed!G:G=""Closed Sales Bonus""
+    )
+  ),
+"""")
+"),"")
+V11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A11, Bonus!G:G=""Bonus from TL / OP"")
+  ),
+"""")
+"),"")
+W11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A11,
+      Bonus!G:G=""Bonus from TL / OP""
+    )
+  ),
+"""")
+"),"")
+X11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A11, Bonus!G:G=""Competition Bonus"")
+  ),
+"""")
+"),"")
+Y11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A11,
+      Bonus!G:G=""Competition Bonus""
+    )
+  ),
+"""")
+"),"")
+Z11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A11, Bonus!G:G=""Other Bonus"")
+  ),
+"""")
+"),"")
+AA11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A11,
+      Bonus!G:G=""Other Bonus""
+    )
+  ),
+"""")
+"),"")
+AB11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Cellphone Deduction"")
+  ),
+"""")
+"),"")
+AC11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Cellphone Deduction""
+    )
+  ),
+"""")
+"),"")
+AD11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Private Tabs"")
+  ),
+"""")
+"),"")
+AE11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Private Tabs""
+    )
+  ),
+"""")
+"),"")
+AF11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Side Talks"")
+  ),
+"""")
+"),"")
+AG11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Side talks""
+    )
+  ),
+"""")
+"),"")
+AH11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Not following the rules"")
+  ),
+"""")
+"),"")
+AI11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Not following the rules""
+    )
+  ),
+"""")
+"),"")
+AJ11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Unclean stations / dishes"")
+  ),
+"""")
+"),"")
+AK11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Unclean stations / dishes""
+    )
+  ),
+"""")
+"),"")
+AL11: =VLOOKUP(A11,Attendance!A:BE,13,FALSE)
+AM11: =VLOOKUP(A11,Attendance!A:BE,14,FALSE)
+AN11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Missing FP"")
+  ),
+"""")
+"),"")
+AO11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Missing FP""
+    )
+  ),
+"""")
+"),"")
+AP11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Break Lateness  Exceeding away"")
+  ),
+"""")
+"),"")
+AQ11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Break Lateness  Exceeding away""
+    )
+  ),
+"""")
+"),"")
+AR11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Non-Approved Day Off"")
+  ),
+"""")
+"),"")
+AS11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Non-Approved Day Off""
+    )
+  ),
+"""")
+"),"")
+AT11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Not being in the floor"")
+  ),
+"""")
+"),"")
+AU11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Not being in the floor""
+    )
+  ),
+"""")
+"),"")
+AV11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!H:H=A11)
+  ),
+"""")
+"),"")
+AW11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" For "" & Bonus!C:C & "" - "" & Bonus!F:F  ,
+      Bonus!H:H=A11
+    )
+  ),
+"""")
+"),"")
+AX11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Other Deductions"")
+  ),
+"""")
+"),"")
+AY11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Other Deductions""
+    )
+  ),
+"""")
+"),"")
+AZ11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Quality"")
+  ),
+"""")
+"),"")
+BA11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F,
+      Deduction!A:A=A11,
+      Deduction!G:G=""Quality""
+    )
+  ),
+"""")
+"),"")
+BB11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Deduction!E:E, Deduction!A:A=A11, Deduction!G:G=""Paid"")
+  ),
+"""")
+"),"")
+BC11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Deduction!E:E & "" - "" & Deduction!F:F & "" At "" & TEXT(Deduction!D:D, ""mm/dd/yyyy""),
+      Deduction!A:A=A11,
+      Deduction!G:G=""paid""
+    )
+  ),
+"""")"),"")
+BE11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  SUM(
+    FILTER(Bonus!E:E, Bonus!A:A=A11, Bonus!G:G=""Comission"")
+  ),
+"""")
+"),"")
+BF11: =IFERROR(__xludf.DUMMYFUNCTION("IFERROR(
+  TEXTJOIN(CHAR(10), TRUE,
+    FILTER(
+      Bonus!E:E & "" - "" & Bonus!F:F,
+      Bonus!A:A=A11,
+      Bonus!G:G=""Comission""
+    )
+  ),
+"""")
+"),"")
+
+=== ATTENDANCE ROW 1-2 (date headers) ===
+A: R1=None | R2=HS CODE
+B: R1=None | R2=unit
+C: R1=None | R2=Agent
+D: R1=None | R2=Email
+E: R1=Working Days | R2=June working days : 22
+F: R1=Days-OFF | R2=None
+G: R1=Half Days | R2=None
+H: R1=Qaurter-off | R2=None
+I: R1=WFH | R2=None
+J: R1=Lateness | R2=None
+K: R1=NSNC | R2=None
+L: R1=Paused | R2=None
+M: R1=Extra Days | R2=None
+N: R1=Lateness deductions | R2=None
+O: R1=Lateness Detail | R2=None
+P: R1=Status | R2=2026-06-01 00:00:00
+Q: R1=FP Lateness | R2=None
+R: R1=Status | R2=2026-06-02 00:00:00
+S: R1=FP Lateness | R2=None
+T: R1=Status | R2=2026-06-03 00:00:00
+U: R1=FP Lateness | R2=None
+V: R1=Status | R2=2026-06-04 00:00:00
+W: R1=FP Lateness | R2=None
+X: R1=Status | R2=2026-06-05 00:00:00
+Y: R1=FP Lateness | R2=None
+Z: R1=Status | R2=2026-06-08 00:00:00
+AA: R1=FP Lateness | R2=None
+AB: R1=Status | R2=2026-06-09 00:00:00
+AC: R1=FP Lateness | R2=None
+AD: R1=Status | R2=2026-06-10 00:00:00
+AE: R1=FP Lateness | R2=None
+AF: R1=Status | R2=2026-06-11 00:00:00
+AG: R1=FP Lateness | R2=None
+AH: R1=Status | R2=2026-06-12 00:00:00
+AI: R1=FP Lateness | R2=None
+AJ: R1=Status | R2=2026-06-15 00:00:00
+AK: R1=FP Lateness | R2=None
+AL: R1=Status | R2=2026-06-16 00:00:00
+AM: R1=FP Lateness | R2=None
+AN: R1=Status | R2=2026-06-17 00:00:00
+AO: R1=FP Lateness | R2=None
+AP: R1=Status | R2=2026-06-18 00:00:00
+AQ: R1=FP Lateness | R2=None
+AR: R1=Status | R2=2026-06-19 00:00:00
+AS: R1=FP Lateness | R2=None
+AT: R1=Status | R2=2026-06-22 00:00:00
+AU: R1=FP Lateness | R2=None
+AV: R1=Status | R2=2026-06-23 00:00:00
+AW: R1=FP Lateness | R2=None
+AX: R1=Status | R2=2026-06-24 00:00:00
+AY: R1=FP Lateness | R2=None
+AZ: R1=Status | R2=2026-06-25 00:00:00
+BA: R1=FP Lateness | R2=None
+BB: R1=Status | R2=2026-06-26 00:00:00
+BC: R1=FP Lateness | R2=None
+BD: R1=Status | R2=2026-06-29 00:00:00
+BE: R1=FP Lateness | R2=None
+BF: R1=Status | R2=2026-06-30 00:00:00
+BG: R1=FP Lateness | R2=None
+
+=== ATTENDANCE FP LATENESS FORMULAS (P3 sample) ===
+
+=== BONUS_SUMMARY ===
+A: =IFERROR(__xludf.DUMMYFUNCTION("QUERY(
+  Bonus!A2:H1502,
+  ""select A, G, sum(E)
+   where A is not null
+   group by A, G
+   label sum(E) 'Total'"",
+  0
+)
+"),"")
+B: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"")
+C: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Total")
+D: None
+E: None
+F: None
+G: None
+H: None
+I: None
+J: None
+K: None
+L: None
+M: None
+N: None
+O: None
+P: None
+Q: None
+R: None
+S: None
+  =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-18") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Training - ON Hold - Correction") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),7000.0) | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A2))"),"AMY WINTERS") | None | None | None | None | None | None | None
+  =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-20") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Bonus from TL / OP") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),100.0) | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A3))"),"Heaven Lancaster") | None | None | None | None | None | None | None
+  =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-20") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Training - ON Hold - Correction") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),7000.0) | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A4))"),"Heaven Lancaster") | None | None | None | None | None | None | None
+  =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS3-22") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Competition Bonus") | =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),200.0) | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A5))"),"robertson william") | None | None | None | None | None | None | None
+
+=== Bonus_HS1 (first row headers) ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Bonus on ( ID )
+  I: From
+  Data rows: ~1
+
+=== Deduction_HS1 (first row headers) ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Visible to agents
+  Data rows: ~1
+
+=== Bonus_HS3 (first row headers) ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Bonus on ( ID )
+  I: From
+  Data rows: ~3
+
+=== Deduction_HS3 (first row headers) ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Visible to agents
+  Data rows: ~1
+
+=== EMPLOYEE DATABASE STATS ===
+Active employees with ID: 127
+Statuses: {'blank': 26, 'Active': 31, 'Paused': 9, 'Paused still get paid': 1, 'OUT BUT STILL GET PAID': 6, 'Out': 54}
+Units: {'blank': 27, 'HS-Back-End': 18, 'HS-1': 9, 'HS-3': 47, 'HS-2': 21, 'HS2-PT': 4, 'Finance': 1}
+Top positions: {'Agent': 54, 'blank': 27, 'Agent.': 12, 'Part-Time Agent': 5, 'Acting as Team Leader': 5, 'Evaluator': 3, 'Operation Manager': 2, 'Team Leader.': 2, 'Checker.': 2, 'Quality Agent': 2, 'agent': 2, 'Senior HR Officer': 1, 'Office Manager': 1, 'Head of Dept': 1, 'Senior Office Assisstant': 1}

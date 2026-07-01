@@ -1,0 +1,80 @@
+[
+  {
+    "name": "Agent Category 1",
+    "rateEgp": 3000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "Agent Category 2",
+    "rateEgp": 4000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "Agent Category 3",
+    "rateEgp": 5000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "Agent Category 4",
+    "rateEgp": 6000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "TL Category 1",
+    "rateEgp": 3000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "TL Category 2",
+    "rateEgp": 6000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "TL Category 3",
+    "rateEgp": 7000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "TL Category 4",
+    "rateEgp": 8000.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "No Commision",
+    "rateEgp": 0.0,
+    "description": "Monthly sales target achievement",
+    "active": true
+  },
+  {
+    "name": "Quality Bonus",
+    "rateEgp": 300.0,
+    "description": "Quality score achievement",
+    "active": true
+  },
+  {
+    "name": "Retention Bonus",
+    "rateEgp": 350.0,
+    "description": "Client retention achievement",
+    "active": true
+  },
+  {
+    "name": "Competition Winner",
+    "rateEgp": 1000.0,
+    "description": "Monthly competition winner",
+    "active": true
+  },
+  {
+    "name": "Special Project",
+    "rateEgp": 750.0,
+    "description": "Special project completion",
+    "active": true
+  }
+]

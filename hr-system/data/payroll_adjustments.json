@@ -1,0 +1,425 @@
+[
+  {
+    "employeeId": "HR-1",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS1-05",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS1-10",
+    "yearMonth": "2026-06",
+    "extraDays": 5.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS1-12",
+    "yearMonth": "2026-06",
+    "extraDays": 20.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-08",
+    "yearMonth": "2026-06",
+    "extraDays": 21.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-13",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-18",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-20",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-22",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-23",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-25",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-26",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-27",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-28",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-29",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-35",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-36",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-32",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-33",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-34",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-30",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-31",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "MG1",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "MG2",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "NW-06",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "O1",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "OF1",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "OF2",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "OP1",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "OP2",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "PT-01",
+    "yearMonth": "2026-06",
+    "extraDays": 21.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "PT-04",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "PT-05",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "Q03",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "Q04",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "Q10",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL01",
+    "yearMonth": "2026-06",
+    "extraDays": 21.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL02",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL03",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL06",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL07",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "NW-21",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "NW-18",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "NW-19",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-03",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "TL05",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  },
+  {
+    "employeeId": "HS3-21",
+    "yearMonth": "2026-06",
+    "extraDays": 0.0,
+    "twoWeekHold": false,
+    "commissionType": "No Commision",
+    "commissionAmount": 0.0,
+    "commissionComments": ""
+  }
+]

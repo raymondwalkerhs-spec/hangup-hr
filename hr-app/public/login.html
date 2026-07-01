@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in — Hangup HR</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <img src="/img/hr-team.png" alt="HR Team Services &amp; Admin" class="login-logo" />
+    <p class="brand-tag">Hangup Solutions</p>
+    <h1>HR System</h1>
+    <p class="muted">Sign in with your HR credentials. Internet required — all data is live from Google Sheets.</p>
+    <form id="login-form">
+      <label class="field">
+        <span>Username</span>
+        <input type="text" id="username" name="username" required autocomplete="username" />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="password" name="password" required autocomplete="current-password" />
+      </label>
+      <p id="login-error" class="login-error hidden"></p>
+      <button type="submit" class="btn btn-primary btn-lg" id="login-btn">Sign in</button>
+    </form>
+  </div>
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("login-error");
+      const btn = document.getElementById("login-btn");
+      err.classList.add("hidden");
+      btn.classList.add("is-loading");
+      btn.disabled = true;
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (data.terminated && window.hrDesktop) {
+          await window.hrDesktop.triggerUninstall();
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || "Login failed");
+        if (window.hrDesktop) await window.hrDesktop.setSession(data.sessionId);
+        window.location.href = "/";
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.classList.remove("hidden");
+      } finally {
+        btn.classList.remove("is-loading");
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

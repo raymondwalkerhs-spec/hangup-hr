@@ -1,0 +1,123 @@
+{
+  "name": "hangup-hr",
+  "version": "1.0.0",
+  "description": "Hangup HR desktop app — live Google Sheets",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis portable",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable",
+    "dist:all": "electron-builder --win nsis portable",
+    "dist:mac": "node scripts/ensure-macos.js && electron-builder --mac dmg zip",
+    "dist:mac:dmg": "node scripts/ensure-macos.js && electron-builder --mac dmg",
+    "push:sheet": "node scripts/push-excel-to-sheet.js",
+    "import:excel": "python ../scripts/import_data.py && node scripts/push-excel-to-sheet.js",
+    "reconcile:june": "node scripts/reconcile-june.js",
+    "migrate:archived": "echo Archived — Excel source removed. Use push:sheet with existing hr-system/data JSON only.",
+    "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3"
+  },
+  "build": {
+    "appId": "com.hangup.hr",
+    "productName": "Hangup HR",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "lib/**/*",
+      "routes/**/*",
+      "scripts/**/*",
+      "public/**/*",
+      "Asset/**/*",
+      "app.js",
+      "server.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "credentials",
+        "to": "credentials",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Hangup-HR-Setup-${version}.${ext}"
+    },
+    "npmRebuild": true,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Hangup HR",
+      "uninstallDisplayName": "Hangup HR"
+    },
+    "portable": {
+      "artifactName": "Hangup-HR-Portable-${version}.${ext}",
+      "requestExecutionLevel": "user"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Hangup-HR-${version}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Hangup HR ${version}",
+      "artifactName": "Hangup-HR-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "googleapis": "^144.0.0",
+    "pdfkit": "^0.16.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "@electron/rebuild": "^3.7.1"
+  }
+}

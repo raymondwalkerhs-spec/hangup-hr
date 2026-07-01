@@ -1,0 +1,26 @@
+{
+  "defaultWeekendDays": [
+    6,
+    0
+  ],
+  "weekendDayNames": [
+    "Saturday",
+    "Sunday"
+  ],
+  "latenessRules": {
+    "tierA": {
+      "label": "Lateness A",
+      "beforeHour": 15,
+      "amount": 25
+    },
+    "tierB": {
+      "label": "Lateness B",
+      "afterHour": 15,
+      "amount": 50
+    }
+  },
+  "workingDaysByMonth": {
+    "2026-06": 22,
+    "2026-07": 23
+  }
+}

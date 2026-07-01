@@ -1,0 +1,533 @@
+=== INSTRUCTIONS (first 100 rows) ===
+1: 🏢 HANGUP SMART PAYROLL SYSTEM - USER GUIDE | None
+3: 📋 SYSTEM OVERVIEW | None
+4: This automated payroll system calculates salaries based on: | None
+5: • Monthly salaries converted to daily rates | None
+6: • Actual working days, half days, quarter days | None
+7: • Multiple bonus types and deductions | None
+8: • Commission calculations | None
+9: • 2-weeks salary hold feature | None
+11: 📊 SHEET DESCRIPTIONS | None
+12: Employee_Database | Master list of all employees with contact info and Position/department
+13: Position_Rates | Monthly salaries for each position (EDITABLE)
+14: Commission_Types | Commission categories and rates (EDITABLE)
+15: Payroll_Month2025 | Monthly salary calculations template
+16: Payroll_Template_Month | Individual payslip generator
+17: Summary_Reports | Monthly/Quarterly/Yearly summaries
+19: 🚀 HOW TO USE MONTHLY | None
+20: 1. Copy monthly sheet | Copy Payroll_Month2025 and rename for new month ( Edit Functions for Each month )
+21: 2. Fixed numbers in previous month | Copy all Sheet using CTRL+A then CTRL+SHIFT+V , this will make all functitons turn into fixed numbers
+22: 3. Copy Payroll Template sheet | Copy Payroll_Template_month and rename for new month ( Edit Functions for Each month )
+23: 4. Enter working days | Fill yellow cells with actual days worked
+24: 5. Add bonuses/deductions | Use separate columns for each type
+25: 6. Select commissions | Choose type and enter amounts
+26: 7. Use 2-weeks hold | Enter 'Yes' to hold 2 weeks salary to next month
+27: 8. Review calculations | Blue cells calculate automatically
+28: 9. Print payslips | Use Payroll_Template sheet , Change the ID and the info will appear automatically , print it
+30: ⚙️ 2-WEEKS HOLD FEATURE | None
+31: When '2 Weeks Hold' = 'Yes': | Deducts 2 weeks of basic salary from current month
+32: Hold amount calculation: | Daily Rate × 10 days
+33: Next month carryover: | Add held amount to next month's payroll manually
+34: Only affects: | Basic salary (not bonuses or commissions)
+36: 💰 SALARY CALCULATIONS | None
+37: Daily Rate: | Monthly Salary ÷ working days
+38: Basic Salary: | (Working Days - Half Days×0.5 - Quarter Days×0.25) × Daily Rate
+39: Net Salary: | Basic + Bonuses + Commissions - Deductions - Hold Amount
+41: ⚠️ IMPORTANT NOTES | None
+42: • Only edit YELLOW cells (input fields) | None
+43: • BLUE cells are calculated automatically | None
+44: • Always backup before major changes | None
+45: • Update Position_Rates to change salaries globally | None
+46: • Create new monthly sheets by copying the template | None
+48: 🎯 DEDUCTION TYPES | None
+49: Cellphone | Monthly cellphone deduction
+50: Lateness | Deduction for late arrivals
+51: Break Lateness | Deduction for extended breaks
+52: Non-Approved Day Off | Deduction for unauthorized absences
+53: Non-Approved Quarter Day | Deduction for partial unauthorized absences
+54: Other Deductions | Any additional deductions / any bonus given by this employee to another employee
+56: 🏆 BONUS & COMMISSION TYPES | None
+57: Sales Bonus | Closed sales achievement bonus
+58: Competition Bonus | Contest and competition winnings
+59: Other Bonus | Any additional performance bonuses / any bonus given to him by another Empolyee
+60: Commission | Variable commission based on Target
+
+=== EMPLOYEE_DATABASE HEADERS ===
+A: ID
+B: American Name
+C: Arabic Name
+D: Phone
+E: Email
+F: Employment Date
+G: Status
+H: Position
+I: Department
+J: Unit
+K: Team
+L: Payment Method
+M: Alternative payment
+N: Allowance
+O: Payment Details
+( INSTA _ WALLET)
+P: Identification
+Q: Nationality
+R: Bank Refrence Number
+S: Bank Name (AS BANK SHEET)
+Rows: 905
+Sample row 2:
+  ID: C01
+  American Name: None
+  Arabic Name: None
+  Phone: None
+  Email: None
+  Employment Date: None
+  Status: None
+  Position: None
+  Department: None
+  Unit: None
+  Team: None
+  Payment Method: None
+  Alternative payment: None
+  Allowance: Not Eligble
+  Payment Details
+( INSTA _ WALLET): None
+  Identification: None
+  Nationality: None
+  Bank Refrence Number: None
+  Bank Name (AS BANK SHEET): None
+
+=== Attendance ===
+Dims: A1:BG566, rows=566, cols=59
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: WFH
+  Col J: Lateness
+  Col K: NSNC
+  Col L: Paused
+  Col M: Extra Days
+  Col N: Lateness deductions
+  Col O: Lateness Detail
+  Col P: Status
+  Col Q: FP Lateness
+  Col R: Status
+  Col S: FP Lateness
+  Col T: Status
+  Col U: FP Lateness
+  Col V: Status
+  Col W: FP Lateness
+  Col X: Status
+  Col Y: FP Lateness
+  Col Z: Status
+  Col AA: FP Lateness
+  Col AB: Status
+  Col AC: FP Lateness
+  Col AD: Status
+  Col AE: FP Lateness
+  Col AF: Status
+  Col AG: FP Lateness
+  Col AH: Status
+  Col AI: FP Lateness
+  Col AJ: Status
+  Col AK: FP Lateness
+  Col AL: Status
+  Col AM: FP Lateness
+Formulas (sample):
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A3))"),"HS-3")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A3))"),"Tris bruce")
+  D3: =VLOOKUP(A3,Employee_Database!A:I,5,FALSE)
+  E3: =COUNTIF(P3:BG3,"Attended")+G3+H3+J3
+  F3: =COUNTIF(P3:BE3,"Day-OFF")
+  G3: =COUNTIF(P3:BE3,"Half Day")
+  H3: =COUNTIF(P3:BE3,"Quarter Day-Off")
+  I3: =COUNTIF(P3:BE3,"WFH")
+  J3: =COUNTIF(P3:BE3,"Lateness B")+COUNTIF(P3:BE3,"Lateness a")
+  K3: =COUNTIF(P3:BE3,"NSNC")+COUNTIF(P3:BE3,"Not Approved day off")
+  L3: =COUNTIF(P3:BE3,"paused")
+  N3: =(COUNTIF(P3:BE3,"Lateness A")*25)+(COUNTIF(P3:BE3,"Lateness B")*50)
+  O3: =(COUNTIF(P3:BE3,"Lateness A")& " Lateness before 3:00PM" & Char(10) & (COUNTIF(P3:BE3,"Lateness B")& " Lateness After 3:00PM"))
+  B4: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A4))"),"HS-3")
+  C4: =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A4))"),"Kate jones")
+
+=== Attendance HS1 ===
+Dims: A1:BF1000, rows=1000, cols=58
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: Lateness
+  Col J: NSNC
+  Col K: Paused
+  Col L: Extra Days
+  Col M: Lateness deductions
+  Col N: Lateness Detail
+  Col O: Status
+  Col P: FP Lateness
+  Col Q: Status
+  Col R: FP Lateness
+  Col S: Status
+  Col T: FP Lateness
+  Col U: Status
+  Col V: FP Lateness
+  Col W: Status
+  Col X: FP Lateness
+  Col Y: Status
+  Col Z: FP Lateness
+  Col AA: Status
+  Col AB: FP Lateness
+  Col AC: Status
+  Col AD: FP Lateness
+  Col AE: Status
+  Col AF: FP Lateness
+  Col AG: Status
+  Col AH: FP Lateness
+  Col AI: Status
+  Col AJ: FP Lateness
+  Col AK: Status
+  Col AL: FP Lateness
+  Col AM: Status
+Formulas (sample):
+  A3: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Attendance!A:BE, Attendance!B:B=""HS-1"")
+"),"HS1-05")
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-1")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Ayla Adams")
+  D3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"ayla.adams.hs@gmail.com")
+  E3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),16.0)
+  F3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  G3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  H3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  I3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  J3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),7.0)
+  K3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  L3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  N3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),275.0)
+  O3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"3 Lateness before 3:00PM
+4 Lateness After 3:00PM")
+  P3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Attended")
+
+=== Attendance HS2 ===
+Dims: A1:BF1000, rows=1000, cols=58
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: Lateness
+  Col J: NSNC
+  Col K: Paused
+  Col L: Extra Days
+  Col M: Lateness deductions
+  Col N: Lateness Detail
+  Col O: Status
+  Col P: FP Lateness
+  Col Q: Status
+  Col R: FP Lateness
+  Col S: Status
+  Col T: FP Lateness
+  Col U: Status
+  Col V: FP Lateness
+  Col W: Status
+  Col X: FP Lateness
+  Col Y: Status
+  Col Z: FP Lateness
+  Col AA: Status
+  Col AB: FP Lateness
+  Col AC: Status
+  Col AD: FP Lateness
+  Col AE: Status
+  Col AF: FP Lateness
+  Col AG: Status
+  Col AH: FP Lateness
+  Col AI: Status
+  Col AJ: FP Lateness
+  Col AK: Status
+  Col AL: FP Lateness
+  Col AM: Status
+Formulas (sample):
+  A3: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Attendance!A:BE, Attendance!B:B=""HS-2"")
+"),"TL02")
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-2")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Katherine Kevin")
+  D3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Katherine.kevin.hs@gmail.com")
+  E3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  F3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  G3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  H3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  I3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  J3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  K3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  L3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  N3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  O3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"0 Lateness before 3:00PM
+0 Lateness After 3:00PM")
+  P3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"OUT")
+
+=== Attendance HS3 ===
+Dims: A1:BF1000, rows=1000, cols=58
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: Lateness
+  Col J: NSNC
+  Col K: Paused
+  Col L: Extra Days
+  Col M: Lateness deductions
+  Col N: Lateness Detail
+  Col O: Status
+  Col P: FP Lateness
+  Col Q: Status
+  Col R: FP Lateness
+  Col S: Status
+  Col T: FP Lateness
+  Col U: Status
+  Col V: FP Lateness
+  Col W: Status
+  Col X: FP Lateness
+  Col Y: Status
+  Col Z: FP Lateness
+  Col AA: Status
+  Col AB: FP Lateness
+  Col AC: Status
+  Col AD: FP Lateness
+  Col AE: Status
+  Col AF: FP Lateness
+  Col AG: Status
+  Col AH: FP Lateness
+  Col AI: Status
+  Col AJ: FP Lateness
+  Col AK: Status
+  Col AL: FP Lateness
+  Col AM: Status
+Formulas (sample):
+  A3: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Attendance!A:BE, Attendance!B:B=""HS-3"")
+"),"TL03")
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-3")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Tris bruce")
+  D3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Tris.bruce.hs@gmail.com")
+  E3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),17.0)
+  F3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  G3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  H3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  I3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  J3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  K3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  L3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  N3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),25.0)
+  O3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"1 Lateness before 3:00PM
+0 Lateness After 3:00PM")
+  P3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Attended")
+
+=== Attendance PT ===
+Dims: A1:BF1000, rows=1000, cols=58
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: Lateness
+  Col J: NSNC
+  Col K: Paused
+  Col L: Extra Days
+  Col M: Lateness deductions
+  Col N: Lateness Detail
+  Col O: Status
+  Col P: FP Lateness
+  Col Q: Status
+  Col R: FP Lateness
+  Col S: Status
+  Col T: FP Lateness
+  Col U: Status
+  Col V: FP Lateness
+  Col W: Status
+  Col X: FP Lateness
+  Col Y: Status
+  Col Z: FP Lateness
+  Col AA: Status
+  Col AB: FP Lateness
+  Col AC: Status
+  Col AD: FP Lateness
+  Col AE: Status
+  Col AF: FP Lateness
+  Col AG: Status
+  Col AH: FP Lateness
+  Col AI: Status
+  Col AJ: FP Lateness
+  Col AK: Status
+  Col AL: FP Lateness
+  Col AM: Status
+Formulas (sample):
+  A3: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(
+  Attendance!A:BE,
+  (Attendance!B:B=""HS3-PT"") + (Attendance!B:B=""HS2-PT"")+ (Attendance!B:B=""HS1-PT"")
+)
+"),"PT-04")
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS2-PT")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"LYDIA ADAMS")
+  D3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"lydia.adams.hs@gmail.com")
+  E3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  F3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  G3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  H3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  I3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  J3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  K3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  L3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  N3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  O3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"0 Lateness before 3:00PM
+0 Lateness After 3:00PM")
+  P3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"OUT")
+
+=== Attendance Back-End ===
+Dims: A1:BF1000, rows=1000, cols=58
+  Col E: Working Days
+  Col F: Days-OFF
+  Col G: Half Days
+  Col H: Qaurter-off
+  Col I: Lateness
+  Col J: NSNC
+  Col K: Paused
+  Col L: Extra Days
+  Col M: Lateness deductions
+  Col N: Lateness Detail
+  Col O: Status
+  Col P: FP Lateness
+  Col Q: Status
+  Col R: FP Lateness
+  Col S: Status
+  Col T: FP Lateness
+  Col U: Status
+  Col V: FP Lateness
+  Col W: Status
+  Col X: FP Lateness
+  Col Y: Status
+  Col Z: FP Lateness
+  Col AA: Status
+  Col AB: FP Lateness
+  Col AC: Status
+  Col AD: FP Lateness
+  Col AE: Status
+  Col AF: FP Lateness
+  Col AG: Status
+  Col AH: FP Lateness
+  Col AI: Status
+  Col AJ: FP Lateness
+  Col AK: Status
+  Col AL: FP Lateness
+  Col AM: Status
+Formulas (sample):
+  A3: =IFERROR(__xludf.DUMMYFUNCTION("FILTER(Attendance!A:BE, Attendance!B:B=""HS-Back-End"")
+"),"HR-1")
+  B3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"HS-Back-End")
+  C3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Aurora williams")
+  D3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"aurora.williams.hs@gmail.com")
+  E3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),21.0)
+  F3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),1.0)
+  G3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  H3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  I3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  J3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  K3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  L3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  N3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),0.0)
+  O3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"0 Lateness before 3:00PM
+0 Lateness After 3:00PM")
+  P3: =IFERROR(__xludf.DUMMYFUNCTION("""COMPUTED_VALUE"""),"Attended")
+
+=== POSITION_RATES ===
+  A: 💰 POSITION RATES & SALARIES
+  None | None | None | None | None | None | None
+  Position | Monthly Salary (EGP) | Commission Eligible | Notes | None | None | None
+  Necomer | 10000.0 | Yes | New-Comer | None | None | None
+  Part-Time Agent | 5000.0 | Yes | Part time | None | None | None
+  Agent | 10000.0 | Yes | Base sales position | None | None | None
+  Agent. | 12000.0 | Yes | MLA Agent | None | None | None
+  Agent.. | 15000.0 | Yes | Senior MLA Agent | None | None | None
+  Closer | 10000.0 | Yes | Sales closer | None | None | None
+  Closer. | 12000.0 | Yes | Sales closer - Raise | None | None | None
+  Supervisor | 0.0 | Yes | Team supervision | None | None | None
+  Team Leader Probation | 10000.0 | No | Team Leader Probation | None | None | None
+  Acting as Team Leader | 15000.0 | No | Team Leader Probation | None | None | None
+  Acting as Team Leader. | 12000.0 | No | Team Leader Probation | None | None | None
+
+=== PAYROLL_JUNE2026 HEADERS ===
+  A: 💼 PAYROLL CALCULATOR - March 2025
+  I: Working Days :
+Formulas:
+
+=== Bonus ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Bonus on ( ID )
+  I: From Name
+  J: Visible to agents
+  HS3-23 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A2))
+"),"HS-3") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A2))
+"),"DONA SAMUEL") | 2026-06-04 00:00:00 | 100.0 | Sale bonus | Bonus from TL / OP | TL03 | =VLOOKUP(H2,Employee_Database!A:I,2,FALSE)
+  HS3-20 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A3))
+"),"HS-3") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A3))
+"),"Heaven Lancaster") | 2026-06-03 00:00:00 | 100.0 | Sale bonus | Bonus from TL / OP | TL03 | =VLOOKUP(H3,Employee_Database!A:I,2,FALSE)
+  OF1 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A4))
+"),"HS-Back-End") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A4))
+"),"Ahmed") | 2026-06-05 00:00:00 | 2000.0 | Bonus | Training - ON Hold - Correction | Bonus /sickness | =VLOOKUP(H4,Employee_Database!A:I,2,FALSE)
+  HS3-22 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A5))
+"),"HS-3") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A5))
+"),"robertson william") | 2026-06-11 00:00:00 | 200.0 | Competition  | Competition Bonus | TL03 | =VLOOKUP(H5,Employee_Database!A:I,2,FALSE)
+
+=== Deduction ===
+  A: ID
+  B: Unit
+  C: Name
+  D: DATE
+  E: Amount
+  F: Reason
+  G: Type
+  H: Visible to agents
+  TL07 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A2))
+"),"HS-3") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A2))
+"),"Jude Butler") | 2026-06-05 00:00:00 | 200.0 | cell phone(4:00PM) | Cellphone Deduction | No
+  OF1 | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A3))
+"),"HS-Back-End") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A3))
+"),"Ahmed") | 2026-06-30 00:00:00 | 0.0 | متبقي 1500 يتم خصمها مرة قادمة | Paid | Not on Dashboard
+  None | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A4))
+"),"#REF!") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A4))
+"),"#REF!") | None | None | None | None | Yes
+  None | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!J:J, Employee_Database!A:A=A5))
+"),"#REF!") | =IFERROR(__xludf.DUMMYFUNCTION("INDEX(FILTER(Employee_Database!B:B, Employee_Database!A:A=A5))
+"),"#REF!") | None | None | None | None | Yes
+
+=== Annuals ===
+  A: Name
+  B: Day
+  C: Reason
+  Noah | 2026-01-23 00:00:00 | casual
+  Noah | 2026-01-29 00:00:00 | casual
+  Noah | 2026-01-30 00:00:00 | casual
+  steve | 2026-01-30 00:00:00 | casual
+
+=== Commission_Types ===
+  A: COMMISSION TYPES & RATES
+  None | None | None | None
+  Commission Type | Rate (EGP) | Description | Active
+  Agent Category 1 | 3000.0 | Monthly sales target achievement | Yes
+  Agent Category 2 | 4000.0 | Monthly sales target achievement | Yes
+
+=== Sheet Verification method ===
+  A: Sheet Verification method
+  <openpyxl.worksheet.formula.ArrayFormula object at 0x0000028FF0D38E90> | 165141.40909090912 | MATCH (fraction difference 43.8636363636178)
+  Cash is | 63110.0 | None
+  Bank is | 87757.09090909091 | None
+  Insta is | 14318.18181818182 | None
+
+=== Cash ===
+  A: Cash
+
+=== Bank ===
+  A: Credit agricole
+
+=== Insta ===
+  A: Instapay - Transfers

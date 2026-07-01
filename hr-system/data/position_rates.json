@@ -1,0 +1,154 @@
+[
+  {
+    "position": "Necomer",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Part-Time Agent",
+    "monthlySalary": 5000.0
+  },
+  {
+    "position": "Agent",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Agent.",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "Agent..",
+    "monthlySalary": 15000.0
+  },
+  {
+    "position": "Closer",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Closer.",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "Supervisor",
+    "monthlySalary": 0.0
+  },
+  {
+    "position": "Team Leader Probation",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Acting as Team Leader",
+    "monthlySalary": 15000.0
+  },
+  {
+    "position": "Acting as Team Leader.",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "Team Leader",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Team Leader.",
+    "monthlySalary": 15000.0
+  },
+  {
+    "position": "Part-Time Operation Manager",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Operation Manager",
+    "monthlySalary": 20000.0
+  },
+  {
+    "position": "Head of Dept",
+    "monthlySalary": 20000.0
+  },
+  {
+    "position": "Senior HR Officer",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "HR Manager",
+    "monthlySalary": 20000.0
+  },
+  {
+    "position": "Office Assistant",
+    "monthlySalary": 8000.0
+  },
+  {
+    "position": "Senior Office Assisstant",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Office Manager",
+    "monthlySalary": 15000.0
+  },
+  {
+    "position": "Head of Quality",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "Quality Agent",
+    "monthlySalary": 8000.0
+  },
+  {
+    "position": "Senior Quality / Evaluator",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Evaluator",
+    "monthlySalary": 9000.0
+  },
+  {
+    "position": "Quality Team Leader",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Trainer",
+    "monthlySalary": 14000.0
+  },
+  {
+    "position": "Evaluator.",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Checker.",
+    "monthlySalary": 7000.0
+  },
+  {
+    "position": "Checker..",
+    "monthlySalary": 8000.0
+  },
+  {
+    "position": "Client Relations,",
+    "monthlySalary": 7000.0
+  },
+  {
+    "position": "Client Relations",
+    "monthlySalary": 8000.0
+  },
+  {
+    "position": "Client Relations.",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Client Relations..",
+    "monthlySalary": 12000.0
+  },
+  {
+    "position": "RTM",
+    "monthlySalary": 15000.0
+  },
+  {
+    "position": "RTA",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": "Quality TL Senior",
+    "monthlySalary": 10000.0
+  },
+  {
+    "position": ".Client Relations",
+    "monthlySalary": 5000.0
+  }
+]

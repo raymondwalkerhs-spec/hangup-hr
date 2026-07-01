@@ -1,0 +1,55 @@
+# Build Hangup HR for macOS (DMG + ZIP). Runs on GitHub's macOS runner — not on Windows.
+name: Build macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: hr-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: hr-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write service account credentials
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::Add repository secret SERVICE_ACCOUNT_JSON (full service-account.json contents)."
+            exit 1
+          fi
+          mkdir -p credentials
+          printf '%s' "$SERVICE_ACCOUNT_JSON" > credentials/service-account.json
+
+      - name: Rebuild native modules
+        run: npx @electron/rebuild -f -w better-sqlite3
+
+      - name: Build macOS artifacts (unsigned)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:mac
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hangup-hr-macos
+          path: |
+            hr-app/dist/*.dmg
+            hr-app/dist/*.zip
+          if-no-files-found: error

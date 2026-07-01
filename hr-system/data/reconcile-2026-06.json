@@ -1,0 +1,89 @@
+{
+  "month": "2026-06",
+  "matched": 26,
+  "deltas": [
+    {
+      "employeeId": "TL07",
+      "name": "Jude Butler",
+      "app": 11040.91,
+      "excel": 1845.454545,
+      "delta": 9195.46
+    },
+    {
+      "employeeId": "OP1",
+      "name": "Steven Crawford",
+      "app": 16138.64,
+      "excel": 7271.727273,
+      "delta": 8866.91
+    },
+    {
+      "employeeId": "HS3-23",
+      "name": "DONA SAMUEL",
+      "app": 8665.91,
+      "excel": 781.8181818,
+      "delta": 7884.09
+    },
+    {
+      "employeeId": "HS3-20",
+      "name": "Heaven Lancaster",
+      "app": 7504.55,
+      "excel": -354.5454545,
+      "delta": 7859.1
+    },
+    {
+      "employeeId": "HS3-18",
+      "name": "AMY WINTERS",
+      "app": 8363.64,
+      "excel": 1363.636364,
+      "delta": 7000
+    },
+    {
+      "employeeId": "HS3-22",
+      "name": "robertson william",
+      "app": 8563.64,
+      "excel": 1563.636364,
+      "delta": 7000
+    },
+    {
+      "employeeId": "HS1-05",
+      "name": "Ayla Adams",
+      "app": 6656.82,
+      "excel": 568.1818182,
+      "delta": 6088.64
+    },
+    {
+      "employeeId": "OF1",
+      "name": "Ahmed",
+      "app": 12000,
+      "excel": 10000,
+      "delta": 2000
+    },
+    {
+      "employeeId": "TL03",
+      "name": "Tris bruce",
+      "app": 11565.91,
+      "excel": 9827.272727,
+      "delta": 1738.64
+    },
+    {
+      "employeeId": "HS3-13",
+      "name": "jennie willer",
+      "app": 7222.73,
+      "excel": 6365.636364,
+      "delta": 857.09
+    }
+  ],
+  "missingExcel": [
+    "MG2",
+    "NW-21",
+    "HS3-36",
+    "HS3-31",
+    "HS3-34",
+    "HS3-33",
+    "HS3-29",
+    "HS3-32",
+    "HS3-28",
+    "HS3-26",
+    "HS3-30"
+  ]
+}

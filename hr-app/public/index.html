@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hangup HR</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <div id="sync-overlay" class="sync-overlay hidden">
+    <div class="sync-card">
+      <div class="loader-orbit" aria-hidden="true">
+        <div class="loader-orbit-ring"></div>
+        <div class="loader-orbit-core"><img src="/img/hr-team.png" alt="" /></div>
+      </div>
+      <strong class="loader-title">Syncing HR data…</strong>
+      <p class="muted loader-sub">Employees · attendance · payroll</p>
+      <div class="loader-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />
+        <div>
+          <strong>Hangup HR</strong>
+          <span id="sync-badge" class="badge badge-online">Synced</span>
+          <div id="last-sync" class="sync-time muted"></div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button data-page="dashboard" class="nav-btn active">Dashboard</button>
+        <button data-page="employees" class="nav-btn">Employees</button>
+        <button data-page="attendance" class="nav-btn">Attendance</button>
+        <button data-page="payroll" class="nav-btn">Payroll</button>
+        <button data-page="salaries" class="nav-btn">Salaries</button>
+        <button data-page="reports" class="nav-btn">Reports</button>
+        <button data-page="settings" class="nav-btn">Settings</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="refresh-btn" class="btn btn-sm">↻ Refresh data</button>
+        <span id="user-info" class="user-chip"></span>
+        <button id="logout-btn" class="btn btn-sm btn-ghost">Logout</button>
+      </div>
+    </aside>
+    <main id="app" class="main-content"></main>
+  </div>
+  <div id="modal-root"></div>
+  <div id="save-indicator" class="save-indicator hidden"></div>
+  <script src="/js/app.js" type="module"></script>
+</body>
+</html>

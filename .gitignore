@@ -1,0 +1,19 @@
+# Dependencies & build output
+hr-app/node_modules/
+hr-app/dist/
+hr-app/cache/
+
+# Secrets & local config
+hr-app/credentials/
+hr-app/.env
+*.log
+
+# Service account key copies (never commit)
+decoded-flag-*.json
+**/service-account.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
