@@ -1,0 +1,4384 @@
+const TRANSPORT_ELIGIBLE_FROM_MONTH = "2026-07";
+
+function transportAllowedForMonth(month) {
+  return String(month || "") >= TRANSPORT_ELIGIBLE_FROM_MONTH;
+}
+
+function transportCheckboxChecked(month, adj) {
+  if (adj?.transportEligible === true) return true;
+  if (adj?.transportEligible === false) return false;
+  return transportAllowedForMonth(month);
+}
+
+function shiftMonth(ym, delta) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function splitStatusBadge(status) {
+  const cls =
+    status === "received" ? "badge-ok" : status === "deferred" ? "badge-warn" : "badge-status";
+  return `<span class="badge ${cls}">${status}</span>`;
+}
+
+const SESSION_CHECK_MS = 5 * 60 * 1000;
+const VERSION_NOTICE_KEY = "hr_version_notice_dismissed";
+const SAVED_USER_KEY = "hr_saved_user";
+const SESSION_KEY = "hr_session_id";
+
+function getSessionId() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function clearSessionId() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function getSavedUsername() {
+  try {
+    return localStorage.getItem(SAVED_USER_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+const state = {
+  user: null,
+  page: "dashboard",
+  month: new Date().toISOString().slice(0, 7),
+  unit: "",
+  team: "",
+  hideOut: true,
+  hideZeroNet: false,
+  companyContext: sessionStorage.getItem("companyContext") || "hangup",
+  salesPickDate: new Date().toISOString().slice(0, 10),
+  salesWeekDate: new Date().toISOString().slice(0, 10),
+  empFilter: { q: "", status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
+  changesFilter: { user: "", entity: "" },
+  meta: { statuses: [], units: [], positions: [], backendPools: [] },
+  pendingAttendance: new Map(),
+  saveTimer: null,
+};
+
+let renderGeneration = 0;
+let appReady = false;
+
+function buildApiQuery(params = {}) {
+  const q = listHideOutQuery();
+  if (state.companyContext === "hs2") q.set("company", "hs2");
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && v !== "") q.set(k, String(v));
+  }
+  return q;
+}
+
+function apiContextQuery(params = {}) {
+  const s = buildApiQuery(params).toString();
+  return s ? `?${s}` : "";
+}
+
+function employeesQuery() {
+  return apiContextQuery();
+}
+
+function listHideOutQuery() {
+  const q = new URLSearchParams();
+  if (state.hideOut) q.set("hideOut", "true");
+  else q.set("showOut", "true");
+  return q;
+}
+
+function payrollNetAmount(row) {
+  if (!row) return 0;
+  if (row.hasSplits) return Number(row.calculatedNet ?? row.netSalary ?? 0);
+  return Number(row.netSalary ?? 0);
+}
+
+function filterPayrollByZeroNet(rows) {
+  if (!state.hideZeroNet) return rows;
+  return rows.filter((r) => payrollNetAmount(r) !== 0);
+}
+
+function isOutEmployee(emp) {
+  if (!emp) return true;
+  if (emp.status === "Deleted" || emp.deleted_at) return true;
+  if (emp.status === "Out") return true;
+  if (!emp.status && !emp.american_name && !emp.arabic_name) return true;
+  return false;
+}
+
+function isUnassignedIdStub(emp) {
+  if (!emp?.id || emp.status === "Deleted" || emp.deleted_at) return false;
+  if (emp.american_name || emp.arabic_name) return false;
+  if (emp.promoted_to_id || emp.promoted_from_id) return false;
+  return true;
+}
+
+function closeSidebarNav() {
+  document.getElementById("app-sidebar")?.classList.remove("sidebar-open");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  backdrop?.classList.remove("visible");
+  backdrop?.classList.add("hidden");
+  const toggle = document.getElementById("nav-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "false");
+}
+
+function openSidebarNav() {
+  document.getElementById("app-sidebar")?.classList.add("sidebar-open");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  backdrop?.classList.remove("hidden");
+  requestAnimationFrame(() => backdrop?.classList.add("visible"));
+  const toggle = document.getElementById("nav-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "true");
+}
+
+function initSidebarNav() {
+  const toggle = document.getElementById("nav-toggle");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    const open = document.getElementById("app-sidebar")?.classList.contains("sidebar-open");
+    if (open) closeSidebarNav();
+    else openSidebarNav();
+  });
+  backdrop?.addEventListener("click", closeSidebarNav);
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900) closeSidebarNav();
+  });
+}
+
+const NATIONALITY_ALIASES = {
+  egyptain: "egyptian",
+  egypt: "egyptian",
+  sudan: "sudanese",
+  ethiopia: "ethiopian",
+  eritrea: "eritrean",
+  "south sudan": "south sudanese",
+};
+
+function normNationality(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  return NATIONALITY_ALIASES[raw] || raw;
+}
+
+const TRANSPORT_OVERRIDE_STATUSES = new Set([
+  "Half Day",
+  "NSNC Half Day",
+  "Lateness A",
+  "Lateness B",
+  "Quarter Day-Off",
+]);
+
+function isTransportOverrideStatus(status) {
+  return TRANSPORT_OVERRIDE_STATUSES.has(status);
+}
+
+const TEAM_OPTIONS = [
+  "Back-End",
+  "Daemon",
+  "Steven",
+  "Justin",
+  "Ayla",
+  "Tris",
+  "Jude",
+  "HR",
+  "Quality",
+  "_____",
+];
+
+const CASH_BRANCHES = ["Makram", "Abbas", "Square", "Other"];
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "Instapay / Wallet", label: "Instapay / Wallet" },
+  { value: "Cash", label: "Cash" },
+  { value: "Bank Account", label: "Bank Account" },
+];
+
+const TL_BONUS_TYPE = "Bonus from TL / OP";
+
+function normalizePaymentMethodValue(method) {
+  const m = String(method || "").trim().toLowerCase();
+  if (!m) return "";
+  if (m.includes("insta") || m.includes("wallet") || m.includes("instapay")) return "Instapay / Wallet";
+  if (m.includes("cash")) return "Cash";
+  if (m.includes("bank")) return "Bank Account";
+  return String(method || "").trim();
+}
+
+function paymentMethodFieldsHtml(emp = {}) {
+  const pm = normalizePaymentMethodValue(emp.payment_method);
+  const branch = emp.alternative_payment || "";
+  return `
+    <label class="field"><span>Payment Method</span>
+      <select name="payment_method" id="emp-payment-method">
+        <option value="">— Select —</option>
+        ${PAYMENT_METHOD_OPTIONS.map(
+          (o) => `<option value="${o.value}" ${pm === o.value ? "selected" : ""}>${o.label}</option>`
+        ).join("")}
+      </select>
+    </label>
+    <div id="pay-insta-wrap" class="field ${pm === "Instapay / Wallet" ? "" : "hidden"}" style="grid-column:1/-1">
+      <label class="field"><span>Instapay / wallet number or address</span>
+        <input name="payment_details_insta_wallet" value="${emp.payment_details_insta_wallet || ""}" placeholder="Phone, username, or wallet ID" />
+      </label>
+    </div>
+    <div id="pay-cash-wrap" class="${pm === "Cash" ? "" : "hidden"}" style="grid-column:1/-1">
+      <label class="field"><span>Cash branch</span>
+        <select name="alternative_payment" id="emp-cash-branch">
+          <option value="">— Select branch —</option>
+          ${CASH_BRANCHES.map(
+            (b) => `<option value="${b}" ${branch === b ? "selected" : ""}>${b}</option>`
+          ).join("")}
+        </select>
+      </label>
+    </div>
+    <div id="pay-bank-wrap" class="${pm === "Bank Account" ? "" : "hidden"}" style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <label class="field"><span>Bank reference number</span>
+        <input name="bank_refrence_number" value="${emp.bank_refrence_number || ""}" />
+      </label>
+      <label class="field"><span>Name in bank sheet</span>
+        <input name="bank_name_as_bank_sheet" value="${emp.bank_name_as_bank_sheet || ""}" />
+      </label>
+    </div>`;
+}
+
+function bindPaymentMethodFields() {
+  const sel = document.getElementById("emp-payment-method");
+  if (!sel) return;
+  const refresh = () => {
+    const v = sel.value;
+    document.getElementById("pay-insta-wrap")?.classList.toggle("hidden", v !== "Instapay / Wallet");
+    document.getElementById("pay-cash-wrap")?.classList.toggle("hidden", v !== "Cash");
+    document.getElementById("pay-bank-wrap")?.classList.toggle("hidden", v !== "Bank Account");
+  };
+  sel.onchange = refresh;
+  refresh();
+}
+
+function isOutEmployeeStatus(status) {
+  const s = String(status || "").trim().toLowerCase();
+  return s === "out" || s.includes("out but still");
+}
+
+function positionSelectHtml(name, value, id = "emp-position") {
+  const v = value || "";
+  const fromRates = state.meta?.positionRates || [];
+  const fromPositions = state.meta?.positions || [];
+  const opts = [...new Set([...fromRates, ...fromPositions, v].filter(Boolean))];
+  return `<label class="field"><span>Position</span>
+    <select name="${name}" id="${id}">
+      <option value="">— Select position —</option>
+      ${opts.map((p) => `<option value="${escapeHtml(p)}" ${v === p ? "selected" : ""}>${escapeHtml(p)}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function teamSelectHtml(name, value, id = "emp-team") {
+  const v = value || "";
+  const orgTeams = (state.orgTeams || []).map((t) => t.name);
+  const opts = [...new Set([...TEAM_OPTIONS, ...orgTeams, v].filter(Boolean))];
+  return `<label class="field"><span>Team</span>
+    <select name="${name}" id="${id}">
+      <option value="">— Select team —</option>
+      ${opts.map((t) => `<option value="${t}" ${v === t ? "selected" : ""}>${t}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function pageSkeleton(label = "Loading…") {
+  return `<div class="page-loader">
+    <div class="page-loader-inner">
+      <div class="loader-orbit loader-orbit-sm">
+        <div class="loader-orbit-ring"></div>
+        <div class="loader-orbit-core"><img src="/img/hr-team.png" alt="" /></div>
+      </div>
+      <p class="page-loader-text">${label}</p>
+      <div class="loader-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>`;
+}
+
+function setButtonLoading(btn, loading) {
+  if (!btn) return;
+  btn.classList.toggle("is-loading", loading);
+  btn.disabled = loading;
+}
+
+async function downloadFile(path, filename) {
+  const sessionId = sessionStorage.getItem("hrSessionId");
+  const res = await fetch(`/api${path}`, {
+    headers: sessionId ? { "x-session-id": sessionId } : {},
+  });
+  if (res.status === 401) {
+    window.location.href = "/login";
+    return;
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function api(path, options = {}, timeoutMs = 120000) {
+  if (typeof resetIdleTimer === "function") resetIdleTimer();
+  const sessionId = getSessionId();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionId ? { "x-session-id": sessionId } : {}),
+        ...options.headers,
+      },
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      throw new Error("Request timed out. Check your connection and try Refresh data.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 401) {
+    clearSessionId();
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data.error || res.statusText;
+    if (msg.toLowerCase().includes("credentials") || msg.toLowerCase().includes("service account")) {
+      throw new Error(msg);
+    }
+    if (data.offline) throw new Error("Internet required to sync HR data. Check your connection.");
+    throw new Error(msg);
+  }
+  // Every successful write is pushed to the Google Sheet by the server; afterwards
+  // we quietly pull the newest data back so the local view stays current with edits
+  // made by other users. Sync calls themselves are excluded to avoid a loop.
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && !path.startsWith("/sync/")) {
+    scheduleSilentRefresh();
+  }
+  return data;
+}
+
+let silentRefreshTimer = null;
+
+function scheduleSilentRefresh() {
+  clearTimeout(silentRefreshTimer);
+  silentRefreshTimer = setTimeout(runSilentRefresh, 3000);
+}
+
+function isModalOpen() {
+  return !!document.getElementById("modal-root")?.childElementCount;
+}
+
+async function runSilentRefresh() {
+  if (state.pendingAttendance.size > 0 || isModalOpen()) {
+    scheduleSilentRefresh();
+    return;
+  }
+  try {
+    await api("/sync/refresh", { method: "POST" });
+    await refreshStatus();
+  } catch {
+    /* offline or transient — next write/refresh will retry */
+  }
+}
+
+function showSyncOverlay(show) {
+  document.getElementById("sync-overlay")?.classList.toggle("hidden", !show);
+}
+
+function showSaveIndicator(msg, type = "info") {
+  const el = document.getElementById("save-indicator");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `save-indicator save-${type}`;
+  el.classList.remove("hidden");
+  if (type === "saved") setTimeout(() => el.classList.add("hidden"), 2000);
+}
+
+async function initialSync() {
+  // First run on a fresh PC starts with an empty local cache, so the post-login
+  // sync must succeed before the app is usable. Retry a few times to ride out a
+  // slow/flaky first connection; if it still fails, let boot() show the retry card.
+  showSyncOverlay(true);
+  try {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await api("/sync/refresh", { method: "POST" });
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    throw lastErr;
+  } finally {
+    showSyncOverlay(false);
+    await refreshStatus();
+  }
+}
+
+async function refreshData() {
+  showSyncOverlay(true);
+  try {
+    await api("/sync/refresh", { method: "POST" });
+    showSaveIndicator("Data refreshed", "saved");
+    await refreshStatus();
+    render();
+  } catch (e) {
+    showSaveIndicator(e.message, "error");
+  } finally {
+    showSyncOverlay(false);
+  }
+}
+
+async function checkSession() {
+  try {
+    const data = await api("/session-check");
+    if (data.action === "version_blocked") {
+      showVersionBlockedScreen(data.message, data.versionCheck || data);
+      return false;
+    }
+    if (data.action === "uninstall" && window.hrDesktop) {
+      await window.hrDesktop.triggerUninstall();
+      return false;
+    }
+    if (data.action === "admin") {
+      clearSessionId();
+      alert(data.message || "Contact Admin.");
+      window.location.href = "/login";
+      return false;
+    }
+    if (data.versionNotice) {
+      checkDesktopGitHubUpdate(data.versionNotice);
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function monthLabel(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function monthPayrollFolderName(ym) {
+  return `${monthLabel(ym).replace(/ /g, "_")}_Payroll`;
+}
+
+function parseTlSourceFromReason(reason) {
+  const m = String(reason || "").match(/deducted from\s+(\S+)\)/i);
+  return m ? m[1] : "";
+}
+
+function parseTlTargetFromReason(reason) {
+  const m = String(reason || "").match(/paid to\s+(\S+)/i);
+  return m ? m[1] : "";
+}
+
+function bonusRecipientCell(d, empById) {
+  const targetId = d.bonusRecipientId || parseTlTargetFromReason(d.reason);
+  if (!targetId) return `<span class="muted">—</span>`;
+  const target = empById.get(targetId);
+  const american = d.bonusRecipientAmericanName || target?.american_name || "";
+  const fallback = american || target?.arabic_name || targetId;
+  return `<div class="bonus-recipient-cell">
+    <strong>${escapeHtml(targetId)}</strong><br>
+    <span>${escapeHtml(american || fallback)}</span>
+    ${american && target?.arabic_name ? `<br><span class="muted">${escapeHtml(target.arabic_name)}</span>` : ""}
+  </div>`;
+}
+
+function deductionActionCells(d, canEdit) {
+  if (!canEdit) return "";
+  const key = JSON.stringify({ employeeId: d.employeeId, date: d.date, type: d.type });
+  return `<td class="btn-row">
+    <button class="btn btn-sm" data-edit-ded='${key}'>Edit</button>
+    <button class="btn btn-sm btn-danger" data-del-ded='${key}'>Delete</button>
+  </td>`;
+}
+
+function bindDeductionTableActions(root, deductions, employees, dedTypes) {
+  root.querySelectorAll("[data-edit-ded]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = JSON.parse(btn.dataset.editDed);
+      const d = deductions.find((x) => x.employeeId === key.employeeId && x.date === key.date && x.type === key.type);
+      if (d) openDeductionEditModal(d, employees, dedTypes || []);
+    };
+  });
+  root.querySelectorAll("[data-del-ded]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delDed);
+      openConfirmDeleteModal({
+        title: "Delete deduction",
+        message: `Delete ${payload.type} on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/deductions", { method: "DELETE", body: JSON.stringify(payload) });
+          render();
+        },
+      });
+    };
+  });
+}
+
+function formatPayslipDate(dateStr) {
+  const d = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function attendanceDetailHtml(records) {
+  const lines = (records || [])
+    .filter((r) => ["Lateness A", "Lateness B", "Quarter Day-Off", "Half Day"].includes(r.status))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .map((r) => {
+      const when = formatPayslipDate(r.date);
+      if (r.status === "Lateness A") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Lateness A — 25 EGP on ${when}</div>`;
+      if (r.status === "Lateness B") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Lateness B — 50 EGP on ${when}</div>`;
+      if (r.status === "Quarter Day-Off") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Quarter day on ${when}</div>`;
+      if (r.status === "Half Day") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Half day on ${when}</div>`;
+      return "";
+    })
+    .join("");
+  return lines;
+}
+
+function canManagePayrollEvents() {
+  return ["admin", "ceo", "hr"].includes(state.user?.role);
+}
+
+function canEditTlBonuses() {
+  return canManagePayrollEvents() || state.user?.canTransferBonus === true;
+}
+
+function canViewBonusesDeductions() {
+  if (state.user?.canViewBonuses === true) return true;
+  return ["admin", "ceo", "hr", "finance", "op", "tl", "quality", "rtm", "agent", "office_assistant"].includes(
+    state.user?.role
+  );
+}
+
+function canSubmitBonusRequest() {
+  return state.user?.canSubmitBonusRequest === true || ["tl", "op", "quality", "rtm", "admin", "hr"].includes(state.user?.role);
+}
+
+function canApproveBonusRequest() {
+  return state.user?.canApproveBonusRequest === true || ["admin", "ceo", "hr"].includes(state.user?.role);
+}
+
+function employeeSelectOptions(employees, selectedId = "") {
+  return employees
+    .map(
+      (e) =>
+        `<option value="${e.id}" ${e.id === selectedId ? "selected" : ""}>${e.id} — ${escapeHtml(e.american_name || e.arabic_name || e.id)}</option>`
+    )
+    .join("");
+}
+
+function isLeadershipEmployeeId(id) {
+  const s = String(id || "").trim().toUpperCase();
+  return /^(TL|CL|OP)/.test(s);
+}
+
+function sortEmployeesForLeadDeduct(employees) {
+  const rank = (e) => {
+    const id = String(e?.id || "").toUpperCase();
+    if (id.startsWith("TL")) return 0;
+    if (id.startsWith("CL")) return 1;
+    if (id.startsWith("OP")) return 2;
+    if (e?.lead_role) {
+      const lr = String(e.lead_role).toUpperCase();
+      if (lr === "TL") return 0;
+      if (lr === "CL") return 1;
+      if (lr === "OP") return 2;
+    }
+    return 99;
+  };
+  return [...employees].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+  });
+}
+
+function employeeSelectOptionsForTlDeduct(employees, selectedId = "") {
+  return sortEmployeesForLeadDeduct(employees)
+    .map((e) => {
+      const tag = isLeadershipEmployeeId(e.id) ? " ★" : "";
+      return `<option value="${e.id}" ${e.id === selectedId ? "selected" : ""}>${e.id}${tag} — ${escapeHtml(e.american_name || e.arabic_name || e.id)}</option>`;
+    })
+    .join("");
+}
+
+function dayHeader(cal) {
+  return `${cal.weekdayName} ${cal.dayOfMonth}`;
+}
+
+function isWeekend(d) {
+  const dow = new Date(d + "T12:00:00").getDay();
+  return dow === 0 || dow === 6;
+}
+
+function statusClass(status) {
+  if (!status) return "st-empty";
+  if (status === "Attended") return "st-attended";
+  if (status === "Day-OFF") return "st-dayoff";
+  if (status.includes("Lateness")) return "st-late";
+  if (status === "NSNC" || status === "NSNC Half Day" || status.includes("Not Approved")) return "st-nsnc";
+  return "";
+}
+
+function statusBadge(status) {
+  if (!status) return '<span class="badge badge-out">—</span>';
+  if (status === "Active") return '<span class="badge badge-active">Active</span>';
+  if (status.includes("Paused")) return '<span class="badge badge-paused">Paused</span>';
+  if (status.includes("OUT")) return '<span class="badge badge-paused">OUT</span>';
+  if (status === "Out") return '<span class="badge badge-out">Out</span>';
+  return `<span class="badge badge-status">${status}</span>`;
+}
+
+function payrollStatusBadge(status) {
+  const s = (status || "pending").toLowerCase();
+  const cls =
+    s === "closed" || s === "received"
+      ? "badge-active"
+      : s.includes("pending")
+        ? "badge-paused"
+        : "badge-status";
+  return `<span class="badge ${cls}">${status || "pending"}</span>`;
+}
+
+function initials(name) {
+  return (name || "?").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function avatarHtml(emp, sizeClass = "") {
+  if (!emp) return `<span class="emp-avatar ${sizeClass}">?</span>`;
+  const name = emp.american_name || emp.name || emp.id;
+  if (emp.profile_photo_file_id) {
+    const v = emp.profile_photo_updated
+      ? `?v=${encodeURIComponent(emp.profile_photo_updated)}`
+      : "";
+    const ini = initials(name);
+    return `<span class="emp-avatar has-photo ${sizeClass}" data-ini="${ini}">
+      <img src="/api/employees/${emp.id}/avatar${v}" alt="" loading="lazy"
+        onerror="this.remove();this.parentElement.classList.remove('has-photo');this.parentElement.textContent=this.parentElement.dataset.ini;" />
+    </span>`;
+  }
+  return `<span class="emp-avatar ${sizeClass}">${initials(name)}</span>`;
+}
+
+async function uploadProfilePhotoFile(employeeId, file) {
+  if (!file?.size) throw new Error("Choose an image file");
+  const contentBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return api(`/employees/${employeeId}/profile-photo`, {
+    method: "POST",
+    body: JSON.stringify({ fileName: file.name, contentBase64 }),
+  });
+}
+
+function bindProfilePhotoUpload(employeeId, onDone) {
+  const input = document.getElementById("profile-photo-input");
+  const removeBtn = document.getElementById("remove-photo-btn");
+  const uploadBtn = document.getElementById("upload-photo-btn") || document.getElementById("payslip-photo-btn");
+  input?.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      setButtonLoading(uploadBtn, true);
+      await uploadProfilePhotoFile(employeeId, file);
+      if (employeeId === state.user?.employeeId) await updateSidebarBrand();
+      onDone?.();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setButtonLoading(uploadBtn, false);
+      input.value = "";
+    }
+  });
+  removeBtn?.addEventListener("click", async () => {
+    if (!confirm("Remove profile photo?")) return;
+    try {
+      await api(`/employees/${employeeId}/profile-photo`, { method: "DELETE" });
+      if (employeeId === state.user?.employeeId) await updateSidebarBrand();
+      onDone?.();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+}
+
+function fmt(n) {
+  return Math.round(n || 0).toLocaleString();
+}
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function closeModal() {
+  document.getElementById("modal-root").innerHTML = "";
+}
+
+function versionNoticeDismissKey(currentVersion) {
+  return `${VERSION_NOTICE_KEY}_${currentVersion || "unknown"}`;
+}
+
+function showVersionUpdateNotice(notice, githubInfo = null) {
+  if (!notice?.message && !githubInfo?.updateAvailable) return;
+  const latest = githubInfo?.latest || notice?.currentVersion;
+  const key = versionNoticeDismissKey(latest);
+  try {
+    if (sessionStorage.getItem(key) === "1") return;
+  } catch (_) {}
+
+  const canAutoUpdate = Boolean(githubInfo?.updateAvailable && window.hrDesktop?.applyGitHubUpdate);
+  const message =
+    notice?.message ||
+    `Version ${githubInfo.latest} is available on GitHub (you have ${githubInfo.current || notice?.appVersion || "this version"}).`;
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Update available</h2>
+      <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warn">${escapeHtml(message)}</div>
+      <p class="muted">You are on <strong>${escapeHtml(notice?.appVersion || githubInfo?.current || "this version")}</strong>.
+      The latest version is <strong>${escapeHtml(latest || "unknown")}</strong>.</p>
+      ${
+        canAutoUpdate
+          ? `<p class="muted">Click <strong>Update now</strong> to download ${
+              githubInfo?.updateType === "patch" ? "only the changed files" : "the update package"
+            } and apply them in place (no new installer). The app will restart when finished.${
+              githubInfo?.assetSize
+                ? ` Download size: ~${Math.max(1, Math.round(githubInfo.assetSize / 1024))} KB.`
+                : ""
+            }</p>`
+          : `<p class="muted">You can keep working for now, but please ask Admin for the newest build soon.</p>`
+      }
+      <div id="version-update-status" class="muted" style="margin-top:.5rem;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      ${canAutoUpdate ? `<button type="button" class="btn btn-primary" id="version-notice-update">Update now</button>` : ""}
+      <button type="button" class="btn" id="version-notice-continue">Continue</button>
+    </div>`);
+
+  const root = document.getElementById("modal-root");
+  root.querySelector("#version-notice-continue")?.addEventListener("click", () => {
+    try {
+      sessionStorage.setItem(key, "1");
+    } catch (_) {}
+    closeModal();
+  });
+
+  root.querySelector("#version-notice-update")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#version-notice-update");
+    const statusEl = root.querySelector("#version-update-status");
+    if (!btn || !window.hrDesktop?.applyGitHubUpdate) return;
+    btn.disabled = true;
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.textContent = "Downloading update…";
+    }
+    try {
+      await window.hrDesktop.applyGitHubUpdate();
+      if (statusEl) statusEl.textContent = "Update installed. Restarting…";
+      setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
+    } catch (e) {
+      btn.disabled = false;
+      if (statusEl) statusEl.textContent = e.message || "Update failed";
+      alert(e.message || "Update failed");
+    }
+  });
+}
+
+async function checkDesktopGitHubUpdate(notice = null) {
+  if (!window.hrDesktop?.checkGitHubUpdate) {
+    if (notice) showVersionUpdateNotice(notice);
+    return;
+  }
+  try {
+    const githubInfo = await window.hrDesktop.checkGitHubUpdate();
+    if (githubInfo?.enabled && githubInfo.updateAvailable) {
+      showVersionUpdateNotice(notice, githubInfo);
+      return;
+    }
+  } catch (_) {
+    /* non-fatal */
+  }
+  if (notice) showVersionUpdateNotice(notice);
+}
+
+function showVersionBlockedScreen(message, details) {
+  const root = document.getElementById("app");
+  if (!root) return;
+  document.querySelector(".app-shell")?.classList.add("version-blocked-shell");
+  const canAutoUpdate = Boolean(window.hrDesktop?.applyGitHubUpdate);
+  root.innerHTML = `
+    <div class="version-block-screen">
+      <div class="card" style="max-width:560px;margin:3rem auto;text-align:center">
+        <h2>App update required</h2>
+        <div class="alert alert-warn">${escapeHtml(message || "This app version is no longer supported.")}</div>
+        ${
+          details
+            ? `<p class="muted">Your version: <strong>${escapeHtml(details.appVersion || "unknown")}</strong><br>
+               Required version: <strong>${escapeHtml(details.currentVersion || "unknown")}</strong></p>`
+            : ""
+        }
+        <p class="muted">${canAutoUpdate ? "Install the update below or contact your Admin." : "Contact your Admin to install the latest version. The app cannot be used until then."}</p>
+        <div id="version-block-status" class="muted" style="margin:.5rem 0"></div>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">
+          ${canAutoUpdate ? `<button class="btn btn-primary" id="version-block-update">Update now</button>` : ""}
+          <button class="btn" id="version-block-logout">Return to sign in</button>
+        </div>
+      </div>
+    </div>`;
+  root.querySelector("#version-block-logout")?.addEventListener("click", () => performLogout());
+  root.querySelector("#version-block-update")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#version-block-update");
+    const statusEl = root.querySelector("#version-block-status");
+    if (!btn) return;
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Downloading update…";
+    try {
+      await window.hrDesktop.applyGitHubUpdate();
+      if (statusEl) statusEl.textContent = "Update installed. Restarting…";
+      setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
+    } catch (e) {
+      btn.disabled = false;
+      if (statusEl) statusEl.textContent = e.message || "Update failed";
+    }
+  });
+}
+
+function consumePendingVersionNotice() {
+  try {
+    const raw = sessionStorage.getItem("hr_pending_version_notice");
+    if (!raw) {
+      checkDesktopGitHubUpdate();
+      return;
+    }
+    sessionStorage.removeItem("hr_pending_version_notice");
+    checkDesktopGitHubUpdate(JSON.parse(raw));
+  } catch (_) {
+    checkDesktopGitHubUpdate();
+  }
+}
+
+function openModal(html, wide = false) {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = `<div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal ${wide ? "modal-wide" : ""}" role="dialog">${html}</div>
+  </div>`;
+  root.querySelector("#modal-backdrop").addEventListener("click", (e) => {
+    if (e.target.id === "modal-backdrop") closeModal();
+  });
+  root.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
+}
+
+function setUserInfo(username, role) {
+  const el = document.getElementById("user-info");
+  if (!el) return;
+  const name = username || getSavedUsername() || "";
+  el.textContent = name ? (role ? `${name} · ${role}` : name) : "";
+}
+
+async function updateSidebarBrand() {
+  const wrap = document.getElementById("brand-logo-wrap");
+  if (!wrap) return;
+  const empId = state.user?.employeeId;
+  if (!empId) {
+    wrap.innerHTML = `<img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />`;
+    return;
+  }
+  try {
+    const data = await api(`/employees/${empId}${apiContextQuery()}`);
+    const emp = data.employee;
+    if (emp?.profile_photo_file_id) {
+      wrap.innerHTML = avatarHtml(emp, "brand-user-avatar");
+      return;
+    }
+  } catch {
+    /* fall back to default logo */
+  }
+  wrap.innerHTML = `<img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />`;
+}
+
+function applyCompanyBranding() {
+  const title = document.getElementById("brand-title");
+  if (title) title.textContent = state.companyContext === "hs2" ? "Hangup HS-2" : "Hangup HR";
+  document.body.classList.toggle("company-hs2", state.companyContext === "hs2");
+  const wrap = document.getElementById("company-toggle-wrap");
+  if (!wrap) return;
+  const ctx = state.companyContext === "hs2" ? "hs2" : "hangup";
+  wrap.innerHTML = `<div class="company-switcher" role="group" aria-label="Company to manage">
+    <span class="company-switcher-label">Managing</span>
+    <button type="button" class="company-switch-btn ${ctx === "hangup" ? "active" : ""}" data-company="hangup">Main Hangup</button>
+    <button type="button" class="company-switch-btn ${ctx === "hs2" ? "active" : ""}" data-company="hs2">HS-2</button>
+  </div>`;
+  wrap.querySelectorAll("[data-company]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.company;
+      if (next === state.companyContext) return;
+      state.companyContext = next;
+      sessionStorage.setItem("companyContext", state.companyContext);
+      applyCompanyBranding();
+      render();
+    });
+  });
+}
+
+function openConfirmDeleteModal({ title, message, onConfirm }) {
+  openModal(
+    `<div class="modal-header"><h2>${escapeHtml(title || "Confirm deletion")}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <p>${escapeHtml(message || "This action cannot be undone.")}</p>
+      <label class="field"><input type="checkbox" id="confirm-del-check" /> I confirm this deletion</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-danger" id="confirm-del-btn">Delete</button>
+    </div>`,
+    true
+  );
+  document.getElementById("confirm-del-btn").onclick = async () => {
+    if (!document.getElementById("confirm-del-check")?.checked) {
+      alert("Please check the confirmation box.");
+      return;
+    }
+    closeModal();
+    try {
+      await onConfirm();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+// Full audit logs are restricted to Admin + CEO roles.
+function isChangesViewer() {
+  return ["admin", "ceo"].includes(state.user?.role);
+}
+
+function isUserManager() {
+  return state.user?.canManageUsers === true;
+}
+
+function applyChangesButtonVisibility() {
+  const btn = document.getElementById("nav-changes");
+  if (btn) btn.classList.toggle("hidden", !isChangesViewer());
+  const usersBtn = document.getElementById("nav-users");
+  if (usersBtn) usersBtn.classList.toggle("hidden", !isUserManager());
+  const payrollPages = ["payroll", "loans", "salaries"];
+  const showPayroll = state.user?.canViewPayroll === true || ["admin", "ceo", "hr", "finance"].includes(state.user?.role);
+  payrollPages.forEach((page) => {
+    document.querySelector(`.nav-btn[data-page="${page}"]`)?.classList.toggle("hidden", !showPayroll);
+  });
+  const bonusPages = ["bonuses", "deductions"];
+  const showBonuses = canViewBonusesDeductions();
+  bonusPages.forEach((page) => {
+    document.querySelector(`.nav-btn[data-page="${page}"]`)?.classList.toggle("hidden", !showBonuses);
+  });
+  const salesBtn = document.getElementById("nav-sales");
+  const teamDashBtn = document.getElementById("nav-team-dashboard");
+  const showSales = state.user?.canViewSales !== false || canViewBonusesDeductions();
+  if (salesBtn) salesBtn.classList.toggle("hidden", !showSales);
+  if (teamDashBtn) teamDashBtn.classList.toggle("hidden", !showSales);
+  const costsBtn = document.getElementById("nav-costs");
+  if (costsBtn) {
+    const showCosts = state.user?.canAccessCosts === true || state.user?.canSubmitExpense === true;
+    costsBtn.classList.toggle("hidden", !showCosts);
+  }
+}
+
+async function refreshStatus() {
+  setUserInfo(state.user?.username);
+  applyCompanyBranding();
+  applyChangesButtonVisibility();
+  try {
+    const s = await api("/status");
+    state.user = s.user || null;
+    state.hideOut = s.hideOutEmployees !== false;
+    setUserInfo(s.user?.username, s.user?.role);
+    applyChangesButtonVisibility();
+    document.getElementById("sync-badge").textContent = "Synced";
+    document.getElementById("sync-badge").className = "badge badge-online";
+    document.getElementById("last-sync").textContent = s.lastSync
+      ? `Last sync: ${timeAgo(s.lastSync)}`
+      : "";
+    await updateSidebarBrand();
+  } catch {
+    document.getElementById("sync-badge").textContent = "Offline";
+    document.getElementById("sync-badge").className = "badge badge-offline";
+  }
+}
+
+function monthToolbar(extra = "") {
+  return `<div class="toolbar">
+    <button class="btn" id="prev-month">←</button>
+    <strong>${monthLabel(state.month)}</strong>
+    <button class="btn" id="next-month">→</button>
+    <input type="month" id="month-input" value="${state.month}" />
+    ${extra}
+  </div>`;
+}
+
+function bindMonthNav(root) {
+  root.querySelector("#prev-month")?.addEventListener("click", () => {
+    state.month = shiftMonth(state.month, -1);
+    render();
+  });
+  root.querySelector("#next-month")?.addEventListener("click", () => {
+    state.month = shiftMonth(state.month, 1);
+    render();
+  });
+  root.querySelector("#month-input")?.addEventListener("change", (e) => {
+    state.month = e.target.value;
+    render();
+  });
+}
+
+function hideOutToggle() {
+  return `<label class="toggle-label"><input type="checkbox" id="hide-out" ${state.hideOut ? "checked" : ""} /> Hide out / inactive</label>`;
+}
+
+function bindHideOut(root) {
+  root.querySelector("#hide-out")?.addEventListener("change", (e) => {
+    state.hideOut = e.target.checked;
+    if (canManagePayrollEvents()) {
+      api(`/settings/hide-out`, {
+        method: "PUT",
+        body: JSON.stringify({ hide: state.hideOut }),
+      }).catch(() => {});
+    }
+    render();
+  });
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function matchesEmployeeSearch(emp, q) {
+  const needle = String(q || "").trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [
+    emp.id,
+    emp.employeeId,
+    emp.american_name,
+    emp.arabic_name,
+    emp.name,
+    emp.team,
+    emp.unit,
+    emp.position,
+  ]
+    .map((v) => String(v || "").toLowerCase())
+    .join(" ");
+  return hay.includes(needle);
+}
+
+function employeeSearchInputHtml() {
+  return `<input class="search-input" id="employee-search" type="search" placeholder="Search name or ID…" value="${escapeHtml(state.empFilter.q)}" autocomplete="off" spellcheck="false" />`;
+}
+
+function bindEmployeeSearch(root, onFilter) {
+  const input = root.querySelector("#employee-search");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    state.empFilter.q = input.value;
+    onFilter();
+  });
+}
+
+function filterEmployeesList(employees) {
+  let list = employees;
+  if (state.hideOut) {
+    list = list.filter((e) => !isOutEmployee(e) || isUnassignedIdStub(e));
+  }
+  if (state.empFilter.q) list = list.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  if (state.empFilter.status) list = list.filter((e) => e.status === state.empFilter.status);
+  if (state.empFilter.unit) list = list.filter((e) => e.unit === state.empFilter.unit);
+  if (state.empFilter.nationality) {
+    const want = normNationality(state.empFilter.nationality);
+    list = list.filter((e) => normNationality(e.nationality) === want);
+  }
+  if (state.empFilter.workPermit) {
+    list = list.filter((e) => e.work_permit === state.empFilter.workPermit);
+  }
+  if (state.empFilter.insuranceStatus) {
+    list = list.filter((e) => e.insurance_status === state.empFilter.insuranceStatus);
+  }
+  return list;
+}
+
+function employeeListRowHtml(e) {
+  const stub = isUnassignedIdStub(e);
+  const name = stub ? `(Unassigned ID)` : (e.american_name || e.arabic_name || e.id);
+  const appId = e.archived_app_id && String(e.id || "").startsWith("DEL-") ? e.archived_app_id : e.id;
+  return `<tr class="clickable${stub ? " row-stub" : ""}" data-emp="${e.id}">
+    <td><div class="emp-cell">${avatarHtml(e)}<strong>${name}</strong>${stub ? '<span class="stub-badge">No user assigned</span>' : ""}</div></td>
+    <td><code>${appId}</code>${e.internal_id ? `<div class="muted" style="font-size:.7rem" title="Database ID">${String(e.internal_id).slice(0, 8)}…</div>` : ""}</td>
+    <td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
+    <td>${e.position || "—"}</td>
+    <td>${e.nationality || "—"}</td>
+    <td>${employeeComplianceLabel(e)}</td>
+    <td>${statusBadge(e.status)}</td>
+    <td>${stub ? `<button class="btn btn-sm btn-danger" data-release="${e.id}">Release ID</button>` : ""}
+      <button class="btn btn-sm" data-docs="${e.id}">Docs</button>
+      <button class="btn btn-sm" data-warn="${e.id}">Notes</button>
+      <button class="btn btn-sm" data-edit="${e.id}">Edit</button></td>
+  </tr>`;
+}
+
+function bindEmployeesTableActions(root, allEmployees) {
+  root.querySelectorAll("[data-edit]").forEach((b) => {
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      openEmployeeModal(allEmployees.find((x) => x.id === b.dataset.edit));
+    };
+  });
+  root.querySelectorAll("[data-warn]").forEach((b) => {
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      openEmployeeWarningsModal(b.dataset.warn);
+    };
+  });
+  root.querySelectorAll("[data-docs]").forEach((b) => {
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      openEmployeeDocsModal(b.dataset.docs);
+    };
+  });
+  root.querySelectorAll("[data-release]").forEach((b) => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(`Release app ID ${b.dataset.release}? It can be assigned to a new employee.`)) return;
+      try {
+        await api(`/employees/${b.dataset.release}/release-app-id`, { method: "POST" });
+        showSaveIndicator("App ID released", "saved");
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+  root.querySelectorAll("tr[data-emp]").forEach((tr) => {
+    tr.onclick = () =>
+      openEmployeeModal(allEmployees.find((x) => x.id === tr.dataset.emp));
+  });
+}
+
+function updateEmployeesTable(root) {
+  const data = root.__employeesData;
+  if (!data) return;
+  const list = filterEmployeesList(data.employees);
+  const tbody = root.querySelector("#emp-tbody");
+  const countEl = root.querySelector("#emp-count");
+  if (tbody) {
+    tbody.innerHTML = list.length
+      ? list.map(employeeListRowHtml).join("")
+      : `<tr><td colspan="7" class="muted">No employees match your search</td></tr>`;
+  }
+  if (countEl) countEl.textContent = `${list.length} shown`;
+  bindEmployeesTableActions(root, data.employees);
+}
+
+function patchEmployeeInCache(employee) {
+  if (!employee?.id) return;
+  const root = document.getElementById("app");
+  if (root?.__employeesData?.employees) {
+    const list = root.__employeesData.employees;
+    const idx = list.findIndex((e) => e.id === employee.id);
+    if (idx >= 0) list[idx] = employee;
+    else list.push(employee);
+    if (state.page === "employees") updateEmployeesTable(root);
+  }
+  if (state.meta?.employees) {
+    const idx = state.meta.employees.findIndex((e) => e.id === employee.id);
+    if (idx >= 0) state.meta.employees[idx] = employee;
+    else state.meta.employees.push(employee);
+  }
+}
+
+async function refreshPayrollRowAfterSave(employeeId) {
+  const root = document.getElementById("app");
+  if (state.page !== "payroll" || !root?.__payrollData) return;
+  try {
+    const row = await api(`/payroll/${employeeId}?month=${state.month}`);
+    const p = row.payslip;
+    if (!p) return;
+    const idx = root.__payrollData.payroll.findIndex((r) => r.employeeId === employeeId);
+    const merged = { ...p, employeeId, id: employeeId };
+    if (idx >= 0) root.__payrollData.payroll[idx] = { ...root.__payrollData.payroll[idx], ...merged };
+    else root.__payrollData.payroll.push(merged);
+    updatePayrollTable(root);
+  } catch {
+    /* payroll page will refresh on next visit */
+  }
+}
+
+function attendanceEmployeeRowHtml(emp, ctx) {
+  const { days, statuses, canEdit, recordMap, summaryMap, data } = ctx;
+  const s = summaryMap.get(emp.id) || {};
+  return `<tr data-emp-row="${emp.id}">
+    <td class="att-sticky att-sticky-id">${emp.id}</td>
+    <td class="att-sticky att-sticky-name" title="${emp.position || ""}"><div class="emp-cell emp-cell-compact">${avatarHtml({ id: emp.id, american_name: emp.american_name || emp.name, profile_photo_file_id: emp.profile_photo_file_id, profile_photo_updated: emp.profile_photo_updated })}<span>${emp.name}</span></div></td>
+    <td class="att-sticky att-sticky-team">${emp.team || "—"}</td>
+    <td class="text-center">${s.workingDays || 0}</td>
+    <td class="text-center">${s.lateness || 0}</td>
+    <td class="text-center">${s.latenessDeductions || 0}</td>
+    ${days.map((d) => {
+      const rec = recordMap.get(`${emp.id}|${d}`);
+      const st = rec?.status || "";
+      const dis = canEdit ? "" : "disabled";
+      const dayCls =
+        window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
+      const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
+      const dayTitle = holidayName ? (window.HRMSFeatures?.attendanceDayTitle(d, data) || holidayName) : "";
+      const holidayNote = holidayName
+        ? `<div class="att-holiday-cell-note" title="${escapeHtml(dayTitle)}">${escapeHtml(holidayName)}</div>`
+        : "";
+      return `<td class="att-cell ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
+        ${holidayNote}
+        <select class="status-select ${statusClass(st)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
+        <option value="">—</option>
+        ${statuses.map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
+      </select>
+      ${transportOverrideHtml(emp.id, d, st, rec?.transportOverride, canEdit)}
+      </td>`;
+    }).join("")}
+  </tr>`;
+}
+
+function bindAttendanceGridEvents(root, ctx) {
+  const { canEdit } = ctx;
+
+  function onTransportOverrideChange(e) {
+    const el = e.target;
+    const status =
+      el.closest(".att-cell")?.querySelector(".status-select")?.value || "";
+    queueAttendanceSave(el.dataset.emp, el.dataset.date, status, el.value);
+  }
+
+  root.querySelectorAll(".status-select").forEach((sel) => {
+    sel.addEventListener("change", (e) => {
+      const el = e.target;
+      el.className = `status-select ${statusClass(el.value)}`;
+      const cell = el.closest(".att-cell");
+      const ovSel = cell?.querySelector(".transport-ov-select");
+      if (ovSel) {
+        if (isTransportOverrideStatus(el.value)) {
+          ovSel.classList.remove("hidden");
+        } else {
+          ovSel.classList.add("hidden");
+          ovSel.value = "";
+        }
+      } else if (isTransportOverrideStatus(el.value) && cell && canEdit) {
+        cell.insertAdjacentHTML(
+          "beforeend",
+          transportOverrideHtml(el.dataset.emp, el.dataset.date, el.value, "", true)
+        );
+        const newOv = cell.querySelector(".transport-ov-select");
+        newOv?.addEventListener("change", onTransportOverrideChange);
+      }
+      const ov = cell?.querySelector(".transport-ov-select")?.value || "";
+      queueAttendanceSave(el.dataset.emp, el.dataset.date, el.value, ov);
+    });
+  });
+
+  root.querySelectorAll(".transport-ov-select").forEach((sel) => {
+    sel.addEventListener("change", onTransportOverrideChange);
+  });
+}
+
+function updateAttendanceTable(root) {
+  const ctx = root.__attendanceCtx;
+  if (!ctx) return;
+  let employees = ctx.data.employees;
+  if (state.hideOut) {
+    employees = employees.filter((e) => !isOutEmployee(e));
+  }
+  if (state.empFilter.q) {
+    employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  }
+  const tbody = root.querySelector("#att-tbody");
+  const countEl = root.querySelector("#att-emp-count");
+  if (tbody) {
+    tbody.innerHTML = employees.length
+      ? employees.map((emp) => attendanceEmployeeRowHtml(emp, ctx)).join("")
+      : `<tr><td colspan="99" class="muted">No employees match your search</td></tr>`;
+  }
+  if (countEl) countEl.textContent = `${employees.length} employees · ${monthLabel(state.month)}`;
+  bindAttendanceGridEvents(root, ctx);
+}
+
+function payrollRowHtml(r) {
+  return `<tr class="clickable" data-pay="${r.employeeId}">
+    <td><div class="emp-cell">${avatarHtml({ id: r.employeeId, american_name: r.name, profile_photo_file_id: r.profile_photo_file_id, profile_photo_updated: r.profile_photo_updated })}<div><strong>${r.name}</strong><div class="muted">${r.employeeId} · ${r.unit || "—"}</div></div></div></td>
+    <td>${payrollStatusBadge(r.payrollStatus)}</td>
+    <td class="text-center">${r.salesCount || "—"}</td>
+    <td class="text-right">${r.commissionAmount ? fmt(r.commissionAmount) : "—"}</td>
+    <td><span class="badge badge-status">${r.paymentMethod || "—"}</span></td>
+    <td class="text-center">${r.totalWorkingDays}</td>
+    <td class="text-right">${fmt(r.basicSalary)}</td>
+    <td class="text-right amount-pos">${fmt(r.transportAllowance)}</td>
+    <td class="text-right amount-neg">${r.loanDeductionTotal ? `-${fmt(r.loanDeductionTotal)}` : "—"}</td>
+    <td class="text-right"><strong>${fmt(r.netSalary)}</strong>${r.hasSplits ? `<div class="muted" style="font-size:.7rem">calc ${fmt(r.calculatedNet)}</div>` : ""}${r.receivedTotal ? `<div class="muted" style="font-size:.7rem">paid ${fmt(r.receivedTotal)}</div>` : ""}</td>
+    <td><button class="btn btn-sm" data-slip="${r.employeeId}">Payslip</button></td>
+  </tr>`;
+}
+
+function bindPayrollRowClicks(root) {
+  root.querySelectorAll("[data-slip], tr[data-pay]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      if (e.target.tagName === "BUTTON") e.stopPropagation();
+      openPayslipModal(el.dataset.slip || el.dataset.pay);
+    });
+  });
+}
+
+function updatePayrollTable(root) {
+  const data = root.__payrollData;
+  if (!data) return;
+  let rows = data.payroll;
+  rows = filterPayrollByZeroNet(rows);
+  if (state.empFilter.q) {
+    rows = rows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
+  }
+  const tbody = root.querySelector("#payroll-tbody");
+  const countEl = root.querySelector("#payroll-emp-count");
+  if (tbody) {
+    tbody.innerHTML = rows.length
+      ? rows.map(payrollRowHtml).join("")
+      : `<tr><td colspan="11" class="muted">No employees match your search</td></tr>`;
+  }
+  if (countEl) {
+    countEl.textContent = `${rows.length} employees · ${monthLabel(state.month)} · ${data.workingDays} working days · Transport 3,000 EGP/mo`;
+  }
+  bindPayrollRowClicks(root);
+}
+
+function transportOverrideHtml(empId, date, status, currentOverride, canEdit) {
+  if (!isTransportOverrideStatus(status)) return "";
+  const dis = canEdit ? "" : "disabled";
+  const ov = currentOverride || "";
+  return `<select class="transport-ov-select" data-emp="${empId}" data-date="${date}" ${dis} title="Transport allowance for this day">
+    <option value="" ${!ov ? "selected" : ""}>No transport</option>
+    <option value="full" ${ov === "full" ? "selected" : ""}>Full transport</option>
+    <option value="half" ${ov === "half" ? "selected" : ""}>Half transport</option>
+  </select>`;
+}
+
+function queueAttendanceSave(employeeId, date, status, transportOverride) {
+  const key = `${employeeId}|${date}`;
+  const prev = state.pendingAttendance.get(key);
+  let to = transportOverride;
+  if (to === undefined) to = prev?.transportOverride;
+  if (!isTransportOverrideStatus(status)) to = "";
+  state.pendingAttendance.set(key, {
+    employeeId,
+    date,
+    status,
+    transportOverride: to || "",
+    isWeekendDefault: isWeekend(date) && status === "Day-OFF",
+  });
+  showSaveIndicator("Saving…", "info");
+  clearTimeout(state.saveTimer);
+  state.saveTimer = setTimeout(flushAttendanceSaves, 500);
+}
+
+async function flushAttendanceSaves() {
+  const records = [...state.pendingAttendance.values()];
+  if (!records.length) return;
+  state.pendingAttendance.clear();
+  try {
+    await api("/attendance/batch", {
+      method: "POST",
+      body: JSON.stringify({ records }),
+    });
+    showSaveIndicator("Saved", "saved");
+  } catch (e) {
+    showSaveIndicator(e.message, "error");
+  }
+}
+
+async function renderDashboard(root) {
+  const month = state.month;
+  const salesPromise =
+    state.user?.canViewSales !== false
+      ? api(`/sales/dashboard?period=month&date=${month}-01&groupBy=team${state.companyContext === "hs2" ? "&company=hs2" : ""}`, {}, 10000).catch(() => null)
+      : Promise.resolve(null);
+  const [empData, payData, salesDash] = await Promise.all([
+    api(`/employees${apiContextQuery()}`),
+    api(`/payroll?${buildApiQuery({ month })}`).catch(() => null),
+    salesPromise,
+  ]);
+  state.meta = empData;
+
+  const salesStats = salesDash
+    ? `<div class="card" style="margin-top:1rem"><h3>Sales this month</h3>
+        <p><strong>${salesDash.totals?.passed ?? 0}</strong> passed ·
+        <strong>${salesDash.totals?.pending ?? 0}</strong> pending ·
+        <strong>${salesDash.totals?.callback ?? 0}</strong> callback ·
+        <strong>${salesDash.totals?.denied ?? 0}</strong> denied
+        <button class="btn btn-sm" data-go="sales" style="margin-left:.5rem">View sales</button></p></div>`
+    : "";
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Dashboard</h1><p class="muted">${monthLabel(state.month)}</p></div></div>
+    <div class="grid-4">
+      <div class="card card-stat"><strong>${empData.employees.length}</strong><span class="muted">Employees</span></div>
+      <div class="card card-stat"><strong>${empData.employees.filter((e) => e.status === "Active").length}</strong><span class="muted">Active</span></div>
+      <div class="card card-stat"><strong>${empData.units.length}</strong><span class="muted">Units</span></div>
+      <div class="card card-stat"><strong>${payData ? fmt(payData.totals.totalNet) : "—"}</strong><span class="muted">Net payroll (EGP)</span></div>
+    </div>
+    ${salesStats}
+    <div class="grid-2">
+      <div class="card">
+        <h3>Quick actions</h3>
+        <div class="quick-actions">
+          <button class="btn btn-primary" data-go="employees">Manage employees</button>
+          <button class="btn" data-go="attendance">Edit attendance</button>
+          <button class="btn" data-go="payroll">View payroll</button>
+        </div>
+      </div>
+      <div class="card"><h3>Units</h3><p class="muted">${empData.units.join(" · ") || "—"}</p></div>
+    </div>`;
+  root.querySelectorAll("[data-go]").forEach((b) =>
+    b.addEventListener("click", () => navigate(b.dataset.go))
+  );
+  window.HRMSFeatures?.enhanceDashboard(root, api).catch(() => {});
+}
+
+function openAddAgentWizard() {
+  let step = 1;
+  let wizard = { unit: "", team: "", backendPool: "NW", suggestedId: "" };
+
+  function renderWizard() {
+    if (step === 1) {
+      openModal(`
+        <div class="modal-header"><h2>Add agent — Step 1</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <div class="modal-body">
+          <label class="field"><span>Unit *</span>
+            <select id="wiz-unit"><option value="">Select unit…</option>
+              ${state.meta.units.map((u) => `<option value="${u}">${u}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field"><span>Team *</span>
+            <select id="wiz-team" required>
+              <option value="">Select team…</option>
+              ${TEAM_OPTIONS.map((t) => `<option value="${t}">${t}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field ${wizard.unit === "HS-Back-End" ? "" : "hidden"}" id="wiz-pool-wrap"><span>ID pool (Back-End)</span>
+            <select id="wiz-pool">${(state.meta.backendPools || ["NW", "HR", "MG", "OF"]).map((p) =>
+              `<option value="${p}">${p}</option>`
+            ).join("")}</select>
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" data-close>Cancel</button>
+          <button class="btn btn-primary" id="wiz-next">Next →</button>
+        </div>`);
+
+      const unitSel = document.getElementById("wiz-unit");
+      unitSel.onchange = () => {
+        wizard.unit = unitSel.value;
+        document.getElementById("wiz-pool-wrap")?.classList.toggle("hidden", wizard.unit !== "HS-Back-End");
+      };
+
+      document.getElementById("wiz-next").onclick = async () => {
+        wizard.unit = unitSel.value;
+        wizard.team = document.getElementById("wiz-team").value;
+        wizard.backendPool = document.getElementById("wiz-pool")?.value || "NW";
+        if (!wizard.unit || !wizard.team) {
+          alert("Unit and team are required");
+          return;
+        }
+        const poolQ = wizard.unit === "HS-Back-End" ? `&backendPool=${wizard.backendPool}` : "";
+        const { suggestedId } = await api(
+          `/employees/next-id?unit=${encodeURIComponent(wizard.unit)}${poolQ}`
+        );
+        wizard.suggestedId = suggestedId;
+        step = 2;
+        renderWizard();
+      };
+    } else {
+      openModal(`
+        <div class="modal-header"><h2>Add agent — Step 2</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <div class="modal-body">
+          <p class="muted">${wizard.unit} · ${wizard.team}</p>
+          <form id="wiz-form" class="field-grid">
+            <label class="field"><span>Employee ID</span><input name="id" value="${wizard.suggestedId}" required /></label>
+            <label class="field"><span>American Name</span><input name="american_name" required /></label>
+            <label class="field"><span>Arabic Name</span><input name="arabic_name" /></label>
+            <label class="field"><span>Position</span><select name="position"><option value="">—</option>
+              ${[...new Set([...(state.meta.positionRates || []), ...(state.meta.positions || [])])].map((p) => `<option value="${p}">${p}</option>`).join("")}
+            </select></label>
+            ${paymentMethodFieldsHtml()}
+            <label class="field"><span>Phone</span><input name="phone" /></label>
+            <label class="field"><span>Email</span><input name="email" type="email" /></label>
+            <label class="field"><span>Employment date</span><input name="employment_date" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+            ${nationalityFormFieldsHtml()}
+            <input type="hidden" name="unit" value="${wizard.unit}" />
+            <input type="hidden" name="team" value="${wizard.team}" />
+            <input type="hidden" name="status" value="Active" />
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="wiz-back">← Back</button>
+          <button class="btn btn-primary" id="wiz-create">Create agent</button>
+        </div>`);
+
+      document.getElementById("wiz-back").onclick = () => {
+        step = 1;
+        renderWizard();
+      };
+      bindPaymentMethodFields();
+      bindNationalityFormFields();
+      document.getElementById("wiz-create").onclick = async () => {
+        const btn = document.getElementById("wiz-create");
+        const form = document.getElementById("wiz-form");
+        const body = Object.fromEntries(new FormData(form));
+        if (body.nationality === "__other__") {
+          body.nationality = form.querySelector("#emp-nationality-other")?.value?.trim() || "";
+        }
+        if (!body.employment_date) body.employment_date = new Date().toISOString().slice(0, 10);
+        btn.disabled = true;
+        try {
+          const res = await api("/employees", { method: "POST", body: JSON.stringify(body) });
+          try {
+            await api("/attendance/init-month", {
+              method: "PATCH",
+              body: JSON.stringify({ month: state.month, employeeId: res.employee?.id }),
+            });
+          } catch {
+            /* optional */
+          }
+          closeModal();
+          if (res.employee) patchEmployeeInCache(res.employee);
+          showSaveIndicator("Agent created", "saved");
+        } catch (e) {
+          alert(e.message);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+    }
+  }
+  renderWizard();
+}
+
+function isEgyptianNationality(nationality) {
+  const n = String(nationality || "").trim().toLowerCase();
+  return n === "egyptian" || n === "egyptain" || n === "egypt";
+}
+
+function workPermitLabel(value) {
+  if (value === "have_permit") return "Have permit";
+  if (value === "no_permit") return "Don't have permit";
+  return "—";
+}
+
+function insuranceStatusLabel(value) {
+  if (value === "insured") return "Insured";
+  if (value === "not_insured") return "Not insured";
+  return "—";
+}
+
+function employeeComplianceLabel(emp) {
+  if (isEgyptianNationality(emp.nationality)) return insuranceStatusLabel(emp.insurance_status);
+  if (emp.nationality) return workPermitLabel(emp.work_permit);
+  return "—";
+}
+
+function nationalityFormFieldsHtml(emp = {}) {
+  const egyptian = isEgyptianNationality(emp.nationality);
+  const nonEgyptian = emp.nationality && !egyptian;
+  const insured = emp.insurance_status === "insured";
+  const hasInsuranceDetails =
+    insured &&
+    (emp.insurance_type || emp.insurance_amount != null || emp.insurance_employee_deduction != null);
+  const suggestions = state.meta.nationalities?.length
+    ? state.meta.nationalities
+    : ["Egyptian", "Sudanese", "Ethiopian", "Eritrean", "South Sudanese"];
+  const isOther = emp.nationality && !suggestions.includes(emp.nationality);
+  return `
+    <label class="field"><span>Nationality</span>
+      <select name="nationality" id="emp-nationality">
+        <option value="">—</option>
+        ${suggestions.map((n) => `<option value="${escapeHtml(n)}" ${emp.nationality === n ? "selected" : ""}>${escapeHtml(n)}</option>`).join("")}
+        <option value="__other__" ${isOther ? "selected" : ""}>Other…</option>
+      </select>
+      <input type="text" id="emp-nationality-other" class="${isOther ? "" : "hidden"}" value="${isOther ? escapeHtml(emp.nationality) : ""}" placeholder="Enter nationality" />
+    </label>
+    <div id="work-permit-fields" class="field-grid" style="grid-column:1/-1;${nonEgyptian ? "" : "display:none"}">
+      <label class="field"><span>Work permit</span>
+        <select name="work_permit" id="emp-work-permit">
+          <option value="">—</option>
+          <option value="have_permit" ${emp.work_permit === "have_permit" ? "selected" : ""}>Have permit</option>
+          <option value="no_permit" ${emp.work_permit === "no_permit" ? "selected" : ""}>Don't have permit</option>
+        </select>
+      </label>
+    </div>
+    <div id="insurance-fields" class="field-grid" style="grid-column:1/-1;${egyptian ? "" : "display:none"}">
+      <label class="field"><span>Social insurance</span>
+        <select name="insurance_status" id="emp-insurance-status">
+          <option value="">—</option>
+          <option value="insured" ${emp.insurance_status === "insured" ? "selected" : ""}>Insured</option>
+          <option value="not_insured" ${emp.insurance_status === "not_insured" ? "selected" : ""}>Not insured</option>
+        </select>
+      </label>
+      <div id="insurance-detail-fields" style="grid-column:1/-1;${insured ? "" : "display:none"}">
+        <label class="toggle-label" style="margin-bottom:.5rem">
+          <input type="checkbox" id="emp-insurance-details-toggle" ${hasInsuranceDetails ? "checked" : ""} /> Add insurance details (optional)
+        </label>
+        <div id="insurance-detail-inputs" class="field-grid" style="${hasInsuranceDetails ? "" : "display:none"}">
+          <label class="field"><span>Insurance type</span><input name="insurance_type" value="${escapeHtml(emp.insurance_type || "")}" placeholder="e.g. Social insurance" /></label>
+          <label class="field"><span>Total amount (EGP)</span><input name="insurance_amount" type="number" min="0" step="0.01" value="${emp.insurance_amount ?? ""}" /></label>
+          <label class="field"><span>Deducted from employee (EGP)</span><input name="insurance_employee_deduction" type="number" min="0" step="0.01" value="${emp.insurance_employee_deduction ?? ""}" /></label>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindNationalityFormFields(root = document) {
+  const nationalityInput = root.querySelector("#emp-nationality");
+  const nationalityOther = root.querySelector("#emp-nationality-other");
+  const workPermitBlock = root.querySelector("#work-permit-fields");
+  const insuranceBlock = root.querySelector("#insurance-fields");
+  const insuranceStatus = root.querySelector("#emp-insurance-status");
+  const insuranceDetailFields = root.querySelector("#insurance-detail-fields");
+  const insuranceDetailsToggle = root.querySelector("#emp-insurance-details-toggle");
+  const insuranceDetailInputs = root.querySelector("#insurance-detail-inputs");
+  if (!nationalityInput) return;
+
+  const selectedNationality = () => {
+    if (nationalityInput.value === "__other__") return nationalityOther?.value || "";
+    return nationalityInput.value || "";
+  };
+
+  const refresh = () => {
+    if (nationalityOther) {
+      nationalityOther.classList.toggle("hidden", nationalityInput.value !== "__other__");
+    }
+    const egyptian = isEgyptianNationality(selectedNationality());
+    const hasNationality = Boolean(String(selectedNationality()).trim());
+    if (workPermitBlock) workPermitBlock.style.display = hasNationality && !egyptian ? "" : "none";
+    if (insuranceBlock) insuranceBlock.style.display = egyptian ? "" : "none";
+    if (insuranceDetailFields) {
+      insuranceDetailFields.style.display = egyptian && insuranceStatus?.value === "insured" ? "" : "none";
+    }
+  };
+
+  nationalityInput.addEventListener("change", refresh);
+  nationalityOther?.addEventListener("input", refresh);
+  insuranceStatus?.addEventListener("change", refresh);
+  insuranceDetailsToggle?.addEventListener("change", () => {
+    if (insuranceDetailInputs) {
+      insuranceDetailInputs.style.display = insuranceDetailsToggle.checked ? "" : "none";
+      if (!insuranceDetailsToggle.checked) {
+        insuranceDetailInputs.querySelectorAll("input").forEach((i) => {
+          i.value = "";
+        });
+      }
+    }
+  });
+  refresh();
+}
+
+function employeeFormFields(emp = {}) {
+  const historyNote = emp.promoted_to_id
+    ? `<p class="muted identity-note">Historical ID — records before promotion effective month stay under <strong>${escapeHtml(emp.id)}</strong>. Active record: <strong>${escapeHtml(emp.promoted_to_id)}</strong></p>`
+    : emp.promoted_from_id
+      ? `<p class="muted identity-note">Promoted from <strong>${escapeHtml(emp.promoted_from_id)}</strong>${emp.effective_from_month ? ` · active from <strong>${escapeHtml(emp.effective_from_month)}</strong>` : ""}${emp.former_ids ? ` · former IDs: ${escapeHtml(emp.former_ids)}` : ""}</p>`
+      : "";
+  const dbIdNote = emp.internal_id
+    ? `<label class="field"><span>Database ID (permanent)</span><input value="${escapeHtml(emp.internal_id)}" readonly title="Never changes — links attendance, payroll &amp; all history" /></label>`
+    : "";
+  const appIdDisplay = emp.archived_app_id && String(emp.id || "").startsWith("DEL-")
+    ? emp.archived_app_id
+    : emp.id;
+  return `<form id="emp-form" class="field-grid">
+    <label class="field"><span>App ID (shown in HR screens)</span><input name="app_id_display" value="${escapeHtml(appIdDisplay || "")}" readonly /></label>
+    ${dbIdNote}
+    ${historyNote}
+    <label class="field"><span>American Name</span><input name="american_name" value="${emp.american_name || ""}" /></label>
+    <label class="field"><span>Arabic Name</span><input name="arabic_name" value="${emp.arabic_name || ""}" /></label>
+    <label class="field"><span>Status</span><select name="status">${state.meta.statuses.map((s) =>
+      `<option value="${s}" ${emp.status === s ? "selected" : ""}>${s || "(blank)"}</option>`
+    ).join("")}</select></label>
+    <label class="field"><span>Unit</span><select name="unit">${state.meta.units.map((u) =>
+      `<option value="${u}" ${emp.unit === u ? "selected" : ""}>${u}</option>`
+    ).join("")}</select></label>
+    ${teamSelectHtml("team", emp.team)}
+    ${positionSelectHtml("position", emp.position)}
+    ${paymentMethodFieldsHtml(emp)}
+    <label class="field"><span>Phone</span><input name="phone" value="${emp.phone || ""}" /></label>
+    <label class="field"><span>Email</span><input name="email" value="${emp.email || ""}" /></label>
+    ${nationalityFormFieldsHtml(emp)}
+  </form>`;
+}
+
+function openEmployeeModal(emp) {
+  const canPhoto = true;
+  const canPromote =
+    canManagePayrollEvents() && !emp.promoted_to_id && !emp.promoted_from_id && emp.status !== "Out" && emp.status !== "Deleted";
+  const canRevert = canManagePayrollEvents() && emp.promoted_from_id && !emp.promoted_to_id;
+  const canChangeAppId = canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
+  const canRelease = canManagePayrollEvents() && (isUnassignedIdStub(emp) || emp.status !== "Deleted");
+  openModal(`
+    <div class="modal-header"><h2>Edit employee</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body" id="emp-modal-body">
+      ${canPhoto ? `<div class="profile-photo-block">
+        ${avatarHtml(emp, "profile-photo-lg")}
+        <div class="profile-photo-actions">
+          <label class="btn btn-sm btn-primary" id="upload-photo-btn">Upload photo
+            <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+          </label>
+          ${emp.profile_photo_file_id ? '<button type="button" class="btn btn-sm btn-danger" id="remove-photo-btn">Remove</button>' : ""}
+          <p class="muted" style="margin:.35rem 0 0;font-size:.75rem">JPG, PNG, WebP or GIF · stored in Google Drive</p>
+        </div>
+      </div>` : ""}
+      ${employeeFormFields(emp)}
+      ${canChangeAppId ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Change app ID</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Updates the ID shown in attendance &amp; payroll. Database ID and all historical records stay linked.</p>
+        <div class="btn-row">
+          <input type="text" id="change-app-id-input" placeholder="New app ID" style="max-width:10rem" />
+          <button type="button" class="btn btn-sm" id="change-app-id-btn">Change app ID</button>
+        </div>
+      </div>` : ""}
+      ${canRevert ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Revert mistaken promotion</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Merges records back to <strong>${escapeHtml(emp.promoted_from_id)}</strong> and removes this promotion record.</p>
+        <button type="button" class="btn btn-sm btn-danger" id="revert-promotion-btn">Revert promotion</button>
+      </div>` : ""}
+      ${canPromote ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Promote — new ID &amp; position</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Keeps <strong>${escapeHtml(emp.id)}</strong> for all months before the effective month. From that month on, payroll &amp; attendance use the new ID.</p>
+        <button type="button" class="btn btn-sm btn-primary" id="promote-emp-btn">Reposition agent…</button>
+      </div>` : ""}
+      ${canRelease ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Release / delete app ID</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Sets status to <strong>Deleted</strong>, frees the app ID (e.g. C01) for reuse. Permanent database record and all history are kept.</p>
+        <button type="button" class="btn btn-sm btn-danger" id="release-app-id-btn">Release app ID</button>
+      </div>` : ""}
+      <div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Export employee data</h4>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn btn-sm" id="export-emp-payrolls-btn">All payroll PDFs</button>
+          <button type="button" class="btn btn-sm" id="export-emp-att-csv-btn">Attendance summary (CSV)</button>
+          <button type="button" class="btn btn-sm" id="export-emp-att-pdf-btn">Attendance summary (PDF)</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="save-emp">Save</button>
+    </div>`);
+  bindProfilePhotoUpload(emp.id, () => {
+    api(`/employees/${emp.id}`)
+      .then((d) => {
+        if (d.employee) patchEmployeeInCache(d.employee);
+        openEmployeeModal(d.employee);
+      })
+      .catch((e) => alert(e.message));
+  });
+  bindPaymentMethodFields();
+  bindNationalityFormFields();
+  document.getElementById("promote-emp-btn")?.addEventListener("click", () => openPromoteEmployeeModal(emp));
+  document.getElementById("change-app-id-btn")?.addEventListener("click", async () => {
+    const newId = document.getElementById("change-app-id-input")?.value?.trim();
+    if (!newId) return alert("Enter a new app ID");
+    if (!confirm(`Change app ID from ${emp.id} to ${newId}?`)) return;
+    try {
+      const res = await api(`/employees/${emp.id}/change-app-id`, {
+        method: "POST",
+        body: JSON.stringify({ newId }),
+      });
+      closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("App ID changed", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("revert-promotion-btn")?.addEventListener("click", async () => {
+    if (!confirm(`Revert promotion and merge back to ${emp.promoted_from_id}?`)) return;
+    try {
+      const res = await api(`/employees/${emp.id}/revert-promotion`, { method: "POST" });
+      closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("Promotion reverted", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("release-app-id-btn")?.addEventListener("click", async () => {
+    const label = isUnassignedIdStub(emp) ? emp.id : `app ID ${emp.id}`;
+    if (!confirm(`Release ${label}? The ID can be assigned to someone new; history stays in the database.`)) return;
+    try {
+      await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+      closeModal();
+      showSaveIndicator("App ID released", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("export-emp-payrolls-btn")?.addEventListener("click", () =>
+    exportEmployeePayrolls(emp).catch((e) => alert(e.message))
+  );
+  document.getElementById("export-emp-att-csv-btn")?.addEventListener("click", () =>
+    downloadFile(`/employees/${emp.id}/attendance-summary?format=csv`, `attendance-summary-${emp.id}.csv`).catch((e) => alert(e.message))
+  );
+  document.getElementById("export-emp-att-pdf-btn")?.addEventListener("click", () =>
+    downloadFile(`/employees/${emp.id}/attendance-summary?format=pdf`, `attendance-summary-${emp.id}.pdf`).catch((e) => alert(e.message))
+  );
+  document.getElementById("save-emp").onclick = async () => {
+    const btn = document.getElementById("save-emp");
+    const body = Object.fromEntries(new FormData(document.getElementById("emp-form")));
+    if (body.nationality === "__other__") {
+      body.nationality = document.getElementById("emp-nationality-other")?.value?.trim() || "";
+    }
+    delete body.id;
+
+    const newStatus = body.status;
+    if (newStatus === "Deleted") {
+      if (!confirm(`Release app ID ${emp.id}? History stays in the database; the ID can be reused.`)) return;
+      try {
+        await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+        closeModal();
+        showSaveIndicator("App ID released", "saved");
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
+      return;
+    }
+    const markingOut = isOutEmployeeStatus(newStatus) && !isOutEmployeeStatus(emp.status);
+    if (markingOut) {
+      openModal(`
+        <div class="modal-header"><h2>Mark depart</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <form id="emp-depart-form" class="modal-body field-grid">
+          <p class="muted">Setting status to <strong>${escapeHtml(newStatus)}</strong> requires a depart date and notice type.</p>
+          <label class="field"><span>Depart date</span><input name="departDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+          <label class="field"><span>Notice</span>
+            <select name="notice_type" required>
+              <option value="with_notice">Left with 2 weeks notice</option>
+              <option value="without_notice">Left without 2 weeks notice</option>
+            </select>
+          </label>
+        </form>
+        <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="confirm-emp-depart">Save depart</button></div>`);
+      document.getElementById("confirm-emp-depart").onclick = async () => {
+        const fd = new FormData(document.getElementById("emp-depart-form"));
+        const departBtn = document.getElementById("confirm-emp-depart");
+        departBtn.disabled = true;
+        try {
+          const otherFields = { ...body };
+          delete otherFields.status;
+          if (Object.keys(otherFields).length) {
+            const pre = await api(`/employees/${emp.id}`, { method: "PUT", body: JSON.stringify(otherFields) });
+            if (pre.employee) patchEmployeeInCache(pre.employee);
+          }
+          await api(`/hrms/employment-periods/${emp.id}/depart`, {
+            method: "POST",
+            body: JSON.stringify({
+              departDate: fd.get("departDate"),
+              status: newStatus === "OUT BUT STILL GET PAID" ? "out_still_paid" : "out",
+              notice_type: fd.get("notice_type") || "with_notice",
+            }),
+          });
+          closeModal();
+          const fresh = await api(`/employees/${emp.id}`);
+          if (fresh.employee) patchEmployeeInCache(fresh.employee);
+          showSaveIndicator("Employee departed", "saved");
+        } catch (e) {
+          alert(e.message);
+        } finally {
+          departBtn.disabled = false;
+        }
+      };
+      return;
+    }
+
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      const res = await api(`/employees/${emp.id}`, { method: "PUT", body: JSON.stringify(body) });
+      closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("Employee saved", "saved");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+  window.HRMSFeatures?.mountEmployeeLifecyclePanel?.(emp, api, {
+    escapeHtml,
+    openModal,
+    closeModal,
+    canManagePayrollEvents,
+  });
+}
+window.openEmployeeModal = openEmployeeModal;
+
+async function openPromoteEmployeeModal(emp) {
+  let leadRole = "TL";
+  let suggestedId = "";
+  const ratesRes = await api("/position-rates").catch(() => ({ rates: [] }));
+  const positionRates = ratesRes.rates || [];
+  const positionOptions = positionRates
+    .map((r) => `<option value="${escapeHtml(r.position)}">${escapeHtml(r.position)}</option>`)
+    .join("");
+  const loadSuggested = async () => {
+    const data = await api(`/employees/next-id?leadRole=${encodeURIComponent(leadRole)}`);
+    suggestedId = data.suggestedId || "";
+    const input = document.getElementById("promote-new-id");
+    if (input && !input.dataset.userEdited) input.value = suggestedId;
+  };
+
+  openModal(
+    `<div class="modal-header"><h2>Reposition ${escapeHtml(emp.american_name || emp.id)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <p class="muted">Agent ID <strong>${escapeHtml(emp.id)}</strong> stays in the system for past attendance &amp; payroll. New records use the leadership ID below.</p>
+      <form id="promote-form" class="field-grid" style="margin-top:1rem">
+        <label class="field"><span>Lead role</span>
+          <select name="leadRole" id="promote-lead-role">
+            <option value="TL">Team Leader (TL)</option>
+            <option value="CL">Closer / Supervisor (CL)</option>
+            <option value="OP">OP</option>
+            <option value="HR">HR (back-office)</option>
+            <option value="RTM">RTM</option>
+            <option value="IT">IT</option>
+            <option value="Agent">Agent transfer</option>
+          </select></label>
+        <label class="field"><span>New ID</span>
+          <input name="newId" id="promote-new-id" required placeholder="TL04" /></label>
+        <label class="field"><span>New position</span>
+          <select name="position" id="promote-position">
+            <option value="">— select —</option>
+            ${positionOptions}
+          </select></label>
+        <label class="field"><span>New team</span>
+          <select name="team" id="promote-team">
+            <option value="">— keep current —</option>
+            ${TEAM_OPTIONS.map((t) => `<option value="${t}" ${emp.team === t ? "selected" : ""}>${t}</option>`).join("")}
+          </select></label>
+        <label class="field"><span>Effective from month</span>
+          <input name="effectiveFromMonth" id="promote-effective" type="month" value="${state.month}" required /></label>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="confirm-promote-btn">Reposition</button>
+    </div>`,
+    true
+  );
+
+  const idInput = document.getElementById("promote-new-id");
+  idInput?.addEventListener("input", () => {
+    idInput.dataset.userEdited = "1";
+  });
+  const positionDefaults = { TL: "Team Leader", CL: "Closer", OP: "OP", HR: "HR", RTM: "RTM", IT: "IT Support" };
+  const positionInput = document.getElementById("promote-position");
+  const setDefaultPosition = () => {
+    if (positionInput && !positionInput.dataset.userEdited) {
+      const def = positionDefaults[leadRole] || "Team Leader";
+      const match = [...positionInput.options].find((o) => o.value === def);
+      positionInput.value = match ? def : positionInput.options[1]?.value || "";
+    }
+  };
+  setDefaultPosition();
+
+  document.getElementById("promote-lead-role")?.addEventListener("change", async (e) => {
+    leadRole = e.target.value;
+    if (idInput) idInput.dataset.userEdited = "";
+    if (positionInput) positionInput.dataset.userEdited = "";
+    setDefaultPosition();
+    await loadSuggested();
+  });
+  positionInput?.addEventListener("change", () => {
+    positionInput.dataset.userEdited = "1";
+  });
+  await loadSuggested();
+
+  document.getElementById("confirm-promote-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("promote-form"));
+    const newId = String(fd.get("newId") || "").trim();
+    const effectiveFromMonth = String(fd.get("effectiveFromMonth") || "").trim();
+    if (!newId) {
+      alert("Enter the new TL / CL / OP ID.");
+      return;
+    }
+    if (!effectiveFromMonth) {
+      alert("Choose the month when the new ID and position take effect.");
+      return;
+    }
+    if (
+      !confirm(
+        `Reposition ${emp.id} → ${newId} from ${effectiveFromMonth}?\n\nBefore ${effectiveFromMonth}: ${emp.id}\nFrom ${effectiveFromMonth}: ${newId}`
+      )
+    )
+      return;
+    try {
+      const res = await api(`/employees/${emp.id}/promote`, {
+        method: "POST",
+        body: JSON.stringify({
+          newId,
+          leadRole: fd.get("leadRole"),
+          effectiveFromMonth,
+          position: fd.get("position") || undefined,
+          team: fd.get("team") || undefined,
+        }),
+      });
+      closeModal();
+      alert(`Repositioned. ${res.newId} active from ${res.effectiveFromMonth}.`);
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function exportEmployeePayrolls(emp) {
+  if (!window.hrDesktop?.pickFolder) {
+    alert("Export requires the Hangup HR desktop app.");
+    return;
+  }
+  const data = await api(`/employees/${emp.id}/payroll-months`);
+  if (!data.months?.length) {
+    alert("No payroll months found for this employee.");
+    return;
+  }
+  const folder = await window.hrDesktop.pickFolder();
+  if (!folder) return;
+  const safeName = String(data.name || emp.id)
+    .replace(/[^\w\s-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const subfolder = `${folder}\\${safeName}_${emp.id}_Payrolls`;
+  const sessionId = getSessionId();
+  let ok = 0;
+  for (const row of data.months) {
+    const res = await fetch(`/api/payslip/${row.employeeId}/pdf?month=${row.month}`, {
+      headers: sessionId ? { "x-session-id": sessionId } : {},
+    });
+    if (!res.ok) continue;
+    const buf = await res.arrayBuffer();
+    await window.hrDesktop.writeFileBuffer(`${subfolder}\\payslip-${row.month}-${row.employeeId}.pdf`, buf);
+    ok++;
+  }
+  alert(`Exported ${ok} payslip PDF(s) to:\n${subfolder}`);
+}
+
+async function openPayslipModal(employeeId) {
+  const [data, empListRes] = await Promise.all([
+    api(`/payroll/${employeeId}?month=${state.month}`),
+    api(`/employees${employeesQuery()}`).catch(() => ({ employees: [] })),
+  ]);
+  const deductCandidates = sortEmployeesForLeadDeduct(
+    (empListRes.employees || []).filter((e) => e.id !== employeeId)
+  );
+  const empById = new Map((empListRes.employees || []).map((e) => [e.id, e]));
+  const p = data.payslip;
+  const emp = data.employee || { id: employeeId, american_name: p.name, profile_photo_file_id: p.profile_photo_file_id };
+  const bonusRows = Object.entries(p.bonuses || {})
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-pos">+${fmt(v)}</span></div>`)
+    .join("");
+  const dedRows = Object.entries(p.deductions || {})
+    .filter(([k, v]) => v > 0 && k !== "Lateness Deduction")
+    .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-neg">-${fmt(v)}</span></div>`)
+    .join("");
+  const attDetail = attendanceDetailHtml(data.attendance);
+
+  const bonusList = (data.bonuses || [])
+    .map((b) => {
+      const tlFrom = parseTlSourceFromReason(b.reason);
+      const tlLabel = tlFrom ? ` · deducted from ${tlFrom}` : "";
+      const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
+      return `<div class="adj-row"><span>${b.type}: ${fmt(b.amount)} EGP — ${formatPayslipDate(b.date)}${reason ? ` — ${escapeHtml(reason)}` : ""}${tlLabel}
+          </span><button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></div>`;
+    })
+    .join("");
+  const dedList = (data.deductions || [])
+    .map((d) => {
+      let linked = "";
+      if (d.type === "Bonus from TL / OP") {
+        const targetId = d.bonusRecipientId || parseTlTargetFromReason(d.reason);
+        if (targetId) {
+          const american = d.bonusRecipientAmericanName || empById.get(targetId)?.american_name || targetId;
+          linked = ` · bonus for ${american} (${targetId})`;
+        }
+      }
+      return `<div class="adj-row"><span>${d.type}: ${fmt(d.amount)} EGP — ${formatPayslipDate(d.date)}${d.reason ? ` — ${escapeHtml(d.reason)}` : ""}${linked}
+          </span><button class="btn btn-sm btn-danger" data-del-ded='${JSON.stringify({ employeeId: d.employeeId, date: d.date, type: d.type })}'>Delete</button></div>`;
+    })
+    .join("");
+
+  const adj = data.adjustment || {};
+  const departDate = String(emp.depart_date || "").slice(0, 10);
+  const departDay = departDate ? parseInt(departDate.slice(8, 10), 10) : 0;
+  const finalPayBanner =
+    departDay > 15
+      ? `<div class="alert alert-warn" style="margin-bottom:1rem">Final payment due next payroll cycle (paid on 15th) — depart ${departDate}</div>`
+      : "";
+  const statuses = data.payrollStatuses || ["pending", "pending papers", "pending hardware", "received", "closed"];
+  const statusOpts = statuses
+    .map((s) => `<option value="${s}" ${(adj.payrollStatus || p.payrollStatus) === s ? "selected" : ""}>${s}</option>`)
+    .join("");
+
+  openModal(
+    `<div class="modal-header"><h2>Payslip — ${p.name}</h2>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="hist-slip-btn">History</button>
+        <button class="btn btn-sm" id="pdf-slip-btn">PDF</button>
+        <button class="btn btn-sm" onclick="window.print()">Print</button>
+        <button class="btn btn-sm" data-close>✕</button>
+      </div></div>
+    <div class="modal-body payslip">
+      ${finalPayBanner}
+      <div class="payslip-header">
+        <div class="payslip-identity">
+          ${avatarHtml(emp, "profile-photo-lg")}
+          <div>
+          <strong style="font-size:1.2rem">${p.name}</strong>
+          <div class="muted">${p.employeeId} · ${p.unit || "—"} · ${p.position || "—"}</div>
+          <div class="muted">${monthLabel(state.month)} · ${p.paymentMethod || "—"}</div>
+          <div style="margin-top:.35rem">${payrollStatusBadge(p.payrollStatus)}</div>
+          <label class="btn btn-sm" style="margin-top:.5rem" id="payslip-photo-btn">Change photo
+            <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+          </label>
+          </div>
+        </div>
+        <div class="text-right"><div class="muted">Monthly salary</div><strong>${fmt(p.monthlySalary)} EGP</strong>
+          ${p.salaryRaise ? `<div class="muted">incl. raise +${fmt(p.salaryRaise)}</div>` : ""}</div>
+      </div>
+      <div class="grid-2">
+        <div class="payslip-section">
+          <h4>Attendance</h4>
+          <div class="payslip-row"><span>Working days</span><span>${p.totalWorkingDays}</span></div>
+          ${p.extraDays ? `<div class="payslip-row"><span>Extra days</span><span>${p.extraDays}</span></div>` : ""}
+          ${p.nsnc ? `<div class="payslip-row"><span>NSNC</span><span>${p.nsnc}</span></div>` : ""}
+          ${p.nsncHalf ? `<div class="payslip-row"><span>NSNC Half Day</span><span>${p.nsncHalf}</span></div>` : ""}
+          <div class="payslip-row"><span>Daily rate (${p.workingDaysInMonth}d)</span><span>${p.dailyRate} EGP</span></div>
+          <div class="payslip-row"><span>Basic salary</span><strong>${fmt(p.basicSalary)} EGP</strong></div>
+          ${p.transportAllowance ? `<div class="payslip-row"><span>Transport (${p.transportDays % 1 === 0 ? p.transportDays : p.transportDays} day-units)</span><span class="amount-pos">+${fmt(p.transportAllowance)}</span></div>` : ""}
+          ${p.salesCount ? `<div class="payslip-row"><span>Sales this month</span><span>${p.salesCount}</span></div>` : ""}
+          ${(p.commissionBreakdown || []).length ? `<div class="payslip-row"><span>Commission tiers</span><span class="amount-pos">${p.commissionBreakdown.map((b) => `${b.label}: ${fmt(b.amount)}`).join(" + ")}</span></div>` : ""}
+          ${p.twoWeekHold ? `<div class="payslip-row"><span>2-week hold</span><span class="amount-neg">-${fmt(p.holdAmount)}</span></div>` : ""}
+        </div>
+        <div class="payslip-section">
+          <h4>Net pay</h4>
+          ${bonusRows || '<div class="muted">No bonuses</div>'}
+          <div class="payslip-row"><span>Lateness</span><span class="amount-neg">-${fmt(p.latenessDeduction)}</span></div>
+          ${attDetail}
+          ${dedRows}
+          ${p.deferredIn ? `<div class="payslip-row"><span>Carried from prior month</span><span class="amount-pos">+${fmt(p.deferredIn)}</span></div>` : ""}
+          <div class="payslip-row"><span>Calculated net</span><span>${fmt(p.calculatedNet ?? p.netSalary)} EGP</span></div>
+          ${p.receivedTotal ? `<div class="payslip-row"><span>Paid (splits)</span><span class="amount-neg">-${fmt(p.receivedTotal)}</span></div>` : ""}
+          ${p.deferredOut ? `<div class="payslip-row"><span>Deferred to later month</span><span class="amount-neg">-${fmt(p.deferredOut)}</span></div>` : ""}
+          <div class="payslip-row payslip-total"><span>Balance due</span><span>${fmt(p.remainingBalance ?? p.netSalary)} EGP</span></div>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:1rem">
+        <div class="card">
+          <h4>Bonuses</h4>${bonusList || '<p class="muted">None</p>'}
+          <form id="bonus-form" class="field-grid" style="margin-top:.75rem">
+            <label class="field"><span>Type</span><select name="type" id="bonus-type">${data.bonusTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field hidden" id="deduct-from-wrap" style="grid-column:1/-1"><span>Deduct from agent (pays for this bonus)</span>
+              <select name="deductFromEmployeeId">
+                <option value="">— Select agent —</option>
+                ${employeeSelectOptionsForTlDeduct(deductCandidates)}
+              </select>
+            </label>
+            <label class="field"><span>Amount</span><input name="amount" type="number" min="0" required /></label>
+            <label class="field"><span>Date</span><input name="date" type="date" value="${state.month}-15" required /></label>
+            <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" /></label>
+          </form>
+          <button class="btn btn-primary btn-sm" id="add-bonus-btn" style="margin-top:.5rem">Add bonus</button>
+        </div>
+        <div class="card">
+          <h4>Deductions</h4>${dedList || '<p class="muted">None</p>'}
+          <form id="deduction-form" class="field-grid" style="margin-top:.75rem">
+            <label class="field"><span>Type</span><select name="type">${data.deductionTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field"><span>Amount</span><input name="amount" type="number" min="0" required /></label>
+            <label class="field"><span>Date</span><input name="date" type="date" value="${state.month}-15" required /></label>
+            <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" /></label>
+          </form>
+          <button class="btn btn-primary btn-sm" id="add-ded-btn" style="margin-top:.5rem">Add deduction</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h4>Month profile — ${monthLabel(state.month)}</h4>
+        <p class="muted" style="margin:0 0 .75rem">Payment method and salary apply to this month only (historical reports stay correct).</p>
+        <form id="adj-form" class="field-grid">
+          <label class="field"><span>Position</span><input name="position" value="${adj.position || p.position || ""}" /></label>
+          <label class="field"><span>Salary raise (EGP)</span><input name="salaryRaise" type="number" min="0" value="${adj.salaryRaise ?? p.salaryRaise ?? 0}" /></label>
+          <label class="field"><span>Salary override</span><input name="monthlySalaryOverride" type="number" min="0" placeholder="optional" value="${adj.monthlySalaryOverride ?? ""}" /></label>
+          <label class="field"><span>Payment method</span><input name="paymentMethod" value="${adj.paymentMethod || p.paymentMethod || ""}" /></label>
+          <label class="field"><span>Payroll status</span><select name="payrollStatus">${statusOpts}</select></label>
+          <label class="field"><span>Extra days</span><input name="extraDays" type="number" step="0.5" value="${adj.extraDays ?? 0}" /></label>
+          <label class="field"><span>2-week hold</span><input name="twoWeekHold" type="checkbox" ${adj.twoWeekHold ? "checked" : ""} /></label>
+          <label class="field"><span>Transport eligible</span><input name="transportEligible" type="checkbox" ${transportCheckboxChecked(state.month, adj) ? "checked" : ""} />
+            <span class="muted" style="font-size:.75rem;display:block;margin-top:.25rem">${transportAllowedForMonth(state.month) ? "Default on from July 2026" : "June default off — check to enable for this agent"}</span></label>
+          <label class="field"><span>Sales count (month)</span><input name="salesCount" type="number" min="0" step="1" value="${adj.salesCount ?? p.salesCount ?? 0}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Bank reference</span><input name="bankReference" value="${adj.bankReference || ""}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Month notes</span><textarea name="monthNotes">${adj.monthNotes || p.monthNotes || ""}</textarea></label>
+        </form>
+        <button class="btn btn-primary btn-sm" id="save-adj-btn" style="margin-top:.5rem">Save month profile</button>
+        <button class="btn btn-sm" id="emp-loans-btn" style="margin-top:.5rem;margin-left:.5rem">Loans</button>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <div class="flex-between" style="margin-bottom:.75rem">
+          <div>
+            <h4 style="margin:0">Payment splits</h4>
+            <p class="muted" style="margin:.25rem 0 0">Partial payments, defer remainder to a future month, or corrections — multiple splits per month allowed.</p>
+          </div>
+          <button class="btn btn-sm" id="defer-remainder-btn" type="button">Defer balance → next month</button>
+        </div>
+        <div id="splits-list" class="stack">${(data.splits || []).length ? (data.splits || []).map((s) => `
+          <div class="adj-row" data-split-id="${s.id}">
+            <span>${splitStatusBadge(s.status)} <strong>${fmt(s.amount)}</strong> EGP
+              ${s.splitKind === "correction" ? " (correction)" : ""}
+              ${s.status === "deferred" && s.deferToMonth ? ` → ${monthLabel(s.deferToMonth)}` : ""}
+              ${s.notes ? ` · ${s.notes}` : ""}</span>
+            <span class="btn-row">
+              ${s.status === "pending" ? `<button class="btn btn-sm btn-primary" data-split-received="${s.id}">Mark received</button>` : ""}
+              ${s.status === "pending" ? `<button class="btn btn-sm" data-split-defer="${s.id}">Defer</button>` : ""}
+              <button class="btn btn-sm btn-danger" data-split-del="${s.id}">Delete</button>
+            </span>
+          </div>`).join("") : '<p class="muted">No payment splits yet.</p>'}</div>
+        <form id="split-form" class="field-grid" style="margin-top:.75rem">
+          <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" step="0.01" required /></label>
+          <label class="field"><span>Type</span><select name="splitKind">
+            <option value="payment">Payment</option>
+            <option value="correction">Correction (+/−)</option>
+          </select></label>
+          <label class="field"><span>Status</span><select name="status">
+            <option value="pending">Pending</option>
+            <option value="received">Received</option>
+            <option value="deferred">Defer to month</option>
+          </select></label>
+          <label class="field split-defer-field hidden"><span>Defer to month</span><input name="deferToMonth" type="month" value="${shiftMonth(state.month, 1)}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" placeholder="e.g. First installment, correction" /></label>
+        </form>
+        <button class="btn btn-primary btn-sm" id="add-split-btn" style="margin-top:.5rem">Add split</button>
+      </div>
+      <div id="payroll-history-panel" class="card hidden" style="margin-top:1rem"></div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("pdf-slip-btn").onclick = async () => {
+    try {
+      await downloadFile(`/payslip/${employeeId}/pdf?month=${state.month}`, `payslip-${employeeId}-${state.month}.pdf`);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  bindProfilePhotoUpload(employeeId, () => {
+    openPayslipModal(employeeId);
+  });
+
+  document.getElementById("hist-slip-btn").onclick = async () => {
+    const panel = document.getElementById("payroll-history-panel");
+    if (!panel.classList.contains("hidden")) {
+      panel.classList.add("hidden");
+      return;
+    }
+    panel.classList.remove("hidden");
+    panel.innerHTML = '<p class="muted">Loading history…</p>';
+    const hist = await api(`/payroll/history/${employeeId}?months=12`);
+    panel.innerHTML = `<h4>Payroll history</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Month</th><th>Status</th><th>Payment</th><th class="text-right">Net</th><th class="text-right">Transport</th></tr></thead>
+        <tbody>${hist.history.map((h) => `<tr>
+          <td>${h.yearMonth}</td>
+          <td>${payrollStatusBadge(h.payrollStatus)}</td>
+          <td>${h.paymentMethod || "—"}</td>
+          <td class="text-right">${fmt(h.netSalary)}</td>
+          <td class="text-right">${fmt(h.transportAllowance)}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+  };
+
+  document.getElementById("save-adj-btn").onclick = async () => {
+    const btn = document.getElementById("save-adj-btn");
+    const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      await api(`/payroll-adjustments/${employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          yearMonth: state.month,
+          position: fd.get("position"),
+          salaryRaise: Number(fd.get("salaryRaise")) || 0,
+          monthlySalaryOverride: fd.get("monthlySalaryOverride") || null,
+          paymentMethod: fd.get("paymentMethod"),
+          payrollStatus: fd.get("payrollStatus"),
+          extraDays: Number(fd.get("extraDays")) || 0,
+          twoWeekHold: fd.get("twoWeekHold") === "on",
+          transportEligible: fd.get("transportEligible") === "on",
+          salesCount: Number(fd.get("salesCount")) || 0,
+          bankReference: fd.get("bankReference") || "",
+          monthNotes: fd.get("monthNotes") || "",
+        }),
+      });
+      closeModal();
+      showSaveIndicator("Month profile saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+
+  document.getElementById("emp-loans-btn").onclick = () => openEmployeeLoansModal(employeeId);
+
+  const splitForm = document.getElementById("split-form");
+  const splitStatusSel = splitForm?.querySelector("[name=status]");
+  const deferField = splitForm?.querySelector(".split-defer-field");
+  splitStatusSel?.addEventListener("change", () => {
+    deferField?.classList.toggle("hidden", splitStatusSel.value !== "deferred");
+  });
+
+  document.getElementById("add-split-btn")?.addEventListener("click", async () => {
+    const fd = new FormData(splitForm);
+    try {
+      await api("/payroll-splits", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          yearMonth: state.month,
+          amount: Number(fd.get("amount")),
+          splitKind: fd.get("splitKind") || "payment",
+          status: fd.get("status") || "pending",
+          deferToMonth: fd.get("status") === "deferred" ? fd.get("deferToMonth") : "",
+          notes: fd.get("notes") || "",
+        }),
+      });
+      openPayslipModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  document.getElementById("defer-remainder-btn")?.addEventListener("click", async () => {
+    const balance = p.remainingBalance ?? p.netSalary;
+    if (!(balance > 0)) return alert("No balance left to defer");
+    const deferToMonth = prompt(`Defer ${fmt(balance)} EGP to which month? (YYYY-MM)`, shiftMonth(state.month, 1));
+    if (!deferToMonth || !/^\d{4}-\d{2}$/.test(deferToMonth)) return;
+    try {
+      await api("/payroll-splits", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          yearMonth: state.month,
+          amount: balance,
+          status: "deferred",
+          deferToMonth,
+          notes: "Deferred remainder",
+        }),
+      });
+      openPayslipModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  document.querySelectorAll("[data-split-received]").forEach((btn) => {
+    btn.onclick = async () => {
+      const split = (data.splits || []).find((s) => s.id === btn.dataset.splitReceived);
+      if (!split) return;
+      try {
+        await api(`/payroll-splits/${split.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...split, status: "received" }),
+        });
+        closeModal();
+        openPayslipModal(employeeId);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+
+  document.querySelectorAll("[data-split-defer]").forEach((btn) => {
+    btn.onclick = async () => {
+      const split = (data.splits || []).find((s) => s.id === btn.dataset.splitDefer);
+      if (!split) return;
+      const deferToMonth = prompt("Defer to month (YYYY-MM)", shiftMonth(state.month, 1));
+      if (!deferToMonth) return;
+      try {
+        await api(`/payroll-splits/${split.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...split, status: "deferred", deferToMonth }),
+        });
+        closeModal();
+        openPayslipModal(employeeId);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+
+  document.querySelectorAll("[data-split-del]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Delete this payment split?")) return;
+      try {
+        await api(`/payroll-splits/${btn.dataset.splitDel}`, { method: "DELETE" });
+        closeModal();
+        openPayslipModal(employeeId);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+
+  document.getElementById("add-bonus-btn").onclick = async () => {
+    const body = Object.fromEntries(new FormData(document.getElementById("bonus-form")));
+    if (body.type === TL_BONUS_TYPE && !body.deductFromEmployeeId) {
+      alert("Select which agent this TL bonus is deducted from.");
+      return;
+    }
+    try {
+      await api("/bonuses", {
+        method: "POST",
+        body: JSON.stringify({
+          ...body,
+          employeeId,
+          amount: Number(body.amount),
+          deductFromEmployeeId: body.deductFromEmployeeId || undefined,
+        }),
+      });
+      openPayslipModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  const bonusTypeSel = document.getElementById("bonus-type");
+  const deductWrap = document.getElementById("deduct-from-wrap");
+  if (bonusTypeSel && deductWrap) {
+    const toggleDeduct = () => {
+      deductWrap.classList.toggle("hidden", bonusTypeSel.value !== TL_BONUS_TYPE);
+    };
+    bonusTypeSel.onchange = toggleDeduct;
+    toggleDeduct();
+  }
+  document.getElementById("add-ded-btn").onclick = async () => {
+    const body = Object.fromEntries(new FormData(document.getElementById("deduction-form")));
+    try {
+      await api("/deductions", {
+        method: "POST",
+        body: JSON.stringify({ ...body, employeeId, amount: Number(body.amount) }),
+      });
+      openPayslipModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  document.querySelectorAll("[data-del-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delBonus);
+      openConfirmDeleteModal({
+        title: "Delete bonus",
+        message: `Delete ${payload.type} bonus on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/bonuses", { method: "DELETE", body: JSON.stringify(payload) });
+          openPayslipModal(employeeId);
+        },
+      });
+    };
+  });
+  document.querySelectorAll("[data-del-ded]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delDed);
+      openConfirmDeleteModal({
+        title: "Delete deduction",
+        message: `Delete ${payload.type} deduction on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/deductions", { method: "DELETE", body: JSON.stringify(payload) });
+          openPayslipModal(employeeId);
+        },
+      });
+    };
+  });
+}
+
+async function renderEmployees(root) {
+  const data = await api(`/employees${employeesQuery()}`);
+  state.meta = data;
+  root.__employeesData = data;
+
+  const list = filterEmployeesList(data.employees);
+
+  const nationalities = data.nationalities || ["Egyptian", "Sudanese"];
+
+  root.innerHTML = `
+    <div class="page-header">
+      <div><h1>Employees</h1><p class="muted" id="emp-count">${list.length} shown</p></div>
+      <button class="btn btn-primary" id="add-emp">+ Add agent</button>
+    </div>
+    <div class="toolbar">
+      ${employeeSearchInputHtml()}
+      <select id="filter-status"><option value="">All statuses</option>${data.statuses.map((s) =>
+        `<option value="${s}" ${state.empFilter.status === s ? "selected" : ""}>${s || "(blank)"}</option>`
+      ).join("")}</select>
+      <select id="filter-unit"><option value="">All units</option>${data.units.map((u) =>
+        `<option value="${u}" ${state.empFilter.unit === u ? "selected" : ""}>${u}</option>`
+      ).join("")}</select>
+      <select id="filter-nationality"><option value="">All nationalities</option>${nationalities.map((n) =>
+        `<option value="${escapeHtml(n)}" ${state.empFilter.nationality === n ? "selected" : ""}>${escapeHtml(n)}</option>`
+      ).join("")}</select>
+      <select id="filter-work-permit"><option value="">All work permits</option>
+        <option value="have_permit" ${state.empFilter.workPermit === "have_permit" ? "selected" : ""}>Have permit</option>
+        <option value="no_permit" ${state.empFilter.workPermit === "no_permit" ? "selected" : ""}>Don't have permit</option>
+      </select>
+      <select id="filter-insurance"><option value="">All insurance</option>
+        <option value="insured" ${state.empFilter.insuranceStatus === "insured" ? "selected" : ""}>Insured</option>
+        <option value="not_insured" ${state.empFilter.insuranceStatus === "not_insured" ? "selected" : ""}>Not insured</option>
+      </select>
+      ${hideOutToggle()}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th><th>Nationality</th><th>Permit / Insurance</th><th>Status</th><th></th></tr></thead>
+      <tbody id="emp-tbody">${list.map(employeeListRowHtml).join("")}</tbody>
+    </table></div>`;
+
+  root.querySelector("#add-emp").onclick = () => openAddAgentWizard();
+  bindHideOut(root);
+  bindEmployeeSearch(root, () => updateEmployeesTable(root));
+  root.querySelector("#filter-status").onchange = (e) => {
+    state.empFilter.status = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-unit").onchange = (e) => {
+    state.empFilter.unit = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-nationality").onchange = (e) => {
+    state.empFilter.nationality = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-work-permit").onchange = (e) => {
+    state.empFilter.workPermit = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-insurance").onchange = (e) => {
+    state.empFilter.insuranceStatus = e.target.value;
+    updateEmployeesTable(root);
+  };
+  bindEmployeesTableActions(root, data.employees);
+}
+
+async function renderAttendance(root) {
+  const q = buildApiQuery({ month: state.month, unit: state.unit || "", team: state.team || "" });
+  const data = await api(`/attendance?${q}`);
+  const recordMap = new Map(data.records.map((r) => [`${r.employeeId}|${r.date}`, r]));
+  const summaryMap = new Map(data.summaries.map((s) => [s.employeeId, s]));
+  const calMap = new Map((data.calendar || []).map((c) => [c.date, c]));
+  const ctx = {
+    data,
+    days: data.days,
+    statuses: data.statuses,
+    canEdit: data.canEdit,
+    recordMap,
+    summaryMap,
+    calMap,
+  };
+  root.__attendanceCtx = ctx;
+
+  let employees = data.employees;
+  if (state.hideOut) {
+    employees = employees.filter((e) => !isOutEmployee(e));
+  }
+  if (state.empFilter.q) {
+    employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  }
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
+    ${window.HRMSFeatures?.attendanceBannersHtml(data) || ""}
+    ${monthToolbar(`${employeeSearchInputHtml()}
+    <select id="unit-filter"><option value="">All units</option>${(data.units || []).map((u) =>
+      `<option value="${u}" ${state.unit === u ? "selected" : ""}>${u}</option>`
+    ).join("")}</select>
+    <select id="team-filter"><option value="">All teams</option>${(data.teams || []).map((t) =>
+      `<option value="${t}" ${state.team === t ? "selected" : ""}>${t}</option>`
+    ).join("")}</select>
+    <label>Working days <input type="number" id="wd-input" min="1" max="31" value="${data.workingDays || 22}" style="width:4rem" /></label>
+    <button class="btn" id="save-wd">Save</button>
+    <button class="btn" id="init-month">Init weekends</button>
+    <button class="btn" id="bulk-attended">Mark weekdays Attended</button>
+    <select id="bulk-agent-select" title="Agent for month mark"><option value="">Agent…</option>${employees.map((e) =>
+      `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
+    ).join("")}</select>
+    <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
+    ${hideOutToggle()}
+    <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
+    <div class="table-wrap attendance-grid"><table>
+      <thead><tr>
+        <th class="att-sticky att-sticky-id">ID</th><th class="att-sticky att-sticky-name">Name</th><th class="att-sticky att-sticky-team">Team</th>
+        <th class="text-center">Work</th><th class="text-center">Late</th><th class="text-center">Ded.</th>
+        ${data.days.map((d) => {
+          const cal = calMap.get(d);
+          const label = cal ? dayHeader(cal) : d.slice(8);
+          const dayCls = window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
+          const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
+          const dayTitle = holidayName ? (window.HRMSFeatures?.attendanceDayTitle(d, data) || holidayName) : (window.HRMSFeatures?.attendanceDayTitle(d, data) || "");
+          const holidayLine = holidayName
+            ? `<div class="att-holiday-head-name">${escapeHtml(holidayName)}</div>`
+            : "";
+          return `<th class="text-center att-day-head ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
+            <div class="att-day-head-label">${label}</div>${holidayLine}</th>`;
+        }).join("")}
+      </tr></thead>
+      <tbody id="att-tbody">${employees.map((emp) => attendanceEmployeeRowHtml(emp, ctx)).join("")}</tbody>
+    </table></div>`;
+
+  bindMonthNav(root);
+  bindHideOut(root);
+  bindEmployeeSearch(root, () => updateAttendanceTable(root));
+  root.querySelector("#unit-filter").onchange = (e) => {
+    state.unit = e.target.value;
+    state.team = "";
+    render();
+  };
+  root.querySelector("#team-filter").onchange = (e) => {
+    state.team = e.target.value;
+    render();
+  };
+  root.querySelector("#save-wd").onclick = async () => {
+    await api("/attendance/working-days", {
+      method: "PUT",
+      body: JSON.stringify({ month: state.month, workingDays: root.querySelector("#wd-input").value }),
+    });
+  };
+  root.querySelector("#init-month").onclick = async () => {
+    await api("/attendance/init-month", { method: "PATCH", body: JSON.stringify({ month: state.month }) });
+    render();
+  };
+  root.querySelector("#bulk-attended").onclick = async () => {
+    if (!confirm("Mark all visible weekday cells as Attended?")) return;
+    await api("/attendance/bulk-weekdays", {
+      method: "PATCH",
+      body: JSON.stringify({ month: state.month, status: "Attended", unit: state.unit, team: state.team }),
+    });
+    render();
+  };
+  root.querySelector("#bulk-agent-month")?.addEventListener("click", async () => {
+    const employeeId = root.querySelector("#bulk-agent-select")?.value;
+    if (!employeeId) {
+      alert("Select an agent first.");
+      return;
+    }
+    if (!confirm(`Mark all weekdays in ${monthLabel(state.month)} as Attended for ${employeeId}?`)) return;
+    try {
+      await api("/attendance/bulk-agent-month", {
+        method: "PATCH",
+        body: JSON.stringify({ month: state.month, employeeId, status: "Attended" }),
+      });
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  bindAttendanceGridEvents(root, ctx);
+}
+
+async function renderPayroll(root) {
+  const q = buildApiQuery({ month: state.month });
+  const [data, tiersData] = await Promise.all([
+    api(`/payroll?${q}`),
+    api(`/commission-tiers?month=${state.month}`).catch(() => ({ tiers: [] })),
+  ]);
+  const tiers = tiersData.tiers || [];
+  root.__payrollData = data;
+
+  let payrollRows = filterPayrollByZeroNet(data.payroll);
+  if (state.empFilter.q) {
+    payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
+  }
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Payroll</h1><p class="muted" id="payroll-emp-count">${payrollRows.length} employees · ${monthLabel(state.month)} · ${data.workingDays} working days · Transport 3,000 EGP/mo</p></div>
+      <div class="btn-row">
+        <button class="btn btn-sm btn-primary" id="init-month-profiles">Init month profiles</button>
+        <button class="btn btn-sm" id="export-payroll-pdf">Export PDF</button>
+        <button class="btn btn-sm" id="export-all-payslips" title="Save every payslip PDF into a folder">Export all payslips</button>
+        <button class="btn btn-sm" id="record-loan-payments">Record loan payments</button>
+        <button class="btn btn-sm" id="manage-loans-btn">Loans</button>
+        ${isChangesViewer() ? `
+        <button class="btn btn-sm" id="export-cash-csv" title="Cash payroll sheet (CSV)">Cash CSV</button>
+        <button class="btn btn-sm" id="export-cash-pdf" title="Cash payroll sheet (PDF)">Cash PDF</button>
+        <button class="btn btn-sm" id="export-insta-csv" title="Instapay / wallet sheet (CSV)">Instapay CSV</button>
+        <button class="btn btn-sm" id="export-insta-pdf" title="Instapay / wallet sheet (PDF)">Instapay PDF</button>
+        <button class="btn btn-sm" id="export-bank-csv" title="Bank payroll sheet (CSV)">Bank CSV</button>
+        <button class="btn btn-sm" id="export-bank-pdf" title="Bank payroll sheet (PDF)">Bank PDF</button>` : ""}
+      </div>
+    </div>
+    ${monthToolbar(`${employeeSearchInputHtml()}${hideOutToggle()}
+    <label class="toggle-label"><input type="checkbox" id="hide-zero-net" ${state.hideZeroNet ? "checked" : ""} /> Hide zero net pay</label>`)}
+    <div class="card" style="margin-bottom:1rem">
+      <div class="flex-between" style="margin-bottom:.75rem">
+        <div><h3 style="margin:0">Sales commission targets</h3>
+          <p class="muted" style="margin:.25rem 0 0">Stackable tiers — e.g. 16+ → 5,000 EGP and 20+ → +2,000 EGP (21 sales = 7,000 EGP)</p></div>
+        <button class="btn btn-sm btn-primary" id="save-tiers-btn">Save targets</button>
+      </div>
+      <div id="tiers-editor" class="stack">${tiers.length ? tiers.map((t, i) => tierRowHtml(t, i)).join("") : tierRowHtml({}, 0)}</div>
+      <button class="btn btn-sm" id="add-tier-btn" style="margin-top:.5rem">+ Add tier</button>
+    </div>
+    <div class="grid-4">
+      <div class="card card-stat"><strong>${fmt(data.totals.totalBasic)}</strong><span class="muted">Basic (EGP)</span></div>
+      <div class="card card-stat"><strong>${fmt(data.totals.totalBonuses)}</strong><span class="muted">Bonuses</span></div>
+      <div class="card card-stat"><strong>${fmt(data.totals.totalDeductions)}</strong><span class="muted">Deductions</span></div>
+      <div class="card card-stat"><strong>${fmt(data.totals.totalNet)}</strong><span class="muted">Net payroll</span></div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee</th><th>Status</th><th>Sales</th><th>Commission</th><th>Payment</th><th>Days</th><th class="text-right">Basic</th>
+        <th class="text-right">Transport</th><th class="text-right">Loan</th><th class="text-right">Net</th><th></th></tr></thead>
+      <tbody id="payroll-tbody">${payrollRows.map(payrollRowHtml).join("")}</tbody>
+      <tfoot>
+      <tr class="totals-row"><td colspan="6"><strong>Totals</strong></td>
+        <td class="text-right"><strong>${fmt(data.totals.totalBasic)}</strong></td>
+        <td class="text-right"><strong>${fmt(data.payroll.reduce((s, r) => s + (r.transportAllowance || 0), 0))}</strong></td>
+        <td class="text-right"><strong>-${fmt(data.payroll.reduce((s, r) => s + (r.loanDeductionTotal || 0), 0))}</strong></td>
+        <td class="text-right"><strong>${fmt(data.totals.totalNet)}</strong></td><td></td></tr>
+      </tfoot>
+    </table></div>`;
+
+  bindMonthNav(root);
+  bindHideOut(root);
+  root.querySelector("#hide-zero-net")?.addEventListener("change", (e) => {
+    state.hideZeroNet = e.target.checked;
+    updatePayrollTable(root);
+  });
+  bindEmployeeSearch(root, () => updatePayrollTable(root));
+
+  let tierIndex = tiers.length || 1;
+  root.querySelector("#add-tier-btn").onclick = () => {
+    const editor = root.querySelector("#tiers-editor");
+    editor.insertAdjacentHTML("beforeend", tierRowHtml({}, tierIndex++));
+  };
+  root.querySelector("#save-tiers-btn").onclick = async () => {
+    const rows = [...root.querySelectorAll(".tier-row")];
+    const payload = rows
+      .map((row) => ({
+        minSales: Number(row.querySelector("[name=minSales]").value) || 0,
+        bonusAmount: Number(row.querySelector("[name=bonusAmount]").value) || 0,
+        label: row.querySelector("[name=label]").value || "",
+      }))
+      .filter((t) => t.minSales > 0 && t.bonusAmount > 0);
+    try {
+      await api("/commission-tiers", {
+        method: "PUT",
+        body: JSON.stringify({ month: state.month, tiers: payload }),
+      });
+      alert("Commission targets saved");
+      renderPayroll(root);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  root.querySelector("#export-payroll-pdf").onclick = async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await downloadFile(`/payroll/pdf?${buildApiQuery({ month: state.month })}`, `payroll-${state.month}.pdf`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  };
+  root.querySelector("#export-all-payslips")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await bulkExportAllPayslips(payrollRows);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
+  root.querySelector("#record-loan-payments").onclick = async () => {
+    if (!confirm(`Record loan installment payments for ${monthLabel(state.month)}?`)) return;
+    try {
+      const res = await api("/payroll/record-loan-payments", {
+        method: "POST",
+        body: JSON.stringify({ month: state.month }),
+      });
+      alert(`Recorded ${res.count} loan payment(s)`);
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  root.querySelector("#manage-loans-btn").onclick = () => openLoansManagerModal();
+
+  root.querySelector("#init-month-profiles").onclick = async () => {
+    if (!confirm(`Create month profiles for ${monthLabel(state.month)} from employee master / previous month?`)) return;
+    const res = await api("/payroll-adjustments/init-month", {
+      method: "POST",
+      body: JSON.stringify({ month: state.month }),
+    });
+    alert(`Created ${res.count} month profiles`);
+    render();
+  };
+  const bindPaymentExport = (id, method, format) => {
+    root.querySelector(id)?.addEventListener("click", () => {
+      const ext = format === "pdf" ? "pdf" : "csv";
+      const name = method === "insta" ? "instapay" : method;
+      downloadFile(
+        `/exports/payments?${buildApiQuery({ month: state.month, method, format })}`,
+        `${name}-${state.month}.${ext}`
+      ).catch((e) => alert(e.message));
+    });
+  };
+  bindPaymentExport("#export-cash-csv", "cash", "csv");
+  bindPaymentExport("#export-cash-pdf", "cash", "pdf");
+  bindPaymentExport("#export-insta-csv", "insta", "csv");
+  bindPaymentExport("#export-insta-pdf", "insta", "pdf");
+  bindPaymentExport("#export-bank-csv", "bank", "csv");
+  bindPaymentExport("#export-bank-pdf", "bank", "pdf");
+  bindPayrollRowClicks(root);
+  window.HRMSFeatures?.enhancePayroll(root, api, state, {
+    downloadFile,
+    monthLabel,
+    fmt,
+    isChangesViewer,
+    render,
+  }).catch(() => {});
+}
+
+function tierRowHtml(tier = {}, index = 0) {
+  return `<div class="tier-row field-grid" style="align-items:end;margin-bottom:.5rem" data-idx="${index}">
+    <label class="field"><span>Min sales</span><input name="minSales" type="number" min="1" value="${tier.minSales ?? ""}" placeholder="16" /></label>
+    <label class="field"><span>Bonus (EGP)</span><input name="bonusAmount" type="number" min="0" value="${tier.bonusAmount ?? ""}" placeholder="5000" /></label>
+    <label class="field" style="grid-column:span 2"><span>Label</span><input name="label" value="${tier.label || ""}" placeholder="16+ sales secure 5000 EGP" /></label>
+  </div>`;
+}
+
+async function openEmployeeLoansModal(employeeId) {
+  const data = await api(`/loans?employeeId=${employeeId}`);
+  const loanList = data.loans || [];
+  const loans = loanList
+    .map(
+      (l) => `<div class="card card-flat">
+      <div class="flex-between"><strong>${fmt(l.totalAmount)} EGP</strong><span class="badge">${l.status}</span></div>
+      <div class="muted">${l.installmentAmount} EGP × ${l.installmentsCount} · paid ${l.installmentsPaid || 0}</div>
+      <div class="muted">Starts ${l.startYearMonth}${l.skipCurrentMonth ? " (skipped creation month)" : ""}</div>
+      ${l.notes ? `<p style="margin:.35rem 0 0">${l.notes}</p>` : ""}
+      <div class="btn-row" style="margin-top:.5rem">
+        ${l.status === "active" ? `<button class="btn btn-sm" data-loan-edit="${l.id}">Edit</button>` : ""}
+        ${l.status === "active" ? `<button class="btn btn-sm" data-loan-cancel="${l.id}">Cancel</button>` : ""}
+        ${!(l.installmentsPaid > 0) && l.status !== "completed" ? `<button class="btn btn-sm btn-danger" data-loan-delete="${l.id}">Delete</button>` : ""}
+      </div>
+    </div>`
+    )
+    .join("");
+
+  openModal(
+    `<div class="modal-header"><h2>Loans — ${employeeId}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="stack">${loans || '<p class="muted">No loans for this employee.</p>'}</div>
+      <div class="card" style="margin-top:1rem">
+        <h4>New loan</h4>
+        <form id="loan-form" class="field-grid">
+          <label class="field"><span>Total amount (EGP)</span><input name="totalAmount" type="number" min="1" required /></label>
+          <label class="field"><span>Per salary (EGP)</span><input name="installmentAmount" type="number" min="1" placeholder="500" /></label>
+          <label class="field"><span>Number of salaries</span><input name="installmentsCount" type="number" min="1" placeholder="2" /></label>
+          <label class="field"><span>Skip current payroll</span><input name="skipCurrentMonth" type="checkbox" title="Start deductions from next month" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
+        </form>
+        <p class="muted" style="margin:.5rem 0 0">Enter either per-salary amount or number of salaries (e.g. 1,000 loan → 500 × 2 salaries).</p>
+        <button class="btn btn-primary btn-sm" id="save-loan-btn" style="margin-top:.5rem">Create loan</button>
+      </div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("save-loan-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("loan-form"));
+    try {
+      await api("/loans", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          totalAmount: Number(fd.get("totalAmount")),
+          installmentAmount: fd.get("installmentAmount") ? Number(fd.get("installmentAmount")) : null,
+          installmentsCount: fd.get("installmentsCount") ? Number(fd.get("installmentsCount")) : null,
+          skipCurrentMonth: fd.get("skipCurrentMonth") === "on",
+          notes: fd.get("notes") || "",
+          createdYearMonth: state.month,
+        }),
+      });
+      closeModal();
+      openEmployeeLoansModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  document.querySelectorAll("[data-loan-edit]").forEach((btn) => {
+    btn.onclick = () => {
+      const loan = loanList.find((l) => l.id === btn.dataset.loanEdit);
+      if (loan) openLoanEditModal(employeeId, loan);
+    };
+  });
+  document.querySelectorAll("[data-loan-cancel]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Cancel this loan? No further deductions will be scheduled.")) return;
+      try {
+        await api(`/loans/${btn.dataset.loanCancel}/cancel`, { method: "POST" });
+        closeModal();
+        openEmployeeLoansModal(employeeId);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+  document.querySelectorAll("[data-loan-delete]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Delete this loan permanently?")) return;
+      try {
+        await api(`/loans/${btn.dataset.loanDelete}`, { method: "DELETE" });
+        closeModal();
+        openEmployeeLoansModal(employeeId);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+}
+
+function openLoanEditModal(employeeId, loan) {
+  const locked = (loan.installmentsPaid || 0) > 0;
+  openModal(
+    `<div class="modal-header"><h2>Edit loan</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      ${locked ? '<p class="alert alert-warn">Payments already recorded — only notes can be changed.</p>' : ""}
+      <form id="loan-edit-form" class="field-grid">
+        <label class="field"><span>Total amount (EGP)</span><input name="totalAmount" type="number" min="1" value="${loan.totalAmount}" ${locked ? "readonly" : ""} required /></label>
+        <label class="field"><span>Per salary (EGP)</span><input name="installmentAmount" type="number" min="1" value="${loan.installmentAmount}" ${locked ? "readonly" : ""} /></label>
+        <label class="field"><span>Number of salaries</span><input name="installmentsCount" type="number" min="1" value="${loan.installmentsCount}" ${locked ? "readonly" : ""} /></label>
+        <label class="field"><span>Skip creation month</span><input name="skipCurrentMonth" type="checkbox" ${loan.skipCurrentMonth ? "checked" : ""} ${locked ? "disabled" : ""} /></label>
+        <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" value="${escapeHtml(loan.notes || "")}" /></label>
+      </form>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn" data-close>Back</button>
+        <button class="btn btn-primary" id="save-loan-edit-btn">Save changes</button>
+      </div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("save-loan-edit-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("loan-edit-form"));
+    const body = locked
+      ? { notes: fd.get("notes") || "" }
+      : {
+          totalAmount: Number(fd.get("totalAmount")),
+          installmentAmount: fd.get("installmentAmount") ? Number(fd.get("installmentAmount")) : null,
+          installmentsCount: fd.get("installmentsCount") ? Number(fd.get("installmentsCount")) : null,
+          skipCurrentMonth: fd.get("skipCurrentMonth") === "on",
+          notes: fd.get("notes") || "",
+        };
+    try {
+      await api(`/loans/${loan.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      closeModal();
+      if (state.page === "loans") render();
+      else openEmployeeLoansModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  document.querySelectorAll("[data-close]").forEach((b) => {
+    b.onclick = () => {
+      closeModal();
+      if (state.page === "loans") render();
+      else openEmployeeLoansModal(employeeId);
+    };
+  });
+}
+
+async function openLoansManagerModal() {
+  const data = await api("/loans");
+  const loanList = data.loans || [];
+  const active = loanList.filter((l) => l.status === "active");
+  const list = active
+    .map(
+      (l) => `<tr>
+        <td>${l.employeeId}</td>
+        <td class="text-right">${fmt(l.totalAmount)}</td>
+        <td class="text-right">${fmt(l.installmentAmount)}</td>
+        <td>${l.installmentsPaid || 0} / ${l.installmentsCount}</td>
+        <td>${l.startYearMonth}</td>
+        <td>${l.notes || "—"}</td>
+        <td><button class="btn btn-sm" data-loan-mgr-edit="${l.id}">Edit</button></td>
+      </tr>`
+    )
+    .join("");
+
+  openModal(
+    `<div class="modal-header"><h2>Active loans (${active.length})</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Employee</th><th class="text-right">Total</th><th class="text-right">Installment</th><th>Paid</th><th>Starts</th><th>Notes</th><th></th></tr></thead>
+        <tbody>${list || '<tr><td colspan="7" class="muted">No active loans</td></tr>'}</tbody>
+      </table></div>
+      <p class="muted" style="margin-top:1rem">Create loans from an employee payslip → Loans. Use "Record loan payments" on payroll when salaries are paid.</p>
+    </div>`,
+    true
+  );
+
+  document.querySelectorAll("[data-loan-mgr-edit]").forEach((btn) => {
+    btn.onclick = () => {
+      const loan = loanList.find((l) => l.id === btn.dataset.loanMgrEdit);
+      if (loan) openLoanEditModal(loan.employeeId, loan);
+    };
+  });
+}
+
+async function bulkExportAllPayslips(payrollRows) {
+  if (!window.hrDesktop?.pickFolder) {
+    alert("Bulk payslip export requires the Hangup HR desktop app.");
+    return;
+  }
+  if (!payrollRows.length) {
+    alert("No payroll rows to export.");
+    return;
+  }
+  const folder = await window.hrDesktop.pickFolder();
+  if (!folder) return;
+  const subfolder = `${folder}\\${monthPayrollFolderName(state.month)}`;
+  const sessionId = getSessionId();
+  let ok = 0;
+  for (const row of payrollRows) {
+    const res = await fetch(`/api/payslip/${row.employeeId}/pdf?month=${state.month}`, {
+      headers: sessionId ? { "x-session-id": sessionId } : {},
+    });
+    if (res.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!res.ok) continue;
+    const buf = await res.arrayBuffer();
+    const safeName = String(row.name || row.employeeId)
+      .replace(/[^\w\s-]+/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+    await window.hrDesktop.writeFileBuffer(`${subfolder}\\payslip-${row.employeeId}-${safeName}.pdf`, buf);
+    ok++;
+  }
+  alert(`Exported ${ok} payslip PDF(s) to:\n${subfolder}`);
+}
+
+async function openBonusEditModal(bonus, employees, bonusTypes) {
+  const deductFrom = parseTlSourceFromReason(bonus.reason);
+  const cleanReason = String(bonus.reason || "")
+    .replace(/\s*\(deducted from[^)]+\)\s*/i, "")
+    .trim();
+  openModal(
+    `<div class="modal-header"><h2>Edit bonus</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="bonus-edit-form" class="field-grid">
+        <label class="field"><span>Employee</span><select name="employeeId" required>${employeeSelectOptions(employees, bonus.employeeId)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${bonus.date}" required /></label>
+        <label class="field"><span>Type</span><select name="type" id="bonus-edit-type">${bonusTypes.map((t) => `<option value="${t}" ${bonus.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" min="0" step="0.01" value="${bonus.amount}" required /></label>
+        <label class="field hidden" id="bonus-edit-deduct-wrap" style="grid-column:1/-1"><span>Deduct from agent (TL pays)</span>
+          <select name="deductFromEmployeeId">${employeeSelectOptionsForTlDeduct(employees, deductFrom)}</select></label>
+        <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" value="${escapeHtml(cleanReason)}" /></label>
+      </form>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="save-bonus-edit-btn">Save</button>
+      </div>
+    </div>`,
+    true
+  );
+  const typeSel = document.getElementById("bonus-edit-type");
+  const deductWrap = document.getElementById("bonus-edit-deduct-wrap");
+  const toggleDeduct = () => deductWrap?.classList.toggle("hidden", typeSel.value !== TL_BONUS_TYPE);
+  typeSel.onchange = toggleDeduct;
+  toggleDeduct();
+  document.getElementById("save-bonus-edit-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("bonus-edit-form"));
+    const body = Object.fromEntries(fd);
+    if (body.type === TL_BONUS_TYPE && !body.deductFromEmployeeId) {
+      alert("Select which agent this TL bonus is deducted from.");
+      return;
+    }
+    try {
+      await api("/bonuses", {
+        method: "PATCH",
+        body: JSON.stringify({
+          originalEmployeeId: bonus.employeeId,
+          originalDate: bonus.date,
+          originalType: bonus.type,
+          employeeId: body.employeeId,
+          date: body.date,
+          amount: Number(body.amount),
+          reason: body.reason,
+          type: body.type,
+          deductFromEmployeeId: body.deductFromEmployeeId || undefined,
+        }),
+      });
+      closeModal();
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function openDeductionEditModal(deduction, employees, deductionTypes) {
+  openModal(
+    `<div class="modal-header"><h2>Edit deduction</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="deduction-edit-form" class="field-grid">
+        <label class="field"><span>Employee</span><select name="employeeId" required>${employeeSelectOptions(employees, deduction.employeeId)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${deduction.date}" required /></label>
+        <label class="field"><span>Type</span><select name="type">${deductionTypes.map((t) => `<option value="${t}" ${deduction.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" min="0" step="0.01" value="${deduction.amount}" required /></label>
+        <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" value="${escapeHtml(deduction.reason || "")}" /></label>
+      </form>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="save-ded-edit-btn">Save</button>
+      </div>
+    </div>`,
+    true
+  );
+  document.getElementById("save-ded-edit-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("deduction-edit-form"));
+    const body = Object.fromEntries(fd);
+    try {
+      await api("/deductions", {
+        method: "PATCH",
+        body: JSON.stringify({
+          originalEmployeeId: deduction.employeeId,
+          originalDate: deduction.date,
+          originalType: deduction.type,
+          employeeId: body.employeeId,
+          date: body.date,
+          amount: Number(body.amount),
+          reason: body.reason,
+          type: body.type,
+        }),
+      });
+      closeModal();
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function renderBonuses(root) {
+  const reqs = [
+    api(`/bonuses?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
+  ];
+  if (canSubmitBonusRequest() || canApproveBonusRequest()) {
+    reqs.push(api(`/bonus-requests?month=${state.month}&status=pending`).catch(() => ({ requests: [] })));
+  }
+  const [bonusData, empData, reqData] = await Promise.all(reqs);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const bonuses = (bonusData.bonuses || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const requests = reqData?.requests || [];
+  const canEdit = canManagePayrollEvents();
+
+  const requestSection =
+    requests.length || canSubmitBonusRequest()
+      ? `<div class="card" style="margin-bottom:1rem">
+      <h3>Bonus requests ${canApproveBonusRequest() ? "(pending approval)" : ""}</h3>
+      ${canSubmitBonusRequest() ? '<button class="btn btn-sm" id="submit-bonus-req">+ Request bonus for agent</button>' : ""}
+      <table style="margin-top:.5rem"><thead><tr><th>Date</th><th>Agent</th><th>Amount</th><th>Type</th><th>By</th>${canApproveBonusRequest() ? "<th></th>" : ""}</tr></thead>
+      <tbody>${requests.length ? requests.map((r) => `<tr>
+        <td>${r.date}</td><td>${r.employeeId}</td><td>${fmt(r.amount)}</td><td>${escapeHtml(r.type)}</td><td>${escapeHtml(r.submittedBy)}</td>
+        ${canApproveBonusRequest() ? `<td class="btn-row">
+          <button class="btn btn-sm" data-approve-req="${r.id}">Approve</button>
+          <button class="btn btn-sm btn-danger" data-deny-req="${r.id}">Deny</button>
+        </td>` : ""}
+      </tr>`).join("") : '<tr><td colspan="6" class="muted">No pending requests</td></tr>'}
+      </tbody></table></div>`
+      : "";
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Bonuses</h1><p class="muted">${monthLabel(state.month)} · ${bonuses.length} entries</p></div>
+      ${canEdit ? '<button class="btn btn-primary" id="add-bonus-page-btn">+ Add bonus (HR)</button>' : ""}
+    </div>
+    ${requestSection}
+    ${monthToolbar("")}
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Date</th><th>Employee</th><th>Type</th><th class="text-right">Amount</th><th>Reason / TL source</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+      <tbody>${bonuses.length ? bonuses.map((b) => {
+        const emp = empById.get(b.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || b.employeeId) : b.employeeId;
+        const tlFrom = parseTlSourceFromReason(b.reason);
+        const tlFromName = tlFrom ? (empById.get(tlFrom)?.american_name || empById.get(tlFrom)?.arabic_name || tlFrom) : "";
+        const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
+        return `<tr>
+          <td>${b.date}</td><td>${b.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${escapeHtml(b.type)}</td><td class="text-right">${fmt(b.amount)}</td>
+          <td>${escapeHtml(reason || "—")}${tlFromName ? `<br><span class="muted">Deducted from ${escapeHtml(tlFromName)}</span>` : ""}</td>
+          ${canEdit ? `<td class="btn-row"><button class="btn btn-sm" data-edit-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Edit</button>
+            <button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></td>` : ""}
+        </tr>`;
+      }).join("") : `<tr><td colspan="${canEdit ? 6 : 5}" class="muted">No bonuses this month</td></tr>`}
+      </tbody>
+    </table></div>`;
+
+  root.querySelectorAll("[data-edit-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = JSON.parse(btn.dataset.editBonus);
+      const b = bonuses.find((x) => x.employeeId === key.employeeId && x.date === key.date && x.type === key.type);
+      if (b) openBonusEditModal(b, employees, bonusData.types || []);
+    };
+  });
+  root.querySelectorAll("[data-del-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delBonus);
+      openConfirmDeleteModal({
+        title: "Delete bonus",
+        message: `Delete ${payload.type} on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/bonuses", { method: "DELETE", body: JSON.stringify(payload) });
+          render();
+        },
+      });
+    };
+  });
+
+  root.querySelector("#submit-bonus-req")?.addEventListener("click", () => {
+    const agents = employees.filter((e) => !/^(TL|CL|OP|HR)/i.test(e.id));
+    openModal(`
+      <div class="modal-header"><h2>Request bonus for agent</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <form id="bonus-req-form" class="form-grid">
+        <label class="field"><span>Agent</span><select name="employeeId" required>${employeeSelectOptions(agents)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${state.month}-15" required /></label>
+        <label class="field"><span>Amount</span><input name="amount" type="number" step="0.01" required /></label>
+        <label class="field"><span>Type</span><input name="type" value="${escapeHtml(TL_BONUS_TYPE)}" readonly /></label>
+        <label class="field"><span>Reason</span><input name="reason" /></label>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Submit for approval</button></div>
+      </form>
+    `);
+    document.getElementById("bonus-req-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = Object.fromEntries(fd.entries());
+      body.amount = Number(body.amount);
+      try {
+        await api("/bonus-requests", { method: "POST", body: JSON.stringify(body) });
+        closeModal();
+        render();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  });
+  root.querySelectorAll("[data-approve-req]").forEach((btn) => {
+    btn.onclick = async () => {
+      await api(`/bonus-requests/${btn.dataset.approveReq}`, { method: "PATCH", body: JSON.stringify({ action: "approve" }) });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-deny-req]").forEach((btn) => {
+    btn.onclick = async () => {
+      const denyReason = prompt("Deny reason:") || "";
+      await api(`/bonus-requests/${btn.dataset.denyReq}`, { method: "PATCH", body: JSON.stringify({ action: "deny", denyReason }) });
+      render();
+    };
+  });
+  root.querySelector("#add-bonus-page-btn")?.addEventListener("click", () => {
+    openBonusEditModal(null, employees, bonusData.types || []);
+  });
+
+  bindMonthNav(root);
+}
+
+async function renderDeductions(root) {
+  const [dedData, empData] = await Promise.all([
+    api(`/deductions?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
+  ]);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const deductions = (dedData.deductions || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const regularDeductions = deductions.filter((d) => d.type !== TL_BONUS_TYPE);
+  const bonusTransferDeductions = deductions.filter((d) => d.type === TL_BONUS_TYPE);
+  const canEdit = canManagePayrollEvents();
+  const colSpan = canEdit ? 6 : 5;
+  const transferColSpan = canEdit ? 6 : 5;
+
+  const regularRows = regularDeductions.length
+    ? regularDeductions.map((d) => {
+        const emp = empById.get(d.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || d.employeeId) : d.employeeId;
+        return `<tr>
+          <td>${d.date}</td>
+          <td>${d.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${escapeHtml(d.type)}</td>
+          <td class="text-right amount-neg">${fmt(d.amount)}</td>
+          <td>${escapeHtml(d.reason || "—")}</td>
+          ${deductionActionCells(d, canEdit)}
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="${colSpan}" class="muted">No regular deductions this month</td></tr>`;
+
+  const transferRows = bonusTransferDeductions.length
+    ? bonusTransferDeductions.map((d) => {
+        const emp = empById.get(d.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || d.employeeId) : d.employeeId;
+        return `<tr>
+          <td>${d.date}</td>
+          <td>${d.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${bonusRecipientCell(d, empById)}</td>
+          <td class="text-right amount-neg">${fmt(d.amount)}</td>
+          <td>${escapeHtml((d.reason || "").replace(/TL bonus paid to\s+\S+/i, "").trim() || "—")}</td>
+          ${deductionActionCells(d, canEdit)}
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="${transferColSpan}" class="muted">No TL / OP bonus transfer deductions this month</td></tr>`;
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Deductions</h1><p class="muted">${monthLabel(state.month)} · ${deductions.length} entries (${regularDeductions.length} regular · ${bonusTransferDeductions.length} bonus transfers)</p></div></div>
+    ${monthToolbar("")}
+    <section class="deductions-section">
+      <h2 class="deductions-section-title">Regular deductions</h2>
+      <p class="deductions-section-desc muted">Lateness, loans, hardware, and other payroll deductions.</p>
+      <div class="table-wrap card"><table>
+        <thead><tr><th>Date</th><th>Employee</th><th>Type</th><th class="text-right">Amount</th><th>Reason</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+        <tbody>${regularRows}</tbody>
+      </table></div>
+    </section>
+    <section class="deductions-section">
+      <h2 class="deductions-section-title">TL / OP bonus transfers</h2>
+      <p class="deductions-section-desc muted">Deductions applied when a team lead or OP gave a bonus to another employee — the recipient is shown below.</p>
+      <div class="table-wrap card"><table>
+        <thead><tr><th>Date</th><th>Deducted from</th><th>Bonus given to</th><th class="text-right">Amount</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+        <tbody>${transferRows}</tbody>
+      </table></div>
+    </section>`;
+
+  bindDeductionTableActions(root, deductions, employees, dedData.types || []);
+  bindMonthNav(root);
+}
+
+async function renderLoansPage(root) {
+  const [loanData, empData] = await Promise.all([
+    api("/loans"),
+    api(`/employees${employeesQuery()}`),
+  ]);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const loans = (loanData.loans || []).slice().sort((a, b) => String(b.startYearMonth).localeCompare(String(a.startYearMonth)));
+  const canEdit = canManagePayrollEvents();
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Loans</h1><p class="muted">${monthLabel(state.month)} · ${loans.length} loan(s) · manage installments and agents</p></div>
+      ${canEdit ? `<div class="btn-row"><button class="btn btn-sm btn-primary" id="loans-record-payments">Record loan payments (${monthLabel(state.month)})</button></div>` : ""}
+    </div>
+    ${monthToolbar("")}
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Employee</th><th>Status</th><th class="text-right">Total</th><th class="text-right">Installment</th><th>Paid</th><th>Starts</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+      <tbody>${loans.length ? loans.map((l) => {
+        const emp = empById.get(l.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || l.employeeId) : l.employeeId;
+        return `<tr>
+          <td>${l.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td><span class="badge">${l.status}</span></td>
+          <td class="text-right">${fmt(l.totalAmount)}</td>
+          <td class="text-right">${fmt(l.installmentAmount)}</td>
+          <td>${l.installmentsPaid || 0} / ${l.installmentsCount}</td>
+          <td>${l.startYearMonth}</td>
+          <td>${escapeHtml(l.notes || "—")}</td>
+          ${canEdit ? `<td class="btn-row">
+            ${l.status === "active" ? `<button class="btn btn-sm" data-loan-page-edit="${l.id}">Edit</button>` : ""}
+            ${l.status === "active" ? `<button class="btn btn-sm" data-loan-page-cancel="${l.id}">Cancel</button>` : ""}
+            ${!(l.installmentsPaid > 0) && l.status !== "completed" ? `<button class="btn btn-sm btn-danger" data-loan-page-delete="${l.id}">Delete</button>` : ""}
+          </td>` : ""}
+        </tr>`;
+      }).join("") : `<tr><td colspan="${canEdit ? 8 : 7}" class="muted">No loans</td></tr>`}
+      </tbody>
+    </table></div>
+    <p class="muted" style="margin-top:1rem">Create new loans from an employee payslip → Loans.</p>`;
+
+  root.querySelector("#loans-record-payments")?.addEventListener("click", async () => {
+    if (!confirm(`Record loan installment payments for ${monthLabel(state.month)}?`)) return;
+    const res = await api("/payroll/record-loan-payments", { method: "POST", body: JSON.stringify({ month: state.month }) });
+    alert(`Recorded ${res.count} loan payment(s)`);
+    render();
+  });
+  root.querySelectorAll("[data-loan-page-edit]").forEach((btn) => {
+    btn.onclick = () => {
+      const loan = loans.find((l) => l.id === btn.dataset.loanPageEdit);
+      if (loan) openLoanEditModal(loan.employeeId, loan);
+    };
+  });
+  root.querySelectorAll("[data-loan-page-cancel]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Cancel this loan?")) return;
+      await api(`/loans/${btn.dataset.loanPageCancel}/cancel`, { method: "POST" });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-loan-page-delete]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Delete this loan permanently?")) return;
+      await api(`/loans/${btn.dataset.loanPageDelete}`, { method: "DELETE" });
+      render();
+    };
+  });
+  bindMonthNav(root);
+}
+
+async function openEmployeeWarningsModal(employeeId) {
+  const data = await api(`/warnings/${employeeId}`);
+  const list = (data.warnings || [])
+    .map(
+      (w) =>
+        `<div class="card card-flat"><div class="flex-between"><strong>${w.type}: ${w.title || "—"}</strong><span class="muted">${w.date}</span></div>
+          <p style="margin:.5rem 0 0">${w.content}</p>
+          <div class="muted" style="font-size:.75rem">${w.createdBy || ""} · ${w.severity || "normal"}${w.warningLevel ? ` · Level: ${w.warningLevel}` : ""}</div></div>`
+    )
+    .join("");
+
+  openModal(
+    `<div class="modal-header"><h2>Warnings & notes — ${employeeId}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="stack">${list || '<p class="muted">No warnings or notes yet.</p>'}</div>
+      <div class="card" style="margin-top:1rem">
+        <h4>Add warning / note</h4>
+        <form id="warn-form" class="field-grid">
+          <label class="field"><span>Type</span><select name="type"><option>Warning</option><option>Note</option><option>Verbal warning</option><option>Written warning</option></select></label>
+          <label class="field"><span>Date</span><input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Title</span><input name="title" required /></label>
+          <label class="field" style="grid-column:1/-1"><span>Content</span><textarea name="content" required></textarea></label>
+          <label class="field"><span>Severity</span><select name="severity"><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+          <label class="field"><span>Warning level</span><select name="warningLevel"><option value="">—</option><option value="1st">1st</option><option value="2nd">2nd</option><option value="final">Final</option></select></label>
+        </form>
+        <button class="btn btn-primary btn-sm" id="add-warn-btn">Save</button>
+      </div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("add-warn-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("warn-form"));
+    try {
+      await api("/warnings", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          type: fd.get("type"),
+          date: fd.get("date"),
+          title: fd.get("title"),
+          content: fd.get("content"),
+          severity: fd.get("severity"),
+          warningLevel: fd.get("warningLevel") || "",
+        }),
+      });
+      closeModal();
+      openEmployeeWarningsModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function renderSalaries(root) {
+  const [ratesData, adjData, empData] = await Promise.all([
+    api("/position-rates"),
+    api(`/payroll-adjustments?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
+  ]);
+  const raises = adjData.adjustments.filter((a) => a.salaryRaise > 0);
+  const usedPositions = new Set((empData.employees || []).map((e) => e.position).filter(Boolean));
+  const canDeleteRates = canManagePayrollEvents();
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Salaries</h1><p class="muted">Position rates & monthly raises for ${monthLabel(state.month)}</p></div></div>
+    ${monthToolbar("")}
+    <div class="grid-2">
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:1rem"><h3 style="margin:0">Position rates</h3>
+          <button class="btn btn-sm btn-primary" id="add-rate-btn">+ Add position</button></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Position</th><th class="text-right">Monthly (EGP)</th><th></th></tr></thead>
+          <tbody id="rates-body">${ratesData.rates.map((r) => `<tr>
+            <td>${r.position}</td>
+            <td class="text-right"><input class="inline-input" data-pos="${r.position}" type="number" value="${r.monthlySalary}" /></td>
+            <td class="btn-row">
+              <button class="btn btn-sm" data-save-rate="${r.position}">Save</button>
+              ${canDeleteRates && !usedPositions.has(r.position) ? `<button class="btn btn-sm btn-danger" data-del-rate="${escapeHtml(r.position)}">Delete</button>` : ""}
+            </td>
+          </tr>`).join("")}</tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h3>Monthly raises (${raises.length})</h3>
+        <p class="muted">Raises are stored per employee per month — they do not affect past payroll.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Employee</th><th class="text-right">Raise</th><th>Position</th></tr></thead>
+          <tbody>${raises.length ? raises.map((a) => `<tr>
+            <td>${a.employeeId}</td><td class="text-right amount-pos">+${fmt(a.salaryRaise)}</td><td>${a.position || "—"}</td>
+          </tr>`).join("") : '<tr><td colspan="3" class="muted">No raises this month — set in payslip month profile</td></tr>'}
+          </tbody>
+        </table></div>
+      </div>
+    </div>`;
+
+  bindMonthNav(root);
+  root.querySelectorAll("[data-save-rate]").forEach((btn) => {
+    btn.onclick = async () => {
+      const pos = btn.dataset.saveRate;
+      const input = root.querySelector(`input[data-pos="${pos}"]`);
+      await api("/position-rates", {
+        method: "PUT",
+        body: JSON.stringify({ position: pos, monthlySalary: Number(input.value) }),
+      });
+      btn.textContent = "Saved";
+      setTimeout(() => { btn.textContent = "Save"; }, 1500);
+    };
+  });
+  root.querySelectorAll("[data-del-rate]").forEach((btn) => {
+    btn.onclick = () => {
+      const position = btn.dataset.delRate;
+      openConfirmDeleteModal({
+        title: "Delete position rate",
+        message: `Remove position "${position}"?`,
+        onConfirm: async () => {
+          await api(`/position-rates/${encodeURIComponent(position)}`, { method: "DELETE" });
+          renderSalaries(root);
+        },
+      });
+    };
+  });
+  root.querySelector("#add-rate-btn").onclick = async () => {
+    const position = prompt("Position name:");
+    if (!position) return;
+    const salary = Number(prompt("Monthly salary (EGP):"));
+    if (!salary) return;
+    await api("/position-rates", { method: "PUT", body: JSON.stringify({ position, monthlySalary: salary }) });
+    renderSalaries(root);
+  };
+}
+
+async function openEmployeeDocsModal(employeeId) {
+  const data = await api(`/documents/${employeeId}`);
+  const docList = (data.documents || [])
+    .map(
+      (d) =>
+        `<div class="adj-row"><span><strong>${d.docType}</strong> — ${d.fileName}
+          ${d.expiry ? `<span class="muted"> (exp: ${d.expiry})</span>` : ""}</span>
+          ${d.driveLink ? `<a href="${d.driveLink}" target="_blank" class="btn btn-sm">Open</a>` : ""}</div>`
+    )
+    .join("");
+
+  openModal(
+    `<div class="modal-header"><h2>Documents — ${employeeId}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      ${docList || '<p class="muted">No documents uploaded yet.</p>'}
+      <div class="btn-row" style="margin-bottom:.75rem">
+        <button type="button" class="btn btn-sm" id="export-docs-zip-btn">Download all (ZIP)</button>
+      </div>
+      <div class="card" style="margin-top:1rem">
+        <h4>Upload document</h4>
+        <form id="doc-form" class="field-grid">
+          <label class="field"><span>Type</span><select name="docType">${data.docTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+          <label class="field"><span>Expiry (optional)</span><input name="expiry" type="date" /></label>
+          <label class="toggle-label" style="grid-column:1/-1"><input name="noExpiry" type="checkbox" /> No expiry date</label>
+          <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
+          <label class="field" style="grid-column:1/-1"><span>File</span><input name="file" type="file" required /></label>
+        </form>
+        <button class="btn btn-primary btn-sm" id="upload-doc-btn">Upload</button>
+      </div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("export-docs-zip-btn")?.addEventListener("click", () =>
+    downloadFile(`/exports/documents-zip?employeeId=${encodeURIComponent(employeeId)}`, `documents-${employeeId}.zip`).catch(
+      (e) => alert(e.message)
+    )
+  );
+
+  document.getElementById("upload-doc-btn").onclick = async () => {
+    const form = document.getElementById("doc-form");
+    const fd = new FormData(form);
+    const file = fd.get("file");
+    if (!file?.size) return alert("Choose a file");
+    const contentBase64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    try {
+      await api("/documents", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          docType: fd.get("docType"),
+          fileName: file.name,
+          contentBase64,
+          notes: fd.get("notes") || "",
+          expiry: fd.get("expiry") || "",
+          noExpiry: fd.get("noExpiry") === "on",
+        }),
+      });
+      closeModal();
+      openEmployeeDocsModal(employeeId);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function renderReports(root) {
+  const q = new URLSearchParams({ month: state.month });
+  if (!state.hideOut) q.set("showOut", "true");
+  const data = await api(`/reports/monthly?${q}`);
+  const r = data.report;
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>HR Reports</h1><p class="muted">${monthLabel(state.month)}</p></div>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="dl-report-md">Download Markdown</button>
+        <button class="btn btn-sm btn-primary" id="dl-report-pdf">Export PDF</button>
+      </div>
+    </div>
+    ${monthToolbar(hideOutToggle())}
+    <div class="grid-4">
+      <div class="card card-stat"><strong>${r.headcount.total}</strong><span class="muted">Total employees</span></div>
+      <div class="card card-stat"><strong>${r.headcount.active}</strong><span class="muted">Active</span></div>
+      <div class="card card-stat"><strong>${r.attendance.totalNsnc}</strong><span class="muted">NSNC (full)</span></div>
+      <div class="card card-stat"><strong>${r.attendance.totalNsncHalf}</strong><span class="muted">NSNC Half Day</span></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Payroll summary</h3>
+        <div class="payslip-row"><span>Employees on payroll</span><span>${r.payroll.employees}</span></div>
+        <div class="payslip-row"><span>Total basic</span><span>${fmt(r.payroll.totalBasic)} EGP</span></div>
+        <div class="payslip-row"><span>Total bonuses</span><span>${fmt(r.payroll.totalBonuses)} EGP</span></div>
+        <div class="payslip-row"><span>Total deductions</span><span>${fmt(r.payroll.totalDeductions)} EGP</span></div>
+        <div class="payslip-row payslip-total"><span>Net payroll</span><strong>${fmt(r.payroll.totalNet)} EGP</strong></div>
+        <div class="payslip-row"><span>2-week holds</span><span>${r.payroll.twoWeekHolds}</span></div>
+      </div>
+      <div class="card">
+        <h3>Net pay by unit</h3>
+        ${Object.entries(r.payroll.byUnit).map(([u, n]) => `<div class="payslip-row"><span>${u}</span><span>${fmt(n)} EGP</span></div>`).join("")}
+      </div>
+    </div>
+    <div class="card">
+      <h3>Headcount by unit</h3>
+      ${Object.entries(r.headcount.byUnit).map(([u, d]) => `<div class="payslip-row"><span>${u}</span><span>${d.employees} (${d.payrollEligible} payroll)</span></div>`).join("")}
+    </div>`;
+
+  bindMonthNav(root);
+  bindHideOut(root);
+  root.querySelector("#dl-report-md").onclick = () => {
+    const blob = new Blob([data.markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `hr-report-${state.month}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  root.querySelector("#dl-report-pdf").onclick = async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      const q = new URLSearchParams({ month: state.month });
+      if (!state.hideOut) q.set("showOut", "true");
+      await downloadFile(`/reports/monthly/pdf?${q}`, `hr-report-${state.month}.pdf`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  };
+  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt }).catch(() => {});
+}
+
+async function renderSettings(root) {
+  const showLogs = isChangesViewer();
+  const themes = window.HRTheme?.THEMES || [];
+  const currentTheme = window.HRTheme?.get?.() || "light";
+  const [status, changelog] = await Promise.all([
+    api("/status"),
+    showLogs ? api("/changelog?limit=50").catch(() => ({ entries: [] })) : Promise.resolve({ entries: [] }),
+  ]);
+
+  const changeLogCard = showLogs
+    ? `
+    <div class="card">
+      <h3>Change log</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>User</th><th>Entity</th><th>Summary</th></tr></thead>
+        <tbody>${(changelog.entries || []).map((e) => `<tr>
+          <td>${e.timestamp ? new Date(e.timestamp).toLocaleString() : "—"}</td>
+          <td>${e.username || "—"}</td>
+          <td>${e.entity || "—"}</td>
+          <td>${e.summary || `${e.field}: ${e.old_value} → ${e.new_value}`}</td>
+        </tr>`).join("") || '<tr><td colspan="4" class="muted">No changes logged yet</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`
+    : "";
+
+  const themeOptions = themes
+    .map(
+      (t) => `<label class="theme-option">
+        <input type="radio" name="ui-theme" value="${escapeHtml(t.id)}" ${currentTheme === t.id ? "checked" : ""} />
+        <span class="theme-swatch theme-swatch-${escapeHtml(t.id)}" aria-hidden="true"></span>
+        <span class="theme-label"><strong>${escapeHtml(t.label)}</strong><small>${escapeHtml(t.desc)}</small></span>
+      </label>`
+    )
+    .join("");
+
+  root.innerHTML = `
+    <div class="page-header"><h1>Settings</h1></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Appearance</h3>
+        <p class="muted">Color theme for this device. Layout and sidebar structure stay the same.</p>
+        <div class="theme-picker" id="theme-picker">${themeOptions}</div>
+      </div>
+      <div class="card">
+        <h3>Display</h3>
+        <label class="toggle-label"><input type="checkbox" id="set-hide-out" ${status.hideOutEmployees ? "checked" : ""} /> Hide out / inactive employees</label>
+        <p class="muted">When enabled, employees with status "Out" or blank inactive rows are hidden from lists.</p>
+      </div>
+      <div class="card">
+        <h3>App version</h3>
+        <p><strong>${escapeHtml(status.appVersion || "unknown")}</strong></p>
+        <p class="muted">Version policy is managed in Supabase (<code>app_versions</code> table).</p>
+      </div>
+      <div class="card">
+        <h3>Data sync</h3>
+        <p class="muted">Last sync: ${status.lastSync ? timeAgo(status.lastSync) : "Never"}</p>
+        <button class="btn btn-primary" id="settings-refresh">Refresh from server</button>
+      </div>
+    </div>
+    ${changeLogCard}`;
+
+  root.querySelectorAll('input[name="ui-theme"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked && window.HRTheme) {
+        window.HRTheme.set(input.value);
+        showSaveIndicator("Theme updated", "saved");
+      }
+    });
+  });
+  root.querySelector("#set-hide-out").onchange = async (e) => {
+    state.hideOut = e.target.checked;
+    await api("/settings/hide-out", {
+      method: "PUT",
+      body: JSON.stringify({ hide: state.hideOut }),
+    });
+  };
+  root.querySelector("#settings-refresh").onclick = () => refreshData();
+  window.HRMSFeatures?.enhanceSettings(root, api, state, {
+    isChangesViewer,
+    escapeHtml,
+    openModal,
+    closeModal,
+    render,
+  }).catch(() => {});
+}
+
+async function renderUsers(root) {
+  if (!isUserManager()) {
+    root.innerHTML = `<div class="alert alert-warn">This view is restricted to the system administrator.</div>`;
+    return;
+  }
+
+  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false };
+  const data = await api("/admin/users");
+  let users = data.users || [];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "office_assistant", "agent"];
+  const statuses = data.statuses || ["active", "inactive", "terminated"];
+
+  if (state.usersFilter.status === "inactive") {
+    users = users.filter((u) => (u.status || "").toLowerCase() === "inactive");
+  } else if (state.usersFilter.status === "active") {
+    users = users.filter((u) => (u.status || "active").toLowerCase() === "active");
+  } else if (state.usersFilter.status === "no-login") {
+    users = users.filter((u) => !u.employeeId);
+  }
+
+  const sortKey = state.usersFilter.sort || "name";
+  users.sort((a, b) => {
+    if (sortKey === "lastLogin") {
+      return String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""));
+    }
+    if (sortKey === "lastEdit") {
+      return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+    }
+    const an = (a.employeeName || a.username || "").toLowerCase();
+    const bn = (b.employeeName || b.username || "").toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  const statusBadge = (status) => {
+    const s = (status || "active").toLowerCase();
+    const cls =
+      s === "active" ? "badge-ok" : s === "terminated" ? "badge-out" : "badge-warn";
+    return `<span class="badge ${cls}">${status}</span>`;
+  };
+
+  const renderRow = (u) => `<tr>
+    <td><strong>${escapeHtml(u.username)}</strong>${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
+    <td>${u.employeeId ? escapeHtml(u.employeeId) : '<span class="muted">—</span>'}</td>
+    <td class="muted">${u.employeeName ? escapeHtml(u.employeeName) : "—"}</td>
+    <td class="muted">${u.employeeTeam ? escapeHtml(u.employeeTeam) : "—"}</td>
+    <td class="muted">${u.email ? escapeHtml(u.email) : "—"}</td>
+    <td><span class="badge badge-status">${escapeHtml(u.role || "—")}</span></td>
+    <td>${statusBadge(u.status)}</td>
+    <td class="muted">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : "—"}</td>
+    <td class="muted">${u.updatedAt ? timeAgo(u.updatedAt) : "—"}</td>
+    <td class="flex-between" style="gap:.35rem;justify-content:flex-end">
+      <button class="btn btn-sm" data-edit-user="${escapeHtml(u.username)}">Edit</button>
+      <button class="btn btn-sm btn-danger" data-delete-user="${escapeHtml(u.username)}" ${
+        u.username.toLowerCase() === (state.user?.username || "").toLowerCase()
+          ? "disabled title=\"Cannot delete your own account\""
+          : ""
+      }>Remove</button>
+    </td>
+  </tr>`;
+
+  let tableBody;
+  if (state.usersFilter.groupTeam) {
+    const groups = new Map();
+    for (const u of users) {
+      const team = u.employeeTeam || "(No team)";
+      if (!groups.has(team)) groups.set(team, []);
+      groups.get(team).push(u);
+    }
+    tableBody = [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(
+        ([team, list]) => `<tr class="users-group-row"><td colspan="10"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(renderRow).join("")}`
+      )
+      .join("");
+  } else {
+    tableBody = users.map(renderRow).join("");
+  }
+
+  root.innerHTML = `
+    <div class="page-header flex-between">
+      <div>
+        <h1>App users</h1>
+        <p class="muted">Manage sign-ins, roles, and auto-created inactive employee logins.</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="sync-emp-logins-btn">Sync employee logins</button>
+        <button class="btn btn-primary" id="add-user-btn">+ Add user</button>
+      </div>
+    </div>
+    <div class="toolbar users-toolbar">
+      <label class="field field-inline"><span>Status</span>
+        <select id="users-filter-status">
+          <option value="">All</option>
+          <option value="active" ${state.usersFilter.status === "active" ? "selected" : ""}>Active</option>
+          <option value="inactive" ${state.usersFilter.status === "inactive" ? "selected" : ""}>Inactive</option>
+          <option value="no-login" ${state.usersFilter.status === "no-login" ? "selected" : ""}>No employee link</option>
+        </select>
+      </label>
+      <label class="field field-inline"><span>Sort by</span>
+        <select id="users-sort">
+          <option value="name" ${sortKey === "name" ? "selected" : ""}>Name</option>
+          <option value="lastLogin" ${sortKey === "lastLogin" ? "selected" : ""}>Last login</option>
+          <option value="lastEdit" ${sortKey === "lastEdit" ? "selected" : ""}>Last edit</option>
+        </select>
+      </label>
+      <label class="toggle-label"><input type="checkbox" id="users-group-team" ${state.usersFilter.groupTeam ? "checked" : ""} /> Group by team</label>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>Username</th><th>Employee ID</th><th>Name</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
+      </tr></thead>
+      <tbody>${tableBody || '<tr><td colspan="10" class="muted">No users match this filter</td></tr>'}
+      </tbody>
+    </table></div>`;
+
+  root.querySelector("#sync-emp-logins-btn").onclick = async () => {
+    try {
+      const res = await api("/admin/users/sync-employees", { method: "POST", body: "{}" });
+      showSaveIndicator(`Synced ${res.created} new logins`, "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  root.querySelector("#users-filter-status").onchange = (e) => {
+    state.usersFilter.status = e.target.value;
+    renderUsers(root);
+  };
+  root.querySelector("#users-sort").onchange = (e) => {
+    state.usersFilter.sort = e.target.value;
+    renderUsers(root);
+  };
+  root.querySelector("#users-group-team").onchange = (e) => {
+    state.usersFilter.groupTeam = e.target.checked;
+    renderUsers(root);
+  };
+  root.querySelector("#add-user-btn").onclick = () => openUserFormModal({ roles, statuses });
+  root.querySelectorAll("[data-edit-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.editUser;
+      const user = users.find((u) => u.username === username);
+      openUserFormModal({ roles, statuses, user });
+    });
+  });
+  root.querySelectorAll("[data-delete-user]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const username = btn.dataset.deleteUser;
+      if (!confirm(`Remove user "${username}"? They will no longer be able to sign in.`)) return;
+      try {
+        await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+        showSaveIndicator("User removed", "saved");
+        render();
+      } catch (e) {
+        showSaveIndicator(e.message, "error");
+      }
+    });
+  });
+}
+
+function openUserFormModal({ roles, statuses, user = null }) {
+  const isEdit = Boolean(user);
+  const roleOpts = roles
+    .map(
+      (r) =>
+        `<option value="${r}" ${user?.role === r ? "selected" : ""}>${r}</option>`
+    )
+    .join("");
+  const statusOpts = statuses
+    .map(
+      (s) =>
+        `<option value="${s}" ${(user?.status || "active") === s ? "selected" : ""}>${s}</option>`
+    )
+    .join("");
+
+  openModal(`
+    <div class="modal-header">
+      <h2>${isEdit ? "Edit user" : "Add user"}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
+    </div>
+    <form id="user-form" class="modal-body">
+      <label class="field">
+        <span>Username</span>
+        <input name="username" required ${isEdit ? "readonly" : ""} value="${escapeHtml(user?.username || "")}" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Email <span class="muted">(optional — for future password reset)</span></span>
+        <input type="email" name="email" value="${escapeHtml(user?.email || "")}" autocomplete="email" placeholder="name@company.com" />
+      </label>
+      <label class="field">
+        <span>Password ${isEdit ? "(leave blank to keep)" : ""}</span>
+        <input type="password" name="password" ${isEdit ? "" : "required minlength=\"4\""} autocomplete="new-password" />
+      </label>
+      <label class="field">
+        <span>Role / access level</span>
+        <select name="role" required>${roleOpts}</select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status" required>${statusOpts}</select>
+      </label>
+      <p class="muted" style="font-size:.85rem;margin:0">
+        <strong>active</strong> — can sign in ·
+        <strong>inactive</strong> — blocked ·
+        <strong>terminated</strong> — removed access
+      </p>
+    </form>
+    <div class="modal-footer">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" form="user-form" class="btn btn-primary">${isEdit ? "Save changes" : "Create user"}</button>
+    </div>`);
+
+  document.getElementById("user-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      username: String(fd.get("username") || "").trim(),
+      email: String(fd.get("email") || "").trim(),
+      role: fd.get("role"),
+      status: fd.get("status"),
+    };
+    const password = String(fd.get("password") || "");
+    if (password) payload.password = password;
+
+    try {
+      if (isEdit) {
+        await api(`/admin/users/${encodeURIComponent(user.username)}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        if (!payload.password) throw new Error("Password is required for new users");
+        await api("/admin/users", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      closeModal();
+      showSaveIndicator(isEdit ? "User updated" : "User created", "saved");
+      render();
+    } catch (err) {
+      showSaveIndicator(err.message, "error");
+    }
+  };
+}
+
+async function renderChanges(root) {
+  if (!isChangesViewer()) {
+    root.innerHTML = `<div class="alert alert-warn">This view is restricted.</div>`;
+    return;
+  }
+
+  const q = new URLSearchParams({ limit: "200" });
+  if (state.changesFilter?.user) q.set("user", state.changesFilter.user);
+  if (state.changesFilter?.entity) q.set("entity", state.changesFilter.entity);
+  const data = await api(`/changelog?${q.toString()}`).catch(() => ({ entries: [] }));
+  const entries = data.entries || [];
+
+  root.innerHTML = `
+    <div class="page-header">
+      <div><h1>Changes</h1><p class="muted">Audit trail of edits made by all users, live from the log sheet.</p></div>
+      <button class="btn btn-primary" id="changes-refresh">↻ Refresh</button>
+    </div>
+    <div class="card toolbar-card">
+    <div class="toolbar">
+      <input class="search-input" id="changes-user" placeholder="Filter by user" value="${state.changesFilter?.user || ""}" />
+      <select id="changes-entity">
+        ${["", "employee", "attendance", "bonus", "deduction", "config", "warning", "month_profile", "document", "app_user"]
+          .map((e) => `<option value="${e}" ${state.changesFilter?.entity === e ? "selected" : ""}>${e || "All types"}</option>`)
+          .join("")}
+      </select>
+    </div>
+    </div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>When</th><th>User</th><th>Type</th><th>Action</th><th>Details</th></tr></thead>
+      <tbody>${entries
+        .map(
+          (e) => `<tr>
+          <td>${e.timestamp ? new Date(e.timestamp).toLocaleString() : "—"}</td>
+          <td>${e.username || "—"}</td>
+          <td>${e.entity || "—"}</td>
+          <td>${e.action || "—"}</td>
+          <td>${e.summary || `${e.field || ""}: ${e.old_value ?? ""} → ${e.new_value ?? ""}`}</td>
+        </tr>`
+        )
+        .join("") || '<tr><td colspan="5" class="muted">No changes logged yet</td></tr>'}
+      </tbody>
+    </table></div>`;
+
+  state.changesFilter = state.changesFilter || { user: "", entity: "" };
+  root.querySelector("#changes-refresh").onclick = () => render();
+  root.querySelector("#changes-user").onchange = (e) => {
+    state.changesFilter.user = e.target.value.trim();
+    render();
+  };
+  root.querySelector("#changes-entity").onchange = (e) => {
+    state.changesFilter.entity = e.target.value;
+    render();
+  };
+  window.HRMSFeatures?.enhanceChanges(root, api);
+}
+
+function navigate(page) {
+  state.page = page;
+  document.querySelectorAll(".nav-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.page === page)
+  );
+  closeSidebarNav();
+  render();
+}
+
+async function render() {
+  const root = document.getElementById("app");
+  if (!root) return;
+  const gen = ++renderGeneration;
+  const page = state.page;
+  const labels = {
+    dashboard: "Loading dashboard…",
+    employees: "Loading employees…",
+    attendance: "Loading attendance…",
+    payroll: "Loading payroll…",
+    bonuses: "Loading bonuses…",
+    deductions: "Loading deductions…",
+    loans: "Loading loans…",
+    salaries: "Loading salaries…",
+    reports: "Loading reports…",
+    settings: "Loading settings…",
+    changes: "Loading changes…",
+    users: "Loading users…",
+    leave: "Loading requests…",
+    requests: "Loading requests…",
+    equipment: "Loading equipment…",
+    org: "Loading organization…",
+    sales: "Loading sales…",
+    costs: "Loading costs…",
+  };
+  if (!appReady) {
+    root.innerHTML = pageSkeleton(labels[page] || "Loading…");
+  } else {
+    root.classList.add("page-loading");
+  }
+  const stale = () => gen !== renderGeneration || state.page !== page;
+  try {
+    if (page === "dashboard") await renderDashboard(root);
+    else if (page === "attendance") await renderAttendance(root);
+    else if (page === "employees") await renderEmployees(root);
+    else if (page === "payroll") await renderPayroll(root);
+    else if (page === "bonuses") await renderBonuses(root);
+    else if (page === "deductions") await renderDeductions(root);
+    else if (page === "loans") await renderLoansPage(root);
+    else if (page === "salaries") await renderSalaries(root);
+    else if (page === "reports") await renderReports(root);
+    else if (page === "leave" || page === "requests") {
+      if (state.page === "leave") state.page = "requests";
+      if (window.RequestsModule) {
+        await window.RequestsModule.renderRequestsPage(root, api, state, {
+          monthToolbar, escapeHtml, openModal, closeModal, employeeSelectOptions,
+        });
+      } else {
+        await window.HRMSFeatures.renderLeavePage(root, api, state, {
+          monthToolbar, escapeHtml, openModal, closeModal, employeeSelectOptions, api,
+        });
+      }
+    }
+    else if (page === "equipment") await window.HRMSFeatures.renderEquipmentPage(root, api, { escapeHtml, openModal, closeModal, employeeSelectOptions });
+    else if (page === "org") await window.HRMSFeatures.renderOrgPage(root, api, {
+      openEmployeeModal, escapeHtml, openModal, closeModal, canManagePayrollEvents,
+    });
+    else if (page === "settings") await renderSettings(root);
+    else if (page === "changes") await renderChanges(root);
+    else if (page === "users") await renderUsers(root);
+    else if (page === "sales" && window.SalesModule) {
+      await window.SalesModule.renderSalesPage(root, api, state, {
+        monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal,
+      });
+    } else if (page === "team-dashboard" && window.TeamDashboardModule) {
+      await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, { escapeHtml });
+    } else if (page === "costs" && window.ExpensesModule) {
+      await window.ExpensesModule.renderCostsPage(root, api, state, {
+        escapeHtml, fmt, openModal, closeModal,
+      });
+    }
+    if (stale()) return;
+    appReady = true;
+    root.classList.remove("page-loading");
+    root.classList.add("page-ready");
+  } catch (e) {
+    if (stale()) return;
+    root.classList.remove("page-loading");
+    root.classList.remove("page-ready");
+    renderErrorCard(root, e?.message || "Something went wrong loading this page.", () => render());
+  }
+}
+
+function renderErrorCard(root, message, onRetry) {
+  if (!root) return;
+  root.innerHTML = `
+    <div class="card" style="max-width:520px;margin:3rem auto;text-align:center">
+      <h3>Couldn't load</h3>
+      <p class="muted">${message}</p>
+      <button class="btn btn-primary" id="retry-btn">Retry</button>
+    </div>`;
+  const btn = root.querySelector("#retry-btn");
+  if (btn && onRetry) btn.addEventListener("click", () => onRetry());
+}
+
+document.querySelectorAll(".nav-btn").forEach((b) =>
+  b.addEventListener("click", () => navigate(b.dataset.page))
+);
+initSidebarNav();
+document.getElementById("logout-btn").addEventListener("click", () => performLogout());
+document.getElementById("refresh-btn").addEventListener("click", () => refreshData());
+
+let sessionCheckTimer = null;
+
+// Auto sign-out after 10 minutes with no activity in the app window.
+const IDLE_LOGOUT_MS = 10 * 60 * 1000;
+let idleTimer = null;
+let lastActivityAt = Date.now();
+let loggingOut = false;
+
+async function performLogout() {
+  if (loggingOut) return;
+  loggingOut = true;
+  clearTimeout(idleTimer);
+  if (sessionCheckTimer) {
+    clearInterval(sessionCheckTimer);
+    sessionCheckTimer = null;
+  }
+  clearSessionId();
+  try {
+    await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  } catch {
+    /* navigating away regardless */
+  }
+  try {
+    if (window.hrDesktop) await window.hrDesktop.clearSession();
+  } catch {
+    /* ignore */
+  }
+  window.location.href = "/login";
+}
+
+function resetIdleTimer() {
+  if (loggingOut) return;
+  lastActivityAt = Date.now();
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(performLogout, IDLE_LOGOUT_MS);
+}
+
+function checkIdleOnResume() {
+  if (loggingOut) return;
+  if (Date.now() - lastActivityAt >= IDLE_LOGOUT_MS) {
+    performLogout();
+    return;
+  }
+  resetIdleTimer();
+}
+
+["mousemove", "mousedown", "keydown", "wheel", "scroll", "touchstart", "click"].forEach(
+  (ev) => window.addEventListener(ev, resetIdleTimer, { passive: true })
+);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkIdleOnResume();
+});
+window.addEventListener("focus", checkIdleOnResume);
+
+async function boot() {
+  const root = document.getElementById("app");
+  root.innerHTML = pageSkeleton("Loading…");
+  setUserInfo(state.user?.username || getSavedUsername());
+  let syncOk = false;
+  let cacheWarm = false;
+  try {
+    const warm = await api("/sync/status", {}, 8000);
+    cacheWarm = !!warm.warm;
+  } catch {
+    /* proceed to sync */
+  }
+  try {
+    if (cacheWarm) {
+      syncOk = true;
+      await render();
+      initialSync().then(() => refreshStatus()).catch(() => {});
+    } else {
+      await initialSync();
+      syncOk = true;
+      await render();
+    }
+  } catch (e) {
+    try {
+      const warm = await api("/sync/status");
+      if (warm.warm) {
+        syncOk = true;
+        await render();
+      } else throw e;
+    } catch {
+      showSyncOverlay(false);
+      renderErrorCard(
+        root,
+        e?.message || "The app could not start. Check your internet connection and try again.",
+        boot
+      );
+      return;
+    }
+  }
+  try {
+    if (!syncOk) showSaveIndicator("Showing cached data — sync when online", "info");
+    consumePendingVersionNotice();
+    if (!sessionCheckTimer) {
+      sessionCheckTimer = setInterval(checkSession, SESSION_CHECK_MS);
+    }
+    resetIdleTimer();
+    window.HRMSFeatures?.initNotificationsBell(api, state).catch(() => {});
+  } catch (e) {
+    renderErrorCard(
+      root,
+      e?.message || "Could not load the page. Try again.",
+      () => render()
+    );
+  }
+}
+
+boot();

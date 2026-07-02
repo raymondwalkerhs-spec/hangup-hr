@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hangup HR</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <div id="sync-overlay" class="sync-overlay hidden">
+    <div class="sync-card">
+      <div class="loader-orbit" aria-hidden="true">
+        <div class="loader-orbit-ring"></div>
+        <div class="loader-orbit-core"><img src="/img/hr-team.png" alt="" /></div>
+      </div>
+      <strong class="loader-title">Syncing HR data…</strong>
+      <p class="muted loader-sub">All HR data from local cache</p>
+      <div class="loader-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+  <div class="app-shell">
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
+    <aside class="sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+        <div id="brand-logo-wrap" class="brand-logo-wrap">
+          <img src="/img/hr-team.png" alt="HR Team" class="brand-logo" id="brand-logo" />
+        </div>
+        <div>
+          <strong id="brand-title">Hangup HR</strong>
+          <div id="company-toggle-wrap" class="muted" style="margin-top:.2rem;font-size:.8rem"></div>
+          <span id="sync-badge" class="badge badge-online">Synced</span>
+          <div id="last-sync" class="sync-time muted"></div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button data-page="dashboard" class="nav-btn active">Dashboard</button>
+        <button data-page="employees" class="nav-btn">Employees</button>
+        <button data-page="attendance" class="nav-btn">Attendance</button>
+        <button data-page="payroll" class="nav-btn">Payroll</button>
+        <button data-page="bonuses" class="nav-btn">Bonuses</button>
+        <button data-page="deductions" class="nav-btn">Deductions</button>
+        <button data-page="loans" class="nav-btn">Loans</button>
+        <button data-page="salaries" class="nav-btn">Salaries</button>
+        <button data-page="reports" class="nav-btn">Reports</button>
+        <button data-page="sales" class="nav-btn hidden" id="nav-sales">Sales log</button>
+        <button data-page="team-dashboard" class="nav-btn hidden" id="nav-team-dashboard">Team dashboards</button>
+        <button data-page="costs" class="nav-btn hidden" id="nav-costs">Costs</button>
+        <button data-page="requests" class="nav-btn">Requests</button>
+        <button data-page="equipment" class="nav-btn">Equipment</button>
+        <button data-page="org" class="nav-btn">Organization</button>
+        <button data-page="settings" class="nav-btn">Settings</button>
+        <button data-page="users" class="nav-btn hidden" id="nav-users">Users</button>
+        <button data-page="changes" class="nav-btn hidden" id="nav-changes">Changes</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="refresh-btn" class="btn btn-sm">↻ Refresh data</button>
+        <span id="user-info" class="user-chip"></span>
+        <button id="logout-btn" class="btn btn-sm btn-ghost">Logout</button>
+      </div>
+    </aside>
+    <main id="app" class="main-content"></main>
+  </div>
+  <div id="modal-root"></div>
+  <div id="save-indicator" class="save-indicator hidden"></div>
+  <script src="/js/requests.js"></script>
+  <script src="/js/hrms-features.js"></script>
+  <script src="/js/sales.js"></script>
+  <script src="/js/team-dashboard.js"></script>
+  <script src="/js/expenses.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+{
+  "name": "hangup-hr",
+  "version": "1.0.8-beta.1",
+  "description": "Hangup HR desktop app — live Google Sheets",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node scripts/ensure-electron.js && electron .",
+    "dev": "node scripts/ensure-electron.js && electron .",
+    "pack": "electron-builder --dir",
+    "dist": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
+    "dist:installer": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 installer",
+    "dist:portable": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 portable",
+    "dist:all": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
+    "dist:mac": "node scripts/ensure-macos.js && electron-builder --mac dmg zip",
+    "dist:mac:script": "bash scripts/build-macos.sh",
+    "dist:mac:dmg": "node scripts/ensure-macos.js && electron-builder --mac dmg",
+    "package:github": "node scripts/package-github-release.js",
+    "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+    "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
+    "push:sheet": "node scripts/push-excel-to-sheet.js",
+    "import:excel": "python ../scripts/import_data.py && node scripts/push-excel-to-sheet.js",
+    "reconcile:june": "node scripts/reconcile-june.js",
+    "migrate:archived": "echo Archived — Excel source removed. Use push:sheet with existing hr-system/data JSON only.",
+    "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3",
+    "fix:electron": "node node_modules/electron/install.js",
+    "test:supabase": "node scripts/test-supabase.js",
+    "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js"
+  },
+  "build": {
+    "appId": "com.hangup.hr",
+    "productName": "Hangup HR Beta",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "lib/**/*",
+      "routes/**/*",
+      "scripts/**/*",
+      "public/**/*",
+      "Asset/**/*",
+      "app.js",
+      "package.json",
+      "node_modules/adm-zip/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "credentials",
+        "to": "credentials",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".env",
+        "to": ".env"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Hangup-HR-Beta-v2-Setup-${version}.${ext}"
+    },
+    "npmRebuild": true,
+    "forceCodeSigning": false,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Hangup HR Beta",
+      "uninstallDisplayName": "Hangup HR Beta"
+    },
+    "portable": {
+      "artifactName": "Hangup-HR-Beta-v2-Portable-${version}.${ext}",
+      "requestExecutionLevel": "user"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "Hangup-HR-${version}-${arch}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Hangup HR ${version}",
+      "artifactName": "Hangup-HR-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.0",
+    "adm-zip": "^0.5.18",
+    "archiver": "^8.0.0",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.11.1",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "googleapis": "^144.0.0",
+    "pdfkit": "^0.16.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  }
+}

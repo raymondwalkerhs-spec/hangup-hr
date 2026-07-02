@@ -1,0 +1,10 @@
+node_modules/
+dist/
+cache/
+.cache/
+.env
+*.log
+credentials/*.json
+!credentials/.gitkeep
+cursor_chat_hr_app_version_management.json
+cursor_hr_app_version_management.md
