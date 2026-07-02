@@ -10,7 +10,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** `K:\download app hr`
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.0.9-beta.2` (`package.json` → `version`)
+- **Current version:** `1.0.9-beta.3` (`package.json` → `version`)
 
 ---
 
@@ -382,6 +382,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | FIN-04 | **Finance create status fix** | Done | `1.0.9-beta.1` |
 | FIN-05 | **Own-pocket settlement** | Done | `1.0.9-beta.1` |
 | FIN-06 | **Petty cash balance guard** | Done | `1.0.9-beta.1` |
+| FIN-09 | **Edit posted petty cash deposits** | Done | `1.0.9-beta.3` |
 | FIN-07 | **Due-date / overdue alerts** | Done | `1.0.9-beta.1` |
 | FIN-08 | **Denied flow + notifications** | Done | `1.0.9-beta.1` |
 

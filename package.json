@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.0.9-beta.2",
+  "version": "1.0.9-beta.3",
   "description": "Hangup HR desktop app — live Google Sheets",
   "main": "electron/main.js",
   "scripts": {
