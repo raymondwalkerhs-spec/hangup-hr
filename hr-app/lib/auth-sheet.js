@@ -5,7 +5,8 @@ const AUTH_SHEET_ID =
 const AUTH_SHEET_TAB = process.env.AUTH_SHEET_TAB || "";
 
 function authSheetRange() {
-  return AUTH_SHEET_TAB ? `'${AUTH_SHEET_TAB}'!A:C` : "A:C";
+  // Read the full row so an optional Role column (and any future columns) is picked up.
+  return AUTH_SHEET_TAB ? `'${AUTH_SHEET_TAB}'!A:Z` : "A:Z";
 }
 
 async function fetchAuthUsers() {
@@ -22,6 +23,10 @@ async function fetchAuthUsers() {
   const userCol = headers.findIndex((h) => h.toLowerCase() === "user");
   const passCol = headers.findIndex((h) => h.toLowerCase() === "password");
   const statusCol = headers.findIndex((h) => h.toLowerCase() === "status");
+  // Optional per-user role column. Accept a few common header names.
+  const roleCol = headers.findIndex((h) =>
+    ["role", "permission", "permissions", "access", "access level"].includes(h.toLowerCase())
+  );
 
   if (userCol < 0 || passCol < 0 || statusCol < 0) {
     throw new Error("Auth sheet must have columns: User, Password, status");
@@ -31,6 +36,7 @@ async function fetchAuthUsers() {
     user: String(row[userCol] || "").trim(),
     password: String(row[passCol] || ""),
     status: String(row[statusCol] || "").trim(),
+    role: roleCol >= 0 ? String(row[roleCol] || "").trim() : "",
   })).filter((r) => r.user);
 }
 
@@ -49,7 +55,13 @@ function validateLogin(username, password, users) {
     return { ok: false, reason: "inactive" };
   }
   if (status === "active") {
-    return { ok: true, user: record.user, status: record.status, password: record.password };
+    return {
+      ok: true,
+      user: record.user,
+      status: record.status,
+      password: record.password,
+      role: record.role || "",
+    };
   }
   return { ok: false, reason: "unknown_status" };
 }
@@ -71,7 +83,7 @@ function checkSession(sessionUser, sessionPassword, users) {
       message: "Your access was changed. Contact Admin.",
     };
   }
-  return { action: "ok" };
+  return { action: "ok", role: record.role || "" };
 }
 
 module.exports = {

@@ -1,0 +1,2 @@
+-- Hangup HR initial schema (applied via Supabase MCP)
+-- See scripts/migrate-sheets-to-supabase.js for data import

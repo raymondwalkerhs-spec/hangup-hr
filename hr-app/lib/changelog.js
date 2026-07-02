@@ -1,3 +1,5 @@
+const { useSupabase } = require("./backend");
+const { getSupabaseAdmin } = require("./supabase-client");
 const sheets = require("./sheets");
 const logSheet = require("./log-sheet");
 
@@ -20,18 +22,25 @@ async function ensureChangeLogTab() {
 }
 
 async function logChange(entry) {
+  const row = {
+    timestamp: entry.timestamp || new Date().toISOString(),
+    username: entry.username || "system",
+    entity: entry.entity || "",
+    entity_id: entry.entityId || "",
+    action: entry.action || "update",
+    field: entry.field || "*",
+    old_value: entry.oldValue != null ? String(entry.oldValue) : "",
+    new_value: entry.newValue != null ? String(entry.newValue) : "",
+    summary: entry.summary || "",
+  };
+
+  if (useSupabase()) {
+    const { error } = await getSupabaseAdmin().from("change_log").insert(row);
+    if (error) console.warn("Supabase change_log write failed:", error.message);
+    return;
+  }
+
   await ensureChangeLogTab();
-  const row = [
-    entry.timestamp || new Date().toISOString(),
-    entry.username || "system",
-    entry.entity || "",
-    entry.entityId || "",
-    entry.action || "update",
-    entry.field || "*",
-    entry.oldValue != null ? String(entry.oldValue) : "",
-    entry.newValue != null ? String(entry.newValue) : "",
-    entry.summary || "",
-  ];
   const a = await sheets.getAuthClient();
   const client = sheets.getSheetsApi(a);
   await client.spreadsheets.values.append({
@@ -39,18 +48,32 @@ async function logChange(entry) {
     range: `${TAB}!A:I`,
     valueInputOption: "RAW",
     insertDataOption: "INSERT_ROWS",
-    requestBody: { values: [row] },
+    requestBody: {
+      values: [
+        [
+          row.timestamp,
+          row.username,
+          row.entity,
+          row.entity_id,
+          row.action,
+          row.field,
+          row.old_value,
+          row.new_value,
+          row.summary,
+        ],
+      ],
+    },
   });
   await logSheet.appendLogEntry({
-    timestamp: row[0],
-    username: row[1],
-    entity: row[2],
-    entityId: row[3],
-    action: row[4],
-    field: row[5],
-    oldValue: row[6],
-    newValue: row[7],
-    summary: row[8],
+    timestamp: row.timestamp,
+    username: row.username,
+    entity: row.entity,
+    entityId: row.entity_id,
+    action: row.action,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    summary: row.summary,
   });
 }
 
@@ -149,9 +172,36 @@ async function logMonthProfileChange(username, action, profile, field) {
 }
 
 async function readChangeLog(opts) {
+  if (useSupabase()) {
+    return readChangeLogFromSupabase(opts);
+  }
   const fromLogSheet = await logSheet.readLogEntries(opts);
   if (fromLogSheet.length) return fromLogSheet;
   return readChangeLogFromMain(opts);
+}
+
+async function readChangeLogFromSupabase({ limit = 100, entity, username, month } = {}) {
+  let q = getSupabaseAdmin().from("change_log").select("*").order("timestamp", { ascending: false }).limit(limit);
+  const { data, error } = await q;
+  if (error) {
+    console.warn("readChangeLog:", error.message);
+    return [];
+  }
+  let list = data || [];
+  if (entity) list = list.filter((r) => r.entity === entity);
+  if (username) list = list.filter((r) => r.username === username);
+  if (month) list = list.filter((r) => String(r.timestamp || "").startsWith(month));
+  return list.map((r) => ({
+    timestamp: r.timestamp,
+    username: r.username,
+    entity: r.entity,
+    entity_id: r.entity_id,
+    action: r.action,
+    field: r.field,
+    old_value: r.old_value,
+    new_value: r.new_value,
+    summary: r.summary,
+  }));
 }
 
 async function readChangeLogFromMain({ limit = 100, entity, username, month } = {}) {

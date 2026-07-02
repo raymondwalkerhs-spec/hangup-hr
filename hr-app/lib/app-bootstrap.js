@@ -22,6 +22,11 @@ function loadEnvironment() {
     candidates.push(path.join(process.env.PORTABLE_EXECUTABLE_DIR, "HangupHR-data", ".env"));
   }
 
+  const execDir = path.dirname(process.execPath || "");
+  if (execDir) {
+    candidates.push(path.join(execDir, ".env"));
+  }
+
   try {
     const { app } = require("electron");
     if (app?.getAppPath) {

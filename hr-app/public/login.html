@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign in — Hangup HR</title>
   <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body class="login-page">
@@ -12,7 +13,8 @@
     <img src="/img/hr-team.png" alt="HR Team Services &amp; Admin" class="login-logo" />
     <p class="brand-tag">Hangup Solutions</p>
     <h1>HR System</h1>
-    <p class="muted">Sign in with your HR credentials. Internet required — all data is live from Google Sheets.</p>
+    <p class="muted">Sign in with your HR credentials. Internet required — data syncs from Supabase.</p>
+    <p id="app-version-line" class="muted version-line"></p>
     <form id="login-form">
       <label class="field">
         <span>Username</span>
@@ -22,11 +24,70 @@
         <span>Password</span>
         <input type="password" id="password" name="password" required autocomplete="current-password" />
       </label>
+      <label class="remember-row">
+        <input type="checkbox" id="remember-user" />
+        <span>Remember my username</span>
+      </label>
       <p id="login-error" class="login-error hidden"></p>
+      <div id="version-blocked" class="version-blocked hidden">
+        <strong>App update required</strong>
+        <p id="version-blocked-msg" class="muted"></p>
+        <p class="muted">Contact your Admin to install the latest version.</p>
+      </div>
       <button type="submit" class="btn btn-primary btn-lg" id="login-btn">Sign in</button>
     </form>
   </div>
   <script>
+    const SAVED_USER_KEY = "hr_saved_user";
+    const SESSION_KEY = "hr_session_id";
+    const usernameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const rememberBox = document.getElementById("remember-user");
+    const loginForm = document.getElementById("login-form");
+    const loginBtn = document.getElementById("login-btn");
+    const err = document.getElementById("login-error");
+    const blockedBox = document.getElementById("version-blocked");
+    const blockedMsg = document.getElementById("version-blocked-msg");
+
+    let loginPermanentlyBlocked = false;
+
+    function setLoginBlocked(message) {
+      loginPermanentlyBlocked = true;
+      err.classList.add("hidden");
+      blockedBox.classList.remove("hidden");
+      blockedMsg.textContent = message || "This app version is no longer supported.";
+      loginBtn.disabled = true;
+      loginForm.querySelectorAll("input").forEach((el) => {
+        el.disabled = true;
+      });
+    }
+
+    async function loadVersionInfo() {
+      try {
+        const res = await fetch("/api/version-info");
+        const data = await res.json();
+        const line = document.getElementById("app-version-line");
+        if (line && data.appVersion) {
+          line.textContent = `App version ${data.appVersion}`;
+        }
+        if (data.versionCheck?.status === "blocked") {
+          setLoginBlocked(data.versionCheck.message);
+        }
+      } catch (_) {}
+    }
+
+    loadVersionInfo();
+
+    // Prefill the remembered username (never the password) and focus password.
+    try {
+      const savedUser = localStorage.getItem(SAVED_USER_KEY);
+      if (savedUser) {
+        usernameInput.value = savedUser;
+        rememberBox.checked = true;
+        passwordInput.focus();
+      }
+    } catch (_) {}
+
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const err = document.getElementById("login-error");
@@ -34,8 +95,8 @@
       err.classList.add("hidden");
       btn.classList.add("is-loading");
       btn.disabled = true;
-      const username = document.getElementById("username").value.trim();
-      const password = document.getElementById("password").value;
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
       try {
         const res = await fetch("/api/login", {
           method: "POST",
@@ -43,19 +104,39 @@
           body: JSON.stringify({ username, password }),
         });
         const data = await res.json();
+        if (data.versionBlocked) {
+          setLoginBlocked(data.versionCheck?.message || data.error);
+          return;
+        }
         if (data.terminated && window.hrDesktop) {
           await window.hrDesktop.triggerUninstall();
           return;
         }
         if (!res.ok) throw new Error(data.error || "Login failed");
+        // Save only the username; the password is always re-entered.
+        try {
+          if (rememberBox.checked) localStorage.setItem(SAVED_USER_KEY, username);
+          else localStorage.removeItem(SAVED_USER_KEY);
+        } catch (_) {}
+        try {
+          sessionStorage.setItem(SESSION_KEY, data.sessionId);
+        } catch (_) {}
         if (window.hrDesktop) await window.hrDesktop.setSession(data.sessionId);
+        if (data.versionNotice) {
+          try {
+            sessionStorage.setItem(
+              "hr_pending_version_notice",
+              JSON.stringify(data.versionNotice)
+            );
+          } catch (_) {}
+        }
         window.location.href = "/";
       } catch (ex) {
         err.textContent = ex.message;
         err.classList.remove("hidden");
       } finally {
         btn.classList.remove("is-loading");
-        btn.disabled = false;
+        if (!loginPermanentlyBlocked) btn.disabled = false;
       }
     });
   </script>

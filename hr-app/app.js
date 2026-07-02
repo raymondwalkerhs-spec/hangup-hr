@@ -19,6 +19,13 @@ function createApp() {
   );
   app.use(express.static(path.join(__dirname, "public")));
   app.use("/api", apiRoutes);
+  app.use("/api/supabase", require("./routes/supabase"));
+  app.use((err, req, res, next) => {
+    console.error(err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
 
   app.get("/login", (req, res) => {
     if (req.session?.appSessionId) return res.redirect("/");

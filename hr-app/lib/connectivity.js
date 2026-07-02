@@ -1,6 +1,8 @@
 const fs = require("fs");
 const https = require("https");
 const { getSheetsAuth, getSheetsClient, resolveCredentialsPath } = require("./google-auth");
+const { useSupabase } = require("./backend");
+const { isSupabaseConfigured, getSupabaseAdmin } = require("./supabase-client");
 
 const SHEET_ID =
   process.env.SHEET_ID || "17z8JrLV0_4fSXzsiZRpCZWFJk5FTit3IUkw0c3NOkvU";
@@ -23,10 +25,11 @@ function probeUrl(url, timeoutMs = 6000) {
 
 async function isOnline() {
   const probes = [
+    process.env.SUPABASE_URL,
     "https://www.google.com/generate_204",
     "https://www.gstatic.com/generate_204",
     "https://sheets.googleapis.com",
-  ];
+  ].filter(Boolean);
   for (const url of probes) {
     if (await probeUrl(url)) return true;
   }
@@ -34,6 +37,26 @@ async function isOnline() {
 }
 
 async function verifyGoogleSheetsAccess() {
+  if (useSupabase()) {
+    if (!isSupabaseConfigured()) {
+      throw new Error("Supabase is not configured. Set SUPABASE_URL and keys in .env.");
+    }
+    const admin = getSupabaseAdmin();
+    const query = admin.from("employees").select("id").limit(1);
+    const { error } = await Promise.race([
+      query,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Supabase query timed out")), 12000)
+      ),
+    ]);
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    return {
+      ok: true,
+      backend: "supabase",
+      url: process.env.SUPABASE_URL,
+    };
+  }
+
   const keyFile = resolveCredentialsPath();
   if (!fs.existsSync(keyFile)) {
     throw new Error(
@@ -66,6 +89,11 @@ async function requireOnline() {
     const detail = err.message || String(err);
     if (detail.includes("not found") || detail.includes("ENOENT")) {
       throw err;
+    }
+    if (useSupabase()) {
+      throw new Error(
+        `Cannot reach Supabase (${detail}). Check your internet connection and .env keys.`
+      );
     }
     if (detail.includes("403") || detail.includes("permission")) {
       throw new Error(

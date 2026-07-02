@@ -1,204 +1,239 @@
-# Hangup HR — Desktop App (EXE + Installer)
+# Hangup HR — Desktop App
 
+**Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
+**Current version:** `1.0.5-beta.1`
 
-Google Sheets is the **sole source of truth**. A local SQLite cache speeds reads; every write goes to the sheet immediately.
+| Document | Purpose |
+|----------|---------|
+| [`TUTORIAL.md`](TUTORIAL.md) | Day-to-day user guide |
+| [`FEATURES.md`](FEATURES.md) | Feature overview (presentation-style) |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+| [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Database / legacy sheet layout |
+| [`AI_Agent.md`](AI_Agent.md) | Agent context, release checklist, architecture |
 
-
-
-> **Project history:** [`../LOG.md`](../LOG.md)  
-
-> **Repo overview:** [`../README.md`](../README.md)
-
-
+There is **no browser / localhost mode** — the app runs only as the packaged Electron desktop EXE.
 
 ---
 
-
-
-## Google Sheets
-
-
-
-| Sheet | ID |
-
-|-------|-----|
-
-| **HR Access** (login) | `1i4KR3e_jNtPMTSDFnbpS7kYzExqEyA0CgLlaZg5KoF8` |
-
-| **HR Data** (employees, attendance, payroll) | `17z8JrLV0_4fSXzsiZRpCZWFJk5FTit3IUkw0c3NOkvU` |
-
-
-
-**Service account** (Editor on both sheets, and on the HR Documents Drive folder if using document upload):
-
-
+## Architecture
 
 ```
-
-hrsystem@decoded-flag-420721.iam.gserviceaccount.com
-
+Supabase (Postgres + Storage + app_users)
+        │  sync on launch & after writes
+        ▼
+  Local SQLite cache (per PC)
+        │
+        ▼
+  Electron UI + Express API (loopback only)
 ```
 
+- **Source of truth:** Supabase  
+- **Performance layer:** SQLite cache on each machine  
+- **Auth:** `app_users` table (bcrypt passwords), session token after login  
+- **Documents:** Supabase Storage bucket `hr-documents` (legacy Google Drive file IDs still open until re-uploaded)  
+- **Version policy:** `app_versions` table — old EXEs can be blocked or warned at login  
 
-
----
-
-
-
-## Features
-
-
-
-| Feature | Status |
-
-|---------|--------|
-
-| Multi-month attendance + batch save | Done |
-
-| NSNC + **NSNC Half Day** (1.5 day penalty) | Done |
-
-| Payroll (basic, lateness, bonuses, deductions) | Done |
-
-| Extra days + 2-week hold + commission per month | Done |
-
-| Payslip PDF | Done |
-
-| Cash / Bank / Insta CSV export | Done |
-
-| Employee documents (Google Drive) | Done |
-
-| Monthly HR reports | Done |
-
-| Change log | Done |
-
-| One-time Excel migration | Done — archived scripts only |
-
-
+Legacy `DATA_BACKEND=sheets` is still in code for migration only; production uses Supabase.
 
 ---
 
+## Supabase project
 
+| Item | Value |
+|------|--------|
+| **Project URL** | `https://ugntjwqimgosuiodsnnk.supabase.co` |
+| **Auth** | `app_users` (Raymond manages via **Users** tab) |
+| **HR data** | `employees`, `attendance_events`, `payroll_adjustments`, … |
+| **HRMS tables** | `employment_periods`, `leave_requests`, `equipment`, `action_improvement_plans`, … |
+| **Sales / costs** | `sales`, `bonus_requests`, `expense_requests`, `petty_cash_ledger`, `monthly_bills`, `app_notifications` |
+| **Audit** | `change_log` |
+| **Versions** | `app_versions` |
 
-## HR Data tabs
+One-time Sheets → Supabase import: `npm run migrate:supabase`
 
+Connectivity check: `npm run test:supabase`
 
+### Migrations & live database
 
-| Tab | Purpose |
+Schema changes are versioned in `supabase/migrations/`. **Cursor agents with Supabase MCP access should apply pending migrations directly** (`apply_migration` / `execute_sql` on server `user-supabase`) — do not leave new tables unapplied when shipping features that depend on them.
 
-|-----|---------|
+To apply manually (fallback): Supabase Dashboard → SQL Editor → paste the migration file contents.
 
-| `Employee_Database` | Employee master |
-
-| `Attendance_Events` | Daily attendance rows |
-
-| `Bonus_Events` / `Deduction_Events` | Payroll adjustments |
-
-| `Payroll_Adjustments` | Extra days, 2-week hold, commission per employee/month |
-
-| `Commission_Types` | Commission rate lookup |
-
-| `Employee_Documents` | Document metadata (files in Google Drive) |
-
-| `Position_Rates` | Salaries |
-
-| `App_Config` | Working days, lateness rules |
-
-| `Change_Log` | Audit trail |
-
-
+After schema changes that ship a new app version, update `app_versions` (see `AI_Agent.md` release checklist).
 
 ---
 
+## Feature summary
 
+| Area | Highlights |
+|------|------------|
+| **Core HR** | Employees, attendance grid, payroll, payslips, bonuses, deductions, loans, salaries |
+| **Compliance** | Nationality, work permit (non-Egyptian), social insurance (Egyptian) |
+| **Lifecycle** | Employment periods, depart / re-hire, onboarding & offboarding checklists, clearance |
+| **Discipline** | Warnings with escalation levels, Action Improvement Plans (AIP) |
+| **Time off** | Leave requests; approvers: Mark, Raymond, Phoebe |
+| **Payroll control** | Month lock, MoM comparison, tax stub (0% default), finance handoff ZIP |
+| **Assets** | Equipment registry and assignments |
+| **Documents** | Upload, expiry alerts, bulk ZIP export |
+| **Reporting** | Monthly HR report, turnover, attendance rankings |
+| **Admin** | Notifications bell, change log export, session registry (Raymond), user management |
+
+Full detail: [`FEATURES.md`](FEATURES.md)
+
+---
+
+## Building (Windows)
+
+### Prerequisites
+
+- Windows 10/11 x64  
+- Node.js 18+  
+- `.env` with Supabase keys (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, …)  
+- `credentials/service-account.json` only if you still use Drive-backed document IDs  
+
+### Recommended build
+
+```powershell
+cd "K:\download app hr"
+npm run dist:beta
+```
+
+Outputs in **`dist-beta-v2\`**:
+
+| File | Purpose |
+|------|---------|
+| `Hangup-HR-Beta-v2-Setup-1.0.4-beta.3.exe` | Installer |
+| `Hangup-HR-Beta-v2-Portable-1.0.4-beta.3.exe` | Portable (USB / folder) |
+| `win-unpacked\Hangup HR Beta.exe` | Unpacked dev-style run |
+
+Other scripts:
+
+```powershell
+.\scripts\build.ps1              # installer + portable → dist\
+.\scripts\build.ps1 installer    # installer only
+.\scripts\build.ps1 portable     # portable only
+npm run dist:all                 # same via npm
+```
+
+**Before building:** close any running **Hangup HR** / Electron windows so `dist*` folders are not locked.
+
+**Code signing (optional):** set `CSC_LINK` and `CSC_KEY_PASSWORD`, then run the build script.
+
+### Deploy to a PC
+
+1. Copy the installer or portable EXE.  
+2. Run it (SmartScreen may warn on unsigned builds → *More info → Run anyway*).  
+3. Sign in with credentials from `app_users` (Raymond creates users in **Users**).  
+4. First launch needs internet for the initial Supabase sync.
+
+### Development
+
+```powershell
+npm install
+npm run rebuild:native
+npm start
+```
+
+If Electron fails to start: `npm run fix:electron`
+
+---
 
 ## Commands
 
-
-
 | Command | Purpose |
-
 |---------|---------|
-
-| `npm start` | Launch Electron desktop app |
-
-| `npm run server` | Express only (browser at localhost:3847) |
-
-| `npm run dist:installer` | Build Windows installer (`Hangup-HR-Setup-*.exe`) |
-| `npm run dist:portable` | Build portable EXE — no install, runs from USB/folder |
-| `npm run dist:all` | Build **both** installer and portable |
-| `npm run dist:mac` | Build macOS DMG + ZIP — **macOS only** (see below) |
-| `.\scripts\build.ps1` | Full build script (install + native rebuild + both EXEs) |
-| `./scripts/build-macos.sh` | Full macOS build on a Mac (install + native rebuild + DMG/ZIP) |
-
-### macOS builds (not on Windows)
-
-`electron-builder` **cannot** produce `.dmg` / `.app` from Windows. Running `npm run dist:mac` on Windows will exit with instructions.
-
-**Option A — Mac in the office**
-
-```bash
-cd hr-app
-./scripts/build-macos.sh
-```
-
-**Option B — GitHub Actions** (build from your PC without owning a Mac)
-
-1. Push this repo to GitHub.
-2. In the repo → **Settings → Secrets → Actions**, add `SERVICE_ACCOUNT_JSON` (paste the full `credentials/service-account.json` file).
-3. Run **Actions → Build macOS → Run workflow**, or push a tag like `v1.0.0`.
-4. Download `hangup-hr-macos` from the workflow run artifacts.
-
-The Mac build is **unsigned** (no Apple Developer account). Users may need **right-click → Open** the first time.
-
-| `npm run push:sheet` | **Archived** — push `hr-system/data/*.json` to sheet (after `import_data.py`) |
-
-| `npm run reconcile:june` | Compare June payroll JSON vs last Excel export (if file exists) |
-
-
+| `npm start` | Run from source (Electron) |
+| `npm run dist:beta` | Beta channel build → `dist-beta-v2\` |
+| `npm run dist:all` | Installer + portable → `dist\` |
+| `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
+| `npm run test:supabase` | Check Supabase env and clients |
+| `npm run migrate:supabase` | One-time Sheets → Postgres import |
+| `node scripts/import-june-sales.js` | Import June MLA-Ray sales CSV → `sales` table |
+| `node scripts/import-june-sales.js --dry-run` | Preview import without writing |
 
 ---
 
-
-
-## Payroll formula
-
-
+## Payroll formula (summary)
 
 ```
-
-Basic = (workingDays + extraDays - halfDays×0.5 - quarterDays×0.25 - nsnc×2 - nsncHalf×1.5) × dailyRate
-
-Net = basic + bonuses - deductions - lateness - 2-week hold (10 days if enabled)
-
+Basic = (workingDays + extraDays − halfDays×0.5 − quarterDays×0.25 − nsnc×2 − nsncHalf×1.5) × dailyRate
+Net   = basic + bonuses − deductions − lateness − loan − tax (when configured) − 2-week hold if enabled
 ```
 
-
+Action Improvement Plan weeks apply extra rules (e.g. Lateness A = 75 EGP, tripled deductions). See [`FEATURES.md`](FEATURES.md).
 
 ---
 
+## Roles & access
 
+| Role | Access |
+|------|--------|
+| `ceo` | Full + **Changes** audit tab |
+| `admin` | Full + **Changes** audit tab |
+| `hr` | Full HR; no **Changes** tab |
+| `finance` | Payroll + read |
+| `tl` | Attendance edit + read |
+| `agent` | Read only |
 
-## Document upload
-
-
-
-Set `GOOGLE_DRIVE_FOLDER_ID` in `.env`, or let the app create a folder named `Hangup HR Documents`. Share that folder with the service account as **Editor**.
-
-
+- **Users tab** (add/edit passwords, roles, email): **Raymond only**  
+- **Changes tab:** `admin` and `ceo` only  
+- **Leave approval:** Mark, Raymond, Phoebe (by username)  
+- **Session timeout:** 10 minutes idle → auto logout  
+- **Change password:** Settings (logged-in user)  
 
 ---
 
+## Version policy
 
+Each build embeds `package.json` version. On login and every ~5 minutes the app checks `app_versions`:
 
-## Notes
+| Result | Behaviour |
+|--------|-----------|
+| App ≥ current | No notice |
+| App ≥ min compatible, &lt; current | Update warning — can continue |
+| App &lt; min compatible | Blocked — install newer EXE |
 
+**On every release:** bump `package.json`, update docs, set `app_versions` in Supabase, build and distribute EXE.
 
+```sql
+UPDATE app_versions SET is_current = false WHERE is_current = true;
 
-- Internet required for sync and saves
+INSERT INTO app_versions (version, release_date, release_type, min_compatible_version, is_current, notes)
+VALUES ('1.0.4-beta.3', CURRENT_DATE, 'minor', '1.0.0', true, 'Release notes here')
+ON CONFLICT (version) DO UPDATE SET
+  is_current = EXCLUDED.is_current,
+  release_date = EXCLUDED.release_date,
+  notes = EXCLUDED.notes;
+```
 
-- The local `.xlsx` workbook was migrated once; ongoing edits happen only in the app / Google Sheet
+**Live current version:** `1.0.4-beta.3`
 
-- Reconciliation report: `hr-system/data/reconcile-2026-06.json` (some deltas expected where Excel used inline payroll columns not stored as deduction events)
+---
 
+## Security
 
+- Express holds `SUPABASE_SECRET_KEY` on loopback — the UI never talks to Postgres directly.  
+- **RLS enabled** on public tables with deny-all policies for `anon` / `authenticated`; the server secret bypasses RLS.  
+- Do not expose the secret key in a public web client.  
+- Distribute EXE only to trusted HR PCs; treat `.env` as confidential on build machines.
+
+App updates are **not** delivered via Supabase Storage (installers are ~90 MB). Copy the new EXE manually (USB, shared folder, etc.). Version enforcement uses `app_versions` only.
+
+---
+
+## Appearance
+
+Settings → **Appearance** — six themes (Light, Dark, Grey, Dark wine, Dark grey, Alabaster), saved per device.
+
+---
+
+## Release checklist
+
+1. Bump `package.json`  
+2. Update `CHANGELOG.md`, `TUTORIAL.md`, `README.md`, `FEATURES.md` if features changed  
+3. Update `app_versions` in Supabase  
+4. `npm run dist:beta` (or `.\scripts\build.ps1`)  
+5. Distribute new EXE to HR PCs  
+
+See [`AI_Agent.md`](AI_Agent.md) for agent automation details.

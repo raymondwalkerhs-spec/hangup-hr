@@ -22,6 +22,35 @@ function splitStatusBadge(status) {
   return `<span class="badge ${cls}">${status}</span>`;
 }
 
+const SESSION_CHECK_MS = 5 * 60 * 1000;
+const VERSION_NOTICE_KEY = "hr_version_notice_dismissed";
+const SAVED_USER_KEY = "hr_saved_user";
+const SESSION_KEY = "hr_session_id";
+
+function getSessionId() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function clearSessionId() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function getSavedUsername() {
+  try {
+    return localStorage.getItem(SAVED_USER_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 const state = {
   user: null,
   page: "dashboard",
@@ -29,24 +58,212 @@ const state = {
   unit: "",
   team: "",
   hideOut: true,
-  empFilter: { q: "", status: "", unit: "" },
+  hideZeroNet: false,
+  companyContext: sessionStorage.getItem("companyContext") || "hangup",
+  salesPickDate: new Date().toISOString().slice(0, 10),
+  salesWeekDate: new Date().toISOString().slice(0, 10),
+  empFilter: { q: "", status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
+  changesFilter: { user: "", entity: "" },
   meta: { statuses: [], units: [], positions: [], backendPools: [] },
   pendingAttendance: new Map(),
   saveTimer: null,
 };
 
-const HALF_DAY_STATUSES = new Set(["Half Day", "NSNC Half Day"]);
+let renderGeneration = 0;
+let appReady = false;
 
-function isHalfDayStatus(status) {
-  return HALF_DAY_STATUSES.has(status);
+function buildApiQuery(params = {}) {
+  const q = listHideOutQuery();
+  if (state.companyContext === "hs2") q.set("company", "hs2");
+  for (const [k, v] of Object.entries(params)) {
+    if (v != null && v !== "") q.set(k, String(v));
+  }
+  return q;
 }
 
-function pageSkeleton() {
-  return `<div class="page-skeleton">
-    <div class="skeleton-bar wide"></div>
-    <div class="skeleton-bar mid"></div>
-    <div class="skeleton-grid">${Array(4).fill('<div class="skeleton-card"></div>').join("")}</div>
-    <div class="skeleton-bar"></div><div class="skeleton-bar"></div><div class="skeleton-bar"></div>
+function apiContextQuery(params = {}) {
+  const s = buildApiQuery(params).toString();
+  return s ? `?${s}` : "";
+}
+
+function employeesQuery() {
+  return apiContextQuery();
+}
+
+function listHideOutQuery() {
+  const q = new URLSearchParams();
+  if (state.hideOut) q.set("hideOut", "true");
+  else q.set("showOut", "true");
+  return q;
+}
+
+function payrollNetAmount(row) {
+  if (!row) return 0;
+  if (row.hasSplits) return Number(row.calculatedNet ?? row.netSalary ?? 0);
+  return Number(row.netSalary ?? 0);
+}
+
+function filterPayrollByZeroNet(rows) {
+  if (!state.hideZeroNet) return rows;
+  return rows.filter((r) => payrollNetAmount(r) !== 0);
+}
+
+function isOutEmployee(emp) {
+  if (!emp) return true;
+  if (emp.status === "Out") return true;
+  if (!emp.status && !emp.american_name && !emp.arabic_name) return true;
+  return false;
+}
+
+const NATIONALITY_ALIASES = {
+  egyptain: "egyptian",
+  egypt: "egyptian",
+  sudan: "sudanese",
+  ethiopia: "ethiopian",
+  eritrea: "eritrean",
+  "south sudan": "south sudanese",
+};
+
+function normNationality(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  return NATIONALITY_ALIASES[raw] || raw;
+}
+
+const TRANSPORT_OVERRIDE_STATUSES = new Set([
+  "Half Day",
+  "NSNC Half Day",
+  "Lateness A",
+  "Lateness B",
+  "Quarter Day-Off",
+]);
+
+function isTransportOverrideStatus(status) {
+  return TRANSPORT_OVERRIDE_STATUSES.has(status);
+}
+
+const TEAM_OPTIONS = [
+  "Back-End",
+  "Daemon",
+  "Steven",
+  "Justin",
+  "Ayla",
+  "Tris",
+  "Jude",
+  "HR",
+  "Quality",
+  "_____",
+];
+
+const CASH_BRANCHES = ["Makram", "Abbas", "Square", "Other"];
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "Instapay / Wallet", label: "Instapay / Wallet" },
+  { value: "Cash", label: "Cash" },
+  { value: "Bank Account", label: "Bank Account" },
+];
+
+const TL_BONUS_TYPE = "Bonus from TL / OP";
+
+function normalizePaymentMethodValue(method) {
+  const m = String(method || "").trim().toLowerCase();
+  if (!m) return "";
+  if (m.includes("insta") || m.includes("wallet") || m.includes("instapay")) return "Instapay / Wallet";
+  if (m.includes("cash")) return "Cash";
+  if (m.includes("bank")) return "Bank Account";
+  return String(method || "").trim();
+}
+
+function paymentMethodFieldsHtml(emp = {}) {
+  const pm = normalizePaymentMethodValue(emp.payment_method);
+  const branch = emp.alternative_payment || "";
+  return `
+    <label class="field"><span>Payment Method</span>
+      <select name="payment_method" id="emp-payment-method">
+        <option value="">— Select —</option>
+        ${PAYMENT_METHOD_OPTIONS.map(
+          (o) => `<option value="${o.value}" ${pm === o.value ? "selected" : ""}>${o.label}</option>`
+        ).join("")}
+      </select>
+    </label>
+    <div id="pay-insta-wrap" class="field ${pm === "Instapay / Wallet" ? "" : "hidden"}" style="grid-column:1/-1">
+      <label class="field"><span>Instapay / wallet number or address</span>
+        <input name="payment_details_insta_wallet" value="${emp.payment_details_insta_wallet || ""}" placeholder="Phone, username, or wallet ID" />
+      </label>
+    </div>
+    <div id="pay-cash-wrap" class="${pm === "Cash" ? "" : "hidden"}" style="grid-column:1/-1">
+      <label class="field"><span>Cash branch</span>
+        <select name="alternative_payment" id="emp-cash-branch">
+          <option value="">— Select branch —</option>
+          ${CASH_BRANCHES.map(
+            (b) => `<option value="${b}" ${branch === b ? "selected" : ""}>${b}</option>`
+          ).join("")}
+        </select>
+      </label>
+    </div>
+    <div id="pay-bank-wrap" class="${pm === "Bank Account" ? "" : "hidden"}" style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <label class="field"><span>Bank reference number</span>
+        <input name="bank_refrence_number" value="${emp.bank_refrence_number || ""}" />
+      </label>
+      <label class="field"><span>Name in bank sheet</span>
+        <input name="bank_name_as_bank_sheet" value="${emp.bank_name_as_bank_sheet || ""}" />
+      </label>
+    </div>`;
+}
+
+function bindPaymentMethodFields() {
+  const sel = document.getElementById("emp-payment-method");
+  if (!sel) return;
+  const refresh = () => {
+    const v = sel.value;
+    document.getElementById("pay-insta-wrap")?.classList.toggle("hidden", v !== "Instapay / Wallet");
+    document.getElementById("pay-cash-wrap")?.classList.toggle("hidden", v !== "Cash");
+    document.getElementById("pay-bank-wrap")?.classList.toggle("hidden", v !== "Bank Account");
+  };
+  sel.onchange = refresh;
+  refresh();
+}
+
+function isOutEmployeeStatus(status) {
+  const s = String(status || "").trim().toLowerCase();
+  return s === "out" || s.includes("out but still");
+}
+
+function positionSelectHtml(name, value, id = "emp-position") {
+  const v = value || "";
+  const fromRates = state.meta?.positionRates || [];
+  const fromPositions = state.meta?.positions || [];
+  const opts = [...new Set([...fromRates, ...fromPositions, v].filter(Boolean))];
+  return `<label class="field"><span>Position</span>
+    <select name="${name}" id="${id}">
+      <option value="">— Select position —</option>
+      ${opts.map((p) => `<option value="${escapeHtml(p)}" ${v === p ? "selected" : ""}>${escapeHtml(p)}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function teamSelectHtml(name, value, id = "emp-team") {
+  const v = value || "";
+  const orgTeams = (state.orgTeams || []).map((t) => t.name);
+  const opts = [...new Set([...TEAM_OPTIONS, ...orgTeams, v].filter(Boolean))];
+  return `<label class="field"><span>Team</span>
+    <select name="${name}" id="${id}">
+      <option value="">— Select team —</option>
+      ${opts.map((t) => `<option value="${t}" ${v === t ? "selected" : ""}>${t}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function pageSkeleton(label = "Loading…") {
+  return `<div class="page-loader">
+    <div class="page-loader-inner">
+      <div class="loader-orbit loader-orbit-sm">
+        <div class="loader-orbit-ring"></div>
+        <div class="loader-orbit-core"><img src="/img/hr-team.png" alt="" /></div>
+      </div>
+      <p class="page-loader-text">${label}</p>
+      <div class="loader-dots"><span></span><span></span><span></span></div>
+    </div>
   </div>`;
 }
 
@@ -57,7 +274,10 @@ function setButtonLoading(btn, loading) {
 }
 
 async function downloadFile(path, filename) {
-  const res = await fetch(`/api${path}`);
+  const sessionId = sessionStorage.getItem("hrSessionId");
+  const res = await fetch(`/api${path}`, {
+    headers: sessionId ? { "x-session-id": sessionId } : {},
+  });
   if (res.status === 401) {
     window.location.href = "/login";
     return;
@@ -75,12 +295,33 @@ async function downloadFile(path, filename) {
   URL.revokeObjectURL(url);
 }
 
-async function api(path, options = {}) {
-  const res = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-  });
+async function api(path, options = {}, timeoutMs = 120000) {
+  if (typeof resetIdleTimer === "function") resetIdleTimer();
+  const sessionId = getSessionId();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        ...(sessionId ? { "x-session-id": sessionId } : {}),
+        ...options.headers,
+      },
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      throw new Error("Request timed out. Check your connection and try Refresh data.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401) {
+    clearSessionId();
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }
@@ -93,7 +334,38 @@ async function api(path, options = {}) {
     if (data.offline) throw new Error("Internet required to sync HR data. Check your connection.");
     throw new Error(msg);
   }
+  // Every successful write is pushed to the Google Sheet by the server; afterwards
+  // we quietly pull the newest data back so the local view stays current with edits
+  // made by other users. Sync calls themselves are excluded to avoid a loop.
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && !path.startsWith("/sync/")) {
+    scheduleSilentRefresh();
+  }
   return data;
+}
+
+let silentRefreshTimer = null;
+
+function scheduleSilentRefresh() {
+  clearTimeout(silentRefreshTimer);
+  silentRefreshTimer = setTimeout(runSilentRefresh, 3000);
+}
+
+function isModalOpen() {
+  return !!document.getElementById("modal-root")?.childElementCount;
+}
+
+async function runSilentRefresh() {
+  if (state.pendingAttendance.size > 0 || isModalOpen()) {
+    scheduleSilentRefresh();
+    return;
+  }
+  try {
+    await api("/sync/refresh", { method: "POST" });
+    await refreshStatus();
+  } catch {
+    /* offline or transient — next write/refresh will retry */
+  }
 }
 
 function showSyncOverlay(show) {
@@ -110,11 +382,22 @@ function showSaveIndicator(msg, type = "info") {
 }
 
 async function initialSync() {
+  // First run on a fresh PC starts with an empty local cache, so the post-login
+  // sync must succeed before the app is usable. Retry a few times to ride out a
+  // slow/flaky first connection; if it still fails, let boot() show the retry card.
   showSyncOverlay(true);
   try {
-    await api("/sync/refresh", { method: "POST" });
-  } catch (e) {
-    console.warn("Sync:", e.message);
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await api("/sync/refresh", { method: "POST" });
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    throw lastErr;
   } finally {
     showSyncOverlay(false);
     await refreshStatus();
@@ -138,14 +421,22 @@ async function refreshData() {
 async function checkSession() {
   try {
     const data = await api("/session-check");
+    if (data.action === "version_blocked") {
+      showVersionBlockedScreen(data.message, data.versionCheck || data);
+      return false;
+    }
     if (data.action === "uninstall" && window.hrDesktop) {
       await window.hrDesktop.triggerUninstall();
       return false;
     }
     if (data.action === "admin") {
+      clearSessionId();
       alert(data.message || "Contact Admin.");
       window.location.href = "/login";
       return false;
+    }
+    if (data.versionNotice) {
+      showVersionUpdateNotice(data.versionNotice);
     }
     return true;
   } catch {
@@ -153,15 +444,158 @@ async function checkSession() {
   }
 }
 
-function shiftMonth(ym, delta) {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function monthLabel(ym) {
   const [y, m] = ym.split("-").map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function monthPayrollFolderName(ym) {
+  return `${monthLabel(ym).replace(/ /g, "_")}_Payroll`;
+}
+
+function parseTlSourceFromReason(reason) {
+  const m = String(reason || "").match(/deducted from\s+(\S+)\)/i);
+  return m ? m[1] : "";
+}
+
+function parseTlTargetFromReason(reason) {
+  const m = String(reason || "").match(/paid to\s+(\S+)/i);
+  return m ? m[1] : "";
+}
+
+function bonusRecipientCell(d, empById) {
+  const targetId = d.bonusRecipientId || parseTlTargetFromReason(d.reason);
+  if (!targetId) return `<span class="muted">—</span>`;
+  const target = empById.get(targetId);
+  const american = d.bonusRecipientAmericanName || target?.american_name || "";
+  const fallback = american || target?.arabic_name || targetId;
+  return `<div class="bonus-recipient-cell">
+    <strong>${escapeHtml(targetId)}</strong><br>
+    <span>${escapeHtml(american || fallback)}</span>
+    ${american && target?.arabic_name ? `<br><span class="muted">${escapeHtml(target.arabic_name)}</span>` : ""}
+  </div>`;
+}
+
+function deductionActionCells(d, canEdit) {
+  if (!canEdit) return "";
+  const key = JSON.stringify({ employeeId: d.employeeId, date: d.date, type: d.type });
+  return `<td class="btn-row">
+    <button class="btn btn-sm" data-edit-ded='${key}'>Edit</button>
+    <button class="btn btn-sm btn-danger" data-del-ded='${key}'>Delete</button>
+  </td>`;
+}
+
+function bindDeductionTableActions(root, deductions, employees, dedTypes) {
+  root.querySelectorAll("[data-edit-ded]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = JSON.parse(btn.dataset.editDed);
+      const d = deductions.find((x) => x.employeeId === key.employeeId && x.date === key.date && x.type === key.type);
+      if (d) openDeductionEditModal(d, employees, dedTypes || []);
+    };
+  });
+  root.querySelectorAll("[data-del-ded]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delDed);
+      openConfirmDeleteModal({
+        title: "Delete deduction",
+        message: `Delete ${payload.type} on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/deductions", { method: "DELETE", body: JSON.stringify(payload) });
+          render();
+        },
+      });
+    };
+  });
+}
+
+function formatPayslipDate(dateStr) {
+  const d = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function attendanceDetailHtml(records) {
+  const lines = (records || [])
+    .filter((r) => ["Lateness A", "Lateness B", "Quarter Day-Off", "Half Day"].includes(r.status))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .map((r) => {
+      const when = formatPayslipDate(r.date);
+      if (r.status === "Lateness A") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Lateness A — 25 EGP on ${when}</div>`;
+      if (r.status === "Lateness B") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Lateness B — 50 EGP on ${when}</div>`;
+      if (r.status === "Quarter Day-Off") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Quarter day on ${when}</div>`;
+      if (r.status === "Half Day") return `<div class="muted" style="font-size:.85rem;padding-left:.5rem">Half day on ${when}</div>`;
+      return "";
+    })
+    .join("");
+  return lines;
+}
+
+function canManagePayrollEvents() {
+  return ["admin", "ceo", "hr"].includes(state.user?.role);
+}
+
+function canEditTlBonuses() {
+  return canManagePayrollEvents() || state.user?.canTransferBonus === true;
+}
+
+function canViewBonusesDeductions() {
+  if (state.user?.canViewBonuses === true) return true;
+  return ["admin", "ceo", "hr", "finance", "op", "tl", "quality", "rtm", "agent", "office_assistant"].includes(
+    state.user?.role
+  );
+}
+
+function canSubmitBonusRequest() {
+  return state.user?.canSubmitBonusRequest === true || ["tl", "op", "quality", "rtm", "admin", "hr"].includes(state.user?.role);
+}
+
+function canApproveBonusRequest() {
+  return state.user?.canApproveBonusRequest === true || ["admin", "ceo", "hr"].includes(state.user?.role);
+}
+
+function employeeSelectOptions(employees, selectedId = "") {
+  return employees
+    .map(
+      (e) =>
+        `<option value="${e.id}" ${e.id === selectedId ? "selected" : ""}>${e.id} — ${escapeHtml(e.american_name || e.arabic_name || e.id)}</option>`
+    )
+    .join("");
+}
+
+function isLeadershipEmployeeId(id) {
+  const s = String(id || "").trim().toUpperCase();
+  return /^(TL|CL|OP)/.test(s);
+}
+
+function sortEmployeesForLeadDeduct(employees) {
+  const rank = (e) => {
+    const id = String(e?.id || "").toUpperCase();
+    if (id.startsWith("TL")) return 0;
+    if (id.startsWith("CL")) return 1;
+    if (id.startsWith("OP")) return 2;
+    if (e?.lead_role) {
+      const lr = String(e.lead_role).toUpperCase();
+      if (lr === "TL") return 0;
+      if (lr === "CL") return 1;
+      if (lr === "OP") return 2;
+    }
+    return 99;
+  };
+  return [...employees].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return String(a.id).localeCompare(String(b.id), undefined, { numeric: true });
+  });
+}
+
+function employeeSelectOptionsForTlDeduct(employees, selectedId = "") {
+  return sortEmployeesForLeadDeduct(employees)
+    .map((e) => {
+      const tag = isLeadershipEmployeeId(e.id) ? " ★" : "";
+      return `<option value="${e.id}" ${e.id === selectedId ? "selected" : ""}>${e.id}${tag} — ${escapeHtml(e.american_name || e.arabic_name || e.id)}</option>`;
+    })
+    .join("");
 }
 
 function dayHeader(cal) {
@@ -246,6 +680,7 @@ function bindProfilePhotoUpload(employeeId, onDone) {
     try {
       setButtonLoading(uploadBtn, true);
       await uploadProfilePhotoFile(employeeId, file);
+      if (employeeId === state.user?.employeeId) await updateSidebarBrand();
       onDone?.();
     } catch (e) {
       alert(e.message);
@@ -258,6 +693,7 @@ function bindProfilePhotoUpload(employeeId, onDone) {
     if (!confirm("Remove profile photo?")) return;
     try {
       await api(`/employees/${employeeId}/profile-photo`, { method: "DELETE" });
+      if (employeeId === state.user?.employeeId) await updateSidebarBrand();
       onDone?.();
     } catch (e) {
       alert(e.message);
@@ -284,6 +720,72 @@ function closeModal() {
   document.getElementById("modal-root").innerHTML = "";
 }
 
+function versionNoticeDismissKey(currentVersion) {
+  return `${VERSION_NOTICE_KEY}_${currentVersion || "unknown"}`;
+}
+
+function showVersionUpdateNotice(notice) {
+  if (!notice?.message) return;
+  const key = versionNoticeDismissKey(notice.currentVersion);
+  try {
+    if (sessionStorage.getItem(key) === "1") return;
+  } catch (_) {}
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Update available</h2>
+      <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warn">${escapeHtml(notice.message)}</div>
+      <p class="muted">You are on <strong>${escapeHtml(notice.appVersion || "this version")}</strong>.
+      The latest version is <strong>${escapeHtml(notice.currentVersion || "unknown")}</strong>.</p>
+      <p class="muted">You can keep working for now, but please ask Admin for the newest build soon.</p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-primary" id="version-notice-continue">Continue</button>
+    </div>`);
+
+  const root = document.getElementById("modal-root");
+  root.querySelector("#version-notice-continue")?.addEventListener("click", () => {
+    try {
+      sessionStorage.setItem(key, "1");
+    } catch (_) {}
+    closeModal();
+  });
+}
+
+function showVersionBlockedScreen(message, details) {
+  const root = document.getElementById("app");
+  if (!root) return;
+  document.querySelector(".app-shell")?.classList.add("version-blocked-shell");
+  root.innerHTML = `
+    <div class="version-block-screen">
+      <div class="card" style="max-width:560px;margin:3rem auto;text-align:center">
+        <h2>App update required</h2>
+        <div class="alert alert-warn">${escapeHtml(message || "This app version is no longer supported.")}</div>
+        ${
+          details
+            ? `<p class="muted">Your version: <strong>${escapeHtml(details.appVersion || "unknown")}</strong><br>
+               Required version: <strong>${escapeHtml(details.currentVersion || "unknown")}</strong></p>`
+            : ""
+        }
+        <p class="muted">Contact your Admin to install the latest version. The app cannot be used until then.</p>
+        <button class="btn btn-primary" id="version-block-logout">Return to sign in</button>
+      </div>
+    </div>`;
+  root.querySelector("#version-block-logout")?.addEventListener("click", () => performLogout());
+}
+
+function consumePendingVersionNotice() {
+  try {
+    const raw = sessionStorage.getItem("hr_pending_version_notice");
+    if (!raw) return;
+    sessionStorage.removeItem("hr_pending_version_notice");
+    showVersionUpdateNotice(JSON.parse(raw));
+  } catch (_) {}
+}
+
 function openModal(html, wide = false) {
   const root = document.getElementById("modal-root");
   root.innerHTML = `<div class="modal-backdrop" id="modal-backdrop">
@@ -295,17 +797,137 @@ function openModal(html, wide = false) {
   root.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
 }
 
+function setUserInfo(username, role) {
+  const el = document.getElementById("user-info");
+  if (!el) return;
+  const name = username || getSavedUsername() || "";
+  el.textContent = name ? (role ? `${name} · ${role}` : name) : "";
+}
+
+async function updateSidebarBrand() {
+  const wrap = document.getElementById("brand-logo-wrap");
+  if (!wrap) return;
+  const empId = state.user?.employeeId;
+  if (!empId) {
+    wrap.innerHTML = `<img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />`;
+    return;
+  }
+  try {
+    const data = await api(`/employees/${empId}${apiContextQuery()}`);
+    const emp = data.employee;
+    if (emp?.profile_photo_file_id) {
+      wrap.innerHTML = avatarHtml(emp, "brand-user-avatar");
+      return;
+    }
+  } catch {
+    /* fall back to default logo */
+  }
+  wrap.innerHTML = `<img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />`;
+}
+
+function applyCompanyBranding() {
+  const title = document.getElementById("brand-title");
+  if (title) title.textContent = state.companyContext === "hs2" ? "Hangup HS-2" : "Hangup HR";
+  document.body.classList.toggle("company-hs2", state.companyContext === "hs2");
+  const wrap = document.getElementById("company-toggle-wrap");
+  if (!wrap) return;
+  const ctx = state.companyContext === "hs2" ? "hs2" : "hangup";
+  wrap.innerHTML = `<div class="company-switcher" role="group" aria-label="Company to manage">
+    <span class="company-switcher-label">Managing</span>
+    <button type="button" class="company-switch-btn ${ctx === "hangup" ? "active" : ""}" data-company="hangup">Main Hangup</button>
+    <button type="button" class="company-switch-btn ${ctx === "hs2" ? "active" : ""}" data-company="hs2">HS-2</button>
+  </div>`;
+  wrap.querySelectorAll("[data-company]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.company;
+      if (next === state.companyContext) return;
+      state.companyContext = next;
+      sessionStorage.setItem("companyContext", state.companyContext);
+      applyCompanyBranding();
+      render();
+    });
+  });
+}
+
+function openConfirmDeleteModal({ title, message, onConfirm }) {
+  openModal(
+    `<div class="modal-header"><h2>${escapeHtml(title || "Confirm deletion")}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <p>${escapeHtml(message || "This action cannot be undone.")}</p>
+      <label class="field"><input type="checkbox" id="confirm-del-check" /> I confirm this deletion</label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-danger" id="confirm-del-btn">Delete</button>
+    </div>`,
+    true
+  );
+  document.getElementById("confirm-del-btn").onclick = async () => {
+    if (!document.getElementById("confirm-del-check")?.checked) {
+      alert("Please check the confirmation box.");
+      return;
+    }
+    closeModal();
+    try {
+      await onConfirm();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+// Full audit logs are restricted to Admin + CEO roles.
+function isChangesViewer() {
+  return ["admin", "ceo"].includes(state.user?.role);
+}
+
+function isUserManager() {
+  return state.user?.canManageUsers === true;
+}
+
+function applyChangesButtonVisibility() {
+  const btn = document.getElementById("nav-changes");
+  if (btn) btn.classList.toggle("hidden", !isChangesViewer());
+  const usersBtn = document.getElementById("nav-users");
+  if (usersBtn) usersBtn.classList.toggle("hidden", !isUserManager());
+  const payrollPages = ["payroll", "loans", "salaries"];
+  const showPayroll = state.user?.canViewPayroll === true || ["admin", "ceo", "hr", "finance"].includes(state.user?.role);
+  payrollPages.forEach((page) => {
+    document.querySelector(`.nav-btn[data-page="${page}"]`)?.classList.toggle("hidden", !showPayroll);
+  });
+  const bonusPages = ["bonuses", "deductions"];
+  const showBonuses = canViewBonusesDeductions();
+  bonusPages.forEach((page) => {
+    document.querySelector(`.nav-btn[data-page="${page}"]`)?.classList.toggle("hidden", !showBonuses);
+  });
+  const salesBtn = document.getElementById("nav-sales");
+  const teamDashBtn = document.getElementById("nav-team-dashboard");
+  const showSales = state.user?.canViewSales !== false || canViewBonusesDeductions();
+  if (salesBtn) salesBtn.classList.toggle("hidden", !showSales);
+  if (teamDashBtn) teamDashBtn.classList.toggle("hidden", !showSales);
+  const costsBtn = document.getElementById("nav-costs");
+  if (costsBtn) {
+    const showCosts = state.user?.canAccessCosts === true || state.user?.canSubmitExpense === true;
+    costsBtn.classList.toggle("hidden", !showCosts);
+  }
+}
+
 async function refreshStatus() {
+  setUserInfo(state.user?.username);
+  applyCompanyBranding();
+  applyChangesButtonVisibility();
   try {
     const s = await api("/status");
-    state.user = s.user;
+    state.user = s.user || null;
     state.hideOut = s.hideOutEmployees !== false;
-    document.getElementById("user-info").textContent = `${s.user.username} · ${s.user.role}`;
+    setUserInfo(s.user?.username, s.user?.role);
+    applyChangesButtonVisibility();
     document.getElementById("sync-badge").textContent = "Synced";
     document.getElementById("sync-badge").className = "badge badge-online";
     document.getElementById("last-sync").textContent = s.lastSync
       ? `Last sync: ${timeAgo(s.lastSync)}`
       : "";
+    await updateSidebarBrand();
   } catch {
     document.getElementById("sync-badge").textContent = "Offline";
     document.getElementById("sync-badge").className = "badge badge-offline";
@@ -344,11 +966,12 @@ function hideOutToggle() {
 function bindHideOut(root) {
   root.querySelector("#hide-out")?.addEventListener("change", (e) => {
     state.hideOut = e.target.checked;
-    const q = state.hideOut ? "" : "?showOut=true";
-    api(`/settings/hide-out`, {
-      method: "PUT",
-      body: JSON.stringify({ hide: state.hideOut }),
-    }).catch(() => {});
+    if (canManagePayrollEvents()) {
+      api(`/settings/hide-out`, {
+        method: "PUT",
+        body: JSON.stringify({ hide: state.hideOut }),
+      }).catch(() => {});
+    }
     render();
   });
 }
@@ -394,9 +1017,20 @@ function bindEmployeeSearch(root, onFilter) {
 
 function filterEmployeesList(employees) {
   let list = employees;
+  if (state.hideOut) list = list.filter((e) => !isOutEmployee(e));
   if (state.empFilter.q) list = list.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
   if (state.empFilter.status) list = list.filter((e) => e.status === state.empFilter.status);
   if (state.empFilter.unit) list = list.filter((e) => e.unit === state.empFilter.unit);
+  if (state.empFilter.nationality) {
+    const want = normNationality(state.empFilter.nationality);
+    list = list.filter((e) => normNationality(e.nationality) === want);
+  }
+  if (state.empFilter.workPermit) {
+    list = list.filter((e) => e.work_permit === state.empFilter.workPermit);
+  }
+  if (state.empFilter.insuranceStatus) {
+    list = list.filter((e) => e.insurance_status === state.empFilter.insuranceStatus);
+  }
   return list;
 }
 
@@ -405,7 +1039,10 @@ function employeeListRowHtml(e) {
   return `<tr class="clickable" data-emp="${e.id}">
     <td><div class="emp-cell">${avatarHtml(e)}<strong>${name}</strong></div></td>
     <td>${e.id}</td><td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
-    <td>${e.position || "—"}</td><td>${statusBadge(e.status)}</td>
+    <td>${e.position || "—"}</td>
+    <td>${e.nationality || "—"}</td>
+    <td>${employeeComplianceLabel(e)}</td>
+    <td>${statusBadge(e.status)}</td>
     <td><button class="btn btn-sm" data-docs="${e.id}">Docs</button>
       <button class="btn btn-sm" data-warn="${e.id}">Notes</button>
       <button class="btn btn-sm" data-edit="${e.id}">Edit</button></td>
@@ -452,6 +1089,40 @@ function updateEmployeesTable(root) {
   bindEmployeesTableActions(root, data.employees);
 }
 
+function patchEmployeeInCache(employee) {
+  if (!employee?.id) return;
+  const root = document.getElementById("app");
+  if (root?.__employeesData?.employees) {
+    const list = root.__employeesData.employees;
+    const idx = list.findIndex((e) => e.id === employee.id);
+    if (idx >= 0) list[idx] = employee;
+    else list.push(employee);
+    if (state.page === "employees") updateEmployeesTable(root);
+  }
+  if (state.meta?.employees) {
+    const idx = state.meta.employees.findIndex((e) => e.id === employee.id);
+    if (idx >= 0) state.meta.employees[idx] = employee;
+    else state.meta.employees.push(employee);
+  }
+}
+
+async function refreshPayrollRowAfterSave(employeeId) {
+  const root = document.getElementById("app");
+  if (state.page !== "payroll" || !root?.__payrollData) return;
+  try {
+    const row = await api(`/payroll/${employeeId}?month=${state.month}`);
+    const p = row.payslip;
+    if (!p) return;
+    const idx = root.__payrollData.payroll.findIndex((r) => r.employeeId === employeeId);
+    const merged = { ...p, employeeId, id: employeeId };
+    if (idx >= 0) root.__payrollData.payroll[idx] = { ...root.__payrollData.payroll[idx], ...merged };
+    else root.__payrollData.payroll.push(merged);
+    updatePayrollTable(root);
+  } catch {
+    /* payroll page will refresh on next visit */
+  }
+}
+
 function attendanceEmployeeRowHtml(emp, ctx) {
   const { days, statuses, canEdit, recordMap, summaryMap } = ctx;
   const s = summaryMap.get(emp.id) || {};
@@ -466,7 +1137,9 @@ function attendanceEmployeeRowHtml(emp, ctx) {
       const rec = recordMap.get(`${emp.id}|${d}`);
       const st = rec?.status || "";
       const dis = canEdit ? "" : "disabled";
-      return `<td class="att-cell ${isWeekend(d) ? "weekend-col" : ""}">
+      const dayCls =
+        window.HRMSFeatures?.attendanceDayClass(d, ctx.data) || (isWeekend(d) ? "weekend-col" : "");
+      return `<td class="att-cell ${dayCls}">
         <select class="status-select ${statusClass(st)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
         <option value="">—</option>
         ${statuses.map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
@@ -494,13 +1167,13 @@ function bindAttendanceGridEvents(root, ctx) {
       const cell = el.closest(".att-cell");
       const ovSel = cell?.querySelector(".transport-ov-select");
       if (ovSel) {
-        if (isHalfDayStatus(el.value)) {
+        if (isTransportOverrideStatus(el.value)) {
           ovSel.classList.remove("hidden");
         } else {
           ovSel.classList.add("hidden");
           ovSel.value = "";
         }
-      } else if (isHalfDayStatus(el.value) && cell && canEdit) {
+      } else if (isTransportOverrideStatus(el.value) && cell && canEdit) {
         cell.insertAdjacentHTML(
           "beforeend",
           transportOverrideHtml(el.dataset.emp, el.dataset.date, el.value, "", true)
@@ -522,6 +1195,9 @@ function updateAttendanceTable(root) {
   const ctx = root.__attendanceCtx;
   if (!ctx) return;
   let employees = ctx.data.employees;
+  if (state.hideOut) {
+    employees = employees.filter((e) => !isOutEmployee(e));
+  }
   if (state.empFilter.q) {
     employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
   }
@@ -565,6 +1241,7 @@ function updatePayrollTable(root) {
   const data = root.__payrollData;
   if (!data) return;
   let rows = data.payroll;
+  rows = filterPayrollByZeroNet(rows);
   if (state.empFilter.q) {
     rows = rows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
   }
@@ -582,10 +1259,10 @@ function updatePayrollTable(root) {
 }
 
 function transportOverrideHtml(empId, date, status, currentOverride, canEdit) {
-  if (!isHalfDayStatus(status)) return "";
+  if (!isTransportOverrideStatus(status)) return "";
   const dis = canEdit ? "" : "disabled";
   const ov = currentOverride || "";
-  return `<select class="transport-ov-select" data-emp="${empId}" data-date="${date}" ${dis} title="Half-day transport override">
+  return `<select class="transport-ov-select" data-emp="${empId}" data-date="${date}" ${dis} title="Transport allowance for this day">
     <option value="" ${!ov ? "selected" : ""}>No transport</option>
     <option value="full" ${ov === "full" ? "selected" : ""}>Full transport</option>
     <option value="half" ${ov === "half" ? "selected" : ""}>Half transport</option>
@@ -597,7 +1274,7 @@ function queueAttendanceSave(employeeId, date, status, transportOverride) {
   const prev = state.pendingAttendance.get(key);
   let to = transportOverride;
   if (to === undefined) to = prev?.transportOverride;
-  if (!isHalfDayStatus(status)) to = "";
+  if (!isTransportOverrideStatus(status)) to = "";
   state.pendingAttendance.set(key, {
     employeeId,
     date,
@@ -626,12 +1303,26 @@ async function flushAttendanceSaves() {
 }
 
 async function renderDashboard(root) {
-  const showQ = state.hideOut ? "" : "?showOut=true";
-  const [empData, payData] = await Promise.all([
-    api(`/employees${showQ}`),
-    api(`/payroll?month=${state.month}${state.hideOut ? "" : "&showOut=true"}`).catch(() => null),
+  const month = state.month;
+  const salesPromise =
+    state.user?.canViewSales !== false
+      ? api(`/sales/dashboard?period=month&date=${month}-01&groupBy=team${state.companyContext === "hs2" ? "&company=hs2" : ""}`, {}, 10000).catch(() => null)
+      : Promise.resolve(null);
+  const [empData, payData, salesDash] = await Promise.all([
+    api(`/employees${apiContextQuery()}`),
+    api(`/payroll?${buildApiQuery({ month })}`).catch(() => null),
+    salesPromise,
   ]);
   state.meta = empData;
+
+  const salesStats = salesDash
+    ? `<div class="card" style="margin-top:1rem"><h3>Sales this month</h3>
+        <p><strong>${salesDash.totals?.passed ?? 0}</strong> passed ·
+        <strong>${salesDash.totals?.pending ?? 0}</strong> pending ·
+        <strong>${salesDash.totals?.callback ?? 0}</strong> callback ·
+        <strong>${salesDash.totals?.denied ?? 0}</strong> denied
+        <button class="btn btn-sm" data-go="sales" style="margin-left:.5rem">View sales</button></p></div>`
+    : "";
 
   root.innerHTML = `
     <div class="page-header"><div><h1>Dashboard</h1><p class="muted">${monthLabel(state.month)}</p></div></div>
@@ -641,6 +1332,7 @@ async function renderDashboard(root) {
       <div class="card card-stat"><strong>${empData.units.length}</strong><span class="muted">Units</span></div>
       <div class="card card-stat"><strong>${payData ? fmt(payData.totals.totalNet) : "—"}</strong><span class="muted">Net payroll (EGP)</span></div>
     </div>
+    ${salesStats}
     <div class="grid-2">
       <div class="card">
         <h3>Quick actions</h3>
@@ -655,6 +1347,7 @@ async function renderDashboard(root) {
   root.querySelectorAll("[data-go]").forEach((b) =>
     b.addEventListener("click", () => navigate(b.dataset.go))
   );
+  window.HRMSFeatures?.enhanceDashboard(root, api).catch(() => {});
 }
 
 function openAddAgentWizard() {
@@ -672,8 +1365,10 @@ function openAddAgentWizard() {
             </select>
           </label>
           <label class="field"><span>Team *</span>
-            <select id="wiz-team" disabled><option value="">Select unit first…</option></select>
-            <input id="wiz-team-new" class="hidden" placeholder="New team name" />
+            <select id="wiz-team" required>
+              <option value="">Select team…</option>
+              ${TEAM_OPTIONS.map((t) => `<option value="${t}">${t}</option>`).join("")}
+            </select>
           </label>
           <label class="field ${wizard.unit === "HS-Back-End" ? "" : "hidden"}" id="wiz-pool-wrap"><span>ID pool (Back-End)</span>
             <select id="wiz-pool">${(state.meta.backendPools || ["NW", "HR", "MG", "OF"]).map((p) =>
@@ -687,34 +1382,14 @@ function openAddAgentWizard() {
         </div>`);
 
       const unitSel = document.getElementById("wiz-unit");
-      unitSel.onchange = async () => {
+      unitSel.onchange = () => {
         wizard.unit = unitSel.value;
         document.getElementById("wiz-pool-wrap")?.classList.toggle("hidden", wizard.unit !== "HS-Back-End");
-        const teamSel = document.getElementById("wiz-team");
-        if (!wizard.unit) {
-          teamSel.innerHTML = '<option value="">Select unit first…</option>';
-          teamSel.disabled = true;
-          return;
-        }
-        const { teams } = await api(`/meta/teams?unit=${encodeURIComponent(wizard.unit)}`);
-        teamSel.disabled = false;
-        teamSel.innerHTML =
-          '<option value="">Select team…</option>' +
-          teams.map((t) => `<option value="${t}">${t}</option>`).join("") +
-          '<option value="__new__">+ New team…</option>';
-      };
-
-      document.getElementById("wiz-team").onchange = (e) => {
-        const v = e.target.value;
-        document.getElementById("wiz-team-new").classList.toggle("hidden", v !== "__new__");
       };
 
       document.getElementById("wiz-next").onclick = async () => {
-        const teamSel = document.getElementById("wiz-team");
-        wizard.team =
-          teamSel.value === "__new__"
-            ? document.getElementById("wiz-team-new").value.trim()
-            : teamSel.value;
+        wizard.unit = unitSel.value;
+        wizard.team = document.getElementById("wiz-team").value;
         wizard.backendPool = document.getElementById("wiz-pool")?.value || "NW";
         if (!wizard.unit || !wizard.team) {
           alert("Unit and team are required");
@@ -738,13 +1413,13 @@ function openAddAgentWizard() {
             <label class="field"><span>American Name</span><input name="american_name" required /></label>
             <label class="field"><span>Arabic Name</span><input name="arabic_name" /></label>
             <label class="field"><span>Position</span><select name="position"><option value="">—</option>
-              ${state.meta.positions.map((p) => `<option value="${p}">${p}</option>`).join("")}
+              ${[...new Set([...(state.meta.positionRates || []), ...(state.meta.positions || [])])].map((p) => `<option value="${p}">${p}</option>`).join("")}
             </select></label>
-            <label class="field"><span>Payment Method</span><select name="payment_method">
-              <option value="Cash">Cash</option><option value="Bank">Bank</option><option value="Insta">Insta</option>
-            </select></label>
+            ${paymentMethodFieldsHtml()}
             <label class="field"><span>Phone</span><input name="phone" /></label>
             <label class="field"><span>Email</span><input name="email" type="email" /></label>
+            <label class="field"><span>Employment date</span><input name="employment_date" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+            ${nationalityFormFieldsHtml()}
             <input type="hidden" name="unit" value="${wizard.unit}" />
             <input type="hidden" name="team" value="${wizard.team}" />
             <input type="hidden" name="status" value="Active" />
@@ -759,14 +1434,34 @@ function openAddAgentWizard() {
         step = 1;
         renderWizard();
       };
+      bindPaymentMethodFields();
+      bindNationalityFormFields();
       document.getElementById("wiz-create").onclick = async () => {
-        const body = Object.fromEntries(new FormData(document.getElementById("wiz-form")));
+        const btn = document.getElementById("wiz-create");
+        const form = document.getElementById("wiz-form");
+        const body = Object.fromEntries(new FormData(form));
+        if (body.nationality === "__other__") {
+          body.nationality = form.querySelector("#emp-nationality-other")?.value?.trim() || "";
+        }
+        if (!body.employment_date) body.employment_date = new Date().toISOString().slice(0, 10);
+        btn.disabled = true;
         try {
-          await api("/employees", { method: "POST", body: JSON.stringify(body) });
+          const res = await api("/employees", { method: "POST", body: JSON.stringify(body) });
+          try {
+            await api("/attendance/init-month", {
+              method: "PATCH",
+              body: JSON.stringify({ month: state.month, employeeId: res.employee?.id }),
+            });
+          } catch {
+            /* optional */
+          }
           closeModal();
-          render();
+          if (res.employee) patchEmployeeInCache(res.employee);
+          showSaveIndicator("Agent created", "saved");
         } catch (e) {
           alert(e.message);
+        } finally {
+          btn.disabled = false;
         }
       };
     }
@@ -774,9 +1469,133 @@ function openAddAgentWizard() {
   renderWizard();
 }
 
+function isEgyptianNationality(nationality) {
+  const n = String(nationality || "").trim().toLowerCase();
+  return n === "egyptian" || n === "egyptain" || n === "egypt";
+}
+
+function workPermitLabel(value) {
+  if (value === "have_permit") return "Have permit";
+  if (value === "no_permit") return "Don't have permit";
+  return "—";
+}
+
+function insuranceStatusLabel(value) {
+  if (value === "insured") return "Insured";
+  if (value === "not_insured") return "Not insured";
+  return "—";
+}
+
+function employeeComplianceLabel(emp) {
+  if (isEgyptianNationality(emp.nationality)) return insuranceStatusLabel(emp.insurance_status);
+  if (emp.nationality) return workPermitLabel(emp.work_permit);
+  return "—";
+}
+
+function nationalityFormFieldsHtml(emp = {}) {
+  const egyptian = isEgyptianNationality(emp.nationality);
+  const nonEgyptian = emp.nationality && !egyptian;
+  const insured = emp.insurance_status === "insured";
+  const hasInsuranceDetails =
+    insured &&
+    (emp.insurance_type || emp.insurance_amount != null || emp.insurance_employee_deduction != null);
+  const suggestions = state.meta.nationalities?.length
+    ? state.meta.nationalities
+    : ["Egyptian", "Sudanese", "Ethiopian", "Eritrean", "South Sudanese"];
+  const isOther = emp.nationality && !suggestions.includes(emp.nationality);
+  return `
+    <label class="field"><span>Nationality</span>
+      <select name="nationality" id="emp-nationality">
+        <option value="">—</option>
+        ${suggestions.map((n) => `<option value="${escapeHtml(n)}" ${emp.nationality === n ? "selected" : ""}>${escapeHtml(n)}</option>`).join("")}
+        <option value="__other__" ${isOther ? "selected" : ""}>Other…</option>
+      </select>
+      <input type="text" id="emp-nationality-other" class="${isOther ? "" : "hidden"}" value="${isOther ? escapeHtml(emp.nationality) : ""}" placeholder="Enter nationality" />
+    </label>
+    <div id="work-permit-fields" class="field-grid" style="grid-column:1/-1;${nonEgyptian ? "" : "display:none"}">
+      <label class="field"><span>Work permit</span>
+        <select name="work_permit" id="emp-work-permit">
+          <option value="">—</option>
+          <option value="have_permit" ${emp.work_permit === "have_permit" ? "selected" : ""}>Have permit</option>
+          <option value="no_permit" ${emp.work_permit === "no_permit" ? "selected" : ""}>Don't have permit</option>
+        </select>
+      </label>
+    </div>
+    <div id="insurance-fields" class="field-grid" style="grid-column:1/-1;${egyptian ? "" : "display:none"}">
+      <label class="field"><span>Social insurance</span>
+        <select name="insurance_status" id="emp-insurance-status">
+          <option value="">—</option>
+          <option value="insured" ${emp.insurance_status === "insured" ? "selected" : ""}>Insured</option>
+          <option value="not_insured" ${emp.insurance_status === "not_insured" ? "selected" : ""}>Not insured</option>
+        </select>
+      </label>
+      <div id="insurance-detail-fields" style="grid-column:1/-1;${insured ? "" : "display:none"}">
+        <label class="toggle-label" style="margin-bottom:.5rem">
+          <input type="checkbox" id="emp-insurance-details-toggle" ${hasInsuranceDetails ? "checked" : ""} /> Add insurance details (optional)
+        </label>
+        <div id="insurance-detail-inputs" class="field-grid" style="${hasInsuranceDetails ? "" : "display:none"}">
+          <label class="field"><span>Insurance type</span><input name="insurance_type" value="${escapeHtml(emp.insurance_type || "")}" placeholder="e.g. Social insurance" /></label>
+          <label class="field"><span>Total amount (EGP)</span><input name="insurance_amount" type="number" min="0" step="0.01" value="${emp.insurance_amount ?? ""}" /></label>
+          <label class="field"><span>Deducted from employee (EGP)</span><input name="insurance_employee_deduction" type="number" min="0" step="0.01" value="${emp.insurance_employee_deduction ?? ""}" /></label>
+        </div>
+      </div>
+    </div>`;
+}
+
+function bindNationalityFormFields(root = document) {
+  const nationalityInput = root.querySelector("#emp-nationality");
+  const nationalityOther = root.querySelector("#emp-nationality-other");
+  const workPermitBlock = root.querySelector("#work-permit-fields");
+  const insuranceBlock = root.querySelector("#insurance-fields");
+  const insuranceStatus = root.querySelector("#emp-insurance-status");
+  const insuranceDetailFields = root.querySelector("#insurance-detail-fields");
+  const insuranceDetailsToggle = root.querySelector("#emp-insurance-details-toggle");
+  const insuranceDetailInputs = root.querySelector("#insurance-detail-inputs");
+  if (!nationalityInput) return;
+
+  const selectedNationality = () => {
+    if (nationalityInput.value === "__other__") return nationalityOther?.value || "";
+    return nationalityInput.value || "";
+  };
+
+  const refresh = () => {
+    if (nationalityOther) {
+      nationalityOther.classList.toggle("hidden", nationalityInput.value !== "__other__");
+    }
+    const egyptian = isEgyptianNationality(selectedNationality());
+    const hasNationality = Boolean(String(selectedNationality()).trim());
+    if (workPermitBlock) workPermitBlock.style.display = hasNationality && !egyptian ? "" : "none";
+    if (insuranceBlock) insuranceBlock.style.display = egyptian ? "" : "none";
+    if (insuranceDetailFields) {
+      insuranceDetailFields.style.display = egyptian && insuranceStatus?.value === "insured" ? "" : "none";
+    }
+  };
+
+  nationalityInput.addEventListener("change", refresh);
+  nationalityOther?.addEventListener("input", refresh);
+  insuranceStatus?.addEventListener("change", refresh);
+  insuranceDetailsToggle?.addEventListener("change", () => {
+    if (insuranceDetailInputs) {
+      insuranceDetailInputs.style.display = insuranceDetailsToggle.checked ? "" : "none";
+      if (!insuranceDetailsToggle.checked) {
+        insuranceDetailInputs.querySelectorAll("input").forEach((i) => {
+          i.value = "";
+        });
+      }
+    }
+  });
+  refresh();
+}
+
 function employeeFormFields(emp = {}) {
+  const historyNote = emp.promoted_to_id
+    ? `<p class="muted" style="grid-column:1/-1">Historical ID — records before promotion effective month stay under <strong>${escapeHtml(emp.id)}</strong>. Active record: <strong>${escapeHtml(emp.promoted_to_id)}</strong></p>`
+    : emp.promoted_from_id
+      ? `<p class="muted" style="grid-column:1/-1">Promoted from <strong>${escapeHtml(emp.promoted_from_id)}</strong>${emp.effective_from_month ? ` · active from <strong>${escapeHtml(emp.effective_from_month)}</strong>` : ""}${emp.former_ids ? ` · former IDs: ${escapeHtml(emp.former_ids)}` : ""}</p>`
+      : "";
   return `<form id="emp-form" class="field-grid">
     <label class="field"><span>Employee ID</span><input name="id" value="${emp.id || ""}" readonly /></label>
+    ${historyNote}
     <label class="field"><span>American Name</span><input name="american_name" value="${emp.american_name || ""}" /></label>
     <label class="field"><span>Arabic Name</span><input name="arabic_name" value="${emp.arabic_name || ""}" /></label>
     <label class="field"><span>Status</span><select name="status">${state.meta.statuses.map((s) =>
@@ -785,19 +1604,22 @@ function employeeFormFields(emp = {}) {
     <label class="field"><span>Unit</span><select name="unit">${state.meta.units.map((u) =>
       `<option value="${u}" ${emp.unit === u ? "selected" : ""}>${u}</option>`
     ).join("")}</select></label>
-    <label class="field"><span>Team</span><input name="team" value="${emp.team || ""}" /></label>
-    <label class="field"><span>Position</span><input name="position" value="${emp.position || ""}" /></label>
-    <label class="field"><span>Payment Method</span><input name="payment_method" value="${emp.payment_method || ""}" /></label>
+    ${teamSelectHtml("team", emp.team)}
+    ${positionSelectHtml("position", emp.position)}
+    ${paymentMethodFieldsHtml(emp)}
     <label class="field"><span>Phone</span><input name="phone" value="${emp.phone || ""}" /></label>
     <label class="field"><span>Email</span><input name="email" value="${emp.email || ""}" /></label>
+    ${nationalityFormFieldsHtml(emp)}
   </form>`;
 }
 
 function openEmployeeModal(emp) {
   const canPhoto = true;
+  const canPromote =
+    canManagePayrollEvents() && !emp.promoted_to_id && !emp.promoted_from_id && emp.status !== "Out";
   openModal(`
     <div class="modal-header"><h2>Edit employee</h2><button class="btn btn-sm" data-close>✕</button></div>
-    <div class="modal-body">
+    <div class="modal-body" id="emp-modal-body">
       ${canPhoto ? `<div class="profile-photo-block">
         ${avatarHtml(emp, "profile-photo-lg")}
         <div class="profile-photo-actions">
@@ -809,23 +1631,235 @@ function openEmployeeModal(emp) {
         </div>
       </div>` : ""}
       ${employeeFormFields(emp)}
+      ${canPromote ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Promote — new ID &amp; position</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Keeps <strong>${escapeHtml(emp.id)}</strong> for all months before the effective month. From that month on, payroll &amp; attendance use the new ID.</p>
+        <button type="button" class="btn btn-sm btn-primary" id="promote-emp-btn">Reposition agent…</button>
+      </div>` : ""}
+      <div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Export employee data</h4>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn btn-sm" id="export-emp-payrolls-btn">All payroll PDFs</button>
+          <button type="button" class="btn btn-sm" id="export-emp-att-csv-btn">Attendance summary (CSV)</button>
+          <button type="button" class="btn btn-sm" id="export-emp-att-pdf-btn">Attendance summary (PDF)</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn" data-close>Cancel</button>
       <button class="btn btn-primary" id="save-emp">Save</button>
     </div>`);
   bindProfilePhotoUpload(emp.id, () => {
-    closeModal();
     api(`/employees/${emp.id}`)
-      .then((d) => openEmployeeModal(d.employee))
-      .catch(() => render());
+      .then((d) => {
+        if (d.employee) patchEmployeeInCache(d.employee);
+        openEmployeeModal(d.employee);
+      })
+      .catch((e) => alert(e.message));
   });
+  bindPaymentMethodFields();
+  bindNationalityFormFields();
+  document.getElementById("promote-emp-btn")?.addEventListener("click", () => openPromoteEmployeeModal(emp));
+  document.getElementById("export-emp-payrolls-btn")?.addEventListener("click", () =>
+    exportEmployeePayrolls(emp).catch((e) => alert(e.message))
+  );
+  document.getElementById("export-emp-att-csv-btn")?.addEventListener("click", () =>
+    downloadFile(`/employees/${emp.id}/attendance-summary?format=csv`, `attendance-summary-${emp.id}.csv`).catch((e) => alert(e.message))
+  );
+  document.getElementById("export-emp-att-pdf-btn")?.addEventListener("click", () =>
+    downloadFile(`/employees/${emp.id}/attendance-summary?format=pdf`, `attendance-summary-${emp.id}.pdf`).catch((e) => alert(e.message))
+  );
   document.getElementById("save-emp").onclick = async () => {
+    const btn = document.getElementById("save-emp");
     const body = Object.fromEntries(new FormData(document.getElementById("emp-form")));
+    if (body.nationality === "__other__") {
+      body.nationality = document.getElementById("emp-nationality-other")?.value?.trim() || "";
+    }
     delete body.id;
+
+    const newStatus = body.status;
+    const markingOut = isOutEmployeeStatus(newStatus) && !isOutEmployeeStatus(emp.status);
+    if (markingOut) {
+      openModal(`
+        <div class="modal-header"><h2>Mark depart</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <form id="emp-depart-form" class="modal-body field-grid">
+          <p class="muted">Setting status to <strong>${escapeHtml(newStatus)}</strong> requires a depart date and notice type.</p>
+          <label class="field"><span>Depart date</span><input name="departDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+          <label class="field"><span>Notice</span>
+            <select name="notice_type" required>
+              <option value="with_notice">Left with 2 weeks notice</option>
+              <option value="without_notice">Left without 2 weeks notice</option>
+            </select>
+          </label>
+        </form>
+        <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="confirm-emp-depart">Save depart</button></div>`);
+      document.getElementById("confirm-emp-depart").onclick = async () => {
+        const fd = new FormData(document.getElementById("emp-depart-form"));
+        const departBtn = document.getElementById("confirm-emp-depart");
+        departBtn.disabled = true;
+        try {
+          const otherFields = { ...body };
+          delete otherFields.status;
+          if (Object.keys(otherFields).length) {
+            const pre = await api(`/employees/${emp.id}`, { method: "PUT", body: JSON.stringify(otherFields) });
+            if (pre.employee) patchEmployeeInCache(pre.employee);
+          }
+          await api(`/hrms/employment-periods/${emp.id}/depart`, {
+            method: "POST",
+            body: JSON.stringify({
+              departDate: fd.get("departDate"),
+              status: newStatus === "OUT BUT STILL GET PAID" ? "out_still_paid" : "out",
+              notice_type: fd.get("notice_type") || "with_notice",
+            }),
+          });
+          closeModal();
+          const fresh = await api(`/employees/${emp.id}`);
+          if (fresh.employee) patchEmployeeInCache(fresh.employee);
+          showSaveIndicator("Employee departed", "saved");
+        } catch (e) {
+          alert(e.message);
+        } finally {
+          departBtn.disabled = false;
+        }
+      };
+      return;
+    }
+
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
     try {
-      await api(`/employees/${emp.id}`, { method: "PUT", body: JSON.stringify(body) });
+      const res = await api(`/employees/${emp.id}`, { method: "PUT", body: JSON.stringify(body) });
       closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("Employee saved", "saved");
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+  window.HRMSFeatures?.mountEmployeeLifecyclePanel?.(emp, api, {
+    escapeHtml,
+    openModal,
+    closeModal,
+    canManagePayrollEvents,
+  });
+}
+window.openEmployeeModal = openEmployeeModal;
+
+async function openPromoteEmployeeModal(emp) {
+  let leadRole = "TL";
+  let suggestedId = "";
+  const ratesRes = await api("/position-rates").catch(() => ({ rates: [] }));
+  const positionRates = ratesRes.rates || [];
+  const positionOptions = positionRates
+    .map((r) => `<option value="${escapeHtml(r.position)}">${escapeHtml(r.position)}</option>`)
+    .join("");
+  const loadSuggested = async () => {
+    const data = await api(`/employees/next-id?leadRole=${encodeURIComponent(leadRole)}`);
+    suggestedId = data.suggestedId || "";
+    const input = document.getElementById("promote-new-id");
+    if (input && !input.dataset.userEdited) input.value = suggestedId;
+  };
+
+  openModal(
+    `<div class="modal-header"><h2>Reposition ${escapeHtml(emp.american_name || emp.id)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <p class="muted">Agent ID <strong>${escapeHtml(emp.id)}</strong> stays in the system for past attendance &amp; payroll. New records use the leadership ID below.</p>
+      <form id="promote-form" class="field-grid" style="margin-top:1rem">
+        <label class="field"><span>Lead role</span>
+          <select name="leadRole" id="promote-lead-role">
+            <option value="TL">Team Leader (TL)</option>
+            <option value="CL">Closer / Supervisor (CL)</option>
+            <option value="OP">OP</option>
+            <option value="HR">HR (back-office)</option>
+            <option value="RTM">RTM</option>
+            <option value="IT">IT</option>
+            <option value="Agent">Agent transfer</option>
+          </select></label>
+        <label class="field"><span>New ID</span>
+          <input name="newId" id="promote-new-id" required placeholder="TL04" /></label>
+        <label class="field"><span>New position</span>
+          <select name="position" id="promote-position">
+            <option value="">— select —</option>
+            ${positionOptions}
+          </select></label>
+        <label class="field"><span>New team</span>
+          <select name="team" id="promote-team">
+            <option value="">— keep current —</option>
+            ${TEAM_OPTIONS.map((t) => `<option value="${t}" ${emp.team === t ? "selected" : ""}>${t}</option>`).join("")}
+          </select></label>
+        <label class="field"><span>Effective from month</span>
+          <input name="effectiveFromMonth" id="promote-effective" type="month" value="${state.month}" required /></label>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="confirm-promote-btn">Reposition</button>
+    </div>`,
+    true
+  );
+
+  const idInput = document.getElementById("promote-new-id");
+  idInput?.addEventListener("input", () => {
+    idInput.dataset.userEdited = "1";
+  });
+  const positionDefaults = { TL: "Team Leader", CL: "Closer", OP: "OP", HR: "HR", RTM: "RTM", IT: "IT Support" };
+  const positionInput = document.getElementById("promote-position");
+  const setDefaultPosition = () => {
+    if (positionInput && !positionInput.dataset.userEdited) {
+      const def = positionDefaults[leadRole] || "Team Leader";
+      const match = [...positionInput.options].find((o) => o.value === def);
+      positionInput.value = match ? def : positionInput.options[1]?.value || "";
+    }
+  };
+  setDefaultPosition();
+
+  document.getElementById("promote-lead-role")?.addEventListener("change", async (e) => {
+    leadRole = e.target.value;
+    if (idInput) idInput.dataset.userEdited = "";
+    if (positionInput) positionInput.dataset.userEdited = "";
+    setDefaultPosition();
+    await loadSuggested();
+  });
+  positionInput?.addEventListener("change", () => {
+    positionInput.dataset.userEdited = "1";
+  });
+  await loadSuggested();
+
+  document.getElementById("confirm-promote-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("promote-form"));
+    const newId = String(fd.get("newId") || "").trim();
+    const effectiveFromMonth = String(fd.get("effectiveFromMonth") || "").trim();
+    if (!newId) {
+      alert("Enter the new TL / CL / OP ID.");
+      return;
+    }
+    if (!effectiveFromMonth) {
+      alert("Choose the month when the new ID and position take effect.");
+      return;
+    }
+    if (
+      !confirm(
+        `Reposition ${emp.id} → ${newId} from ${effectiveFromMonth}?\n\nBefore ${effectiveFromMonth}: ${emp.id}\nFrom ${effectiveFromMonth}: ${newId}`
+      )
+    )
+      return;
+    try {
+      const res = await api(`/employees/${emp.id}/promote`, {
+        method: "POST",
+        body: JSON.stringify({
+          newId,
+          leadRole: fd.get("leadRole"),
+          effectiveFromMonth,
+          position: fd.get("position") || undefined,
+          team: fd.get("team") || undefined,
+        }),
+      });
+      closeModal();
+      alert(`Repositioned. ${res.newId} active from ${res.effectiveFromMonth}.`);
       render();
     } catch (e) {
       alert(e.message);
@@ -833,8 +1867,46 @@ function openEmployeeModal(emp) {
   };
 }
 
+async function exportEmployeePayrolls(emp) {
+  if (!window.hrDesktop?.pickFolder) {
+    alert("Export requires the Hangup HR desktop app.");
+    return;
+  }
+  const data = await api(`/employees/${emp.id}/payroll-months`);
+  if (!data.months?.length) {
+    alert("No payroll months found for this employee.");
+    return;
+  }
+  const folder = await window.hrDesktop.pickFolder();
+  if (!folder) return;
+  const safeName = String(data.name || emp.id)
+    .replace(/[^\w\s-]+/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const subfolder = `${folder}\\${safeName}_${emp.id}_Payrolls`;
+  const sessionId = getSessionId();
+  let ok = 0;
+  for (const row of data.months) {
+    const res = await fetch(`/api/payslip/${row.employeeId}/pdf?month=${row.month}`, {
+      headers: sessionId ? { "x-session-id": sessionId } : {},
+    });
+    if (!res.ok) continue;
+    const buf = await res.arrayBuffer();
+    await window.hrDesktop.writeFileBuffer(`${subfolder}\\payslip-${row.month}-${row.employeeId}.pdf`, buf);
+    ok++;
+  }
+  alert(`Exported ${ok} payslip PDF(s) to:\n${subfolder}`);
+}
+
 async function openPayslipModal(employeeId) {
-  const data = await api(`/payroll/${employeeId}?month=${state.month}`);
+  const [data, empListRes] = await Promise.all([
+    api(`/payroll/${employeeId}?month=${state.month}`),
+    api(`/employees${employeesQuery()}`).catch(() => ({ employees: [] })),
+  ]);
+  const deductCandidates = sortEmployeesForLeadDeduct(
+    (empListRes.employees || []).filter((e) => e.id !== employeeId)
+  );
+  const empById = new Map((empListRes.employees || []).map((e) => [e.id, e]));
   const p = data.payslip;
   const emp = data.employee || { id: employeeId, american_name: p.name, profile_photo_file_id: p.profile_photo_file_id };
   const bonusRows = Object.entries(p.bonuses || {})
@@ -842,30 +1914,42 @@ async function openPayslipModal(employeeId) {
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-pos">+${fmt(v)}</span></div>`)
     .join("");
   const dedRows = Object.entries(p.deductions || {})
-    .filter(([, v]) => v > 0)
+    .filter(([k, v]) => v > 0 && k !== "Lateness Deduction")
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-neg">-${fmt(v)}</span></div>`)
     .join("");
+  const attDetail = attendanceDetailHtml(data.attendance);
 
   const bonusList = (data.bonuses || [])
-    .map(
-      (b) =>
-        `<div class="adj-row"><span>${b.type}: ${fmt(b.amount)} EGP (${b.date})</span>
-          <button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></div>`
-    )
+    .map((b) => {
+      const tlFrom = parseTlSourceFromReason(b.reason);
+      const tlLabel = tlFrom ? ` · deducted from ${tlFrom}` : "";
+      const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
+      return `<div class="adj-row"><span>${b.type}: ${fmt(b.amount)} EGP — ${formatPayslipDate(b.date)}${reason ? ` — ${escapeHtml(reason)}` : ""}${tlLabel}
+          </span><button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></div>`;
+    })
     .join("");
   const dedList = (data.deductions || [])
-    .map(
-      (d) =>
-        `<div class="adj-row"><span>${d.type}: ${fmt(d.amount)} EGP (${d.date})</span>
-          <button class="btn btn-sm btn-danger" data-del-ded='${JSON.stringify({ employeeId: d.employeeId, date: d.date, type: d.type })}'>Delete</button></div>`
-    )
+    .map((d) => {
+      let linked = "";
+      if (d.type === "Bonus from TL / OP") {
+        const targetId = d.bonusRecipientId || parseTlTargetFromReason(d.reason);
+        if (targetId) {
+          const american = d.bonusRecipientAmericanName || empById.get(targetId)?.american_name || targetId;
+          linked = ` · bonus for ${american} (${targetId})`;
+        }
+      }
+      return `<div class="adj-row"><span>${d.type}: ${fmt(d.amount)} EGP — ${formatPayslipDate(d.date)}${d.reason ? ` — ${escapeHtml(d.reason)}` : ""}${linked}
+          </span><button class="btn btn-sm btn-danger" data-del-ded='${JSON.stringify({ employeeId: d.employeeId, date: d.date, type: d.type })}'>Delete</button></div>`;
+    })
     .join("");
 
   const adj = data.adjustment || {};
-  const commissionOpts = (data.commissionTypes || [])
-    .map((t) => `<option value="${t.name}" ${adj.commissionType === t.name ? "selected" : ""}>${t.name} (${t.rateEgp} EGP)</option>`)
-    .join("");
-
+  const departDate = String(emp.depart_date || "").slice(0, 10);
+  const departDay = departDate ? parseInt(departDate.slice(8, 10), 10) : 0;
+  const finalPayBanner =
+    departDay > 15
+      ? `<div class="alert alert-warn" style="margin-bottom:1rem">Final payment due next payroll cycle (paid on 15th) — depart ${departDate}</div>`
+      : "";
   const statuses = data.payrollStatuses || ["pending", "pending papers", "pending hardware", "received", "closed"];
   const statusOpts = statuses
     .map((s) => `<option value="${s}" ${(adj.payrollStatus || p.payrollStatus) === s ? "selected" : ""}>${s}</option>`)
@@ -880,6 +1964,7 @@ async function openPayslipModal(employeeId) {
         <button class="btn btn-sm" data-close>✕</button>
       </div></div>
     <div class="modal-body payslip">
+      ${finalPayBanner}
       <div class="payslip-header">
         <div class="payslip-identity">
           ${avatarHtml(emp, "profile-photo-lg")}
@@ -914,6 +1999,7 @@ async function openPayslipModal(employeeId) {
           <h4>Net pay</h4>
           ${bonusRows || '<div class="muted">No bonuses</div>'}
           <div class="payslip-row"><span>Lateness</span><span class="amount-neg">-${fmt(p.latenessDeduction)}</span></div>
+          ${attDetail}
           ${dedRows}
           ${p.deferredIn ? `<div class="payslip-row"><span>Carried from prior month</span><span class="amount-pos">+${fmt(p.deferredIn)}</span></div>` : ""}
           <div class="payslip-row"><span>Calculated net</span><span>${fmt(p.calculatedNet ?? p.netSalary)} EGP</span></div>
@@ -926,7 +2012,13 @@ async function openPayslipModal(employeeId) {
         <div class="card">
           <h4>Bonuses</h4>${bonusList || '<p class="muted">None</p>'}
           <form id="bonus-form" class="field-grid" style="margin-top:.75rem">
-            <label class="field"><span>Type</span><select name="type">${data.bonusTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field"><span>Type</span><select name="type" id="bonus-type">${data.bonusTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field hidden" id="deduct-from-wrap" style="grid-column:1/-1"><span>Deduct from agent (pays for this bonus)</span>
+              <select name="deductFromEmployeeId">
+                <option value="">— Select agent —</option>
+                ${employeeSelectOptionsForTlDeduct(deductCandidates)}
+              </select>
+            </label>
             <label class="field"><span>Amount</span><input name="amount" type="number" min="0" required /></label>
             <label class="field"><span>Date</span><input name="date" type="date" value="${state.month}-15" required /></label>
             <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" /></label>
@@ -958,8 +2050,6 @@ async function openPayslipModal(employeeId) {
           <label class="field"><span>Transport eligible</span><input name="transportEligible" type="checkbox" ${transportCheckboxChecked(state.month, adj) ? "checked" : ""} />
             <span class="muted" style="font-size:.75rem;display:block;margin-top:.25rem">${transportAllowedForMonth(state.month) ? "Default on from July 2026" : "June default off — check to enable for this agent"}</span></label>
           <label class="field"><span>Sales count (month)</span><input name="salesCount" type="number" min="0" step="1" value="${adj.salesCount ?? p.salesCount ?? 0}" /></label>
-          <label class="field"><span>Commission type</span><select name="commissionType"><option value="">—</option>${commissionOpts}</select></label>
-          <label class="field"><span>Manual commission</span><input name="commissionAmount" type="number" min="0" value="${adj.commissionAmount ?? p.commissionAmount ?? 0}" title="Used only when sales count is 0" /></label>
           <label class="field" style="grid-column:1/-1"><span>Bank reference</span><input name="bankReference" value="${adj.bankReference || ""}" /></label>
           <label class="field" style="grid-column:1/-1"><span>Month notes</span><textarea name="monthNotes">${adj.monthNotes || p.monthNotes || ""}</textarea></label>
         </form>
@@ -1016,7 +2106,6 @@ async function openPayslipModal(employeeId) {
   };
 
   bindProfilePhotoUpload(employeeId, () => {
-    closeModal();
     openPayslipModal(employeeId);
   });
 
@@ -1043,7 +2132,11 @@ async function openPayslipModal(employeeId) {
   };
 
   document.getElementById("save-adj-btn").onclick = async () => {
+    const btn = document.getElementById("save-adj-btn");
     const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
     try {
       await api(`/payroll-adjustments/${employeeId}`, {
         method: "PUT",
@@ -1058,16 +2151,18 @@ async function openPayslipModal(employeeId) {
           twoWeekHold: fd.get("twoWeekHold") === "on",
           transportEligible: fd.get("transportEligible") === "on",
           salesCount: Number(fd.get("salesCount")) || 0,
-          commissionType: fd.get("commissionType") || "",
-          commissionAmount: Number(fd.get("commissionAmount")) || 0,
           bankReference: fd.get("bankReference") || "",
           monthNotes: fd.get("monthNotes") || "",
         }),
       });
       closeModal();
-      openPayslipModal(employeeId);
+      showSaveIndicator("Month profile saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
     } catch (e) {
       alert(e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
     }
   };
 
@@ -1095,7 +2190,6 @@ async function openPayslipModal(employeeId) {
           notes: fd.get("notes") || "",
         }),
       });
-      closeModal();
       openPayslipModal(employeeId);
     } catch (e) {
       alert(e.message);
@@ -1119,7 +2213,6 @@ async function openPayslipModal(employeeId) {
           notes: "Deferred remainder",
         }),
       });
-      closeModal();
       openPayslipModal(employeeId);
     } catch (e) {
       alert(e.message);
@@ -1177,17 +2270,34 @@ async function openPayslipModal(employeeId) {
 
   document.getElementById("add-bonus-btn").onclick = async () => {
     const body = Object.fromEntries(new FormData(document.getElementById("bonus-form")));
+    if (body.type === TL_BONUS_TYPE && !body.deductFromEmployeeId) {
+      alert("Select which agent this TL bonus is deducted from.");
+      return;
+    }
     try {
       await api("/bonuses", {
         method: "POST",
-        body: JSON.stringify({ ...body, employeeId, amount: Number(body.amount) }),
+        body: JSON.stringify({
+          ...body,
+          employeeId,
+          amount: Number(body.amount),
+          deductFromEmployeeId: body.deductFromEmployeeId || undefined,
+        }),
       });
-      closeModal();
       openPayslipModal(employeeId);
     } catch (e) {
       alert(e.message);
     }
   };
+  const bonusTypeSel = document.getElementById("bonus-type");
+  const deductWrap = document.getElementById("deduct-from-wrap");
+  if (bonusTypeSel && deductWrap) {
+    const toggleDeduct = () => {
+      deductWrap.classList.toggle("hidden", bonusTypeSel.value !== TL_BONUS_TYPE);
+    };
+    bonusTypeSel.onchange = toggleDeduct;
+    toggleDeduct();
+  }
   document.getElementById("add-ded-btn").onclick = async () => {
     const body = Object.fromEntries(new FormData(document.getElementById("deduction-form")));
     try {
@@ -1195,7 +2305,6 @@ async function openPayslipModal(employeeId) {
         method: "POST",
         body: JSON.stringify({ ...body, employeeId, amount: Number(body.amount) }),
       });
-      closeModal();
       openPayslipModal(employeeId);
     } catch (e) {
       alert(e.message);
@@ -1203,30 +2312,41 @@ async function openPayslipModal(employeeId) {
   };
 
   document.querySelectorAll("[data-del-bonus]").forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const payload = JSON.parse(btn.dataset.delBonus);
-      await api("/bonuses", { method: "DELETE", body: JSON.stringify(payload) });
-      closeModal();
-      openPayslipModal(employeeId);
+      openConfirmDeleteModal({
+        title: "Delete bonus",
+        message: `Delete ${payload.type} bonus on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/bonuses", { method: "DELETE", body: JSON.stringify(payload) });
+          openPayslipModal(employeeId);
+        },
+      });
     };
   });
   document.querySelectorAll("[data-del-ded]").forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const payload = JSON.parse(btn.dataset.delDed);
-      await api("/deductions", { method: "DELETE", body: JSON.stringify(payload) });
-      closeModal();
-      openPayslipModal(employeeId);
+      openConfirmDeleteModal({
+        title: "Delete deduction",
+        message: `Delete ${payload.type} deduction on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/deductions", { method: "DELETE", body: JSON.stringify(payload) });
+          openPayslipModal(employeeId);
+        },
+      });
     };
   });
 }
 
 async function renderEmployees(root) {
-  const showQ = state.hideOut ? "" : "?showOut=true";
-  const data = await api(`/employees${showQ}`);
+  const data = await api(`/employees${employeesQuery()}`);
   state.meta = data;
   root.__employeesData = data;
 
   const list = filterEmployeesList(data.employees);
+
+  const nationalities = data.nationalities || ["Egyptian", "Sudanese"];
 
   root.innerHTML = `
     <div class="page-header">
@@ -1241,10 +2361,21 @@ async function renderEmployees(root) {
       <select id="filter-unit"><option value="">All units</option>${data.units.map((u) =>
         `<option value="${u}" ${state.empFilter.unit === u ? "selected" : ""}>${u}</option>`
       ).join("")}</select>
+      <select id="filter-nationality"><option value="">All nationalities</option>${nationalities.map((n) =>
+        `<option value="${escapeHtml(n)}" ${state.empFilter.nationality === n ? "selected" : ""}>${escapeHtml(n)}</option>`
+      ).join("")}</select>
+      <select id="filter-work-permit"><option value="">All work permits</option>
+        <option value="have_permit" ${state.empFilter.workPermit === "have_permit" ? "selected" : ""}>Have permit</option>
+        <option value="no_permit" ${state.empFilter.workPermit === "no_permit" ? "selected" : ""}>Don't have permit</option>
+      </select>
+      <select id="filter-insurance"><option value="">All insurance</option>
+        <option value="insured" ${state.empFilter.insuranceStatus === "insured" ? "selected" : ""}>Insured</option>
+        <option value="not_insured" ${state.empFilter.insuranceStatus === "not_insured" ? "selected" : ""}>Not insured</option>
+      </select>
       ${hideOutToggle()}
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th><th>Nationality</th><th>Permit / Insurance</th><th>Status</th><th></th></tr></thead>
       <tbody id="emp-tbody">${list.map(employeeListRowHtml).join("")}</tbody>
     </table></div>`;
 
@@ -1259,14 +2390,23 @@ async function renderEmployees(root) {
     state.empFilter.unit = e.target.value;
     updateEmployeesTable(root);
   };
+  root.querySelector("#filter-nationality").onchange = (e) => {
+    state.empFilter.nationality = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-work-permit").onchange = (e) => {
+    state.empFilter.workPermit = e.target.value;
+    updateEmployeesTable(root);
+  };
+  root.querySelector("#filter-insurance").onchange = (e) => {
+    state.empFilter.insuranceStatus = e.target.value;
+    updateEmployeesTable(root);
+  };
   bindEmployeesTableActions(root, data.employees);
 }
 
 async function renderAttendance(root) {
-  const q = new URLSearchParams({ month: state.month });
-  if (state.unit) q.set("unit", state.unit);
-  if (state.team) q.set("team", state.team);
-  if (!state.hideOut) q.set("showOut", "true");
+  const q = buildApiQuery({ month: state.month, unit: state.unit || "", team: state.team || "" });
   const data = await api(`/attendance?${q}`);
   const recordMap = new Map(data.records.map((r) => [`${r.employeeId}|${r.date}`, r]));
   const summaryMap = new Map(data.summaries.map((s) => [s.employeeId, s]));
@@ -1283,12 +2423,16 @@ async function renderAttendance(root) {
   root.__attendanceCtx = ctx;
 
   let employees = data.employees;
+  if (state.hideOut) {
+    employees = employees.filter((e) => !isOutEmployee(e));
+  }
   if (state.empFilter.q) {
     employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
   }
 
   root.innerHTML = `
     <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
+    ${window.HRMSFeatures?.attendanceBannersHtml(data) || ""}
     ${monthToolbar(`${employeeSearchInputHtml()}
     <select id="unit-filter"><option value="">All units</option>${(data.units || []).map((u) =>
       `<option value="${u}" ${state.unit === u ? "selected" : ""}>${u}</option>`
@@ -1300,8 +2444,12 @@ async function renderAttendance(root) {
     <button class="btn" id="save-wd">Save</button>
     <button class="btn" id="init-month">Init weekends</button>
     <button class="btn" id="bulk-attended">Mark weekdays Attended</button>
+    <select id="bulk-agent-select" title="Agent for month mark"><option value="">Agent…</option>${employees.map((e) =>
+      `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
+    ).join("")}</select>
+    <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
     ${hideOutToggle()}
-    <p class="muted" style="grid-column:1/-1;margin:0">Half days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
+    <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
     <div class="table-wrap attendance-grid"><table>
       <thead><tr>
         <th class="att-sticky att-sticky-id">ID</th><th class="att-sticky att-sticky-name">Name</th><th class="att-sticky att-sticky-team">Team</th>
@@ -1309,7 +2457,9 @@ async function renderAttendance(root) {
         ${data.days.map((d) => {
           const cal = calMap.get(d);
           const label = cal ? dayHeader(cal) : d.slice(8);
-          return `<th class="text-center ${isWeekend(d) ? "weekend-col" : ""}">${label}</th>`;
+          const dayCls = window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
+          const dayTitle = window.HRMSFeatures?.attendanceDayTitle(d, data) || "";
+          return `<th class="text-center ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>${label}</th>`;
         }).join("")}
       </tr></thead>
       <tbody id="att-tbody">${employees.map((emp) => attendanceEmployeeRowHtml(emp, ctx)).join("")}</tbody>
@@ -1345,12 +2495,28 @@ async function renderAttendance(root) {
     });
     render();
   };
+  root.querySelector("#bulk-agent-month")?.addEventListener("click", async () => {
+    const employeeId = root.querySelector("#bulk-agent-select")?.value;
+    if (!employeeId) {
+      alert("Select an agent first.");
+      return;
+    }
+    if (!confirm(`Mark all weekdays in ${monthLabel(state.month)} as Attended for ${employeeId}?`)) return;
+    try {
+      await api("/attendance/bulk-agent-month", {
+        method: "PATCH",
+        body: JSON.stringify({ month: state.month, employeeId, status: "Attended" }),
+      });
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
   bindAttendanceGridEvents(root, ctx);
 }
 
 async function renderPayroll(root) {
-  const q = new URLSearchParams({ month: state.month });
-  if (!state.hideOut) q.set("showOut", "true");
+  const q = buildApiQuery({ month: state.month });
   const [data, tiersData] = await Promise.all([
     api(`/payroll?${q}`),
     api(`/commission-tiers?month=${state.month}`).catch(() => ({ tiers: [] })),
@@ -1358,7 +2524,7 @@ async function renderPayroll(root) {
   const tiers = tiersData.tiers || [];
   root.__payrollData = data;
 
-  let payrollRows = data.payroll;
+  let payrollRows = filterPayrollByZeroNet(data.payroll);
   if (state.empFilter.q) {
     payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
   }
@@ -1368,14 +2534,20 @@ async function renderPayroll(root) {
       <div class="btn-row">
         <button class="btn btn-sm btn-primary" id="init-month-profiles">Init month profiles</button>
         <button class="btn btn-sm" id="export-payroll-pdf">Export PDF</button>
+        <button class="btn btn-sm" id="export-all-payslips" title="Save every payslip PDF into a folder">Export all payslips</button>
         <button class="btn btn-sm" id="record-loan-payments">Record loan payments</button>
         <button class="btn btn-sm" id="manage-loans-btn">Loans</button>
-        <button class="btn btn-sm" id="export-cash">Cash CSV</button>
-        <button class="btn btn-sm" id="export-bank">Bank CSV</button>
-        <button class="btn btn-sm" id="export-insta">Insta CSV</button>
+        ${isChangesViewer() ? `
+        <button class="btn btn-sm" id="export-cash-csv" title="Cash payroll sheet (CSV)">Cash CSV</button>
+        <button class="btn btn-sm" id="export-cash-pdf" title="Cash payroll sheet (PDF)">Cash PDF</button>
+        <button class="btn btn-sm" id="export-insta-csv" title="Instapay / wallet sheet (CSV)">Instapay CSV</button>
+        <button class="btn btn-sm" id="export-insta-pdf" title="Instapay / wallet sheet (PDF)">Instapay PDF</button>
+        <button class="btn btn-sm" id="export-bank-csv" title="Bank payroll sheet (CSV)">Bank CSV</button>
+        <button class="btn btn-sm" id="export-bank-pdf" title="Bank payroll sheet (PDF)">Bank PDF</button>` : ""}
       </div>
     </div>
-    ${monthToolbar(`${employeeSearchInputHtml()}${hideOutToggle()}`)}
+    ${monthToolbar(`${employeeSearchInputHtml()}${hideOutToggle()}
+    <label class="toggle-label"><input type="checkbox" id="hide-zero-net" ${state.hideZeroNet ? "checked" : ""} /> Hide zero net pay</label>`)}
     <div class="card" style="margin-bottom:1rem">
       <div class="flex-between" style="margin-bottom:.75rem">
         <div><h3 style="margin:0">Sales commission targets</h3>
@@ -1406,6 +2578,10 @@ async function renderPayroll(root) {
 
   bindMonthNav(root);
   bindHideOut(root);
+  root.querySelector("#hide-zero-net")?.addEventListener("change", (e) => {
+    state.hideZeroNet = e.target.checked;
+    updatePayrollTable(root);
+  });
   bindEmployeeSearch(root, () => updatePayrollTable(root));
 
   let tierIndex = tiers.length || 1;
@@ -1438,13 +2614,24 @@ async function renderPayroll(root) {
     const btn = e.currentTarget;
     setButtonLoading(btn, true);
     try {
-      await downloadFile(`/payroll/pdf?month=${state.month}${state.hideOut ? "" : "&showOut=true"}`, `payroll-${state.month}.pdf`);
+      await downloadFile(`/payroll/pdf?${buildApiQuery({ month: state.month })}`, `payroll-${state.month}.pdf`);
     } catch (err) {
       alert(err.message);
     } finally {
       setButtonLoading(btn, false);
     }
   };
+  root.querySelector("#export-all-payslips")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await bulkExportAllPayslips(payrollRows);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
   root.querySelector("#record-loan-payments").onclick = async () => {
     if (!confirm(`Record loan installment payments for ${monthLabel(state.month)}?`)) return;
     try {
@@ -1469,13 +2656,30 @@ async function renderPayroll(root) {
     alert(`Created ${res.count} month profiles`);
     render();
   };
-  root.querySelector("#export-cash").onclick = () =>
-    downloadFile(`/exports/payments?month=${state.month}&method=cash&format=csv`, `cash-${state.month}.csv`).catch((e) => alert(e.message));
-  root.querySelector("#export-bank").onclick = () =>
-    downloadFile(`/exports/payments?month=${state.month}&method=bank&format=csv`, `bank-${state.month}.csv`).catch((e) => alert(e.message));
-  root.querySelector("#export-insta").onclick = () =>
-    downloadFile(`/exports/payments?month=${state.month}&method=insta&format=csv`, `insta-${state.month}.csv`).catch((e) => alert(e.message));
+  const bindPaymentExport = (id, method, format) => {
+    root.querySelector(id)?.addEventListener("click", () => {
+      const ext = format === "pdf" ? "pdf" : "csv";
+      const name = method === "insta" ? "instapay" : method;
+      downloadFile(
+        `/exports/payments?${buildApiQuery({ month: state.month, method, format })}`,
+        `${name}-${state.month}.${ext}`
+      ).catch((e) => alert(e.message));
+    });
+  };
+  bindPaymentExport("#export-cash-csv", "cash", "csv");
+  bindPaymentExport("#export-cash-pdf", "cash", "pdf");
+  bindPaymentExport("#export-insta-csv", "insta", "csv");
+  bindPaymentExport("#export-insta-pdf", "insta", "pdf");
+  bindPaymentExport("#export-bank-csv", "bank", "csv");
+  bindPaymentExport("#export-bank-pdf", "bank", "pdf");
   bindPayrollRowClicks(root);
+  window.HRMSFeatures?.enhancePayroll(root, api, state, {
+    downloadFile,
+    monthLabel,
+    fmt,
+    isChangesViewer,
+    render,
+  }).catch(() => {});
 }
 
 function tierRowHtml(tier = {}, index = 0) {
@@ -1617,7 +2821,8 @@ function openLoanEditModal(employeeId, loan) {
         body: JSON.stringify(body),
       });
       closeModal();
-      openEmployeeLoansModal(employeeId);
+      if (state.page === "loans") render();
+      else openEmployeeLoansModal(employeeId);
     } catch (e) {
       alert(e.message);
     }
@@ -1625,7 +2830,8 @@ function openLoanEditModal(employeeId, loan) {
   document.querySelectorAll("[data-close]").forEach((b) => {
     b.onclick = () => {
       closeModal();
-      openEmployeeLoansModal(employeeId);
+      if (state.page === "loans") render();
+      else openEmployeeLoansModal(employeeId);
     };
   });
 }
@@ -1668,6 +2874,402 @@ async function openLoansManagerModal() {
   });
 }
 
+async function bulkExportAllPayslips(payrollRows) {
+  if (!window.hrDesktop?.pickFolder) {
+    alert("Bulk payslip export requires the Hangup HR desktop app.");
+    return;
+  }
+  if (!payrollRows.length) {
+    alert("No payroll rows to export.");
+    return;
+  }
+  const folder = await window.hrDesktop.pickFolder();
+  if (!folder) return;
+  const subfolder = `${folder}\\${monthPayrollFolderName(state.month)}`;
+  const sessionId = getSessionId();
+  let ok = 0;
+  for (const row of payrollRows) {
+    const res = await fetch(`/api/payslip/${row.employeeId}/pdf?month=${state.month}`, {
+      headers: sessionId ? { "x-session-id": sessionId } : {},
+    });
+    if (res.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    if (!res.ok) continue;
+    const buf = await res.arrayBuffer();
+    const safeName = String(row.name || row.employeeId)
+      .replace(/[^\w\s-]+/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
+    await window.hrDesktop.writeFileBuffer(`${subfolder}\\payslip-${row.employeeId}-${safeName}.pdf`, buf);
+    ok++;
+  }
+  alert(`Exported ${ok} payslip PDF(s) to:\n${subfolder}`);
+}
+
+async function openBonusEditModal(bonus, employees, bonusTypes) {
+  const deductFrom = parseTlSourceFromReason(bonus.reason);
+  const cleanReason = String(bonus.reason || "")
+    .replace(/\s*\(deducted from[^)]+\)\s*/i, "")
+    .trim();
+  openModal(
+    `<div class="modal-header"><h2>Edit bonus</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="bonus-edit-form" class="field-grid">
+        <label class="field"><span>Employee</span><select name="employeeId" required>${employeeSelectOptions(employees, bonus.employeeId)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${bonus.date}" required /></label>
+        <label class="field"><span>Type</span><select name="type" id="bonus-edit-type">${bonusTypes.map((t) => `<option value="${t}" ${bonus.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" min="0" step="0.01" value="${bonus.amount}" required /></label>
+        <label class="field hidden" id="bonus-edit-deduct-wrap" style="grid-column:1/-1"><span>Deduct from agent (TL pays)</span>
+          <select name="deductFromEmployeeId">${employeeSelectOptionsForTlDeduct(employees, deductFrom)}</select></label>
+        <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" value="${escapeHtml(cleanReason)}" /></label>
+      </form>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="save-bonus-edit-btn">Save</button>
+      </div>
+    </div>`,
+    true
+  );
+  const typeSel = document.getElementById("bonus-edit-type");
+  const deductWrap = document.getElementById("bonus-edit-deduct-wrap");
+  const toggleDeduct = () => deductWrap?.classList.toggle("hidden", typeSel.value !== TL_BONUS_TYPE);
+  typeSel.onchange = toggleDeduct;
+  toggleDeduct();
+  document.getElementById("save-bonus-edit-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("bonus-edit-form"));
+    const body = Object.fromEntries(fd);
+    if (body.type === TL_BONUS_TYPE && !body.deductFromEmployeeId) {
+      alert("Select which agent this TL bonus is deducted from.");
+      return;
+    }
+    try {
+      await api("/bonuses", {
+        method: "PATCH",
+        body: JSON.stringify({
+          originalEmployeeId: bonus.employeeId,
+          originalDate: bonus.date,
+          originalType: bonus.type,
+          employeeId: body.employeeId,
+          date: body.date,
+          amount: Number(body.amount),
+          reason: body.reason,
+          type: body.type,
+          deductFromEmployeeId: body.deductFromEmployeeId || undefined,
+        }),
+      });
+      closeModal();
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function openDeductionEditModal(deduction, employees, deductionTypes) {
+  openModal(
+    `<div class="modal-header"><h2>Edit deduction</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <form id="deduction-edit-form" class="field-grid">
+        <label class="field"><span>Employee</span><select name="employeeId" required>${employeeSelectOptions(employees, deduction.employeeId)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${deduction.date}" required /></label>
+        <label class="field"><span>Type</span><select name="type">${deductionTypes.map((t) => `<option value="${t}" ${deduction.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" min="0" step="0.01" value="${deduction.amount}" required /></label>
+        <label class="field" style="grid-column:1/-1"><span>Reason</span><input name="reason" value="${escapeHtml(deduction.reason || "")}" /></label>
+      </form>
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="save-ded-edit-btn">Save</button>
+      </div>
+    </div>`,
+    true
+  );
+  document.getElementById("save-ded-edit-btn").onclick = async () => {
+    const fd = new FormData(document.getElementById("deduction-edit-form"));
+    const body = Object.fromEntries(fd);
+    try {
+      await api("/deductions", {
+        method: "PATCH",
+        body: JSON.stringify({
+          originalEmployeeId: deduction.employeeId,
+          originalDate: deduction.date,
+          originalType: deduction.type,
+          employeeId: body.employeeId,
+          date: body.date,
+          amount: Number(body.amount),
+          reason: body.reason,
+          type: body.type,
+        }),
+      });
+      closeModal();
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function renderBonuses(root) {
+  const reqs = [
+    api(`/bonuses?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
+  ];
+  if (canSubmitBonusRequest() || canApproveBonusRequest()) {
+    reqs.push(api(`/bonus-requests?month=${state.month}&status=pending`).catch(() => ({ requests: [] })));
+  }
+  const [bonusData, empData, reqData] = await Promise.all(reqs);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const bonuses = (bonusData.bonuses || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const requests = reqData?.requests || [];
+  const canEdit = canManagePayrollEvents();
+
+  const requestSection =
+    requests.length || canSubmitBonusRequest()
+      ? `<div class="card" style="margin-bottom:1rem">
+      <h3>Bonus requests ${canApproveBonusRequest() ? "(pending approval)" : ""}</h3>
+      ${canSubmitBonusRequest() ? '<button class="btn btn-sm" id="submit-bonus-req">+ Request bonus for agent</button>' : ""}
+      <table style="margin-top:.5rem"><thead><tr><th>Date</th><th>Agent</th><th>Amount</th><th>Type</th><th>By</th>${canApproveBonusRequest() ? "<th></th>" : ""}</tr></thead>
+      <tbody>${requests.length ? requests.map((r) => `<tr>
+        <td>${r.date}</td><td>${r.employeeId}</td><td>${fmt(r.amount)}</td><td>${escapeHtml(r.type)}</td><td>${escapeHtml(r.submittedBy)}</td>
+        ${canApproveBonusRequest() ? `<td class="btn-row">
+          <button class="btn btn-sm" data-approve-req="${r.id}">Approve</button>
+          <button class="btn btn-sm btn-danger" data-deny-req="${r.id}">Deny</button>
+        </td>` : ""}
+      </tr>`).join("") : '<tr><td colspan="6" class="muted">No pending requests</td></tr>'}
+      </tbody></table></div>`
+      : "";
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Bonuses</h1><p class="muted">${monthLabel(state.month)} · ${bonuses.length} entries</p></div>
+      ${canEdit ? '<button class="btn btn-primary" id="add-bonus-page-btn">+ Add bonus (HR)</button>' : ""}
+    </div>
+    ${requestSection}
+    ${monthToolbar("")}
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Date</th><th>Employee</th><th>Type</th><th class="text-right">Amount</th><th>Reason / TL source</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+      <tbody>${bonuses.length ? bonuses.map((b) => {
+        const emp = empById.get(b.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || b.employeeId) : b.employeeId;
+        const tlFrom = parseTlSourceFromReason(b.reason);
+        const tlFromName = tlFrom ? (empById.get(tlFrom)?.american_name || empById.get(tlFrom)?.arabic_name || tlFrom) : "";
+        const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
+        return `<tr>
+          <td>${b.date}</td><td>${b.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${escapeHtml(b.type)}</td><td class="text-right">${fmt(b.amount)}</td>
+          <td>${escapeHtml(reason || "—")}${tlFromName ? `<br><span class="muted">Deducted from ${escapeHtml(tlFromName)}</span>` : ""}</td>
+          ${canEdit ? `<td class="btn-row"><button class="btn btn-sm" data-edit-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Edit</button>
+            <button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></td>` : ""}
+        </tr>`;
+      }).join("") : `<tr><td colspan="${canEdit ? 6 : 5}" class="muted">No bonuses this month</td></tr>`}
+      </tbody>
+    </table></div>`;
+
+  root.querySelectorAll("[data-edit-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = JSON.parse(btn.dataset.editBonus);
+      const b = bonuses.find((x) => x.employeeId === key.employeeId && x.date === key.date && x.type === key.type);
+      if (b) openBonusEditModal(b, employees, bonusData.types || []);
+    };
+  });
+  root.querySelectorAll("[data-del-bonus]").forEach((btn) => {
+    btn.onclick = () => {
+      const payload = JSON.parse(btn.dataset.delBonus);
+      openConfirmDeleteModal({
+        title: "Delete bonus",
+        message: `Delete ${payload.type} on ${payload.date}?`,
+        onConfirm: async () => {
+          await api("/bonuses", { method: "DELETE", body: JSON.stringify(payload) });
+          render();
+        },
+      });
+    };
+  });
+
+  root.querySelector("#submit-bonus-req")?.addEventListener("click", () => {
+    const agents = employees.filter((e) => !/^(TL|CL|OP|HR)/i.test(e.id));
+    openModal(`
+      <div class="modal-header"><h2>Request bonus for agent</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <form id="bonus-req-form" class="form-grid">
+        <label class="field"><span>Agent</span><select name="employeeId" required>${employeeSelectOptions(agents)}</select></label>
+        <label class="field"><span>Date</span><input name="date" type="date" value="${state.month}-15" required /></label>
+        <label class="field"><span>Amount</span><input name="amount" type="number" step="0.01" required /></label>
+        <label class="field"><span>Type</span><input name="type" value="${escapeHtml(TL_BONUS_TYPE)}" readonly /></label>
+        <label class="field"><span>Reason</span><input name="reason" /></label>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Submit for approval</button></div>
+      </form>
+    `);
+    document.getElementById("bonus-req-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = Object.fromEntries(fd.entries());
+      body.amount = Number(body.amount);
+      try {
+        await api("/bonus-requests", { method: "POST", body: JSON.stringify(body) });
+        closeModal();
+        render();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  });
+  root.querySelectorAll("[data-approve-req]").forEach((btn) => {
+    btn.onclick = async () => {
+      await api(`/bonus-requests/${btn.dataset.approveReq}`, { method: "PATCH", body: JSON.stringify({ action: "approve" }) });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-deny-req]").forEach((btn) => {
+    btn.onclick = async () => {
+      const denyReason = prompt("Deny reason:") || "";
+      await api(`/bonus-requests/${btn.dataset.denyReq}`, { method: "PATCH", body: JSON.stringify({ action: "deny", denyReason }) });
+      render();
+    };
+  });
+  root.querySelector("#add-bonus-page-btn")?.addEventListener("click", () => {
+    openBonusEditModal(null, employees, bonusData.types || []);
+  });
+
+  bindMonthNav(root);
+}
+
+async function renderDeductions(root) {
+  const [dedData, empData] = await Promise.all([
+    api(`/deductions?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
+  ]);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const deductions = (dedData.deductions || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const regularDeductions = deductions.filter((d) => d.type !== TL_BONUS_TYPE);
+  const bonusTransferDeductions = deductions.filter((d) => d.type === TL_BONUS_TYPE);
+  const canEdit = canManagePayrollEvents();
+  const colSpan = canEdit ? 6 : 5;
+  const transferColSpan = canEdit ? 6 : 5;
+
+  const regularRows = regularDeductions.length
+    ? regularDeductions.map((d) => {
+        const emp = empById.get(d.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || d.employeeId) : d.employeeId;
+        return `<tr>
+          <td>${d.date}</td>
+          <td>${d.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${escapeHtml(d.type)}</td>
+          <td class="text-right amount-neg">${fmt(d.amount)}</td>
+          <td>${escapeHtml(d.reason || "—")}</td>
+          ${deductionActionCells(d, canEdit)}
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="${colSpan}" class="muted">No regular deductions this month</td></tr>`;
+
+  const transferRows = bonusTransferDeductions.length
+    ? bonusTransferDeductions.map((d) => {
+        const emp = empById.get(d.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || d.employeeId) : d.employeeId;
+        return `<tr>
+          <td>${d.date}</td>
+          <td>${d.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td>${bonusRecipientCell(d, empById)}</td>
+          <td class="text-right amount-neg">${fmt(d.amount)}</td>
+          <td>${escapeHtml((d.reason || "").replace(/TL bonus paid to\s+\S+/i, "").trim() || "—")}</td>
+          ${deductionActionCells(d, canEdit)}
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="${transferColSpan}" class="muted">No TL / OP bonus transfer deductions this month</td></tr>`;
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Deductions</h1><p class="muted">${monthLabel(state.month)} · ${deductions.length} entries (${regularDeductions.length} regular · ${bonusTransferDeductions.length} bonus transfers)</p></div></div>
+    ${monthToolbar("")}
+    <section class="deductions-section">
+      <h2 class="deductions-section-title">Regular deductions</h2>
+      <p class="deductions-section-desc muted">Lateness, loans, hardware, and other payroll deductions.</p>
+      <div class="table-wrap card"><table>
+        <thead><tr><th>Date</th><th>Employee</th><th>Type</th><th class="text-right">Amount</th><th>Reason</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+        <tbody>${regularRows}</tbody>
+      </table></div>
+    </section>
+    <section class="deductions-section">
+      <h2 class="deductions-section-title">TL / OP bonus transfers</h2>
+      <p class="deductions-section-desc muted">Deductions applied when a team lead or OP gave a bonus to another employee — the recipient is shown below.</p>
+      <div class="table-wrap card"><table>
+        <thead><tr><th>Date</th><th>Deducted from</th><th>Bonus given to</th><th class="text-right">Amount</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+        <tbody>${transferRows}</tbody>
+      </table></div>
+    </section>`;
+
+  bindDeductionTableActions(root, deductions, employees, dedData.types || []);
+  bindMonthNav(root);
+}
+
+async function renderLoansPage(root) {
+  const [loanData, empData] = await Promise.all([
+    api("/loans"),
+    api(`/employees${employeesQuery()}`),
+  ]);
+  const employees = empData.employees || [];
+  const empById = new Map(employees.map((e) => [e.id, e]));
+  const loans = (loanData.loans || []).slice().sort((a, b) => String(b.startYearMonth).localeCompare(String(a.startYearMonth)));
+  const canEdit = canManagePayrollEvents();
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Loans</h1><p class="muted">${monthLabel(state.month)} · ${loans.length} loan(s) · manage installments and agents</p></div>
+      ${canEdit ? `<div class="btn-row"><button class="btn btn-sm btn-primary" id="loans-record-payments">Record loan payments (${monthLabel(state.month)})</button></div>` : ""}
+    </div>
+    ${monthToolbar("")}
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Employee</th><th>Status</th><th class="text-right">Total</th><th class="text-right">Installment</th><th>Paid</th><th>Starts</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+      <tbody>${loans.length ? loans.map((l) => {
+        const emp = empById.get(l.employeeId);
+        const name = emp ? (emp.american_name || emp.arabic_name || l.employeeId) : l.employeeId;
+        return `<tr>
+          <td>${l.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
+          <td><span class="badge">${l.status}</span></td>
+          <td class="text-right">${fmt(l.totalAmount)}</td>
+          <td class="text-right">${fmt(l.installmentAmount)}</td>
+          <td>${l.installmentsPaid || 0} / ${l.installmentsCount}</td>
+          <td>${l.startYearMonth}</td>
+          <td>${escapeHtml(l.notes || "—")}</td>
+          ${canEdit ? `<td class="btn-row">
+            ${l.status === "active" ? `<button class="btn btn-sm" data-loan-page-edit="${l.id}">Edit</button>` : ""}
+            ${l.status === "active" ? `<button class="btn btn-sm" data-loan-page-cancel="${l.id}">Cancel</button>` : ""}
+            ${!(l.installmentsPaid > 0) && l.status !== "completed" ? `<button class="btn btn-sm btn-danger" data-loan-page-delete="${l.id}">Delete</button>` : ""}
+          </td>` : ""}
+        </tr>`;
+      }).join("") : `<tr><td colspan="${canEdit ? 8 : 7}" class="muted">No loans</td></tr>`}
+      </tbody>
+    </table></div>
+    <p class="muted" style="margin-top:1rem">Create new loans from an employee payslip → Loans.</p>`;
+
+  root.querySelector("#loans-record-payments")?.addEventListener("click", async () => {
+    if (!confirm(`Record loan installment payments for ${monthLabel(state.month)}?`)) return;
+    const res = await api("/payroll/record-loan-payments", { method: "POST", body: JSON.stringify({ month: state.month }) });
+    alert(`Recorded ${res.count} loan payment(s)`);
+    render();
+  });
+  root.querySelectorAll("[data-loan-page-edit]").forEach((btn) => {
+    btn.onclick = () => {
+      const loan = loans.find((l) => l.id === btn.dataset.loanPageEdit);
+      if (loan) openLoanEditModal(loan.employeeId, loan);
+    };
+  });
+  root.querySelectorAll("[data-loan-page-cancel]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Cancel this loan?")) return;
+      await api(`/loans/${btn.dataset.loanPageCancel}/cancel`, { method: "POST" });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-loan-page-delete]").forEach((btn) => {
+    btn.onclick = async () => {
+      if (!confirm("Delete this loan permanently?")) return;
+      await api(`/loans/${btn.dataset.loanPageDelete}`, { method: "DELETE" });
+      render();
+    };
+  });
+  bindMonthNav(root);
+}
+
 async function openEmployeeWarningsModal(employeeId) {
   const data = await api(`/warnings/${employeeId}`);
   const list = (data.warnings || [])
@@ -1675,7 +3277,7 @@ async function openEmployeeWarningsModal(employeeId) {
       (w) =>
         `<div class="card card-flat"><div class="flex-between"><strong>${w.type}: ${w.title || "—"}</strong><span class="muted">${w.date}</span></div>
           <p style="margin:.5rem 0 0">${w.content}</p>
-          <div class="muted" style="font-size:.75rem">${w.createdBy || ""} · ${w.severity || "normal"}</div></div>`
+          <div class="muted" style="font-size:.75rem">${w.createdBy || ""} · ${w.severity || "normal"}${w.warningLevel ? ` · Level: ${w.warningLevel}` : ""}</div></div>`
     )
     .join("");
 
@@ -1691,6 +3293,7 @@ async function openEmployeeWarningsModal(employeeId) {
           <label class="field" style="grid-column:1/-1"><span>Title</span><input name="title" required /></label>
           <label class="field" style="grid-column:1/-1"><span>Content</span><textarea name="content" required></textarea></label>
           <label class="field"><span>Severity</span><select name="severity"><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+          <label class="field"><span>Warning level</span><select name="warningLevel"><option value="">—</option><option value="1st">1st</option><option value="2nd">2nd</option><option value="final">Final</option></select></label>
         </form>
         <button class="btn btn-primary btn-sm" id="add-warn-btn">Save</button>
       </div>
@@ -1710,6 +3313,7 @@ async function openEmployeeWarningsModal(employeeId) {
           title: fd.get("title"),
           content: fd.get("content"),
           severity: fd.get("severity"),
+          warningLevel: fd.get("warningLevel") || "",
         }),
       });
       closeModal();
@@ -1721,11 +3325,14 @@ async function openEmployeeWarningsModal(employeeId) {
 }
 
 async function renderSalaries(root) {
-  const [ratesData, adjData] = await Promise.all([
+  const [ratesData, adjData, empData] = await Promise.all([
     api("/position-rates"),
     api(`/payroll-adjustments?month=${state.month}`),
+    api(`/employees${employeesQuery()}`),
   ]);
   const raises = adjData.adjustments.filter((a) => a.salaryRaise > 0);
+  const usedPositions = new Set((empData.employees || []).map((e) => e.position).filter(Boolean));
+  const canDeleteRates = canManagePayrollEvents();
 
   root.innerHTML = `
     <div class="page-header"><div><h1>Salaries</h1><p class="muted">Position rates & monthly raises for ${monthLabel(state.month)}</p></div></div>
@@ -1739,7 +3346,10 @@ async function renderSalaries(root) {
           <tbody id="rates-body">${ratesData.rates.map((r) => `<tr>
             <td>${r.position}</td>
             <td class="text-right"><input class="inline-input" data-pos="${r.position}" type="number" value="${r.monthlySalary}" /></td>
-            <td><button class="btn btn-sm" data-save-rate="${r.position}">Save</button></td>
+            <td class="btn-row">
+              <button class="btn btn-sm" data-save-rate="${r.position}">Save</button>
+              ${canDeleteRates && !usedPositions.has(r.position) ? `<button class="btn btn-sm btn-danger" data-del-rate="${escapeHtml(r.position)}">Delete</button>` : ""}
+            </td>
           </tr>`).join("")}</tbody>
         </table></div>
       </div>
@@ -1769,6 +3379,19 @@ async function renderSalaries(root) {
       setTimeout(() => { btn.textContent = "Save"; }, 1500);
     };
   });
+  root.querySelectorAll("[data-del-rate]").forEach((btn) => {
+    btn.onclick = () => {
+      const position = btn.dataset.delRate;
+      openConfirmDeleteModal({
+        title: "Delete position rate",
+        message: `Remove position "${position}"?`,
+        onConfirm: async () => {
+          await api(`/position-rates/${encodeURIComponent(position)}`, { method: "DELETE" });
+          renderSalaries(root);
+        },
+      });
+    };
+  });
   root.querySelector("#add-rate-btn").onclick = async () => {
     const position = prompt("Position name:");
     if (!position) return;
@@ -1794,11 +3417,15 @@ async function openEmployeeDocsModal(employeeId) {
     `<div class="modal-header"><h2>Documents — ${employeeId}</h2><button class="btn btn-sm" data-close>✕</button></div>
     <div class="modal-body">
       ${docList || '<p class="muted">No documents uploaded yet.</p>'}
+      <div class="btn-row" style="margin-bottom:.75rem">
+        <button type="button" class="btn btn-sm" id="export-docs-zip-btn">Download all (ZIP)</button>
+      </div>
       <div class="card" style="margin-top:1rem">
         <h4>Upload document</h4>
         <form id="doc-form" class="field-grid">
           <label class="field"><span>Type</span><select name="docType">${data.docTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
           <label class="field"><span>Expiry (optional)</span><input name="expiry" type="date" /></label>
+          <label class="toggle-label" style="grid-column:1/-1"><input name="noExpiry" type="checkbox" /> No expiry date</label>
           <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
           <label class="field" style="grid-column:1/-1"><span>File</span><input name="file" type="file" required /></label>
         </form>
@@ -1806,6 +3433,12 @@ async function openEmployeeDocsModal(employeeId) {
       </div>
     </div>`,
     true
+  );
+
+  document.getElementById("export-docs-zip-btn")?.addEventListener("click", () =>
+    downloadFile(`/exports/documents-zip?employeeId=${encodeURIComponent(employeeId)}`, `documents-${employeeId}.zip`).catch(
+      (e) => alert(e.message)
+    )
   );
 
   document.getElementById("upload-doc-btn").onclick = async () => {
@@ -1829,6 +3462,7 @@ async function openEmployeeDocsModal(employeeId) {
           contentBase64,
           notes: fd.get("notes") || "",
           expiry: fd.get("expiry") || "",
+          noExpiry: fd.get("noExpiry") === "on",
         }),
       });
       closeModal();
@@ -1903,28 +3537,20 @@ async function renderReports(root) {
       setButtonLoading(btn, false);
     }
   };
+  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt }).catch(() => {});
 }
 
 async function renderSettings(root) {
+  const showLogs = isChangesViewer();
+  const themes = window.HRTheme?.THEMES || [];
+  const currentTheme = window.HRTheme?.get?.() || "light";
   const [status, changelog] = await Promise.all([
     api("/status"),
-    api("/changelog?limit=50").catch(() => ({ entries: [] })),
+    showLogs ? api("/changelog?limit=50").catch(() => ({ entries: [] })) : Promise.resolve({ entries: [] }),
   ]);
 
-  root.innerHTML = `
-    <div class="page-header"><h1>Settings</h1></div>
-    <div class="grid-2">
-      <div class="card">
-        <h3>Display</h3>
-        <label class="toggle-label"><input type="checkbox" id="set-hide-out" ${status.hideOutEmployees ? "checked" : ""} /> Hide out / inactive employees</label>
-        <p class="muted">When enabled, employees with status "Out" or blank inactive rows are hidden from lists.</p>
-      </div>
-      <div class="card">
-        <h3>Data sync</h3>
-        <p class="muted">Last sync: ${status.lastSync ? timeAgo(status.lastSync) : "Never"}</p>
-        <button class="btn btn-primary" id="settings-refresh">Refresh from Google Sheet</button>
-      </div>
-    </div>
+  const changeLogCard = showLogs
+    ? `
     <div class="card">
       <h3>Change log</h3>
       <div class="table-wrap"><table>
@@ -1937,8 +3563,53 @@ async function renderSettings(root) {
         </tr>`).join("") || '<tr><td colspan="4" class="muted">No changes logged yet</td></tr>'}
         </tbody>
       </table></div>
-    </div>`;
+    </div>`
+    : "";
 
+  const themeOptions = themes
+    .map(
+      (t) => `<label class="theme-option">
+        <input type="radio" name="ui-theme" value="${escapeHtml(t.id)}" ${currentTheme === t.id ? "checked" : ""} />
+        <span class="theme-swatch theme-swatch-${escapeHtml(t.id)}" aria-hidden="true"></span>
+        <span class="theme-label"><strong>${escapeHtml(t.label)}</strong><small>${escapeHtml(t.desc)}</small></span>
+      </label>`
+    )
+    .join("");
+
+  root.innerHTML = `
+    <div class="page-header"><h1>Settings</h1></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Appearance</h3>
+        <p class="muted">Color theme for this device. Layout and sidebar structure stay the same.</p>
+        <div class="theme-picker" id="theme-picker">${themeOptions}</div>
+      </div>
+      <div class="card">
+        <h3>Display</h3>
+        <label class="toggle-label"><input type="checkbox" id="set-hide-out" ${status.hideOutEmployees ? "checked" : ""} /> Hide out / inactive employees</label>
+        <p class="muted">When enabled, employees with status "Out" or blank inactive rows are hidden from lists.</p>
+      </div>
+      <div class="card">
+        <h3>App version</h3>
+        <p><strong>${escapeHtml(status.appVersion || "unknown")}</strong></p>
+        <p class="muted">Version policy is managed in Supabase (<code>app_versions</code> table).</p>
+      </div>
+      <div class="card">
+        <h3>Data sync</h3>
+        <p class="muted">Last sync: ${status.lastSync ? timeAgo(status.lastSync) : "Never"}</p>
+        <button class="btn btn-primary" id="settings-refresh">Refresh from server</button>
+      </div>
+    </div>
+    ${changeLogCard}`;
+
+  root.querySelectorAll('input[name="ui-theme"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked && window.HRTheme) {
+        window.HRTheme.set(input.value);
+        showSaveIndicator("Theme updated", "saved");
+      }
+    });
+  });
   root.querySelector("#set-hide-out").onchange = async (e) => {
     state.hideOut = e.target.checked;
     await api("/settings/hide-out", {
@@ -1947,6 +3618,314 @@ async function renderSettings(root) {
     });
   };
   root.querySelector("#settings-refresh").onclick = () => refreshData();
+  window.HRMSFeatures?.enhanceSettings(root, api, state, {
+    isChangesViewer,
+    escapeHtml,
+    openModal,
+    closeModal,
+    render,
+  }).catch(() => {});
+}
+
+async function renderUsers(root) {
+  if (!isUserManager()) {
+    root.innerHTML = `<div class="alert alert-warn">This view is restricted to the system administrator.</div>`;
+    return;
+  }
+
+  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false };
+  const data = await api("/admin/users");
+  let users = data.users || [];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "office_assistant", "agent"];
+  const statuses = data.statuses || ["active", "inactive", "terminated"];
+
+  if (state.usersFilter.status === "inactive") {
+    users = users.filter((u) => (u.status || "").toLowerCase() === "inactive");
+  } else if (state.usersFilter.status === "active") {
+    users = users.filter((u) => (u.status || "active").toLowerCase() === "active");
+  } else if (state.usersFilter.status === "no-login") {
+    users = users.filter((u) => !u.employeeId);
+  }
+
+  const sortKey = state.usersFilter.sort || "name";
+  users.sort((a, b) => {
+    if (sortKey === "lastLogin") {
+      return String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""));
+    }
+    if (sortKey === "lastEdit") {
+      return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+    }
+    const an = (a.employeeName || a.username || "").toLowerCase();
+    const bn = (b.employeeName || b.username || "").toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  const statusBadge = (status) => {
+    const s = (status || "active").toLowerCase();
+    const cls =
+      s === "active" ? "badge-ok" : s === "terminated" ? "badge-out" : "badge-warn";
+    return `<span class="badge ${cls}">${status}</span>`;
+  };
+
+  const renderRow = (u) => `<tr>
+    <td><strong>${escapeHtml(u.username)}</strong>${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
+    <td>${u.employeeId ? escapeHtml(u.employeeId) : '<span class="muted">—</span>'}</td>
+    <td class="muted">${u.employeeName ? escapeHtml(u.employeeName) : "—"}</td>
+    <td class="muted">${u.employeeTeam ? escapeHtml(u.employeeTeam) : "—"}</td>
+    <td class="muted">${u.email ? escapeHtml(u.email) : "—"}</td>
+    <td><span class="badge badge-status">${escapeHtml(u.role || "—")}</span></td>
+    <td>${statusBadge(u.status)}</td>
+    <td class="muted">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : "—"}</td>
+    <td class="muted">${u.updatedAt ? timeAgo(u.updatedAt) : "—"}</td>
+    <td class="flex-between" style="gap:.35rem;justify-content:flex-end">
+      <button class="btn btn-sm" data-edit-user="${escapeHtml(u.username)}">Edit</button>
+      <button class="btn btn-sm btn-danger" data-delete-user="${escapeHtml(u.username)}" ${
+        u.username.toLowerCase() === (state.user?.username || "").toLowerCase()
+          ? "disabled title=\"Cannot delete your own account\""
+          : ""
+      }>Remove</button>
+    </td>
+  </tr>`;
+
+  let tableBody;
+  if (state.usersFilter.groupTeam) {
+    const groups = new Map();
+    for (const u of users) {
+      const team = u.employeeTeam || "(No team)";
+      if (!groups.has(team)) groups.set(team, []);
+      groups.get(team).push(u);
+    }
+    tableBody = [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(
+        ([team, list]) => `<tr class="users-group-row"><td colspan="10"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(renderRow).join("")}`
+      )
+      .join("");
+  } else {
+    tableBody = users.map(renderRow).join("");
+  }
+
+  root.innerHTML = `
+    <div class="page-header flex-between">
+      <div>
+        <h1>App users</h1>
+        <p class="muted">Manage sign-ins, roles, and auto-created inactive employee logins.</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="sync-emp-logins-btn">Sync employee logins</button>
+        <button class="btn btn-primary" id="add-user-btn">+ Add user</button>
+      </div>
+    </div>
+    <div class="toolbar users-toolbar">
+      <label class="field field-inline"><span>Status</span>
+        <select id="users-filter-status">
+          <option value="">All</option>
+          <option value="active" ${state.usersFilter.status === "active" ? "selected" : ""}>Active</option>
+          <option value="inactive" ${state.usersFilter.status === "inactive" ? "selected" : ""}>Inactive</option>
+          <option value="no-login" ${state.usersFilter.status === "no-login" ? "selected" : ""}>No employee link</option>
+        </select>
+      </label>
+      <label class="field field-inline"><span>Sort by</span>
+        <select id="users-sort">
+          <option value="name" ${sortKey === "name" ? "selected" : ""}>Name</option>
+          <option value="lastLogin" ${sortKey === "lastLogin" ? "selected" : ""}>Last login</option>
+          <option value="lastEdit" ${sortKey === "lastEdit" ? "selected" : ""}>Last edit</option>
+        </select>
+      </label>
+      <label class="toggle-label"><input type="checkbox" id="users-group-team" ${state.usersFilter.groupTeam ? "checked" : ""} /> Group by team</label>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>Username</th><th>Employee ID</th><th>Name</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
+      </tr></thead>
+      <tbody>${tableBody || '<tr><td colspan="10" class="muted">No users match this filter</td></tr>'}
+      </tbody>
+    </table></div>`;
+
+  root.querySelector("#sync-emp-logins-btn").onclick = async () => {
+    try {
+      const res = await api("/admin/users/sync-employees", { method: "POST", body: "{}" });
+      showSaveIndicator(`Synced ${res.created} new logins`, "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  root.querySelector("#users-filter-status").onchange = (e) => {
+    state.usersFilter.status = e.target.value;
+    renderUsers(root);
+  };
+  root.querySelector("#users-sort").onchange = (e) => {
+    state.usersFilter.sort = e.target.value;
+    renderUsers(root);
+  };
+  root.querySelector("#users-group-team").onchange = (e) => {
+    state.usersFilter.groupTeam = e.target.checked;
+    renderUsers(root);
+  };
+  root.querySelector("#add-user-btn").onclick = () => openUserFormModal({ roles, statuses });
+  root.querySelectorAll("[data-edit-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.editUser;
+      const user = users.find((u) => u.username === username);
+      openUserFormModal({ roles, statuses, user });
+    });
+  });
+  root.querySelectorAll("[data-delete-user]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const username = btn.dataset.deleteUser;
+      if (!confirm(`Remove user "${username}"? They will no longer be able to sign in.`)) return;
+      try {
+        await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+        showSaveIndicator("User removed", "saved");
+        render();
+      } catch (e) {
+        showSaveIndicator(e.message, "error");
+      }
+    });
+  });
+}
+
+function openUserFormModal({ roles, statuses, user = null }) {
+  const isEdit = Boolean(user);
+  const roleOpts = roles
+    .map(
+      (r) =>
+        `<option value="${r}" ${user?.role === r ? "selected" : ""}>${r}</option>`
+    )
+    .join("");
+  const statusOpts = statuses
+    .map(
+      (s) =>
+        `<option value="${s}" ${(user?.status || "active") === s ? "selected" : ""}>${s}</option>`
+    )
+    .join("");
+
+  openModal(`
+    <div class="modal-header">
+      <h2>${isEdit ? "Edit user" : "Add user"}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
+    </div>
+    <form id="user-form" class="modal-body">
+      <label class="field">
+        <span>Username</span>
+        <input name="username" required ${isEdit ? "readonly" : ""} value="${escapeHtml(user?.username || "")}" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Email <span class="muted">(optional — for future password reset)</span></span>
+        <input type="email" name="email" value="${escapeHtml(user?.email || "")}" autocomplete="email" placeholder="name@company.com" />
+      </label>
+      <label class="field">
+        <span>Password ${isEdit ? "(leave blank to keep)" : ""}</span>
+        <input type="password" name="password" ${isEdit ? "" : "required minlength=\"4\""} autocomplete="new-password" />
+      </label>
+      <label class="field">
+        <span>Role / access level</span>
+        <select name="role" required>${roleOpts}</select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status" required>${statusOpts}</select>
+      </label>
+      <p class="muted" style="font-size:.85rem;margin:0">
+        <strong>active</strong> — can sign in ·
+        <strong>inactive</strong> — blocked ·
+        <strong>terminated</strong> — removed access
+      </p>
+    </form>
+    <div class="modal-footer">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" form="user-form" class="btn btn-primary">${isEdit ? "Save changes" : "Create user"}</button>
+    </div>`);
+
+  document.getElementById("user-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const payload = {
+      username: String(fd.get("username") || "").trim(),
+      email: String(fd.get("email") || "").trim(),
+      role: fd.get("role"),
+      status: fd.get("status"),
+    };
+    const password = String(fd.get("password") || "");
+    if (password) payload.password = password;
+
+    try {
+      if (isEdit) {
+        await api(`/admin/users/${encodeURIComponent(user.username)}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        if (!payload.password) throw new Error("Password is required for new users");
+        await api("/admin/users", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      closeModal();
+      showSaveIndicator(isEdit ? "User updated" : "User created", "saved");
+      render();
+    } catch (err) {
+      showSaveIndicator(err.message, "error");
+    }
+  };
+}
+
+async function renderChanges(root) {
+  if (!isChangesViewer()) {
+    root.innerHTML = `<div class="alert alert-warn">This view is restricted.</div>`;
+    return;
+  }
+
+  const q = new URLSearchParams({ limit: "200" });
+  if (state.changesFilter?.user) q.set("user", state.changesFilter.user);
+  if (state.changesFilter?.entity) q.set("entity", state.changesFilter.entity);
+  const data = await api(`/changelog?${q.toString()}`).catch(() => ({ entries: [] }));
+  const entries = data.entries || [];
+
+  root.innerHTML = `
+    <div class="page-header">
+      <div><h1>Changes</h1><p class="muted">Audit trail of edits made by all users, live from the log sheet.</p></div>
+      <button class="btn btn-primary" id="changes-refresh">↻ Refresh</button>
+    </div>
+    <div class="card toolbar-card">
+    <div class="toolbar">
+      <input class="search-input" id="changes-user" placeholder="Filter by user" value="${state.changesFilter?.user || ""}" />
+      <select id="changes-entity">
+        ${["", "employee", "attendance", "bonus", "deduction", "config", "warning", "month_profile", "document", "app_user"]
+          .map((e) => `<option value="${e}" ${state.changesFilter?.entity === e ? "selected" : ""}>${e || "All types"}</option>`)
+          .join("")}
+      </select>
+    </div>
+    </div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>When</th><th>User</th><th>Type</th><th>Action</th><th>Details</th></tr></thead>
+      <tbody>${entries
+        .map(
+          (e) => `<tr>
+          <td>${e.timestamp ? new Date(e.timestamp).toLocaleString() : "—"}</td>
+          <td>${e.username || "—"}</td>
+          <td>${e.entity || "—"}</td>
+          <td>${e.action || "—"}</td>
+          <td>${e.summary || `${e.field || ""}: ${e.old_value ?? ""} → ${e.new_value ?? ""}`}</td>
+        </tr>`
+        )
+        .join("") || '<tr><td colspan="5" class="muted">No changes logged yet</td></tr>'}
+      </tbody>
+    </table></div>`;
+
+  state.changesFilter = state.changesFilter || { user: "", entity: "" };
+  root.querySelector("#changes-refresh").onclick = () => render();
+  root.querySelector("#changes-user").onchange = (e) => {
+    state.changesFilter.user = e.target.value.trim();
+    render();
+  };
+  root.querySelector("#changes-entity").onchange = (e) => {
+    state.changesFilter.entity = e.target.value;
+    render();
+  };
+  window.HRMSFeatures?.enhanceChanges(root, api);
 }
 
 function navigate(page) {
@@ -1959,32 +3938,213 @@ function navigate(page) {
 
 async function render() {
   const root = document.getElementById("app");
-  root.innerHTML = pageSkeleton();
-  try {
-    if (state.page === "dashboard") await renderDashboard(root);
-    else if (state.page === "attendance") await renderAttendance(root);
-    else if (state.page === "employees") await renderEmployees(root);
-    else if (state.page === "payroll") await renderPayroll(root);
-    else if (state.page === "salaries") await renderSalaries(root);
-    else if (state.page === "reports") await renderReports(root);
-    else if (state.page === "settings") await renderSettings(root);
-  } catch (e) {
-    root.innerHTML = `<div class="alert alert-warn">${e.message}</div>`;
+  if (!root) return;
+  const gen = ++renderGeneration;
+  const page = state.page;
+  const labels = {
+    dashboard: "Loading dashboard…",
+    employees: "Loading employees…",
+    attendance: "Loading attendance…",
+    payroll: "Loading payroll…",
+    bonuses: "Loading bonuses…",
+    deductions: "Loading deductions…",
+    loans: "Loading loans…",
+    salaries: "Loading salaries…",
+    reports: "Loading reports…",
+    settings: "Loading settings…",
+    changes: "Loading changes…",
+    users: "Loading users…",
+    leave: "Loading requests…",
+    requests: "Loading requests…",
+    equipment: "Loading equipment…",
+    org: "Loading organization…",
+    sales: "Loading sales…",
+    costs: "Loading costs…",
+  };
+  if (!appReady) {
+    root.innerHTML = pageSkeleton(labels[page] || "Loading…");
+  } else {
+    root.classList.add("page-loading");
   }
+  const stale = () => gen !== renderGeneration || state.page !== page;
+  try {
+    if (page === "dashboard") await renderDashboard(root);
+    else if (page === "attendance") await renderAttendance(root);
+    else if (page === "employees") await renderEmployees(root);
+    else if (page === "payroll") await renderPayroll(root);
+    else if (page === "bonuses") await renderBonuses(root);
+    else if (page === "deductions") await renderDeductions(root);
+    else if (page === "loans") await renderLoansPage(root);
+    else if (page === "salaries") await renderSalaries(root);
+    else if (page === "reports") await renderReports(root);
+    else if (page === "leave" || page === "requests") {
+      if (state.page === "leave") state.page = "requests";
+      if (window.RequestsModule) {
+        await window.RequestsModule.renderRequestsPage(root, api, state, {
+          monthToolbar, escapeHtml, openModal, closeModal, employeeSelectOptions,
+        });
+      } else {
+        await window.HRMSFeatures.renderLeavePage(root, api, state, {
+          monthToolbar, escapeHtml, openModal, closeModal, employeeSelectOptions, api,
+        });
+      }
+    }
+    else if (page === "equipment") await window.HRMSFeatures.renderEquipmentPage(root, api, { escapeHtml, openModal, closeModal, employeeSelectOptions });
+    else if (page === "org") await window.HRMSFeatures.renderOrgPage(root, api, {
+      openEmployeeModal, escapeHtml, openModal, closeModal, canManagePayrollEvents,
+    });
+    else if (page === "settings") await renderSettings(root);
+    else if (page === "changes") await renderChanges(root);
+    else if (page === "users") await renderUsers(root);
+    else if (page === "sales" && window.SalesModule) {
+      await window.SalesModule.renderSalesPage(root, api, state, {
+        monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal,
+      });
+    } else if (page === "team-dashboard" && window.TeamDashboardModule) {
+      await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, { escapeHtml });
+    } else if (page === "costs" && window.ExpensesModule) {
+      await window.ExpensesModule.renderCostsPage(root, api, state, {
+        escapeHtml, fmt, openModal, closeModal,
+      });
+    }
+    if (stale()) return;
+    appReady = true;
+    root.classList.remove("page-loading");
+    root.classList.add("page-ready");
+  } catch (e) {
+    if (stale()) return;
+    root.classList.remove("page-loading");
+    root.classList.remove("page-ready");
+    renderErrorCard(root, e?.message || "Something went wrong loading this page.", () => render());
+  }
+}
+
+function renderErrorCard(root, message, onRetry) {
+  if (!root) return;
+  root.innerHTML = `
+    <div class="card" style="max-width:520px;margin:3rem auto;text-align:center">
+      <h3>Couldn't load</h3>
+      <p class="muted">${message}</p>
+      <button class="btn btn-primary" id="retry-btn">Retry</button>
+    </div>`;
+  const btn = root.querySelector("#retry-btn");
+  if (btn && onRetry) btn.addEventListener("click", () => onRetry());
 }
 
 document.querySelectorAll(".nav-btn").forEach((b) =>
   b.addEventListener("click", () => navigate(b.dataset.page))
 );
-document.getElementById("logout-btn").addEventListener("click", async () => {
-  await api("/logout", { method: "POST" });
-  if (window.hrDesktop) await window.hrDesktop.clearSession();
-  window.location.href = "/login";
-});
+document.getElementById("logout-btn").addEventListener("click", () => performLogout());
 document.getElementById("refresh-btn").addEventListener("click", () => refreshData());
 
-(async () => {
-  await initialSync();
-  render();
-  setInterval(checkSession, SESSION_CHECK_MS);
-})();
+let sessionCheckTimer = null;
+
+// Auto sign-out after 10 minutes with no activity in the app window.
+const IDLE_LOGOUT_MS = 10 * 60 * 1000;
+let idleTimer = null;
+let lastActivityAt = Date.now();
+let loggingOut = false;
+
+async function performLogout() {
+  if (loggingOut) return;
+  loggingOut = true;
+  clearTimeout(idleTimer);
+  if (sessionCheckTimer) {
+    clearInterval(sessionCheckTimer);
+    sessionCheckTimer = null;
+  }
+  clearSessionId();
+  try {
+    await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  } catch {
+    /* navigating away regardless */
+  }
+  try {
+    if (window.hrDesktop) await window.hrDesktop.clearSession();
+  } catch {
+    /* ignore */
+  }
+  window.location.href = "/login";
+}
+
+function resetIdleTimer() {
+  if (loggingOut) return;
+  lastActivityAt = Date.now();
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(performLogout, IDLE_LOGOUT_MS);
+}
+
+function checkIdleOnResume() {
+  if (loggingOut) return;
+  if (Date.now() - lastActivityAt >= IDLE_LOGOUT_MS) {
+    performLogout();
+    return;
+  }
+  resetIdleTimer();
+}
+
+["mousemove", "mousedown", "keydown", "wheel", "scroll", "touchstart", "click"].forEach(
+  (ev) => window.addEventListener(ev, resetIdleTimer, { passive: true })
+);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkIdleOnResume();
+});
+window.addEventListener("focus", checkIdleOnResume);
+
+async function boot() {
+  const root = document.getElementById("app");
+  root.innerHTML = pageSkeleton("Loading…");
+  setUserInfo(state.user?.username || getSavedUsername());
+  let syncOk = false;
+  let cacheWarm = false;
+  try {
+    const warm = await api("/sync/status", {}, 8000);
+    cacheWarm = !!warm.warm;
+  } catch {
+    /* proceed to sync */
+  }
+  try {
+    if (cacheWarm) {
+      syncOk = true;
+      await render();
+      initialSync().then(() => refreshStatus()).catch(() => {});
+    } else {
+      await initialSync();
+      syncOk = true;
+      await render();
+    }
+  } catch (e) {
+    try {
+      const warm = await api("/sync/status");
+      if (warm.warm) {
+        syncOk = true;
+        await render();
+      } else throw e;
+    } catch {
+      showSyncOverlay(false);
+      renderErrorCard(
+        root,
+        e?.message || "The app could not start. Check your internet connection and try again.",
+        boot
+      );
+      return;
+    }
+  }
+  try {
+    if (!syncOk) showSaveIndicator("Showing cached data — sync when online", "info");
+    consumePendingVersionNotice();
+    if (!sessionCheckTimer) {
+      sessionCheckTimer = setInterval(checkSession, SESSION_CHECK_MS);
+    }
+    resetIdleTimer();
+    window.HRMSFeatures?.initNotificationsBell(api, state).catch(() => {});
+  } catch (e) {
+    renderErrorCard(
+      root,
+      e?.message || "Could not load the page. Try again.",
+      () => render()
+    );
+  }
+}
+
+boot();

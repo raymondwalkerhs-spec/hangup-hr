@@ -37,8 +37,22 @@ jobs:
           mkdir -p credentials
           printf '%s' "$SERVICE_ACCOUNT_JSON" > credentials/service-account.json
 
+      - name: Write packaged .env
+        env:
+          HR_ENV: ${{ secrets.HR_ENV }}
+        run: |
+          if [ -n "$HR_ENV" ]; then
+            printf '%s' "$HR_ENV" > .env
+          elif [ -f .env.example ]; then
+            cp .env.example .env
+            echo "Using .env.example (set HR_ENV secret for production values)."
+          else
+            echo "::error::No HR_ENV secret and no .env.example found."
+            exit 1
+          fi
+
       - name: Rebuild native modules
-        run: npx @electron/rebuild -f -w better-sqlite3
+        run: npx @electron/rebuild -f -w better-sqlite3,bcrypt
 
       - name: Build macOS artifacts (unsigned)
         env:

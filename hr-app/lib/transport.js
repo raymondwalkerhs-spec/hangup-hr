@@ -1,4 +1,14 @@
-const TRANSPORT_STATUSES_FULL = new Set(["Attended", "Lateness A"]);
+const TRANSPORT_STATUSES_FULL = new Set(["Attended"]);
+
+const TRANSPORT_OVERRIDE_STATUSES = new Set([
+  "Half Day",
+  "NSNC Half Day",
+  "Lateness A",
+  "Lateness B",
+  "Quarter Day-Off",
+]);
+
+/** @deprecated use TRANSPORT_OVERRIDE_STATUSES */
 const HALF_DAY_STATUSES = new Set(["Half Day", "NSNC Half Day"]);
 
 function transportUnitsForRecord(record) {
@@ -7,7 +17,7 @@ function transportUnitsForRecord(record) {
 
   if (TRANSPORT_STATUSES_FULL.has(status)) return 1;
 
-  if (HALF_DAY_STATUSES.has(status)) {
+  if (TRANSPORT_OVERRIDE_STATUSES.has(status)) {
     if (override === "full") return 1;
     if (override === "half") return 0.5;
     return 0;
@@ -50,6 +60,7 @@ function calcTransportAllowance(records, workingDaysInMonth, config, transportEl
 
 module.exports = {
   TRANSPORT_STATUSES_FULL,
+  TRANSPORT_OVERRIDE_STATUSES,
   HALF_DAY_STATUSES,
   transportUnitsForRecord,
   countTransportDays,

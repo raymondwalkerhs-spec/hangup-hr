@@ -1,4 +1,5 @@
 const PDFDocument = require("pdfkit");
+const { buildPayslipPdfContext } = require("./payslip-detail");
 
 function fmt(n) {
   return (Math.round((n || 0) * 100) / 100).toLocaleString("en-EG", {
@@ -7,7 +8,9 @@ function fmt(n) {
   });
 }
 
-function buildPayslipPdf(payslip, month) {
+function buildPayslipPdf(payslip, month, detailCtx = {}) {
+  const ctx = buildPayslipPdfContext(payslip, detailCtx);
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: "A4" });
     const chunks = [];
@@ -21,9 +24,11 @@ function buildPayslipPdf(payslip, month) {
     doc.fillColor("#000");
     doc.moveDown();
 
-    doc.fontSize(14).text(payslip.name, { continued: false });
+    doc.fontSize(14).text(payslip.name || "—", { continued: false });
+    if (payslip.arabicName && payslip.arabicName !== payslip.name) {
+      doc.fontSize(10).text(payslip.arabicName);
+    }
     doc.fontSize(10).text(`${payslip.employeeId} · ${payslip.unit || "—"} · ${payslip.position || "—"}`);
-    if (payslip.arabicName) doc.text(payslip.arabicName);
     doc.moveDown();
 
     section(doc, "Salary basis");
@@ -35,32 +40,39 @@ function buildPayslipPdf(payslip, month) {
     if (payslip.nsncHalf) row(doc, "NSNC Half Day", payslip.nsncHalf);
     row(doc, "Daily rate", `${fmt(payslip.dailyRate)} EGP`);
     row(doc, "Basic salary", `${fmt(payslip.basicSalary)} EGP`, true);
-  if (payslip.transportAllowance > 0) {
-    const dayLabel =
-      payslip.transportDays % 1 === 0
-        ? `${payslip.transportDays} days`
-        : `${payslip.transportDays} day-units`;
-    row(doc, "Transportation", `+${fmt(payslip.transportAllowance)} EGP (${dayLabel})`);
-  }
-  if (payslip.salesCount) row(doc, "Sales", payslip.salesCount);
-  if (payslip.commissionAmount > 0) row(doc, "Commission", `+${fmt(payslip.commissionAmount)} EGP`);
+    if (payslip.transportAllowance > 0) {
+      const dayLabel =
+        payslip.transportDays % 1 === 0
+          ? `${payslip.transportDays} days`
+          : `${payslip.transportDays} day-units`;
+      row(doc, "Transportation", `+${fmt(payslip.transportAllowance)} EGP (${dayLabel})`);
+    }
+    if (payslip.salesCount) row(doc, "Sales", payslip.salesCount);
+    if (payslip.commissionAmount > 0) row(doc, "Commission total", `+${fmt(payslip.commissionAmount)} EGP`);
+
+    if (ctx.attendanceLines.length) {
+      section(doc, "Attendance notes");
+      ctx.attendanceLines.forEach((l) => detailRow(doc, l.text));
+    }
 
     section(doc, "Bonuses");
-    const bonuses = Object.entries(payslip.bonuses || {}).filter(([, v]) => v > 0);
-    if (!bonuses.length) doc.text("None");
-    else bonuses.forEach(([k, v]) => row(doc, k, `+${fmt(v)} EGP`));
+    if (!ctx.bonusLines.length) doc.fontSize(10).text("None");
+    else ctx.bonusLines.forEach((l) => detailRow(doc, l.label, `+${fmt(l.amount)} EGP`));
 
     section(doc, "Deductions");
-    row(doc, "Lateness", `-${fmt(payslip.latenessDeduction)} EGP`);
-    const deds = Object.entries(payslip.deductions || {}).filter(
-      ([k, v]) => v > 0 && k !== "Lateness Deduction"
-    );
-    deds.forEach(([k, v]) => row(doc, k, `-${fmt(v)} EGP`));
-    if (payslip.holdAmount > 0) row(doc, "2-week hold", `-${fmt(payslip.holdAmount)} EGP`);
+    if (!ctx.deductionLines.length) doc.fontSize(10).text("None");
+    else ctx.deductionLines.forEach((l) => detailRow(doc, l.label, l.amount ? `-${fmt(l.amount)} EGP` : ""));
+
     row(doc, "Total deductions", `-${fmt(payslip.totalDeductions)} EGP`, true);
 
+    if (payslip.deferredIn) row(doc, "Carried from prior month", `+${fmt(payslip.deferredIn)} EGP`);
+    if (payslip.calculatedNet != null) row(doc, "Calculated net", `${fmt(payslip.calculatedNet)} EGP`);
+    if (payslip.receivedTotal) row(doc, "Paid (splits)", `-${fmt(payslip.receivedTotal)} EGP`);
+    if (payslip.deferredOut) row(doc, "Deferred to later month", `-${fmt(payslip.deferredOut)} EGP`);
+
     doc.moveDown();
-    doc.fontSize(14).text(`Net salary: ${fmt(payslip.netSalary)} EGP`, { align: "right" });
+    const balance = payslip.remainingBalance ?? payslip.netSalary;
+    doc.fontSize(14).text(`Balance due: ${fmt(balance)} EGP`, { align: "right" });
 
     doc.end();
   });
@@ -76,10 +88,19 @@ function row(doc, label, value, bold = false) {
   const y = doc.y;
   doc.fontSize(10);
   if (bold) doc.font("Helvetica-Bold");
+  else doc.font("Helvetica");
   doc.text(label, 50, y, { width: 280 });
   doc.text(String(value), 330, y, { width: 200, align: "right" });
   if (bold) doc.font("Helvetica");
   doc.moveDown(0.15);
+}
+
+function detailRow(doc, label, value = "") {
+  const y = doc.y;
+  doc.font("Helvetica").fontSize(9);
+  doc.text(label, 55, y, { width: value ? 300 : 480, lineGap: 1 });
+  if (value) doc.text(value, 360, y, { width: 170, align: "right" });
+  doc.moveDown(0.12);
 }
 
 module.exports = { buildPayslipPdf };

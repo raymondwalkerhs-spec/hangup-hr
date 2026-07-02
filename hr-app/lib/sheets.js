@@ -44,6 +44,11 @@ const EMPLOYEE_HEADERS = [
   "Profile Photo File ID",
   "Profile Photo Link",
   "Profile Photo Updated",
+  "Former IDs",
+  "Promoted To ID",
+  "Promoted From ID",
+  "Lead Role",
+  "Effective From Month",
 ];
 
 const ATTENDANCE_HEADERS = [
@@ -166,6 +171,7 @@ const EMPLOYEE_STATUSES = [
   "Paused",
   "Paused still get paid",
   "OUT BUT STILL GET PAID",
+  "Promoted",
   "Out",
   "",
 ];
@@ -245,11 +251,33 @@ function mapEmployeeRow(r) {
       r["Payment Details\n( INSTA _ WALLET)"] || r.payment_details_insta_wallet || null,
     identification: r.Identification || r.identification || null,
     nationality: r.Nationality || r.nationality || null,
+    work_permit: r.work_permit || r["Work Permit"] || null,
+    insurance_status: r.insurance_status || r["Insurance Status"] || null,
+    insurance_type: r.insurance_type || r["Insurance Type"] || null,
+    insurance_amount:
+      r.insurance_amount != null && r.insurance_amount !== ""
+        ? Number(r.insurance_amount)
+        : r["Insurance Amount"] != null && r["Insurance Amount"] !== ""
+          ? Number(r["Insurance Amount"])
+          : null,
+    insurance_employee_deduction:
+      r.insurance_employee_deduction != null && r.insurance_employee_deduction !== ""
+        ? Number(r.insurance_employee_deduction)
+        : r["Insurance Employee Deduction"] != null && r["Insurance Employee Deduction"] !== ""
+          ? Number(r["Insurance Employee Deduction"])
+          : null,
+    depart_date: r.depart_date || r["Depart Date"] || null,
+    notice_type: r.notice_type || r["Notice Type"] || null,
     bank_refrence_number: r["Bank Refrence Number"] || r.bank_refrence_number || null,
     bank_name_as_bank_sheet: r["Bank Name (AS BANK SHEET)"] || r.bank_name_as_bank_sheet || null,
     profile_photo_file_id: String(r["Profile Photo File ID"] || r.profile_photo_file_id || "").trim(),
     profile_photo_link: r["Profile Photo Link"] || r.profile_photo_link || null,
     profile_photo_updated: r["Profile Photo Updated"] || r.profile_photo_updated || null,
+    former_ids: r["Former IDs"] || r.former_ids || null,
+    promoted_to_id: String(r["Promoted To ID"] || r.promoted_to_id || "").trim() || null,
+    promoted_from_id: String(r["Promoted From ID"] || r.promoted_from_id || "").trim() || null,
+    lead_role: String(r["Lead Role"] || r.lead_role || "").trim() || null,
+    effective_from_month: String(r["Effective From Month"] || r.effective_from_month || "").trim() || null,
   };
 }
 
@@ -277,6 +305,11 @@ function employeeToRow(emp) {
     emp.profile_photo_file_id || "",
     emp.profile_photo_link || "",
     emp.profile_photo_updated || "",
+    emp.former_ids || "",
+    emp.promoted_to_id || "",
+    emp.promoted_from_id || "",
+    emp.lead_role || "",
+    emp.effective_from_month || "",
   ];
 }
 
@@ -1366,6 +1399,34 @@ async function upsertPositionRate(position, monthlySalary) {
   return { position, monthlySalary: Number(monthlySalary) };
 }
 
+async function deletePositionRate(position) {
+  await ensureTab(TABS.POSITION_RATES, POSITION_HEADERS);
+  const a = await auth();
+  const sheets = getSheetsClient(a);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${TABS.POSITION_RATES}!A:B`,
+  });
+  const rows = res.data.values || [];
+  let found = -1;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0] || "").trim() === position) {
+      found = i + 1;
+      break;
+    }
+  }
+  if (found < 0) return;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const tab = meta.data.sheets.find((s) => s.properties.title === TABS.POSITION_RATES);
+  const sheetId = tab.properties.sheetId;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: found - 1, endIndex: found } } }],
+    },
+  });
+}
+
 function mapCommissionTierRow(r) {
   return {
     yearMonth: r.year_month,
@@ -1899,6 +1960,7 @@ module.exports = {
   readAllEmployeeWarnings,
   appendEmployeeWarning,
   upsertPositionRate,
+  deletePositionRate,
   readCommissionTiers,
   readAllCommissionTiers,
   writeCommissionTiersForMonth,

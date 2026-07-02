@@ -23,6 +23,7 @@ const DEDUCTION_TYPES = [
   "ON HOLD",
   "Quality Deduction",
   "Loan Repayment",
+  "Bonus from TL / OP",
 ];
 
 const PAYROLL_STATUSES = require("./month-profile").PAYROLL_STATUSES;
@@ -74,7 +75,9 @@ function calcPayrollRow(
   attendanceRecords = [],
   commissionTiers = [],
   loans = [],
-  loanPayments = []
+  loanPayments = [],
+  actionPlans = [],
+  payslipGateNotes = []
 ) {
   const resolved = resolveEmployeeForMonth(emp, adjustment, rates, ym);
   const workingDaysInMonth = getWorkingDaysForMonth(ym, config);
@@ -143,7 +146,22 @@ function calcPayrollRow(
   const totalBonuses = Object.values(bonusMap).reduce((s, v) => s + v, 0);
 
   const loanDeductions = getEmployeeLoanDeductions(loans, emp.id, ym, loanPayments);
-  const allDeductions = [...deductions];
+  const activePlans = require("./action-plans").getActivePlansForEmployee(actionPlans, emp.id);
+  const { deductions: aipDeductions, notes: aipDedNotes } = require("./action-plans").applyAipToDeductionEvents(
+    deductions,
+    activePlans
+  );
+  const aipDayOff = require("./action-plans").calcAipDayOffPenalty(attendanceRecords, dailyRate, activePlans);
+  const allDeductions = [...aipDeductions];
+  if (aipDayOff.penalty > 0) {
+    allDeductions.push({
+      employeeId: emp.id,
+      date: `${ym}-01`,
+      amount: aipDayOff.penalty,
+      type: "Other Deductions",
+      reason: "Action Improvement Plan — Day-OFF penalty (3 salary days)",
+    });
+  }
   for (const ld of loanDeductions) {
     allDeductions.push({
       employeeId: emp.id,
@@ -161,8 +179,18 @@ function calcPayrollRow(
   const otherDeductions = sheetDeductions - latenessFromSheet;
 
   const holdAmount = twoWeekHold ? dailyRate * 10 : 0;
-  const totalDeductions = latenessDeduction + otherDeductions + holdAmount;
+  const taxRules = config.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 };
+  const taxAmount = 0;
+  const statutoryDeductions = 0;
+  const totalDeductions = latenessDeduction + otherDeductions + holdAmount + taxAmount + statutoryDeductions;
   const netSalary = basicSalary + totalBonuses - totalDeductions;
+
+  const aipSection = require("./action-plans").buildAipPayslipSection(
+    activePlans,
+    [...(summary.aipNotes || []), ...aipDedNotes, ...aipDayOff.notes]
+  );
+  const gateNotes = (payslipGateNotes || []).filter(Boolean).join("\n");
+  const combinedNotes = [adjustment?.monthNotes || "", aipSection, gateNotes].filter(Boolean).join("\n\n");
 
   return {
     employeeId: emp.id,
@@ -203,7 +231,11 @@ function calcPayrollRow(
     loanDeductions,
     loanDeductionTotal: totalLoanDeduction(loanDeductions),
     payrollStatus: adjustment?.payrollStatus || resolved.payrollStatus || "pending",
-    monthNotes: adjustment?.monthNotes || "",
+    monthNotes: combinedNotes,
+    taxAmount,
+    statutoryDeductions,
+    aipSection,
+    payslipGateNotes: payslipGateNotes || [],
     profile_photo_file_id: emp.profile_photo_file_id || "",
     profile_photo_updated: emp.profile_photo_updated || "",
     netSalary: Math.round(netSalary * 100) / 100,
@@ -226,7 +258,9 @@ function buildPayroll(
   commissionTiers = [],
   loans = [],
   loanPayments = [],
-  allPayrollSplits = []
+  allPayrollSplits = [],
+  actionPlans = [],
+  payslipGateNotesByEmployee = new Map()
 ) {
   const summaryMap = new Map(summaries.map((s) => [s.employeeId, s]));
   const bonusMap = groupByEmployee(bonusEvents);
@@ -268,7 +302,9 @@ function buildPayroll(
           attendanceByEmployee.get(emp.id) || [],
           commissionTiers,
           loans,
-          loanPayments
+          loanPayments,
+          actionPlans,
+          payslipGateNotesByEmployee.get(emp.id) || []
         ),
         byEmployeeMonth.get(emp.id) || [],
         deferredIn.get(emp.id) || []

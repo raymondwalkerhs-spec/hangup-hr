@@ -9,6 +9,8 @@ const UNIT_ID_RULES = {
 
 const BACKEND_POOLS = {
   HR: { prefix: "HR-", pad: 1 },
+  RTM: { prefix: "RTM", pad: 2 },
+  IT: { prefix: "IT", pad: 2 },
   MG: { prefix: "MG", pad: 0 },
   OF: { prefix: "OF", pad: 0 },
   NW: { prefix: "NW-", pad: 2 },
@@ -34,7 +36,9 @@ function suggestNextId(employees, unit, backendPool) {
       .filter((e) => e.id?.startsWith(rule.prefix))
       .map((e) => parseIdNumber(e.id, rule.prefix));
     const max = Math.max(0, ...nums, ...alsoByPrefix);
-    return formatId(rule.prefix, max + 1, rule.pad);
+    const next = max + 1;
+    const pad = unit === "HS-3" && next >= 100 ? 3 : rule.pad;
+    return formatId(rule.prefix, next, pad);
   }
 
   if (unit === "HS-Back-End" && backendPool && BACKEND_POOLS[backendPool]) {
@@ -78,9 +82,28 @@ function isOutEmployee(emp) {
   return false;
 }
 
-function filterEmployees(employees, { hideOut = true, unit, team, q } = {}) {
+const {
+  isSupersededAgent,
+  isSupersededForMonth,
+  isNotYetActiveForMonth,
+} = require("./employee-ids");
+
+function filterEmployeesForMonth(employees, month, { hideOut = true } = {}) {
   let list = [...employees];
   if (hideOut) list = list.filter((e) => !isOutEmployee(e));
+  const byId = new Map(list.map((e) => [e.id, e]));
+  return list.filter((emp) => {
+    if (isNotYetActiveForMonth(emp, month)) return false;
+    if (isSupersededForMonth(emp, month, byId)) return false;
+    return true;
+  });
+}
+
+function filterEmployees(employees, { hideOut = true, unit, team, q, excludePromoted = true, month = null } = {}) {
+  let list = [...employees];
+  if (hideOut) list = list.filter((e) => !isOutEmployee(e));
+  if (month) return filterEmployeesForMonth(list, month, { hideOut: false });
+  if (excludePromoted) list = list.filter((e) => !isSupersededAgent(e));
   if (unit) list = list.filter((e) => e.unit === unit);
   if (team) list = list.filter((e) => e.team === team);
   if (q) {
@@ -101,6 +124,7 @@ module.exports = {
   getUnits,
   isOutEmployee,
   filterEmployees,
+  filterEmployeesForMonth,
   BACKEND_POOLS,
   UNIT_ID_RULES,
 };

@@ -1,8 +1,21 @@
 const path = require("path");
 const fs = require("fs");
-const Database = require("better-sqlite3");
 
+let Database = null;
 let db = null;
+
+function loadSqlite() {
+  if (!Database) {
+    try {
+      Database = require("better-sqlite3");
+    } catch (err) {
+      throw new Error(
+        `Local cache module failed to load (${err.message}). Reinstall Hangup HR or run the installer build with "npm run rebuild:native".`
+      );
+    }
+  }
+  return Database;
+}
 
 function getCacheDir() {
   const dir =
@@ -14,8 +27,9 @@ function getCacheDir() {
 function getDb() {
   if (db) return db;
   const dbPath = path.join(getCacheDir(), "hr-cache.db");
-  db = new Database(dbPath);
+  db = new loadSqlite()(dbPath);
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
   initSchema(db);
   return db;
 }
@@ -151,6 +165,10 @@ function upsertEmployee(emp) {
     .run(emp.id, JSON.stringify(emp));
 }
 
+function removeEmployee(id) {
+  getDb().prepare("DELETE FROM employees WHERE id = ?").run(id);
+}
+
 function setAttendanceForMonth(yearMonth, records) {
   const database = getDb();
   const prefix = yearMonth + "-";
@@ -169,6 +187,13 @@ function getAttendanceForMonth(yearMonth) {
   return getDb()
     .prepare("SELECT data FROM attendance WHERE date LIKE ? ORDER BY date, employee_id")
     .all(prefix + "%")
+    .map((r) => JSON.parse(r.data));
+}
+
+function getAttendanceForEmployee(employeeId) {
+  return getDb()
+    .prepare("SELECT data FROM attendance WHERE employee_id = ? ORDER BY date")
+    .all(employeeId)
     .map((r) => JSON.parse(r.data));
 }
 
@@ -559,6 +584,20 @@ function deletePayrollSplitCache(id) {
   getDb().prepare("DELETE FROM payroll_splits WHERE id = ?").run(id);
 }
 
+function setBusinessCache(table, items) {
+  setMeta(`biz_${table}`, JSON.stringify(items || []));
+}
+
+function getBusinessCache(table) {
+  const raw = getMeta(`biz_${table}`);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   getDb,
   getCacheDir,
@@ -568,8 +607,10 @@ module.exports = {
   setEmployees,
   getEmployees,
   upsertEmployee,
+  removeEmployee,
   setAttendanceForMonth,
   getAttendanceForMonth,
+  getAttendanceForEmployee,
   upsertAttendanceRecord,
   deleteAttendanceRecord,
   setBonusesForMonth,
@@ -611,4 +652,6 @@ module.exports = {
   getPayrollSplitsForMonth,
   upsertPayrollSplit,
   deletePayrollSplitCache,
+  setBusinessCache,
+  getBusinessCache,
 };

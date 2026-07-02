@@ -1,0 +1,284 @@
+# Changelog
+
+All notable changes to the Hangup HR desktop app.
+
+## [1.0.8-beta.1] — 2026-07-02
+
+### Added
+- **Company scope everywhere:** Payroll, attendance, org, sales, and team dashboards respect Main Hangup vs HS-2 toggle (HS2 IDs included).
+- **Team dashboards:** Active dialing agents only; Day-OFF excluded from roster; sales from main log.
+- **App users:** Employee ID column, filter/sort, group-by-team, sync missing inactive logins.
+- **Reposition:** HR, RTM, IT backend transfers with IT01-style IDs; login role updates on promote.
+- **Equipment:** Simplified issue flow — pick agent + device; unit auto from employee.
+
+### Fixed
+- **Petty cash:** Idempotent ledger sync — toggling cash ↔ petty cash no longer duplicates withdrawals.
+- **Position dropdown:** Edit employee and wizard use salaries position-rates list.
+- **HS-2 roster:** Migration removes Kate team, adds HS2-MGMT, assigns Hazel/Robert as HS-2 OP (apply `20260705_hs2_mgmt_roster.sql`).
+
+## [1.0.7-beta.3] — 2026-07-02
+
+### Added
+- **Team dashboards:** New daily/weekly page matching the spreadsheet layout (agent roster + team summary). Excludes non-dialing roles (HR, RTM, OPs, TLs, closers, part-time).
+- **Organization by unit:** Teams grouped under HS-1, HS-2, HS-3, HS-MGMT; add/edit teams, assign agents inline.
+- **Company switcher:** Clear “Managing: Main Hangup | HS-2” toggle in the sidebar.
+
+### Changed
+- **Sales log:** Former Sales page is now a record log only; period team grid moved to Team dashboards.
+
+### Fixed
+- **Depart:** Auto-creates employment period when missing; setting status to Out from the employee form runs the proper depart flow.
+
+### Applied (Supabase)
+- `org_teams_registry` — `org_teams` table with unit assignment and dial roster flags
+
+## [1.0.7-beta.2] — 2026-07-02
+
+### Fixed
+- **Petty cash:** Editing a paid receipt amount now updates the linked ledger withdrawal and recalculates fund balance (was stuck on the original amount).
+- **Idle logout:** 10-minute auto sign-out now survives minimized/background windows (checks elapsed time on focus) and resets on API activity.
+
+### Applied (Supabase)
+- `public_holidays_active` — `public_holidays.active` column
+- `v107_unified_requests_schema` — paid leave, requests, last login, notice type columns
+
+## [1.0.7-beta.1] — 2026-07-02
+
+### Added
+- **Unified Requests:** Annual (paid Day-OFF), unpaid, medical, and same-day off in one module; late submission after 12:00 flagged; TL/OP team requests with HR warnings.
+- **Paid leave payroll:** Approved annual leave counts as working day (`paidLeave` on attendance).
+- **Sales period grid:** Daily date picker, weekly week picker, team×date passed-sales matrix with agents-off overlay.
+- **Costs:** Edit/delete receipts, archived tab, release from on-hold; audit notifications to Raymond.
+- **Equipment:** Edit assets, fixed type dropdown, double-assign guard.
+- **Departure:** With/without 2-week notice; 10 working-day basic deduction for no-notice departures.
+- **HS-2 company mode:** Sidebar toggle filters roster to HS-2 scope; default Hangup view hides HS-2 staff.
+- **Users:** Last login tracking; auto-create inactive `app_users` on employee create.
+- **Audit routing:** Raymond notified on unusual edits; Mark never notified; Phoebe/Eva/Aurora get HR warnings.
+
+### Fixed
+- Hide out / hide zero net pay filters in attendance and payroll.
+- Clearance/equipment payslip blockers only for departed or offboarding agents.
+- Payslip commission type tab removed (tiers remain in payroll engine).
+- Settings: federal holiday import and empty-ID cleanup error surfacing.
+
+### Changed
+- Nav **Leave** → **Requests**; reposition uses position-rates dropdown; sale closer select; bonus/deduction delete requires confirmation.
+- Out-agent bonuses rejected after depart date.
+
+### Migration
+- `supabase/migrations/20260703_v107_schema.sql`
+
+## [1.0.6-beta.1] — 2026-07-02
+
+### Added
+- **Sales:** Edit modal + field PATCH; day/week/month dashboard; status stat cards (passed/pending/callback/denied); month list matches effective or submission date.
+- **Costs:** Wider receipt modal, file upload, petty cash deposit/mark-paid modals, ledger view, `GET /expenses/:id/receipt`.
+- **Attendance:** Sticky column backgrounds; holiday styling on body cells; per-agent **Mark month Attended** bulk action.
+- **Federal holidays:** USA 2024–2028 seed/import; per-holiday active toggle; prefill-only Day-OFF on init-month (never overwrites existing cells).
+- **HRMS lifecycle:** Modals for re-hire, depart, employment periods, Action Plan Week (renamed from AIP); panel refreshes after actions.
+- **Organization:** Live team rosters from employee records.
+- **Equipment:** Add asset, assign to agent dropdown, return workflow.
+- **Leave:** Employee dropdown instead of manual ID.
+- **IDs:** HS3 pad to 3 digits at ≥100; Reposition modal (role, team, position); empty stub cleanup in Settings.
+- **Payroll:** Hide zero net pay toggle.
+- **Nationality:** Select dropdown + expanded list and spelling aliases.
+
+### Changed
+- Repositioning keeps prior agent record **Active** (removed **Promoted** status on superseded records).
+- Commission types removed from Settings (tiers remain on Payroll page).
+- UI polish: page fade-in, clickable stat cards, wider modals.
+
+### Migration
+- `supabase/migrations/20260702_public_holidays_active.sql`
+
+## [1.0.5-beta.2] — 2026-07-02
+
+### Fixed
+- **Performance:** Warm local SQLite cache loads UI immediately; background sync refreshes data. Page navigation no longer shows full-screen loader after first paint.
+- **Race condition:** Fixed wrong page showing after fast tab switching (e.g. attendance → loans).
+- **WebSocket / Supabase:** Added `ws` transport — fixes Costs, notifications, and other Supabase reads in Node/Electron.
+- **Notifications panel:** Fixed transparent/unreadable panel (missing CSS variables).
+- **Changes page:** Toolbar and buttons now use solid card backgrounds.
+- **Employee filters:** Hide out + nationality filter now excludes Out agents on client and server; nationality matching is case-insensitive.
+- **Bonus requests:** TL/OP submissions limited to **Bonus from TL / OP** type only (HR adds other types directly).
+
+### Changed
+- Business data (sales, expenses, bills, bonus requests) cached in SQLite during sync.
+- Build outputs consolidated to `dist\` only (`npm run dist`).
+
+## [1.0.5-beta.1] — 2026-07-02
+
+### Added
+- **Bonus approval:** TL/OP/quality/RTM submit bonus requests for agents; HR+ approves/denies; leadership roles receive bonuses via payslip only.
+- **Sales module:** Per-sale records (phone, name, device, agent, closer); statuses passed/pending/postdated/denied/callback; TL submissions need approval; sales dashboard by team/week.
+- **Sales visibility grants:** OP/admin/quality/RTM can delegate cross-team read scope (TL cannot pass cross-team to agents).
+- **Costs module:** Expense receipts/invoices, petty cash ledger, monthly bills; finance access (Mark, Phoebe, Raymond, finance role); HR can submit own requests.
+- **Persistent notifications:** `app_notifications` table; bell merges with leave/doc alerts.
+- **Role:** `office_assistant` added to Users dropdown.
+- Migration: `supabase/migrations/20260702_sales_bonus_costs.sql`
+
+### API
+- `/api/bonus-requests`, `/api/sales`, `/api/expenses` (+ petty cash, bills sub-routes)
+
+
+### Added
+- **Employee nationality & compliance:** nationality field (suggestions: Egyptian, Sudanese); non-Egyptians get work permit dropdown; Egyptians get insured/not insured with optional insurance type, amount, and employee deduction.
+- **Employee filters:** filter by nationality, work permit, and insurance status on the Employees page.
+- **Supabase ops:** RLS deny-all applied; `app_versions` set to `1.0.4-beta.2`; employment period backfill + equipment seed run.
+
+## [1.0.4-beta.2] — 2026-07-02
+
+### Added — HRMS advanced features
+- **Employment lifecycle:** `employment_periods` table, depart/re-hire API, attendance guards outside active periods, working-days override audit banner.
+- **Action Improvement Plans (AIP):** Mon–Fri week picker; payroll triples all deductions in-plan week; Lateness A fixed at 75 EGP; Day-OFF deducts 3 salary days; payslip section notes.
+- **Onboarding / offboarding / clearance:** Checklists per employee; payroll approval blocked until final pay, clearance, and equipment returned.
+- **Equipment registry:** Asset tracking + assignments; seed script `scripts/seed-equipment.js`.
+- **Leave (ATT-01):** Request + approval queue; approvers Mark, Raymond, Phoebe only; approved leave auto-creates Day-OFF rows.
+- **Federal holidays (ATT-02):** CRUD in Settings; pink columns in attendance grid.
+- **Payroll month lock (PAY-01):** Lock/unlock month; blocks attendance/bonus/deduction/adjustment writes.
+- **Payroll compare (PAY-02):** Month-over-month net pay delta + anomaly flags on Payroll page.
+- **Tax stub (PAY-03):** `taxRules` in config (0% default); payslip tax lines; Settings editor.
+- **Auth:** Change password (AUTH-02); session registry + revoke for Raymond (AUTH-05); RLS deny-all migration file (AUTH-04).
+- **Warnings (HR-01):** Warning levels 1st / 2nd / final on employee profile.
+- **Commission types (HR-03):** CRUD UI in Settings.
+- **Documents (DOC-01/03):** Expiry dashboard widget; `no_expiry` flag on upload; bulk ZIP export per employee.
+- **Reports (RPT-01/02/04):** Turnover, attendance rankings CSV, finance handoff ZIP (payroll CSV + payslips + change log).
+- **Admin (ADM-01/02):** Notifications bell; Changes tab CSV export.
+- **New nav pages:** Leave, Equipment, Organization.
+- `public/js/hrms-features.js` — HRMS UI module; `lib/hrms-repo.js`, `lib/export-zip.js`, `routes/hrms.js`, `routes/auth-routes.js`.
+
+### Scripts
+- `scripts/backfill-employment-periods.js` — safe employment period backfill (skips invalid dates).
+- `scripts/app-versions-1.0.4-beta.2.sql` — mark this build current in Supabase.
+
+### Documentation
+- Updated `AI_Agent.md`, `README.md`, `TUTORIAL.md`, `SHEET_SCHEMA.md` for HRMS scope.
+
+## [1.0.2-beta.5] — 2026-07-02
+
+### Added
+- **UI themes.** Settings → **Appearance** offers six color themes (saved per device in local storage):
+  Light mode (default), Dark mode, Grey UI, Dark wine, Dark grey, and Alabaster. Layout and structure
+  unchanged — only colors and surfaces update.
+- **`app_users.email`** — optional contact email per login (set by Raymond in **Users**). Reserved for
+  future forgot-password / self-service reset via email; not used for sign-in yet.
+- **App users admin (Raymond only).** When signed in as **Raymond**, a **Users** tab appears in the
+  sidebar. He can add, edit, or remove rows in Supabase `app_users`, set each person's **role**
+  (access level) and **status** (`active` / `inactive` / `terminated`), and reset passwords. Changes
+  are written to `change_log`. Other users — including other admins — do not see this tab.
+- `lib/users-admin.js`, `routes/admin-users.js` — CRUD API at `/api/admin/users` (requires
+  `DATA_BACKEND=supabase`).
+
+### Changed
+- **Supabase migration (live).** Set `DATA_BACKEND=supabase` to use PostgreSQL + Storage instead of
+  Google Sheets/Drive as the live backend. Run `npm run migrate:supabase` once to import existing
+  sheet data. Users are stored in `app_users` with **bcrypt-hashed** passwords. New document uploads
+  go to Supabase Storage (`hr-documents` bucket); existing Drive file IDs still work until re-uploaded.
+- **Version policy** reads from Supabase `app_versions` when `DATA_BACKEND=supabase` (sheet
+  `App_Versions` tab remains the fallback for `DATA_BACKEND=sheets`).
+- Local SQLite cache unchanged — reads stay fast; sync now pulls from Supabase.
+
+### Documentation
+- **Release habit:** every shipped version must update [`CHANGELOG.md`](CHANGELOG.md),
+  [`TUTORIAL.md`](TUTORIAL.md), [`README.md`](README.md), and **[`AI_Agent.md`](AI_Agent.md)** when
+  architecture or agent workflows change.
+- **Supabase `app_versions` (required on every build/release):** the coding agent must update the live
+  table so only the new build is marked current — see [`AI_Agent.md`](AI_Agent.md) § Release checklist.
+  Applied for this release: **`1.0.2-beta.5`** marked `is_current = true`.
+
+### Not planned
+- **App updates via Supabase Storage** — Windows installers/portables are ~130–180 MB each (over the
+  100 MB threshold). Keep distributing EXEs manually (USB, shared folder, or a release host). The
+  `hr-documents` bucket stays for employee files only. Data sync uses Postgres, not Storage.
+
+### Added (infrastructure)
+- `lib/supabase-client.js`, `lib/supabase-repo.js`, `lib/backend.js` — data layer switch
+- `lib/auth-supabase.js` — auth from `app_users` table
+- `lib/storage.js` — Supabase Storage for PDFs/photos
+- `public/js/theme.js` — UI theme persistence
+- `npm run migrate:supabase` — one-time Sheets → Postgres import
+- Postgres schema: employees, attendance, payroll, loans, change_log, app_users, app_versions, …
+
+### Build
+- `Hangup-HR-Beta-v2-Setup-1.0.2-beta.5.exe` and portable EXE in `dist\`.
+
+## [1.0.2-beta.4] — 2026-07-02
+
+### Added
+- **App version policy.** The HR Access sheet now has an **`App_Versions`** tab that defines the
+  current release and minimum compatible version. On login and during the periodic session check,
+  the app compares its built-in version (`package.json`) against the sheet:
+  - **Compatible but outdated** → popup warning to ask Admin for the latest build (you can continue).
+  - **Not compatible** → sign-in and app use are blocked until Admin installs the required version.
+- **Auto re-sync after every write.** Each edit is pushed to the Google Sheet and
+  then the app silently pulls the newest data back (including edits made by other
+  users) and refreshes the current view — without the full-screen sync overlay,
+  and without interrupting in-progress typing.
+- **Changes view for Raymond.** The user `Raymond` gets an extra **Changes**
+  button in the sidebar showing the full audit trail (employee, attendance,
+  bonus, deduction, config, warnings, documents), read live from the Change Log
+  sheet `14vcc32AvyXI6PEUPbCd5IBoTfhEirAorGX1xMI75h9Y`. Includes user/type filters.
+- **Exam / medical note document types.** Added `Medical Note` and `Exam Note` to
+  the document upload types. Documents, profile photos, and notes upload to the
+  Drive folder `1rfPMKlIqbJ_eKpwXIpHPKW_vfR7VXVUe`.
+- **Real per-user roles.** Roles are now read from a **Role** column in the HR
+  Access sheet (via the service account) instead of hardcoding `hr`. Supported
+  roles: `ceo`, `admin`, `hr`, `finance`, `tl`, `agent` (plus common aliases).
+  The role is stored in the session at login and refreshed on the periodic
+  session check.
+  - **Blank/unknown role = no access:** a user must be given a recognised role
+    before they can sign in; removing a role signs them out automatically.
+  - **Audit logs restricted to `admin` + `ceo`:** the Changes tab and the
+    Settings change-log card are hidden from `hr` and everyone else.
+  - Current assignments seeded in the sheet: Mark=`ceo`, Raymond=`admin`,
+    Aurora/Eva/Phoebe=`hr`.
+- **Sheet schema doc.** Added [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) describing every
+  tab/column in the HR data sheet and how it maps to the local SQLite cache.
+
+### Changed
+- **Standalone/portable app only.** Removed the `localhost` browser/server mode
+  entirely: deleted `server.js` and the `npm run server` script, and dropped it
+  from the packaged files. The app runs solely as the Windows installer or the
+  portable EXE. (The Electron window still talks to an internal in-process
+  loopback; that is an implementation detail, not a server you run.)
+- **Local-first data model.** Reads are now served from the local SQLite cache
+  with **no per-request internet probe**, so day-to-day work is fast and stable.
+  The previous behaviour verified connectivity on every request.
+
+### Fixed
+- **Blank main area / dead sidebar tabs.** `app.js` was loaded as `type="module"`
+  which prevented the UI script from running reliably; restored as a classic script.
+  Session ID is now stored in `sessionStorage` and sent as `x-session-id` on every API
+  call so authenticated data loads after login.
+- **Loading animation restored** on startup sync and tab navigation (orbit loader +
+  bouncing dots).
+- **10-minute idle auto-logout.** The app signs out automatically after 10 minutes
+  with no activity (mouse/keyboard/scroll) in the window.
+- **Robust first-run sync.** The post-login sync now retries a few times so a
+  fresh PC with an empty cache reliably populates before the app is used; on
+  failure it shows the Retry card instead of a blank screen.
+- **Signing-ready build.** `electron-builder` signs the Windows output
+  automatically when `CSC_LINK` + `CSC_KEY_PASSWORD` are set; `build.ps1` reports
+  whether a certificate is configured. Unsigned builds still succeed.
+
+## [Prior]
+
+### Fixed
+- Post-login blank screen: defined the missing `SESSION_CHECK_MS`, hardened the
+  startup flow with a clear error + Retry card, and made `render()` always show a
+  result.
+- Invisible sidebar "Refresh data" button (white-on-white) — added visible
+  sidebar button styling.
+- Logged-in user was not shown — the user chip is now always populated.
+- `/status` moved above the sync middleware so the username and online/offline
+  badge render even when Sheets sync is failing.
+
+### Added
+- "Remember my username" checkbox on the login screen (stores the username only;
+  the password must always be re-entered).
+- Transport allowance override for Lateness A, Lateness B, and Quarter Day-Off
+  (same Full/Half/None dropdown as half days).
+
+### Changed
+- Startup hardening in `electron/main.js`: bind to `127.0.0.1`, single-instance
+  lock, clear error dialogs, lazy-load `better-sqlite3`, bundle `.env`.

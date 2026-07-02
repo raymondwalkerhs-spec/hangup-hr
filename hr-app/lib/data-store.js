@@ -1,7 +1,10 @@
-const sheets = require("./sheets");
+const backendMod = require("./backend");
+const backend = backendMod.getBackend();
 const cache = require("./cache");
 const changelog = require("./changelog");
+const { TRANSPORT_OVERRIDE_STATUSES } = require("./transport");
 const idGen = require("./id-generator");
+const employeeIds = require("./employee-ids");
 const { autoWorkingDays } = require("./calendar");
 const { resolveTransportEligible, defaultTransportEligible } = require("./month-profile");
 const { summarizeEmployeeMonth, isPayrollEligible } = require("./attendance");
@@ -10,22 +13,54 @@ const {
   installmentsRemaining,
 } = require("./loans");
 
-const SYNC_MONTHS_BACK = 6;
-const SYNC_MONTHS_FORWARD = 2;
+const monthLookupStore = {
+  getEmployeeById,
+  getAttendanceEvents,
+  getBonusEvents,
+  getDeductionEvents,
+  getPayrollAdjustments,
+};
 
-function monthsToSync() {
-  const now = new Date();
-  const list = [];
-  for (let i = -SYNC_MONTHS_BACK; i <= SYNC_MONTHS_FORWARD; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    list.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    );
+function groupByYearMonth(items, field) {
+  const map = new Map();
+  for (const item of items) {
+    const raw = item[field];
+    if (!raw) continue;
+    const ym = String(raw).slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+    if (!map.has(ym)) map.set(ym, []);
+    map.get(ym).push(item);
   }
-  return list;
+  return map;
 }
 
+function cacheMonthKeyedRecords(allAttendance, allBonuses, allDeductions, allAdjustments) {
+  for (const [ym, rows] of groupByYearMonth(allAttendance, "date")) {
+    cache.setAttendanceForMonth(ym, rows);
+  }
+  for (const [ym, rows] of groupByYearMonth(allBonuses, "date")) {
+    cache.setBonusesForMonth(ym, rows);
+  }
+  for (const [ym, rows] of groupByYearMonth(allDeductions, "date")) {
+    cache.setDeductionsForMonth(ym, rows);
+  }
+  for (const [ym, rows] of groupByYearMonth(allAdjustments, "yearMonth")) {
+    cache.setPayrollAdjustmentsForMonth(ym, rows);
+  }
+}
+
+let syncInFlight = null;
+
 async function syncFromSheet() {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = syncFromSheetInner().finally(() => {
+    syncInFlight = null;
+  });
+  return syncInFlight;
+}
+
+async function syncFromSheetInner() {
+  const syncWork = (async () => {
   const [
     employees,
     config,
@@ -42,20 +77,20 @@ async function syncFromSheet() {
     allLoanPayments,
     allPayrollSplits,
   ] = await Promise.all([
-    sheets.readEmployees(),
-    sheets.readConfig(),
-    sheets.readPositionRates(),
-    sheets.readAllAttendanceEvents(),
-    sheets.readAllBonusEvents(),
-    sheets.readAllDeductionEvents(),
-    sheets.readAllPayrollAdjustments(),
-    sheets.readCommissionTypes(),
-    sheets.readAllEmployeeDocuments(),
-    sheets.readAllEmployeeWarnings(),
-    sheets.readAllCommissionTiers(),
-    sheets.readAllEmployeeLoans(),
-    sheets.readAllLoanPayments(),
-    sheets.readAllPayrollSplits(),
+    backend.readEmployees(),
+    backend.readConfig(),
+    backend.readPositionRates(),
+    backend.readAllAttendanceEvents(),
+    backend.readAllBonusEvents(),
+    backend.readAllDeductionEvents(),
+    backend.readAllPayrollAdjustments(),
+    backend.readCommissionTypes(),
+    backend.readAllEmployeeDocuments(),
+    backend.readAllEmployeeWarnings(),
+    backend.readAllCommissionTiers(),
+    backend.readAllEmployeeLoans(),
+    backend.readAllLoanPayments(),
+    backend.readAllPayrollSplits(),
   ]);
 
   if (config.hideOutEmployees === undefined) config.hideOutEmployees = true;
@@ -71,41 +106,40 @@ async function syncFromSheet() {
   cache.setLoanPayments(allLoanPayments);
   cache.setPayrollSplits(allPayrollSplits);
 
-  const syncMonths = monthsToSync();
-  const adjustmentMonths = new Set(allAdjustments.map((a) => a.yearMonth));
-  for (const ym of syncMonths) {
-    const prefix = ym + "-";
-    cache.setAttendanceForMonth(
-      ym,
-      allAttendance.filter((r) => r.date.startsWith(prefix))
-    );
-    cache.setBonusesForMonth(
-      ym,
-      allBonuses.filter((r) => r.date.startsWith(prefix))
-    );
-    cache.setDeductionsForMonth(
-      ym,
-      allDeductions.filter((r) => r.date.startsWith(prefix))
-    );
-    cache.setPayrollAdjustmentsForMonth(
-      ym,
-      allAdjustments.filter((a) => a.yearMonth === ym)
-    );
-  }
-  for (const ym of adjustmentMonths) {
-    if (!syncMonths.includes(ym)) {
-      cache.setPayrollAdjustmentsForMonth(
-        ym,
-        allAdjustments.filter((a) => a.yearMonth === ym)
-      );
+  cacheMonthKeyedRecords(allAttendance, allBonuses, allDeductions, allAdjustments);
+
+  cache.setMeta("last_sync", new Date().toISOString());
+
+  if (backendMod.useSupabase()) {
+    try {
+      const business = require("./business-repo");
+      const [sales, expenses, bills, bonusReqs] = await Promise.all([
+        business.readSales({}, { skipCache: true }),
+        business.readExpenseRequests({ excludeArchived: false }, { skipCache: true }),
+        business.readMonthlyBills({ skipCache: true }),
+        business.readBonusRequests({}, { skipCache: true }),
+      ]);
+      cache.setBusinessCache("sales", sales);
+      cache.setBusinessCache("expenses", expenses);
+      cache.setBusinessCache("monthly_bills", bills);
+      cache.setBusinessCache("bonus_requests", bonusReqs);
+    } catch {
+      /* business tables optional during rollout */
     }
   }
 
-  cache.setMeta("last_sync", new Date().toISOString());
   return {
     employees: employees.length,
     syncedAt: cache.getMeta("last_sync"),
   };
+  })();
+
+  return Promise.race([
+    syncWork,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Sync timed out after 90s. Check Supabase connection.")), 90000)
+    ),
+  ]);
 }
 
 async function ensureSynced() {
@@ -118,11 +152,97 @@ function getEmployees(opts = {}) {
   const config = cache.getConfigRaw();
   const hideOut =
     opts.hideOut !== undefined ? opts.hideOut : config.hideOutEmployees;
-  return idGen.filterEmployees(cache.getEmployees(), { ...opts, hideOut });
+  const month = opts.month || new Date().toISOString().slice(0, 7);
+  return idGen.filterEmployees(cache.getEmployees(), { ...opts, hideOut, month });
+}
+
+function getEmployeesForMonth(month, opts = {}) {
+  const config = cache.getConfigRaw();
+  const hideOut =
+    opts.hideOut !== undefined ? opts.hideOut : config.hideOutEmployees;
+  const base = idGen.filterEmployees(cache.getEmployees(), { hideOut, month });
+  let merged = employeeIds.mergeEmployeesForMonth(base, monthLookupStore, month);
+  if (hideOut) {
+    merged = merged.filter((e) => !idGen.isOutEmployee(e));
+  }
+  return merged;
 }
 
 function getEmployeeById(id) {
-  return cache.getEmployees().find((e) => e.id === id) || null;
+  if (!id) return null;
+  const employees = cache.getEmployees();
+  const direct = employees.find((e) => e.id === id);
+  if (direct) return direct;
+  return (
+    employees.find((e) => employeeIds.parseFormerIds(e.former_ids).includes(id)) || null
+  );
+}
+
+async function promoteEmployee(oldId, { newId, leadRole, effectiveFromMonth, position, team }, username) {
+  const old = getEmployeeById(oldId);
+  if (!old) throw new Error("Employee not found");
+  if (old.promoted_to_id) throw new Error("This agent record was already superseded by promotion");
+  if (getEmployeeById(newId)) throw new Error(`Employee ID ${newId} already exists`);
+
+  const role = String(leadRole || "TL").toUpperCase();
+  const backendRoles = employeeIds.BACKEND_TRANSFER_ROLES || [];
+  if (
+    role !== "AGENT" &&
+    !employeeIds.LEAD_ID_PREFIXES.includes(role) &&
+    !backendRoles.includes(role)
+  ) {
+    throw new Error(
+      `Lead role must be one of: ${employeeIds.LEAD_ID_PREFIXES.join(", ")}, ${backendRoles.join(", ")}, Agent`
+    );
+  }
+
+  const eff =
+    effectiveFromMonth ||
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+  const isBackend = backendRoles.includes(role);
+  const newEmp = {
+    ...old,
+    id: newId,
+    promoted_from_id: oldId,
+    promoted_to_id: null,
+    former_ids: employeeIds.mergeFormerIds(old.former_ids, oldId),
+    lead_role: role === "AGENT" ? null : role,
+    position:
+      position ||
+      (role !== "AGENT" ? employeeIds.LEAD_POSITIONS[role] : old.position) ||
+      old.position,
+    team: team || (isBackend ? (role === "HR" ? "HR" : role === "RTM" ? "Quality" : "Back-End") : old.team),
+    unit: isBackend ? "HS-Back-End" : old.unit,
+    effective_from_month: eff,
+    status: old.status === "Out" ? old.status : "Active",
+  };
+
+  await createEmployee(newEmp, username);
+  await updateEmployee(
+    oldId,
+    {
+      promoted_to_id: newId,
+      status: old.status === "Out" ? "Out" : old.status || "Active",
+    },
+    username
+  );
+  if (backendMod.useSupabase()) {
+    try {
+      const usersAdmin = require("./users-admin");
+      const existingLogin = await usersAdmin.getAppUser(oldId);
+      if (existingLogin) {
+        await usersAdmin.updateAppUser(oldId, { status: "inactive" }, username);
+      }
+      await usersAdmin.upsertEmployeeLogin(
+        { employeeId: newId, role: usersAdmin.inferRoleFromEmployeeId(newId) },
+        username
+      );
+    } catch (err) {
+      console.warn(`login update after promote failed for ${oldId}→${newId}:`, err.message);
+    }
+  }
+  return { oldId, newId, effectiveFromMonth: eff, employee: getEmployeeById(newId) };
 }
 
 function getConfig() {
@@ -135,6 +255,10 @@ function getPositionRates() {
 
 function getAttendanceEvents(yearMonth) {
   return cache.getAttendanceForMonth(yearMonth);
+}
+
+function getAttendanceForEmployee(employeeId) {
+  return cache.getAttendanceForEmployee(employeeId);
 }
 
 function getBonusEvents(yearMonth, employeeId) {
@@ -162,6 +286,34 @@ function getPayrollAdjustment(yearMonth, employeeId) {
 
 function getCommissionTypes() {
   return cache.getCommissionTypes();
+}
+
+async function upsertCommissionType(type, username) {
+  if (!backend.upsertCommissionType) throw new Error("Commission type CRUD requires Supabase backend");
+  const saved = await backend.upsertCommissionType(type);
+  const types = cache.getCommissionTypes();
+  const idx = types.findIndex((t) => t.name === saved.name);
+  if (idx >= 0) types[idx] = saved;
+  else types.push(saved);
+  cache.setCommissionTypes(types);
+  await changelog.logConfigChange(username, "commission_type", saved.name, null, saved);
+  return saved;
+}
+
+async function deleteCommissionType(name, username) {
+  if (!backend.deleteCommissionType) throw new Error("Commission type CRUD requires Supabase backend");
+  await backend.deleteCommissionType(name);
+  cache.setCommissionTypes(cache.getCommissionTypes().filter((t) => t.name !== name));
+  await changelog.logConfigChange(username, "commission_type", name, "delete", null);
+}
+
+async function updateTaxRules(taxRules, username) {
+  await backend.saveConfigKey("taxRules", taxRules);
+  const config = cache.getConfig();
+  config.taxRules = taxRules;
+  cache.setConfig(config);
+  await changelog.logConfigChange(username, "taxRules", null, null, taxRules);
+  return taxRules;
 }
 
 function getCommissionTiers(yearMonth) {
@@ -253,13 +405,13 @@ async function initMonthProfiles(yearMonth, username) {
 }
 
 async function bulkSetTransportEligible(yearMonth, eligible, username) {
-  const count = await sheets.bulkSetTransportEligibleForMonth(yearMonth, eligible, username);
+  const count = await backend.bulkSetTransportEligibleForMonth(yearMonth, eligible, username);
   await refreshCache();
   return count;
 }
 
 async function upsertPositionRate(position, monthlySalary, username) {
-  const rate = await sheets.upsertPositionRate(position, monthlySalary);
+  const rate = await backend.upsertPositionRate(position, monthlySalary);
   cache.setPositionRates(
     cache
       .getPositionRates()
@@ -268,6 +420,18 @@ async function upsertPositionRate(position, monthlySalary, username) {
   );
   await changelog.logConfigChange(username, `positionRate.${position}`, null, monthlySalary);
   return rate;
+}
+
+async function deletePositionRate(position, username) {
+  const existing = cache.getPositionRates().find((r) => r.position === position);
+  await backend.deletePositionRate(position);
+  cache.setPositionRates(cache.getPositionRates().filter((r) => r.position !== position));
+  await changelog.logConfigChange(
+    username,
+    `positionRate.${position}`,
+    existing?.monthlySalary ?? null,
+    null
+  );
 }
 
 async function refreshCache() {
@@ -280,26 +444,41 @@ async function getWorkingDaysForMonth(yearMonth) {
   if (config.workingDaysByMonth?.[yearMonth] != null) {
     return config.workingDaysByMonth[yearMonth];
   }
-  const auto = autoWorkingDays(yearMonth);
-  config.workingDaysByMonth = config.workingDaysByMonth || {};
-  config.workingDaysByMonth[yearMonth] = auto;
-  await sheets.saveConfigKey("workingDaysByMonth", config.workingDaysByMonth);
-  cache.setConfig(config);
-  await changelog.logConfigChange("system", "workingDaysByMonth", null, config.workingDaysByMonth);
-  return auto;
+  return autoWorkingDays(yearMonth);
 }
 
 async function createEmployee(emp, username) {
-  const mapped = sheets.mapEmployeeRow(emp);
-  const created = await sheets.createEmployee(mapped, username);
+  const mapped = backend.mapEmployeeRow(emp);
+  const { sanitizeEmployeeComplianceFields } = require("./employee-compliance");
+  if (!mapped.employment_date) {
+    mapped.employment_date = new Date().toISOString().slice(0, 10);
+  }
+  const created = await backend.createEmployee(sanitizeEmployeeComplianceFields(mapped), username);
   cache.upsertEmployee(created);
   await changelog.logEmployeeChange(username, "create", created, null, "id");
+  if (backendMod.useSupabase()) {
+    try {
+      await require("./users-admin").upsertEmployeeLogin({ employeeId: created.id }, username);
+    } catch (err) {
+      console.warn(`upsertEmployeeLogin failed for ${created.id}:`, err.message);
+    }
+    try {
+      await require("./hrms-repo").insertEmploymentPeriodRecord(
+        created.id,
+        { startDate: created.employment_date, endDate: null, notes: "Initial hire" },
+        username
+      );
+    } catch (err) {
+      console.warn(`employment period bootstrap failed for ${created.id}:`, err.message);
+    }
+  }
   return created;
 }
 
 async function updateEmployee(id, updates, username) {
   const old = getEmployeeById(id);
-  const updated = await sheets.updateEmployee(id, updates, username);
+  const { sanitizeEmployeeComplianceFields } = require("./employee-compliance");
+  const updated = await backend.updateEmployee(id, sanitizeEmployeeComplianceFields({ ...old, ...updates }), username);
   cache.upsertEmployee(updated);
   for (const key of Object.keys(updates)) {
     if (old?.[key] !== updated[key]) {
@@ -320,12 +499,11 @@ async function saveAttendanceBatch(records, username) {
   const merged = records.map((record) => {
     const key = `${record.employeeId}|${record.date}`;
     const prior = oldMap.get(key);
-    const halfStatuses = new Set(["Half Day", "NSNC Half Day"]);
     let transportOverride =
       record.transportOverride !== undefined
         ? record.transportOverride
         : prior?.transportOverride || "";
-    if (!halfStatuses.has(record.status || "")) transportOverride = "";
+    if (!TRANSPORT_OVERRIDE_STATUSES.has(record.status || "")) transportOverride = "";
     return { ...record, transportOverride };
   });
 
@@ -334,7 +512,7 @@ async function saveAttendanceBatch(records, username) {
     oldStatusMap.set(`${r.employeeId}|${r.date}`, r.status);
   }
 
-  await sheets.batchUpsertAttendance(merged, username);
+  await backend.batchUpsertAttendance(merged, username);
 
   for (const record of merged) {
     cache.upsertAttendanceRecord(record);
@@ -363,7 +541,7 @@ async function initMonthWeekends(records, username) {
 async function saveConfigKey(key, value, username) {
   const config = getConfig();
   const oldVal = config[key];
-  await sheets.saveConfigKey(key, value);
+  await backend.saveConfigKey(key, value);
   config[key] = value;
   cache.setConfig(config);
   await changelog.logConfigChange(username, key, oldVal, value);
@@ -371,12 +549,24 @@ async function saveConfigKey(key, value, username) {
 
 async function setWorkingDays(month, workingDays, username) {
   const config = getConfig();
+  const { year, month: mo } = require("./calendar").parseYearMonth(month);
+  const autoWd = require("./calendar").countWeekdaysInMonth(year, mo);
   const old = config.workingDaysByMonth?.[month];
   config.workingDaysByMonth = config.workingDaysByMonth || {};
   config.workingDaysByMonth[month] = Number(workingDays);
-  await sheets.saveConfigKey("workingDaysByMonth", config.workingDaysByMonth);
+  await backend.saveConfigKey("workingDaysByMonth", config.workingDaysByMonth);
   cache.setConfig(config);
-  await changelog.logConfigChange(username, `workingDays.${month}`, old, workingDays);
+  const fromLabel = old != null ? old : autoWd;
+  await changelog.logChange({
+    username,
+    entity: "config",
+    entityId: `workingDays.${month}`,
+    action: "update",
+    field: "workingDaysByMonth",
+    oldValue: String(fromLabel),
+    newValue: String(workingDays),
+    summary: `${username} changed working days for ${month} from ${fromLabel} to ${workingDays}`,
+  });
   return Number(workingDays);
 }
 
@@ -385,13 +575,13 @@ async function setHideOutEmployees(hide, username) {
 }
 
 async function upsertBonus(record, username) {
-  await sheets.upsertBonusEvent(record, username);
+  await backend.upsertBonusEvent(record, username);
   cache.upsertBonus(record);
   await changelog.logBonusChange(username, "upsert", record);
 }
 
 async function deleteBonus(employeeId, date, type, username) {
-  await sheets.deleteBonusEvent(employeeId, date, type);
+  await backend.deleteBonusEvent(employeeId, date, type);
   cache.deleteBonus(employeeId, date, type);
   await changelog.logBonusChange(username, "delete", {
     employeeId,
@@ -402,13 +592,13 @@ async function deleteBonus(employeeId, date, type, username) {
 }
 
 async function upsertDeduction(record, username) {
-  await sheets.upsertDeductionEvent(record, username);
+  await backend.upsertDeductionEvent(record, username);
   cache.upsertDeduction(record);
   await changelog.logDeductionChange(username, "upsert", record);
 }
 
 async function deleteDeduction(employeeId, date, type, username) {
-  await sheets.deleteDeductionEvent(employeeId, date, type);
+  await backend.deleteDeductionEvent(employeeId, date, type);
   cache.deleteDeduction(employeeId, date, type);
   await changelog.logDeductionChange(username, "delete", {
     employeeId,
@@ -425,7 +615,7 @@ async function upsertPayrollAdjustment(record, username) {
     record,
     emp || { id: record.employeeId }
   );
-  const saved = await sheets.upsertPayrollAdjustment(merged, username);
+  const saved = await backend.upsertPayrollAdjustment(merged, username);
   cache.upsertPayrollAdjustment(saved);
   await changelog.logMonthProfileChange(username, "upsert", saved);
 
@@ -436,21 +626,21 @@ async function upsertPayrollAdjustment(record, username) {
 }
 
 async function createPayrollSplit(split, username) {
-  const saved = await sheets.appendPayrollSplit(split, username);
+  const saved = await backend.appendPayrollSplit(split, username);
   cache.upsertPayrollSplit(saved);
   await changelog.logMonthProfileChange(username, "payroll_split_create", saved);
   return saved;
 }
 
 async function updatePayrollSplitRecord(split, username) {
-  const saved = await sheets.updatePayrollSplit(split, username);
+  const saved = await backend.updatePayrollSplit(split, username);
   cache.upsertPayrollSplit(saved);
   await changelog.logMonthProfileChange(username, "payroll_split_update", saved);
   return saved;
 }
 
 async function removePayrollSplit(id, username) {
-  await sheets.deletePayrollSplit(id);
+  await backend.deletePayrollSplit(id);
   cache.deletePayrollSplitCache(id);
   await changelog.logMonthProfileChange(username, "payroll_split_delete", { id });
   return true;
@@ -466,8 +656,8 @@ async function setCommissionTiersForMonth(yearMonth, tiers, username) {
     }))
     .filter((t) => t.minSales > 0)
     .sort((a, b) => a.minSales - b.minSales);
-  await sheets.writeCommissionTiersForMonth(yearMonth, normalized);
-  const all = await sheets.readAllCommissionTiers();
+  await backend.writeCommissionTiersForMonth(yearMonth, normalized);
+  const all = await backend.readAllCommissionTiers();
   cache.setCommissionTiers(all);
   await changelog.logConfigChange(username, `commissionTiers.${yearMonth}`, null, normalized);
   return normalized;
@@ -476,7 +666,7 @@ async function setCommissionTiersForMonth(yearMonth, tiers, username) {
 async function createEmployeeLoan(loan, username) {
   const createdYearMonth = loan.createdYearMonth || new Date().toISOString().slice(0, 7);
   const amounts = normalizeLoanAmounts(loan);
-  const saved = await sheets.appendEmployeeLoan(
+  const saved = await backend.appendEmployeeLoan(
     {
       ...loan,
       ...amounts,
@@ -545,7 +735,7 @@ async function updateEmployeeLoanRecord(loanId, updates, username) {
     };
   }
 
-  const saved = await sheets.updateEmployeeLoan(merged);
+  const saved = await backend.updateEmployeeLoan(merged);
   cache.upsertEmployeeLoan(saved);
   await changelog.logEmployeeChange(username, "loan_update", { id: existing.employeeId }, existing, saved.id);
   return saved;
@@ -558,7 +748,7 @@ async function removeEmployeeLoan(loanId, username) {
   if ((existing.installmentsPaid || 0) > 0 || hasPayments) {
     throw new Error("Cannot delete a loan with recorded payments. Cancel it instead.");
   }
-  await sheets.deleteEmployeeLoan(loanId);
+  await backend.deleteEmployeeLoan(loanId);
   cache.deleteEmployeeLoanCache(loanId);
   await changelog.logEmployeeChange(username, "loan_delete", { id: existing.employeeId }, existing, loanId);
   return true;
@@ -581,7 +771,7 @@ async function recordLoanPayment(loanId, yearMonth, username) {
   const deduction = pending[0];
   if (!deduction) return null;
 
-  const payment = await sheets.appendLoanPayment(
+  const payment = await backend.appendLoanPayment(
     {
       loanId: loan.id,
       employeeId: loan.employeeId,
@@ -599,7 +789,7 @@ async function recordLoanPayment(loanId, yearMonth, username) {
     installmentsPaid: newPaid,
     status: installmentsRemaining({ ...loan, installmentsPaid: newPaid }) <= 0 ? "completed" : "active",
   };
-  await sheets.updateEmployeeLoan(updated);
+  await backend.updateEmployeeLoan(updated);
   cache.upsertEmployeeLoan(updated);
   return payment;
 }
@@ -625,14 +815,14 @@ async function recordLoanPaymentsForEmployee(yearMonth, employeeId, username) {
 }
 
 async function addEmployeeWarning(warning, username) {
-  const saved = await sheets.appendEmployeeWarning(warning, username);
+  const saved = await backend.appendEmployeeWarning(warning, username);
   cache.appendEmployeeWarning(saved);
   await changelog.logWarningChange(username, "create", saved);
   return saved;
 }
 
 async function uploadEmployeeDocument(doc, username) {
-  const saved = await sheets.appendEmployeeDocument(doc, username);
+  const saved = await backend.appendEmployeeDocument(doc, username);
   cache.appendEmployeeDocument(saved);
   await changelog.logEmployeeChange(username, "document", { id: doc.employeeId }, null, doc.docType);
   return saved;
@@ -672,6 +862,10 @@ function suggestNextId(unit, backendPool) {
   return idGen.suggestNextId(cache.getEmployees(), unit, backendPool);
 }
 
+function suggestNextLeadId(leadRole) {
+  return employeeIds.suggestNextLeadId(cache.getEmployees(), leadRole);
+}
+
 function getTeams(unit) {
   return idGen.getTeamsForUnit(cache.getEmployees(), unit);
 }
@@ -680,20 +874,60 @@ function getUnits() {
   return idGen.getUnits(cache.getEmployees());
 }
 
+function employeeHasLinkedData(employeeId) {
+  if (cache.getAttendanceForEmployee(employeeId)?.length) return true;
+  const db = cache.getDb();
+  const bonus = db.prepare("SELECT 1 AS ok FROM bonuses WHERE employee_id = ? LIMIT 1").get(employeeId);
+  if (bonus) return true;
+  const deduction = db.prepare("SELECT 1 AS ok FROM deductions WHERE employee_id = ? LIMIT 1").get(employeeId);
+  if (deduction) return true;
+  const sales = cache.getBusinessCache("sales") || [];
+  if (sales.some((s) => s.agentId === employeeId || s.closerId === employeeId)) return true;
+  return false;
+}
+
+function findEmptyEmployeeStubs() {
+  return cache.getEmployees().filter((e) => {
+    if (e.american_name || e.arabic_name) return false;
+    if (e.promoted_to_id || e.promoted_from_id) return false;
+    if (employeeHasLinkedData(e.id)) return false;
+    const status = String(e.status || "").trim();
+    if (status && status !== "Active" && status !== "Out") return false;
+    return true;
+  });
+}
+
+async function deleteEmptyEmployeeStubs(username) {
+  if (!backendMod.useSupabase()) {
+    throw new Error("Empty ID cleanup requires DATA_BACKEND=supabase");
+  }
+  const stubs = findEmptyEmployeeStubs();
+  for (const emp of stubs) {
+    await backend.deleteEmployee(emp.id, username);
+    cache.removeEmployee(emp.id);
+  }
+  return { deleted: stubs.map((e) => e.id), count: stubs.length };
+}
+
 module.exports = {
   syncFromSheet,
   ensureSynced,
   refreshCache,
   getEmployees,
+  getEmployeesForMonth,
   getEmployeeById,
   getConfig,
   getPositionRates,
   getAttendanceEvents,
+  getAttendanceForEmployee,
   getBonusEvents,
   getDeductionEvents,
   getPayrollAdjustments,
   getPayrollAdjustment,
   getCommissionTypes,
+  upsertCommissionType,
+  deleteCommissionType,
+  updateTaxRules,
   getCommissionTiers,
   getEmployeeLoans,
   getLoanPayments,
@@ -706,9 +940,11 @@ module.exports = {
   initMonthProfiles,
   bulkSetTransportEligible,
   upsertPositionRate,
+  deletePositionRate,
   getWorkingDaysForMonth,
   createEmployee,
   updateEmployee,
+  promoteEmployee,
   saveAttendanceBatch,
   saveAttendanceRow,
   initMonthWeekends,
@@ -735,13 +971,16 @@ module.exports = {
   uploadEmployeeDocument,
   uploadEmployeeProfilePhoto,
   removeEmployeeProfilePhoto,
+  findEmptyEmployeeStubs,
+  deleteEmptyEmployeeStubs,
   suggestNextId,
+  suggestNextLeadId,
   getTeams,
   getUnits,
   getLastSync: cache.getLastSync,
   isCacheWarm: cache.isCacheWarm,
   readChangeLog: changelog.readChangeLog,
-  SHEET_ID: sheets.SHEET_ID,
-  EMPLOYEE_STATUSES: sheets.EMPLOYEE_STATUSES,
+  SHEET_ID: backend.SHEET_ID,
+  EMPLOYEE_STATUSES: backend.EMPLOYEE_STATUSES,
   BACKEND_POOLS: idGen.BACKEND_POOLS,
 };

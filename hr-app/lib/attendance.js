@@ -41,26 +41,31 @@ function countLateness(records) {
   return records.filter((r) => r.status === "Lateness A" || r.status === "Lateness B").length;
 }
 
-function calcLatenessDeduction(records, config) {
+function calcLatenessDeduction(records, config, actionPlans = []) {
+  if (actionPlans?.length) {
+    return require("./action-plans").calcLatenessWithAip(records, config, actionPlans);
+  }
   const a = countStatus(records, "Lateness A");
   const b = countStatus(records, "Lateness B");
   const amount = a * config.latenessRules.tierA.amount + b * config.latenessRules.tierB.amount;
-  return { amount, detail: `${a} Lateness before 3:00PM\n${b} Lateness After 3:00PM` };
+  return { amount, detail: `${a} Lateness before 3:00PM\n${b} Lateness After 3:00PM`, aipNotes: [] };
 }
 
-function summarizeEmployeeMonth(emp, records, config) {
+function summarizeEmployeeMonth(emp, records, config, actionPlans = []) {
   const attended = countStatus(records, "Attended");
+  const paidLeaveDays = records.filter((r) => r.status === "Day-OFF" && r.paidLeave).length;
   const halfDays = countStatus(records, "Half Day");
   const quarterOff = countStatus(records, "Quarter Day-Off");
   const lateness = countLateness(records);
-  const { amount, detail } = calcLatenessDeduction(records, config);
+  const { amount, detail, aipNotes = [] } = calcLatenessDeduction(records, config, actionPlans);
 
   return {
     employeeId: emp.id,
     name: employeeDisplayName(emp),
     unit: emp.unit,
     email: emp.email,
-    workingDays: attended + halfDays + quarterOff + lateness,
+    workingDays: attended + paidLeaveDays + halfDays + quarterOff + lateness,
+    paidLeaveDays,
     daysOff: countStatus(records, "Day-OFF"),
     halfDays,
     quarterOff,
@@ -72,6 +77,7 @@ function summarizeEmployeeMonth(emp, records, config) {
     extraDays: 0,
     latenessDeductions: amount,
     latenessDetail: detail,
+    aipNotes,
   };
 }
 

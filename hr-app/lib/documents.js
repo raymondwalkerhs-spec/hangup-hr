@@ -1,12 +1,16 @@
 const fs = require("fs");
 const path = require("path");
 const { getDriveAuth, getDriveClient } = require("./google-auth");
+const { useSupabase } = require("./backend");
+const storage = require("./storage");
 
 const DOC_TYPES = [
   "National ID",
   "Contract",
   "Warning Letter",
   "Medical",
+  "Medical Note",
+  "Exam Note",
   "Training Certificate",
   "Other",
 ];
@@ -35,12 +39,19 @@ async function getOrCreateFolder() {
   const drive = getDriveClient(auth);
   const name = process.env.GOOGLE_DRIVE_FOLDER_NAME || "Hangup HR Documents";
   const q = `mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false`;
-  const existing = await drive.files.list({ q, fields: "files(id)", pageSize: 1 });
+  const existing = await drive.files.list({
+    q,
+    fields: "files(id)",
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
   if (existing.data.files?.length) return existing.data.files[0].id;
 
   const created = await drive.files.create({
     requestBody: { name, mimeType: "application/vnd.google-apps.folder" },
     fields: "id",
+    supportsAllDrives: true,
   });
   return created.data.id;
 }
@@ -55,7 +66,13 @@ async function getOrCreateProfilePhotosFolder() {
     `'${parentId}' in parents`,
     "trashed=false",
   ].join(" and ");
-  const existing = await drive.files.list({ q, fields: "files(id)", pageSize: 1 });
+  const existing = await drive.files.list({
+    q,
+    fields: "files(id)",
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
   if (existing.data.files?.length) return existing.data.files[0].id;
 
   const created = await drive.files.create({
@@ -65,30 +82,55 @@ async function getOrCreateProfilePhotosFolder() {
       parents: [parentId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
   return created.data.id;
 }
 
 async function deleteDriveFile(fileId) {
   if (!fileId) return;
+  if (useSupabase()) {
+    return storage.deleteStorageFile(fileId);
+  }
   try {
     const auth = await getDriveAuth();
     const drive = getDriveClient(auth);
-    await drive.files.delete({ fileId });
+    await drive.files.delete({ fileId, supportsAllDrives: true });
   } catch {
     /* ignore */
   }
 }
 
 async function getDriveFileStream(fileId) {
+  if (useSupabase()) {
+    return storage.getStorageFileStream(fileId);
+  }
   const auth = await getDriveAuth();
   const drive = getDriveClient(auth);
-  const meta = await drive.files.get({ fileId, fields: "mimeType, name" });
-  const media = await drive.files.get({ fileId, alt: "media" }, { responseType: "stream" });
+  const meta = await drive.files.get({ fileId, fields: "mimeType, name", supportsAllDrives: true });
+  const media = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "stream" }
+  );
   return { stream: media.data, mimeType: meta.data.mimeType || "image/jpeg" };
 }
 
 async function uploadProfilePhoto({ employeeId, filePath, fileName, oldFileId }) {
+  if (useSupabase()) {
+    await deleteDriveFile(oldFileId);
+    const uploaded = await storage.uploadFile({
+      employeeId,
+      filePath,
+      fileName,
+      kind: "profile-photos",
+    });
+    return {
+      fileId: uploaded.storagePath,
+      link: uploaded.link,
+      mimeType: guessImageMime(fileName || filePath),
+      storagePath: uploaded.storagePath,
+    };
+  }
   const auth = await getDriveAuth();
   const drive = getDriveClient(auth);
   const folderId = await getOrCreateProfilePhotosFolder();
@@ -107,6 +149,7 @@ async function uploadProfilePhoto({ employeeId, filePath, fileName, oldFileId })
       body: fs.createReadStream(filePath),
     },
     fields: "id, webViewLink",
+    supportsAllDrives: true,
   });
 
   return {
@@ -117,10 +160,24 @@ async function uploadProfilePhoto({ employeeId, filePath, fileName, oldFileId })
 }
 
 async function uploadEmployeeFile({ employeeId, docType, filePath, fileName, notes, expiry }) {
+  const name = fileName || path.basename(filePath);
+  if (useSupabase()) {
+    const uploaded = await storage.uploadFile({ employeeId, filePath, fileName: name });
+    return {
+      employeeId,
+      docType: docType || "Other",
+      fileName: name,
+      driveFileId: uploaded.storagePath,
+      driveLink: uploaded.link,
+      storagePath: uploaded.storagePath,
+      uploadedAt: new Date().toISOString(),
+      expiry: expiry || "",
+      notes: notes || "",
+    };
+  }
   const auth = await getDriveAuth();
   const drive = getDriveClient(auth);
   const folderId = await getOrCreateFolder();
-  const name = fileName || path.basename(filePath);
 
   const uploaded = await drive.files.create({
     requestBody: {
@@ -132,6 +189,7 @@ async function uploadEmployeeFile({ employeeId, docType, filePath, fileName, not
       body: fs.createReadStream(filePath),
     },
     fields: "id, webViewLink",
+    supportsAllDrives: true,
   });
 
   return {

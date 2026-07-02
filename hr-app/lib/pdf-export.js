@@ -30,13 +30,15 @@ function buildPayrollTablePdf(payroll, month, totals = {}) {
     doc.moveDown(0.5);
 
     const cols = [
-      { label: "Employee", w: 130 },
-      { label: "Sales", w: 36, align: "center" },
-      { label: "Basic", w: 58, align: "right" },
-      { label: "Transport", w: 58, align: "right" },
-      { label: "Commission", w: 58, align: "right" },
-      { label: "Loan", w: 48, align: "right" },
-      { label: "Net", w: 62, align: "right" },
+      { label: "Name", w: 95 },
+      { label: "American", w: 95 },
+      { label: "ID", w: 52 },
+      { label: "Sales", w: 32, align: "center" },
+      { label: "Basic", w: 52, align: "right" },
+      { label: "Transport", w: 52, align: "right" },
+      { label: "Comm.", w: 48, align: "right" },
+      { label: "Loan", w: 44, align: "right" },
+      { label: "Net", w: 55, align: "right" },
     ];
 
     let x = 40;
@@ -56,7 +58,9 @@ function buildPayrollTablePdf(payroll, month, totals = {}) {
       const y = doc.y;
       x = 40;
       const cells = [
-        `${row.name}\n${row.employeeId}`,
+        row.arabicName || row.name || "—",
+        row.name || "—",
+        row.employeeId,
         String(row.salesCount || "—"),
         fmt(row.basicSalary),
         fmt(row.transportAllowance || 0),
@@ -128,4 +132,68 @@ function row(doc, label, value, bold = false) {
   doc.moveDown(0.15);
 }
 
-module.exports = { buildPayrollTablePdf, buildMonthlyReportPdf };
+function buildPaymentSheetPdf({ title, month, columns, rows, total }) {
+  const amountKeys = new Set(["netSalary", "roundedSalary"]);
+  const pageWidth = 515;
+  const weights = columns.map((c) => {
+    if (amountKeys.has(c.key)) return 1.1;
+    if (c.key === "employeeId") return 0.7;
+    if (c.key === "name" || c.key === "americanName") return 1.2;
+    return 1.4;
+  });
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  const widths = weights.map((w) => Math.floor((w / weightSum) * pageWidth));
+
+  return pdfBuffer((doc) => {
+    doc.fontSize(16).font("Helvetica-Bold").text(title, { align: "center" });
+    doc.font("Helvetica").fontSize(10).fillColor("#666").text(month, { align: "center" });
+    doc.fillColor("#000").moveDown();
+
+    const colAlign = (col) => col.align || (amountKeys.has(col.key) ? "right" : "left");
+    const cellText = (row, col) => {
+      const val = row[col.key];
+      return amountKeys.has(col.key) ? fmt(val) : String(val ?? "");
+    };
+
+    let x = 40;
+    const headerY = doc.y;
+    doc.font("Helvetica-Bold").fontSize(8);
+    columns.forEach((col, i) => {
+      doc.text(col.label, x, headerY, { width: widths[i], align: colAlign(col) });
+      x += widths[i];
+    });
+    doc.font("Helvetica").moveDown(0.8);
+
+    for (const row of rows) {
+      if (doc.y > 720) {
+        doc.addPage();
+        doc.fontSize(8);
+      }
+      x = 40;
+      const y = doc.y;
+      columns.forEach((col, i) => {
+        doc.text(cellText(row, col), x, y, { width: widths[i], align: colAlign(col), lineGap: 1 });
+        x += widths[i];
+      });
+      doc.moveDown(0.45);
+      doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#e2e8f0").stroke();
+      doc.strokeColor("#000").moveDown(0.15);
+    }
+
+    doc.moveDown(0.35);
+    const amountIdx = columns.findIndex((c) => amountKeys.has(c.key));
+    x = 40;
+    const totalY = doc.y;
+    doc.font("Helvetica-Bold").fontSize(9);
+    columns.forEach((col, i) => {
+      let text = "";
+      if (i === amountIdx) text = fmt(total);
+      else if (i === amountIdx - 1) text = "Total";
+      doc.text(text, x, totalY, { width: widths[i], align: colAlign(col) });
+      x += widths[i];
+    });
+    doc.font("Helvetica");
+  });
+}
+
+module.exports = { buildPayrollTablePdf, buildMonthlyReportPdf, buildPaymentSheetPdf };

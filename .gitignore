@@ -2,6 +2,8 @@
 hr-app/node_modules/
 hr-app/dist/
 hr-app/cache/
+hr-app/.cache/
+hr-app/.cursor/
 
 # Secrets & local config
 hr-app/credentials/
@@ -17,3 +19,4 @@ decoded-flag-*.json
 Thumbs.db
 .idea/
 .vscode/
+hr-app/cursor_chat_hr_app_version_management.json
