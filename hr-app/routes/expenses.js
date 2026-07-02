@@ -166,6 +166,23 @@ router.post("/petty-cash/deposit", requireFinance, async (req, res) => {
   }
 });
 
+router.patch("/petty-cash/ledger/:id", requireFinance, async (req, res) => {
+  const { amount, notes } = req.body;
+  if (amount == null && notes == null) {
+    return res.status(400).json({ error: "amount or notes required" });
+  }
+  try {
+    const result = await business.updatePettyCashLedgerEntry(
+      req.params.id,
+      { amount: amount != null ? Number(amount) : undefined, notes },
+      req.username
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get("/bills", async (req, res) => {
   if (!roles.canAccessCostsFull(req.userRole, req.username)) {
     return res.status(403).json({ error: "Finance access required" });

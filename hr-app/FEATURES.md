@@ -182,10 +182,10 @@ Discipline week (Mon–Fri) with payroll consequences:
 - HR/admin **approve** → posts to `bonus_events`  
 - Leadership roles receive bonuses via **payslip only**  
 
-## Costs & petty cash (1.0.5)
+## Costs & petty cash (1.0.5+)
 
 - Receipts/invoices with status workflow (paid, pending, on hold, archived)  
-- Petty cash fund + ledger  
+- Petty cash fund + ledger (deposits editable after posting as of `1.0.9-beta.3`)  
 - Monthly bills (landline, internet, utilities, etc.)  
 - Access: Mark, Phoebe, Raymond, finance role; HR can submit  
 

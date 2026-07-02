@@ -10,7 +10,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** `K:\download app hr`
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.0.9-beta.2` (`package.json` → `version`)
+- **Current version:** `1.0.9-beta.4` (`package.json` → `version`)
 
 ---
 
@@ -206,12 +206,12 @@ cd "K:\download app hr"
 
 Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant.
 
-6. **Optional — GitHub in-app patch updates** (does not replace step 5):
+6. **Optional — GitHub in-app patch updates** (does not replace step 5; uploads **win-unpacked** diff only, not EXEs):
 
 ```powershell
-npm run package:github -- --full
-npm run publish:github
-# Or: git tag v{version} && git push origin v{version}  → CI workflow in .github/workflows/release.yml
+.\scripts\publish-github-release.ps1
+# First time on GitHub: .\scripts\publish-github-release.ps1 -IncludeFull
+# Broken draft release:  .\scripts\publish-github-release.ps1 -Recreate
 ```
 
 Set `GITHUB_UPDATES_REPO=owner/repo` in packaged `.env`. Full detail: [`UPDATES.md`](UPDATES.md).
@@ -382,6 +382,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | FIN-04 | **Finance create status fix** | Done | `1.0.9-beta.1` |
 | FIN-05 | **Own-pocket settlement** | Done | `1.0.9-beta.1` |
 | FIN-06 | **Petty cash balance guard** | Done | `1.0.9-beta.1` |
+| FIN-09 | **Edit posted petty cash deposits** | Done | `1.0.9-beta.3` |
 | FIN-07 | **Due-date / overdue alerts** | Done | `1.0.9-beta.1` |
 | FIN-08 | **Denied flow + notifications** | Done | `1.0.9-beta.1` |
 

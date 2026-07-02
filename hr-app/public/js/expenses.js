@@ -94,13 +94,16 @@ window.ExpensesModule = (function () {
         ${funds.map((f) => `<p><strong>${escapeHtml(f.fundName)}</strong>: ${fmt(f.balance)} EGP
           <button class="btn btn-sm" data-deposit="${f.id}">Add funds</button>
           <button class="btn btn-sm" data-ledger="${f.id}">Ledger</button></p>`).join("")}
-        ${ledger.length ? `<div class="table-wrap" style="margin-top:.75rem"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance</th><th>Notes</th></tr></thead>
+        ${ledger.length ? `<div class="table-wrap" style="margin-top:.75rem"><table><thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance</th><th>Notes</th>${canManage() ? "<th></th>" : ""}</tr></thead>
         <tbody>${ledger.slice(0, 20).map((l) => `<tr>
           <td>${l.createdAt ? new Date(l.createdAt).toLocaleString() : "—"}</td>
           <td>${escapeHtml(l.transactionType)}</td>
           <td>${fmt(l.amount)}</td>
           <td>${fmt(l.balanceAfter)}</td>
           <td>${escapeHtml(l.notes || "")}</td>
+          ${canManage() && (l.transactionType === "deposit" || l.transactionType === "adjustment")
+            ? `<td><button type="button" class="btn btn-sm" data-edit-ledger="${l.id}" data-ledger-amount="${l.amount}" data-ledger-notes="${escapeHtml(l.notes || "")}" data-ledger-type="${escapeHtml(l.transactionType)}">Edit</button></td>`
+            : canManage() ? "<td></td>" : ""}
         </tr>`).join("")}</tbody></table></div>` : ""}
       </div>` : ""}
       ${starred.length ? `<div class="card" style="margin-bottom:1rem"><h3>⭐ Priority</h3>
@@ -250,6 +253,44 @@ window.ExpensesModule = (function () {
         renderCostsPage(root, api, state, helpers);
       };
     });
+    root.querySelectorAll("[data-edit-ledger]").forEach((btn) => {
+      btn.onclick = () => openEditLedgerModal(api, helpers, {
+        id: btn.dataset.editLedger,
+        amount: Number(btn.dataset.ledgerAmount),
+        notes: btn.dataset.ledgerNotes || "",
+        transactionType: btn.dataset.ledgerType || "deposit",
+      }, () => renderCostsPage(root, api, state, helpers));
+    });
+  }
+
+  function openEditLedgerModal(api, helpers, entry, onDone) {
+    const { openModal, closeModal, escapeHtml } = helpers;
+    const label = entry.transactionType === "adjustment" ? "adjustment" : "deposit";
+    openModal(`
+      <div class="modal-header"><h2>Edit petty cash ${escapeHtml(label)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <form id="edit-ledger-form" class="form-grid modal-body-scroll">
+        <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" step="0.01" value="${entry.amount}" required /></label>
+        <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" value="${escapeHtml(entry.notes)}" /></label>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+      </form>
+    `, true);
+    document.getElementById("edit-ledger-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await api(`/expenses/petty-cash/ledger/${entry.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            amount: Number(fd.get("amount")),
+            notes: fd.get("notes") || "",
+          }),
+        });
+        closeModal();
+        onDone();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
   }
 
   function openBillModal(api, helpers, billTypes, bill, onDone) {

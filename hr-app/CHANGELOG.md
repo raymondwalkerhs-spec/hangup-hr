@@ -4,6 +4,23 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.0.9-beta.4] — 2026-07-03
+
+### Fixed
+- **Notifications:** Bell moved to visible sidebar header; panel positions correctly; plays sound on new items; shows error badge if API fails.
+- **Sidebar:** Scrollable nav on desktop; active state respects hidden items; blocked pages redirect to dashboard; Escape closes mobile drawer.
+
+### Changed
+- **GitHub publish:** Uploads `win-unpacked` patch zip (changed files only), not installer EXEs.
+
+## [1.0.9-beta.3] — 2026-07-03
+
+### Fixed
+- **Petty cash:** Duplicate withdrawals from repeated expense edits are removed during reconcile; corrected live ledger for print thome (balance **14,875 EGP** = 15,075 deposit − 200 withdrawal).
+
+### Added
+- **Petty cash:** Finance can **edit posted deposits** (amount + notes) from the ledger; fund balance recalculates automatically.
+
 ## [1.0.9-beta.2] — 2026-07-02
 
 ### Fixed
