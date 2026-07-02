@@ -1,7 +1,7 @@
 # Hangup HR — User Guide
 
 Quick guide for daily use of the **Hangup HR** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.0.7-beta.2`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.0.9-beta.2`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).
 
@@ -21,6 +21,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | No access assigned | Raymond must set your **role** in **Users** |
 | Forgot password | Contact Raymond, or use **Settings → Change password** if you know the current one |
 | Version blocked | Install the latest EXE from Admin (`app_versions` policy) |
+| Update available popup | Click **Update now** to patch in place (desktop only), or ask Admin for a new EXE |
 
 **Notifications** — bell icon in the sidebar (pending leave, document expiry, alerts).
 
@@ -32,10 +33,11 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 |---------|---------|
 | **Dashboard** | Headcount, payroll total, document expiry widget |
 | **Employees** | Profiles, nationality, documents, lifecycle |
-| **Attendance** | Monthly grid; federal holidays show as pink columns |
+| **Attendance** | Monthly grid; **Import FP file** for device exports; per-month FP rules |
 | **Payroll** | Monthly payroll, payslips, month lock, MoM compare |
-| **Bonuses / Deductions / Loans / Salaries** | Payroll inputs and position rates |
-| **Reports** | Monthly report, turnover, attendance rankings, finance ZIP |
+| **Bonuses / Deductions / Loans / Salaries** | Payroll inputs; **Loan approvals** (Mark/Phoebe/Raymond only) |
+| **Reports** | Monthly report, turnover, rankings, **saved custom reports** |
+| **Costs** | Expenses, petty cash, monthly bills *(finance + HR submit)* |
 | **Requests** | Annual, unpaid, medical, and same-day off (replaces Leave) |
 | **Equipment** | Company asset registry |
 | **Organization** | Reporting structure (read-only) |
@@ -82,6 +84,33 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 6. Changes save automatically (watch for the Saved indicator).
 
 Edits outside an employee’s **active employment period** are rejected (after depart or before re-hire).
+
+---
+
+## 5a. Costs (finance)
+
+- **HR / RTM** submit receipts → **pending approval** until finance approves.  
+- **Finance** (Mark, Phoebe, Raymond): approve/deny, mark paid, petty cash, monthly bills.  
+- **Petty cash:** balance shown before pay; insufficient funds blocked.  
+- **Own pocket:** mark paid → **Settle** with employee Instapay reference.
+
+---
+
+## 5b. Fingerprint attendance import
+
+1. Set each agent’s **FP number** on the employee profile (or run `npm run seed:fp-june` after placing `Asset/june fp example.xls`).  
+2. **Attendance** → **FP rules** — adjust check-in/out thresholds per month.  
+3. **Import FP file** — upload CSV/XLS from the device → **Preview** → **Apply**.  
+4. Default check-in: before 2:50 PM = OK; 2:50–3:00 Lateness A; 3:00–3:30 Lateness B; 3:30–5:00 Quarter day; after 5:00 Half day.  
+5. Check-out: grace until 1 PM; 7–10 PM = Half day; 10–11:55 PM = Quarter day (unless HR overrides).
+
+---
+
+## 5c. Loan approvals
+
+- **HR** submits loan requests from employee **Loans** (no longer creates active loans directly).  
+- **Mark / Phoebe / Raymond** use **Loan approvals** sidebar (hidden from everyone else).  
+- Any one executive can approve → loan becomes active for payroll deductions.
 
 ---
 
@@ -212,6 +241,7 @@ Roles are set in **Users** (Raymond). Blank or unknown role = cannot sign in.
 ## More
 
 - **Build & deploy:** [`README.md`](README.md)  
+- **In-app updates (admin):** [`UPDATES.md`](UPDATES.md)  
 - **All features:** [`FEATURES.md`](FEATURES.md)  
 - **Database layout:** [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md)  
 - **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)

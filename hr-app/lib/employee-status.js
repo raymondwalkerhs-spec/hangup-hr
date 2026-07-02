@@ -4,6 +4,7 @@ const STATUSES = {
   paused_still_paid: "Paused still get paid",
   out_still_paid: "OUT BUT STILL GET PAID",
   out: "Out",
+  deleted: "Deleted",
   promoted: "Promoted",
 };
 
@@ -15,6 +16,7 @@ const LEGACY_MAP = {
   "out but still get paid": "out_still_paid",
   "out still paid": "out_still_paid",
   out: "out",
+  deleted: "deleted",
   promoted: "promoted",
   "": "active",
 };

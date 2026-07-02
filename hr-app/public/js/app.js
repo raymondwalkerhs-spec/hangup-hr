@@ -110,9 +110,50 @@ function filterPayrollByZeroNet(rows) {
 
 function isOutEmployee(emp) {
   if (!emp) return true;
+  if (emp.status === "Deleted" || emp.deleted_at) return true;
   if (emp.status === "Out") return true;
   if (!emp.status && !emp.american_name && !emp.arabic_name) return true;
   return false;
+}
+
+function isUnassignedIdStub(emp) {
+  if (!emp?.id || emp.status === "Deleted" || emp.deleted_at) return false;
+  if (emp.american_name || emp.arabic_name) return false;
+  if (emp.promoted_to_id || emp.promoted_from_id) return false;
+  return true;
+}
+
+function closeSidebarNav() {
+  document.getElementById("app-sidebar")?.classList.remove("sidebar-open");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  backdrop?.classList.remove("visible");
+  backdrop?.classList.add("hidden");
+  const toggle = document.getElementById("nav-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "false");
+}
+
+function openSidebarNav() {
+  document.getElementById("app-sidebar")?.classList.add("sidebar-open");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  backdrop?.classList.remove("hidden");
+  requestAnimationFrame(() => backdrop?.classList.add("visible"));
+  const toggle = document.getElementById("nav-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "true");
+}
+
+function initSidebarNav() {
+  const toggle = document.getElementById("nav-toggle");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
+    const open = document.getElementById("app-sidebar")?.classList.contains("sidebar-open");
+    if (open) closeSidebarNav();
+    else openSidebarNav();
+  });
+  backdrop?.addEventListener("click", closeSidebarNav);
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900) closeSidebarNav();
+  });
 }
 
 const NATIONALITY_ALIASES = {
@@ -436,7 +477,7 @@ async function checkSession() {
       return false;
     }
     if (data.versionNotice) {
-      showVersionUpdateNotice(data.versionNotice);
+      checkDesktopGitHubUpdate(data.versionNotice);
     }
     return true;
   } catch {
@@ -724,12 +765,18 @@ function versionNoticeDismissKey(currentVersion) {
   return `${VERSION_NOTICE_KEY}_${currentVersion || "unknown"}`;
 }
 
-function showVersionUpdateNotice(notice) {
-  if (!notice?.message) return;
-  const key = versionNoticeDismissKey(notice.currentVersion);
+function showVersionUpdateNotice(notice, githubInfo = null) {
+  if (!notice?.message && !githubInfo?.updateAvailable) return;
+  const latest = githubInfo?.latest || notice?.currentVersion;
+  const key = versionNoticeDismissKey(latest);
   try {
     if (sessionStorage.getItem(key) === "1") return;
   } catch (_) {}
+
+  const canAutoUpdate = Boolean(githubInfo?.updateAvailable && window.hrDesktop?.applyGitHubUpdate);
+  const message =
+    notice?.message ||
+    `Version ${githubInfo.latest} is available on GitHub (you have ${githubInfo.current || notice?.appVersion || "this version"}).`;
 
   openModal(`
     <div class="modal-header">
@@ -737,13 +784,25 @@ function showVersionUpdateNotice(notice) {
       <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
     </div>
     <div class="modal-body">
-      <div class="alert alert-warn">${escapeHtml(notice.message)}</div>
-      <p class="muted">You are on <strong>${escapeHtml(notice.appVersion || "this version")}</strong>.
-      The latest version is <strong>${escapeHtml(notice.currentVersion || "unknown")}</strong>.</p>
-      <p class="muted">You can keep working for now, but please ask Admin for the newest build soon.</p>
+      <div class="alert alert-warn">${escapeHtml(message)}</div>
+      <p class="muted">You are on <strong>${escapeHtml(notice?.appVersion || githubInfo?.current || "this version")}</strong>.
+      The latest version is <strong>${escapeHtml(latest || "unknown")}</strong>.</p>
+      ${
+        canAutoUpdate
+          ? `<p class="muted">Click <strong>Update now</strong> to download ${
+              githubInfo?.updateType === "patch" ? "only the changed files" : "the update package"
+            } and apply them in place (no new installer). The app will restart when finished.${
+              githubInfo?.assetSize
+                ? ` Download size: ~${Math.max(1, Math.round(githubInfo.assetSize / 1024))} KB.`
+                : ""
+            }</p>`
+          : `<p class="muted">You can keep working for now, but please ask Admin for the newest build soon.</p>`
+      }
+      <div id="version-update-status" class="muted" style="margin-top:.5rem;display:none"></div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-primary" id="version-notice-continue">Continue</button>
+      ${canAutoUpdate ? `<button type="button" class="btn btn-primary" id="version-notice-update">Update now</button>` : ""}
+      <button type="button" class="btn" id="version-notice-continue">Continue</button>
     </div>`);
 
   const root = document.getElementById("modal-root");
@@ -753,12 +812,50 @@ function showVersionUpdateNotice(notice) {
     } catch (_) {}
     closeModal();
   });
+
+  root.querySelector("#version-notice-update")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#version-notice-update");
+    const statusEl = root.querySelector("#version-update-status");
+    if (!btn || !window.hrDesktop?.applyGitHubUpdate) return;
+    btn.disabled = true;
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.textContent = "Downloading update…";
+    }
+    try {
+      await window.hrDesktop.applyGitHubUpdate();
+      if (statusEl) statusEl.textContent = "Update installed. Restarting…";
+      setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
+    } catch (e) {
+      btn.disabled = false;
+      if (statusEl) statusEl.textContent = e.message || "Update failed";
+      alert(e.message || "Update failed");
+    }
+  });
+}
+
+async function checkDesktopGitHubUpdate(notice = null) {
+  if (!window.hrDesktop?.checkGitHubUpdate) {
+    if (notice) showVersionUpdateNotice(notice);
+    return;
+  }
+  try {
+    const githubInfo = await window.hrDesktop.checkGitHubUpdate();
+    if (githubInfo?.enabled && githubInfo.updateAvailable) {
+      showVersionUpdateNotice(notice, githubInfo);
+      return;
+    }
+  } catch (_) {
+    /* non-fatal */
+  }
+  if (notice) showVersionUpdateNotice(notice);
 }
 
 function showVersionBlockedScreen(message, details) {
   const root = document.getElementById("app");
   if (!root) return;
   document.querySelector(".app-shell")?.classList.add("version-blocked-shell");
+  const canAutoUpdate = Boolean(window.hrDesktop?.applyGitHubUpdate);
   root.innerHTML = `
     <div class="version-block-screen">
       <div class="card" style="max-width:560px;margin:3rem auto;text-align:center">
@@ -770,20 +867,44 @@ function showVersionBlockedScreen(message, details) {
                Required version: <strong>${escapeHtml(details.currentVersion || "unknown")}</strong></p>`
             : ""
         }
-        <p class="muted">Contact your Admin to install the latest version. The app cannot be used until then.</p>
-        <button class="btn btn-primary" id="version-block-logout">Return to sign in</button>
+        <p class="muted">${canAutoUpdate ? "Install the update below or contact your Admin." : "Contact your Admin to install the latest version. The app cannot be used until then."}</p>
+        <div id="version-block-status" class="muted" style="margin:.5rem 0"></div>
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">
+          ${canAutoUpdate ? `<button class="btn btn-primary" id="version-block-update">Update now</button>` : ""}
+          <button class="btn" id="version-block-logout">Return to sign in</button>
+        </div>
       </div>
     </div>`;
   root.querySelector("#version-block-logout")?.addEventListener("click", () => performLogout());
+  root.querySelector("#version-block-update")?.addEventListener("click", async () => {
+    const btn = root.querySelector("#version-block-update");
+    const statusEl = root.querySelector("#version-block-status");
+    if (!btn) return;
+    btn.disabled = true;
+    if (statusEl) statusEl.textContent = "Downloading update…";
+    try {
+      await window.hrDesktop.applyGitHubUpdate();
+      if (statusEl) statusEl.textContent = "Update installed. Restarting…";
+      setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
+    } catch (e) {
+      btn.disabled = false;
+      if (statusEl) statusEl.textContent = e.message || "Update failed";
+    }
+  });
 }
 
 function consumePendingVersionNotice() {
   try {
     const raw = sessionStorage.getItem("hr_pending_version_notice");
-    if (!raw) return;
+    if (!raw) {
+      checkDesktopGitHubUpdate();
+      return;
+    }
     sessionStorage.removeItem("hr_pending_version_notice");
-    showVersionUpdateNotice(JSON.parse(raw));
-  } catch (_) {}
+    checkDesktopGitHubUpdate(JSON.parse(raw));
+  } catch (_) {
+    checkDesktopGitHubUpdate();
+  }
 }
 
 function openModal(html, wide = false) {
@@ -910,6 +1031,10 @@ function applyChangesButtonVisibility() {
     const showCosts = state.user?.canAccessCosts === true || state.user?.canSubmitExpense === true;
     costsBtn.classList.toggle("hidden", !showCosts);
   }
+  const loanApprovalsBtn = document.getElementById("nav-loan-approvals");
+  if (loanApprovalsBtn) {
+    loanApprovalsBtn.classList.toggle("hidden", state.user?.canApproveLoan !== true);
+  }
 }
 
 async function refreshStatus() {
@@ -1017,7 +1142,9 @@ function bindEmployeeSearch(root, onFilter) {
 
 function filterEmployeesList(employees) {
   let list = employees;
-  if (state.hideOut) list = list.filter((e) => !isOutEmployee(e));
+  if (state.hideOut) {
+    list = list.filter((e) => !isOutEmployee(e) || isUnassignedIdStub(e));
+  }
   if (state.empFilter.q) list = list.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
   if (state.empFilter.status) list = list.filter((e) => e.status === state.empFilter.status);
   if (state.empFilter.unit) list = list.filter((e) => e.unit === state.empFilter.unit);
@@ -1035,15 +1162,19 @@ function filterEmployeesList(employees) {
 }
 
 function employeeListRowHtml(e) {
-  const name = e.american_name || e.arabic_name || e.id;
-  return `<tr class="clickable" data-emp="${e.id}">
-    <td><div class="emp-cell">${avatarHtml(e)}<strong>${name}</strong></div></td>
-    <td>${e.id}</td><td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
+  const stub = isUnassignedIdStub(e);
+  const name = stub ? `(Unassigned ID)` : (e.american_name || e.arabic_name || e.id);
+  const appId = e.archived_app_id && String(e.id || "").startsWith("DEL-") ? e.archived_app_id : e.id;
+  return `<tr class="clickable${stub ? " row-stub" : ""}" data-emp="${e.id}">
+    <td><div class="emp-cell">${avatarHtml(e)}<strong>${name}</strong>${stub ? '<span class="stub-badge">No user assigned</span>' : ""}</div></td>
+    <td><code>${appId}</code>${e.internal_id ? `<div class="muted" style="font-size:.7rem" title="Database ID">${String(e.internal_id).slice(0, 8)}…</div>` : ""}</td>
+    <td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
     <td>${e.position || "—"}</td>
     <td>${e.nationality || "—"}</td>
     <td>${employeeComplianceLabel(e)}</td>
     <td>${statusBadge(e.status)}</td>
-    <td><button class="btn btn-sm" data-docs="${e.id}">Docs</button>
+    <td>${stub ? `<button class="btn btn-sm btn-danger" data-release="${e.id}">Release ID</button>` : ""}
+      <button class="btn btn-sm" data-docs="${e.id}">Docs</button>
       <button class="btn btn-sm" data-warn="${e.id}">Notes</button>
       <button class="btn btn-sm" data-edit="${e.id}">Edit</button></td>
   </tr>`;
@@ -1066,6 +1197,19 @@ function bindEmployeesTableActions(root, allEmployees) {
     b.onclick = (ev) => {
       ev.stopPropagation();
       openEmployeeDocsModal(b.dataset.docs);
+    };
+  });
+  root.querySelectorAll("[data-release]").forEach((b) => {
+    b.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(`Release app ID ${b.dataset.release}? It can be assigned to a new employee.`)) return;
+      try {
+        await api(`/employees/${b.dataset.release}/release-app-id`, { method: "POST" });
+        showSaveIndicator("App ID released", "saved");
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
     };
   });
   root.querySelectorAll("tr[data-emp]").forEach((tr) => {
@@ -1124,7 +1268,7 @@ async function refreshPayrollRowAfterSave(employeeId) {
 }
 
 function attendanceEmployeeRowHtml(emp, ctx) {
-  const { days, statuses, canEdit, recordMap, summaryMap } = ctx;
+  const { days, statuses, canEdit, recordMap, summaryMap, data } = ctx;
   const s = summaryMap.get(emp.id) || {};
   return `<tr data-emp-row="${emp.id}">
     <td class="att-sticky att-sticky-id">${emp.id}</td>
@@ -1138,8 +1282,14 @@ function attendanceEmployeeRowHtml(emp, ctx) {
       const st = rec?.status || "";
       const dis = canEdit ? "" : "disabled";
       const dayCls =
-        window.HRMSFeatures?.attendanceDayClass(d, ctx.data) || (isWeekend(d) ? "weekend-col" : "");
-      return `<td class="att-cell ${dayCls}">
+        window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
+      const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
+      const dayTitle = holidayName ? (window.HRMSFeatures?.attendanceDayTitle(d, data) || holidayName) : "";
+      const holidayNote = holidayName
+        ? `<div class="att-holiday-cell-note" title="${escapeHtml(dayTitle)}">${escapeHtml(holidayName)}</div>`
+        : "";
+      return `<td class="att-cell ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
+        ${holidayNote}
         <select class="status-select ${statusClass(st)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
         <option value="">—</option>
         ${statuses.map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
@@ -1589,12 +1739,19 @@ function bindNationalityFormFields(root = document) {
 
 function employeeFormFields(emp = {}) {
   const historyNote = emp.promoted_to_id
-    ? `<p class="muted" style="grid-column:1/-1">Historical ID — records before promotion effective month stay under <strong>${escapeHtml(emp.id)}</strong>. Active record: <strong>${escapeHtml(emp.promoted_to_id)}</strong></p>`
+    ? `<p class="muted identity-note">Historical ID — records before promotion effective month stay under <strong>${escapeHtml(emp.id)}</strong>. Active record: <strong>${escapeHtml(emp.promoted_to_id)}</strong></p>`
     : emp.promoted_from_id
-      ? `<p class="muted" style="grid-column:1/-1">Promoted from <strong>${escapeHtml(emp.promoted_from_id)}</strong>${emp.effective_from_month ? ` · active from <strong>${escapeHtml(emp.effective_from_month)}</strong>` : ""}${emp.former_ids ? ` · former IDs: ${escapeHtml(emp.former_ids)}` : ""}</p>`
+      ? `<p class="muted identity-note">Promoted from <strong>${escapeHtml(emp.promoted_from_id)}</strong>${emp.effective_from_month ? ` · active from <strong>${escapeHtml(emp.effective_from_month)}</strong>` : ""}${emp.former_ids ? ` · former IDs: ${escapeHtml(emp.former_ids)}` : ""}</p>`
       : "";
+  const dbIdNote = emp.internal_id
+    ? `<label class="field"><span>Database ID (permanent)</span><input value="${escapeHtml(emp.internal_id)}" readonly title="Never changes — links attendance, payroll &amp; all history" /></label>`
+    : "";
+  const appIdDisplay = emp.archived_app_id && String(emp.id || "").startsWith("DEL-")
+    ? emp.archived_app_id
+    : emp.id;
   return `<form id="emp-form" class="field-grid">
-    <label class="field"><span>Employee ID</span><input name="id" value="${emp.id || ""}" readonly /></label>
+    <label class="field"><span>App ID (shown in HR screens)</span><input name="app_id_display" value="${escapeHtml(appIdDisplay || "")}" readonly /></label>
+    ${dbIdNote}
     ${historyNote}
     <label class="field"><span>American Name</span><input name="american_name" value="${emp.american_name || ""}" /></label>
     <label class="field"><span>Arabic Name</span><input name="arabic_name" value="${emp.arabic_name || ""}" /></label>
@@ -1609,6 +1766,10 @@ function employeeFormFields(emp = {}) {
     ${paymentMethodFieldsHtml(emp)}
     <label class="field"><span>Phone</span><input name="phone" value="${emp.phone || ""}" /></label>
     <label class="field"><span>Email</span><input name="email" value="${emp.email || ""}" /></label>
+    <label class="field"><span>Employment date</span><input name="employment_date" type="date" value="${(emp.employment_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>Probation end</span><input name="probation_end_date" type="date" value="${(emp.probation_end_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>Contract end</span><input name="contract_end_date" type="date" value="${(emp.contract_end_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>FP number (biometric)</span><input name="fp_number" value="${emp.fp_number || ""}" placeholder="Device enroll ID" /></label>
     ${nationalityFormFieldsHtml(emp)}
   </form>`;
 }
@@ -1616,7 +1777,10 @@ function employeeFormFields(emp = {}) {
 function openEmployeeModal(emp) {
   const canPhoto = true;
   const canPromote =
-    canManagePayrollEvents() && !emp.promoted_to_id && !emp.promoted_from_id && emp.status !== "Out";
+    canManagePayrollEvents() && !emp.promoted_to_id && !emp.promoted_from_id && emp.status !== "Out" && emp.status !== "Deleted";
+  const canRevert = canManagePayrollEvents() && emp.promoted_from_id && !emp.promoted_to_id;
+  const canChangeAppId = canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
+  const canRelease = canManagePayrollEvents() && (isUnassignedIdStub(emp) || emp.status !== "Deleted");
   openModal(`
     <div class="modal-header"><h2>Edit employee</h2><button class="btn btn-sm" data-close>✕</button></div>
     <div class="modal-body" id="emp-modal-body">
@@ -1631,10 +1795,28 @@ function openEmployeeModal(emp) {
         </div>
       </div>` : ""}
       ${employeeFormFields(emp)}
+      ${canChangeAppId ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Change app ID</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Updates the ID shown in attendance &amp; payroll. Database ID and all historical records stay linked.</p>
+        <div class="btn-row">
+          <input type="text" id="change-app-id-input" placeholder="New app ID" style="max-width:10rem" />
+          <button type="button" class="btn btn-sm" id="change-app-id-btn">Change app ID</button>
+        </div>
+      </div>` : ""}
+      ${canRevert ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Revert mistaken promotion</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Merges records back to <strong>${escapeHtml(emp.promoted_from_id)}</strong> and removes this promotion record.</p>
+        <button type="button" class="btn btn-sm btn-danger" id="revert-promotion-btn">Revert promotion</button>
+      </div>` : ""}
       ${canPromote ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
         <h4>Promote — new ID &amp; position</h4>
         <p class="muted" style="margin:.25rem 0 .75rem">Keeps <strong>${escapeHtml(emp.id)}</strong> for all months before the effective month. From that month on, payroll &amp; attendance use the new ID.</p>
         <button type="button" class="btn btn-sm btn-primary" id="promote-emp-btn">Reposition agent…</button>
+      </div>` : ""}
+      ${canRelease ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Release / delete app ID</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Sets status to <strong>Deleted</strong>, frees the app ID (e.g. C01) for reuse. Permanent database record and all history are kept.</p>
+        <button type="button" class="btn btn-sm btn-danger" id="release-app-id-btn">Release app ID</button>
       </div>` : ""}
       <div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
         <h4>Export employee data</h4>
@@ -1660,6 +1842,47 @@ function openEmployeeModal(emp) {
   bindPaymentMethodFields();
   bindNationalityFormFields();
   document.getElementById("promote-emp-btn")?.addEventListener("click", () => openPromoteEmployeeModal(emp));
+  document.getElementById("change-app-id-btn")?.addEventListener("click", async () => {
+    const newId = document.getElementById("change-app-id-input")?.value?.trim();
+    if (!newId) return alert("Enter a new app ID");
+    if (!confirm(`Change app ID from ${emp.id} to ${newId}?`)) return;
+    try {
+      const res = await api(`/employees/${emp.id}/change-app-id`, {
+        method: "POST",
+        body: JSON.stringify({ newId }),
+      });
+      closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("App ID changed", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("revert-promotion-btn")?.addEventListener("click", async () => {
+    if (!confirm(`Revert promotion and merge back to ${emp.promoted_from_id}?`)) return;
+    try {
+      const res = await api(`/employees/${emp.id}/revert-promotion`, { method: "POST" });
+      closeModal();
+      if (res.employee) patchEmployeeInCache(res.employee);
+      showSaveIndicator("Promotion reverted", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("release-app-id-btn")?.addEventListener("click", async () => {
+    const label = isUnassignedIdStub(emp) ? emp.id : `app ID ${emp.id}`;
+    if (!confirm(`Release ${label}? The ID can be assigned to someone new; history stays in the database.`)) return;
+    try {
+      await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+      closeModal();
+      showSaveIndicator("App ID released", "saved");
+      render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
   document.getElementById("export-emp-payrolls-btn")?.addEventListener("click", () =>
     exportEmployeePayrolls(emp).catch((e) => alert(e.message))
   );
@@ -1678,6 +1901,18 @@ function openEmployeeModal(emp) {
     delete body.id;
 
     const newStatus = body.status;
+    if (newStatus === "Deleted") {
+      if (!confirm(`Release app ID ${emp.id}? History stays in the database; the ID can be reused.`)) return;
+      try {
+        await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+        closeModal();
+        showSaveIndicator("App ID released", "saved");
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
+      return;
+    }
     const markingOut = isOutEmployeeStatus(newStatus) && !isOutEmployeeStatus(emp.status);
     if (markingOut) {
       openModal(`
@@ -2448,6 +2683,7 @@ async function renderAttendance(root) {
       `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
     ).join("")}</select>
     <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
+    ${data.canEdit ? '<button class="btn btn-primary" id="import-fp-btn">Import FP file</button><button class="btn" id="fp-rules-btn">FP rules</button>' : ""}
     ${hideOutToggle()}
     <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
     <div class="table-wrap attendance-grid"><table>
@@ -2458,8 +2694,13 @@ async function renderAttendance(root) {
           const cal = calMap.get(d);
           const label = cal ? dayHeader(cal) : d.slice(8);
           const dayCls = window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
-          const dayTitle = window.HRMSFeatures?.attendanceDayTitle(d, data) || "";
-          return `<th class="text-center ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>${label}</th>`;
+          const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
+          const dayTitle = holidayName ? (window.HRMSFeatures?.attendanceDayTitle(d, data) || holidayName) : (window.HRMSFeatures?.attendanceDayTitle(d, data) || "");
+          const holidayLine = holidayName
+            ? `<div class="att-holiday-head-name">${escapeHtml(holidayName)}</div>`
+            : "";
+          return `<th class="text-center att-day-head ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
+            <div class="att-day-head-label">${label}</div>${holidayLine}</th>`;
         }).join("")}
       </tr></thead>
       <tbody id="att-tbody">${employees.map((emp) => attendanceEmployeeRowHtml(emp, ctx)).join("")}</tbody>
@@ -2512,7 +2753,145 @@ async function renderAttendance(root) {
       alert(e.message);
     }
   });
+  root.querySelector("#import-fp-btn")?.addEventListener("click", () => openFpImportModal());
+  root.querySelector("#fp-rules-btn")?.addEventListener("click", () => openFpRulesModal());
   bindAttendanceGridEvents(root, ctx);
+}
+
+async function fileToBase64Att(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function openFpImportModal() {
+  openModal(`
+    <div class="modal-header"><h2>Import fingerprint attendance — ${monthLabel(state.month)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <form id="fp-import-form" class="modal-body field-grid">
+      <label class="field" style="grid-column:1/-1"><span>CSV or XLS export from device</span>
+        <input type="file" name="file" accept=".csv,.xls,.xlsx" required /></label>
+      <label class="field"><span>On conflict</span>
+        <select name="overwritePolicy">
+          <option value="skip_manual">Skip days with manual edits</option>
+          <option value="overwrite">Overwrite all</option>
+        </select></label>
+      <div class="form-actions" style="grid-column:1/-1">
+        <button type="button" class="btn" id="fp-preview-btn">Preview</button>
+        <button type="submit" class="btn btn-primary">Apply import</button>
+      </div>
+      <div id="fp-preview-area" class="table-wrap" style="grid-column:1/-1;max-height:16rem;overflow:auto"></div>
+    </form>`, true);
+  let lastPreview = null;
+  document.getElementById("fp-preview-btn").onclick = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(document.getElementById("fp-import-form"));
+    const file = fd.get("file");
+    if (!file?.size) return alert("Choose a file first");
+    try {
+      const base64 = await fileToBase64Att(file);
+      lastPreview = await api("/attendance/import", {
+        method: "POST",
+        body: JSON.stringify({
+          month: state.month,
+          base64,
+          fileName: file.name,
+          dryRun: true,
+          overwritePolicy: fd.get("overwritePolicy"),
+        }),
+      });
+      const area = document.getElementById("fp-preview-area");
+      const rows = lastPreview.preview || [];
+      area.innerHTML = rows.length
+        ? `<table><thead><tr><th>FP</th><th>Date</th><th>In</th><th>Out</th><th>Status</th></tr></thead>
+        <tbody>${rows.slice(0, 100).map((r) => `<tr><td>${escapeHtml(r.fpNumber || "")}</td><td>${r.date}</td><td>${r.checkIn || "—"}</td><td>${r.checkOut || "—"}</td><td>${escapeHtml(r.status)}</td></tr>`).join("")}</tbody></table>
+        ${lastPreview.unmatchedFp?.length ? `<p class="muted">Unmatched FP IDs: ${lastPreview.unmatchedFp.join(", ")}</p>` : ""}`
+        : "<p class='muted'>No rows matched this month.</p>";
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  document.getElementById("fp-import-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const file = fd.get("file");
+    if (!file?.size) return alert("Choose a file");
+    if (!confirm(`Apply FP import for ${monthLabel(state.month)}?`)) return;
+    try {
+      const base64 = await fileToBase64Att(file);
+      const res = await api("/attendance/import", {
+        method: "POST",
+        body: JSON.stringify({
+          month: state.month,
+          base64,
+          fileName: file.name,
+          dryRun: false,
+          overwritePolicy: fd.get("overwritePolicy"),
+        }),
+      });
+      closeModal();
+      alert(`Imported ${res.rowsApplied || res.records?.length || 0} day(s). Skipped ${res.rowsSkipped || 0}.`);
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+}
+
+async function openFpRulesModal() {
+  const data = await api(`/attendance/fp-rules/${state.month}`);
+  const r = data.rules?.checkIn || {};
+  const o = data.rules?.checkOut || {};
+  openModal(`
+    <div class="modal-header"><h2>FP rules — ${monthLabel(state.month)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <form id="fp-rules-form" class="modal-body field-grid">
+      <h4 style="grid-column:1/-1">Check-in</h4>
+      <label class="field"><span>On time before</span><input name="onTimeBefore" value="${r.onTimeBefore || "14:50"}" /></label>
+      <label class="field"><span>Lateness A until</span><input name="latenessAUntil" value="${r.latenessAUntil || "15:00"}" /></label>
+      <label class="field"><span>Lateness B until</span><input name="latenessBUntil" value="${r.latenessBUntil || "15:30"}" /></label>
+      <label class="field"><span>Quarter day until</span><input name="quarterDayUntil" value="${r.quarterDayUntil || "17:00"}" /></label>
+      <label class="field"><span>Half day after</span><input name="halfDayAfter" value="${r.halfDayAfter || "17:00"}" /></label>
+      <h4 style="grid-column:1/-1">Check-out</h4>
+      <label class="field"><span>Expected</span><input name="expected" value="${o.expected || "12:00"}" /></label>
+      <label class="field"><span>Grace until</span><input name="graceUntil" value="${o.graceUntil || "13:00"}" /></label>
+      <label class="field"><span>Half day from</span><input name="halfDayFrom" value="${o.halfDayFrom || "19:00"}" /></label>
+      <label class="field"><span>Half day until</span><input name="halfDayUntil" value="${o.halfDayUntil || "22:00"}" /></label>
+      <label class="field"><span>Quarter day from</span><input name="quarterDayFrom" value="${o.quarterDayFrom || "22:00"}" /></label>
+      <label class="field"><span>Quarter day until</span><input name="quarterDayUntil" value="${o.quarterDayUntil || "23:55"}" /></label>
+      <label class="field" style="grid-column:1/-1"><span>Note</span><textarea name="note" rows="2">${escapeHtml(o.note || "")}</textarea></label>
+      <div class="form-actions" style="grid-column:1/-1"><button type="submit" class="btn btn-primary">Save rules</button></div>
+    </form>`, true);
+  document.getElementById("fp-rules-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rules = {
+      checkIn: {
+        onTimeBefore: fd.get("onTimeBefore"),
+        latenessAUntil: fd.get("latenessAUntil"),
+        latenessBUntil: fd.get("latenessBUntil"),
+        quarterDayUntil: fd.get("quarterDayUntil"),
+        halfDayAfter: fd.get("halfDayAfter"),
+      },
+      checkOut: {
+        expected: fd.get("expected"),
+        graceUntil: fd.get("graceUntil"),
+        halfDayFrom: fd.get("halfDayFrom"),
+        halfDayUntil: fd.get("halfDayUntil"),
+        quarterDayFrom: fd.get("quarterDayFrom"),
+        quarterDayUntil: fd.get("quarterDayUntil"),
+        note: fd.get("note"),
+      },
+    };
+    try {
+      await api(`/attendance/fp-rules/${state.month}`, { method: "PUT", body: JSON.stringify({ rules }) });
+      closeModal();
+      showSaveIndicator("FP rules saved", "saved");
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 }
 
 async function renderPayroll(root) {
@@ -2714,7 +3093,8 @@ async function openEmployeeLoansModal(employeeId) {
     <div class="modal-body">
       <div class="stack">${loans || '<p class="muted">No loans for this employee.</p>'}</div>
       <div class="card" style="margin-top:1rem">
-        <h4>New loan</h4>
+        <h4>Request loan</h4>
+        <p class="muted" style="margin:.25rem 0 .5rem">Submitted to Mark / Phoebe / Raymond for approval before payroll deductions start.</p>
         <form id="loan-form" class="field-grid">
           <label class="field"><span>Total amount (EGP)</span><input name="totalAmount" type="number" min="1" required /></label>
           <label class="field"><span>Per salary (EGP)</span><input name="installmentAmount" type="number" min="1" placeholder="500" /></label>
@@ -2723,7 +3103,7 @@ async function openEmployeeLoansModal(employeeId) {
           <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
         </form>
         <p class="muted" style="margin:.5rem 0 0">Enter either per-salary amount or number of salaries (e.g. 1,000 loan → 500 × 2 salaries).</p>
-        <button class="btn btn-primary btn-sm" id="save-loan-btn" style="margin-top:.5rem">Create loan</button>
+        <button class="btn btn-primary btn-sm" id="save-loan-btn" style="margin-top:.5rem">Submit loan request</button>
       </div>
     </div>`,
     true
@@ -2732,7 +3112,7 @@ async function openEmployeeLoansModal(employeeId) {
   document.getElementById("save-loan-btn").onclick = async () => {
     const fd = new FormData(document.getElementById("loan-form"));
     try {
-      await api("/loans", {
+      await api("/loan-requests", {
         method: "POST",
         body: JSON.stringify({
           employeeId,
@@ -2745,6 +3125,7 @@ async function openEmployeeLoansModal(employeeId) {
         }),
       });
       closeModal();
+      alert("Loan request submitted for executive approval.");
       openEmployeeLoansModal(employeeId);
     } catch (e) {
       alert(e.message);
@@ -3202,6 +3583,44 @@ async function renderDeductions(root) {
   bindMonthNav(root);
 }
 
+async function renderLoanApprovalsPage(root) {
+  if (!state.user?.canApproveLoan) {
+    root.innerHTML = '<p class="muted">Executive approval access only (Mark, Phoebe, Raymond).</p>';
+    return;
+  }
+  const data = await api("/loan-requests?status=pending");
+  const requests = data.requests || [];
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Loan approvals</h1><p class="muted">${requests.length} pending · visible to executives only</p></div></div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Employee</th><th class="text-right">Total</th><th>Installment</th><th>Submitted by</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${requests.length ? requests.map((r) => `<tr>
+        <td>${escapeHtml(r.employeeId)}</td>
+        <td class="text-right">${fmt(r.totalAmount)}</td>
+        <td>${fmt(r.installmentAmount)} × ${r.installmentsCount || "—"}</td>
+        <td>${escapeHtml(r.submittedBy)}</td>
+        <td>${escapeHtml(r.notes || "—")}</td>
+        <td class="btn-row">
+          <button class="btn btn-sm btn-primary" data-loan-approve="${r.id}">Approve</button>
+          <button class="btn btn-sm" data-loan-deny="${r.id}">Deny</button>
+        </td>
+      </tr>`).join("") : '<tr><td colspan="6" class="muted">No pending loan requests</td></tr>'}
+      </tbody></table></div>`;
+  root.querySelectorAll("[data-loan-approve]").forEach((btn) => {
+    btn.onclick = async () => {
+      await api(`/loan-requests/${btn.dataset.loanApprove}/approve`, { method: "POST" });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-loan-deny]").forEach((btn) => {
+    btn.onclick = async () => {
+      const reason = prompt("Deny reason (optional):") || "";
+      await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, { method: "POST", body: JSON.stringify({ denyReason: reason }) });
+      render();
+    };
+  });
+}
+
 async function renderLoansPage(root) {
   const [loanData, empData] = await Promise.all([
     api("/loans"),
@@ -3537,7 +3956,7 @@ async function renderReports(root) {
       setButtonLoading(btn, false);
     }
   };
-  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt }).catch(() => {});
+  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt, openModal, closeModal }).catch(() => {});
 }
 
 async function renderSettings(root) {
@@ -3933,6 +4352,7 @@ function navigate(page) {
   document.querySelectorAll(".nav-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.page === page)
   );
+  closeSidebarNav();
   render();
 }
 
@@ -3975,6 +4395,7 @@ async function render() {
     else if (page === "bonuses") await renderBonuses(root);
     else if (page === "deductions") await renderDeductions(root);
     else if (page === "loans") await renderLoansPage(root);
+    else if (page === "loan-approvals") await renderLoanApprovalsPage(root);
     else if (page === "salaries") await renderSalaries(root);
     else if (page === "reports") await renderReports(root);
     else if (page === "leave" || page === "requests") {
@@ -4034,6 +4455,7 @@ function renderErrorCard(root, message, onRetry) {
 document.querySelectorAll(".nav-btn").forEach((b) =>
   b.addEventListener("click", () => navigate(b.dataset.page))
 );
+initSidebarNav();
 document.getElementById("logout-btn").addEventListener("click", () => performLogout());
 document.getElementById("refresh-btn").addEventListener("click", () => refreshData());
 

@@ -5,6 +5,7 @@ const changelog = require("./changelog");
 const { TRANSPORT_OVERRIDE_STATUSES } = require("./transport");
 const idGen = require("./id-generator");
 const employeeIds = require("./employee-ids");
+const employeeIdentity = require("./employee-identity");
 const { autoWorkingDays } = require("./calendar");
 const { resolveTransportEligible, defaultTransportEligible } = require("./month-profile");
 const { summarizeEmployeeMonth, isPayrollEligible } = require("./attendance");
@@ -173,6 +174,10 @@ function getEmployeeById(id) {
   const employees = cache.getEmployees();
   const direct = employees.find((e) => e.id === id);
   if (direct) return direct;
+  const byArchived = employees.find((e) => e.archived_app_id === id);
+  if (byArchived) return byArchived;
+  const byInternal = employees.find((e) => e.internal_id === id);
+  if (byInternal) return byInternal;
   return (
     employees.find((e) => employeeIds.parseFormerIds(e.former_ids).includes(id)) || null
   );
@@ -229,6 +234,14 @@ async function promoteEmployee(oldId, { newId, leadRole, effectiveFromMonth, pos
   );
   if (backendMod.useSupabase()) {
     try {
+      const created = getEmployeeById(newId);
+      if (created?.internal_id) {
+        await employeeIdentity.syncAllInternalIdsForAppId(newId, created.internal_id);
+      }
+    } catch (err) {
+      console.warn(`internal_id sync after promote failed:`, err.message);
+    }
+    try {
       const usersAdmin = require("./users-admin");
       const existingLogin = await usersAdmin.getAppUser(oldId);
       if (existingLogin) {
@@ -243,6 +256,118 @@ async function promoteEmployee(oldId, { newId, leadRole, effectiveFromMonth, pos
     }
   }
   return { oldId, newId, effectiveFromMonth: eff, employee: getEmployeeById(newId) };
+}
+
+async function revertPromotion(successorId, username) {
+  const successor = getEmployeeById(successorId);
+  if (!successor) throw new Error("Employee not found");
+  const oldId = successor.promoted_from_id;
+  if (!oldId) throw new Error("This employee was not created by promotion");
+
+  const old = getEmployeeById(oldId);
+  if (!old) throw new Error(`Original agent record ${oldId} not found`);
+
+  await employeeIdentity.reassignAppIdReferences(successorId, oldId);
+
+  await updateEmployee(
+    oldId,
+    {
+      promoted_to_id: null,
+      status: old.status === "Out" ? "Out" : "Active",
+      team: successor.team || old.team,
+      position: successor.position || old.position,
+      unit: successor.unit || old.unit,
+      lead_role: null,
+    },
+    username
+  );
+
+  if (backendMod.useSupabase()) {
+    await backend.deleteEmployee(successorId);
+    cache.removeEmployee(successorId);
+    try {
+      const usersAdmin = require("./users-admin");
+      const succLogin = await usersAdmin.getAppUser(successorId);
+      if (succLogin) await usersAdmin.deleteAppUser(successorId, username);
+      const oldLogin = await usersAdmin.getAppUser(oldId);
+      if (oldLogin) {
+        await usersAdmin.updateAppUser(oldId, { status: "active" }, username);
+      } else {
+        await usersAdmin.upsertEmployeeLogin(
+          { employeeId: oldId, role: usersAdmin.inferRoleFromEmployeeId(oldId) },
+          username
+        );
+      }
+    } catch (err) {
+      console.warn(`login update after revert failed for ${successorId}→${oldId}:`, err.message);
+    }
+    if (old.internal_id) {
+      await employeeIdentity.syncAllInternalIdsForAppId(oldId, old.internal_id);
+    }
+  }
+
+  await changelog.logEmployeeChange(username, "revert_promotion", old, {
+    promoted_to_id: null,
+  }, successorId);
+
+  return { oldId, revertedFromId: successorId, employee: getEmployeeById(oldId) };
+}
+
+async function changeEmployeeAppId(oldId, newId, username) {
+  const emp = getEmployeeById(oldId);
+  if (!emp) throw new Error("Employee not found");
+  if (employeeIdentity.isDeletedEmployee(emp)) throw new Error("Cannot change app ID on deleted record");
+
+  const result = await employeeIdentity.migrateEmployeeAppId(oldId, newId);
+  const refreshed = await backend.getEmployeeById(newId);
+  if (refreshed) cache.upsertEmployee(refreshed);
+  else {
+    cache.removeEmployee(oldId);
+    cache.upsertEmployee({ ...emp, id: newId });
+  }
+
+  if (backendMod.useSupabase()) {
+    try {
+      const usersAdmin = require("./users-admin");
+      const login = await usersAdmin.getAppUser(oldId);
+      if (login) {
+        await usersAdmin.deleteAppUser(oldId, username);
+        await usersAdmin.upsertEmployeeLogin(
+          { employeeId: newId, role: usersAdmin.inferRoleFromEmployeeId(newId) },
+          username
+        );
+      }
+    } catch (err) {
+      console.warn(`login update after app id change failed:`, err.message);
+    }
+  }
+
+  await changelog.logEmployeeChange(username, "app_id_change", emp, { id: newId }, oldId);
+  return { ...result, employee: getEmployeeById(newId) };
+}
+
+async function releaseEmployeeAppId(appId, username) {
+  const emp = getEmployeeById(appId);
+  if (!emp) throw new Error("Employee not found");
+  if (employeeIdentity.isUnassignedIdStub(emp)) {
+    await backend.deleteEmployee(appId);
+    cache.removeEmployee(appId);
+    return { releasedAppId: appId, deleted: true, stub: true };
+  }
+
+  const result = await employeeIdentity.releaseEmployeeAppId(appId, username);
+  cache.removeEmployee(appId);
+  const updated = await backend.getEmployeeById(result.placeholderId);
+  if (updated) cache.upsertEmployee(updated);
+
+  await changelog.logEmployeeChange(
+    username,
+    "release_app_id",
+    emp,
+    { status: "Deleted", archived_app_id: result.archivedAppId },
+    appId
+  );
+  return result;
 }
 
 function getConfig() {
@@ -452,6 +577,11 @@ async function createEmployee(emp, username) {
   const { sanitizeEmployeeComplianceFields } = require("./employee-compliance");
   if (!mapped.employment_date) {
     mapped.employment_date = new Date().toISOString().slice(0, 10);
+  }
+  if (!mapped.probation_end_date && mapped.employment_date) {
+    const d = new Date(mapped.employment_date);
+    d.setDate(d.getDate() + 90);
+    mapped.probation_end_date = d.toISOString().slice(0, 10);
   }
   const created = await backend.createEmployee(sanitizeEmployeeComplianceFields(mapped), username);
   cache.upsertEmployee(created);
@@ -945,6 +1075,9 @@ module.exports = {
   createEmployee,
   updateEmployee,
   promoteEmployee,
+  revertPromotion,
+  changeEmployeeAppId,
+  releaseEmployeeAppId,
   saveAttendanceBatch,
   saveAttendanceRow,
   initMonthWeekends,

@@ -99,8 +99,12 @@ function filterEmployeesForMonth(employees, month, { hideOut = true } = {}) {
   });
 }
 
-function filterEmployees(employees, { hideOut = true, unit, team, q, excludePromoted = true, month = null } = {}) {
+function filterEmployees(employees, { hideOut = true, unit, team, q, excludePromoted = true, month = null, includeDeleted = false } = {}) {
   let list = [...employees];
+  if (!includeDeleted) {
+    const { isDeletedEmployee } = require("./employee-identity");
+    list = list.filter((e) => !isDeletedEmployee(e));
+  }
   if (hideOut) list = list.filter((e) => !isOutEmployee(e));
   if (month) return filterEmployeesForMonth(list, month, { hideOut: false });
   if (excludePromoted) list = list.filter((e) => !isSupersededAgent(e));

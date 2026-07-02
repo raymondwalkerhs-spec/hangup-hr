@@ -2,8 +2,18 @@
  * HRMS advanced features UI — loaded before app.js; hooks called from app.js.
  */
 window.HRMSFeatures = (function () {
+  function holidayCountryLabel(country) {
+    const c = String(country || "USA").toUpperCase();
+    if (c === "EGY") return "Egyptian holiday";
+    return "Federal holiday";
+  }
+
   function holidayForDate(date, holidays) {
-    return (holidays || []).find((h) => h.date === date || h.holidayDate === date);
+    const day = String(date || "").slice(0, 10);
+    return (holidays || []).find((h) => {
+      const hd = String(h.date || h.holidayDate || "").slice(0, 10);
+      return hd === day;
+    });
   }
 
   function attendanceDayClass(date, data) {
@@ -15,11 +25,39 @@ window.HRMSFeatures = (function () {
 
   function attendanceDayTitle(date, data) {
     const h = holidayForDate(date, data.holidays);
-    return h ? `Federal holiday: ${h.name}` : "";
+    return h ? `${holidayCountryLabel(h.country)}: ${h.name}` : "";
+  }
+
+  function attendanceDayHolidayName(date, data) {
+    const h = holidayForDate(date, data.holidays);
+    return h?.name ? String(h.name).trim() : "";
+  }
+
+  function attendanceHolidaysBannerHtml(data) {
+    const list = (data.holidays || []).filter((h) => h.active !== false);
+    if (!list.length) return "";
+
+    const renderSection = (title, rows, tag) => {
+      const items = rows
+        .map((h) => {
+          const d = String(h.date || h.holidayDate || "").slice(0, 10);
+          return `<li><strong>${escapeHtml(d)}</strong> — ${escapeHtml(h.name)} <span class="muted">(${escapeHtml(tag)})</span></li>`;
+        })
+        .join("");
+      return `<div class="att-holidays-section"><strong>${escapeHtml(title)}</strong><ul class="att-holidays-list">${items}</ul></div>`;
+    };
+
+    const usa = list.filter((h) => String(h.country || "USA").toUpperCase() !== "EGY");
+    const egy = list.filter((h) => String(h.country || "").toUpperCase() === "EGY");
+    const sections = [];
+    if (usa.length) sections.push(renderSection("US federal holidays", usa, "federal"));
+    if (egy.length) sections.push(renderSection("Egyptian holidays", egy, "Egypt"));
+    return `<div class="alert alert-info att-holidays-banner"><strong>Holidays this month</strong>${sections.join("")}<span class="muted">Pink columns are holidays — Day-OFF is prefilled on init when empty.</span></div>`;
   }
 
   function attendanceBannersHtml(data) {
     const parts = [];
+    parts.push(attendanceHolidaysBannerHtml(data));
     if (data.workingDaysNote) {
       parts.push(`<div class="alert alert-warn">${escapeHtml(data.workingDaysNote)}</div>`);
     }
@@ -690,14 +728,32 @@ window.HRMSFeatures = (function () {
   async function enhanceDashboard(root, api) {
     try {
       const { expiring } = await api("/documents/expiring");
-      if (!expiring?.length) return;
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `<h3>Documents expiring (60 days)</h3><ul>${expiring
-        .slice(0, 8)
-        .map((d) => `<li>${escapeHtml(d.employeeId)}: ${escapeHtml(d.docType)} — ${d.expiry}</li>`)
-        .join("")}</ul>`;
-      root.querySelector(".grid-2")?.appendChild(card);
+      if (expiring?.length) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `<h3>Documents expiring (60 days)</h3><ul>${expiring
+          .slice(0, 8)
+          .map((d) => `<li>${escapeHtml(d.employeeId)}: ${escapeHtml(d.docType)} — ${d.expiry}</li>`)
+          .join("")}</ul>`;
+        root.querySelector(".grid-2")?.appendChild(card);
+      }
+    } catch {
+      /* optional */
+    }
+    try {
+      const { alerts } = await api("/hrms/alerts/employment?days=60");
+      if (alerts?.length) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `<h3>Probation / contract ending (60 days)</h3><ul>${alerts
+          .slice(0, 10)
+          .map(
+            (a) =>
+              `<li>${escapeHtml(a.employeeId)} (${escapeHtml(a.name)}): ${a.type === "probation" ? "Probation" : "Contract"} ends ${a.date}</li>`
+          )
+          .join("")}</ul>`;
+        root.querySelector(".grid-2")?.appendChild(card);
+      }
     } catch {
       /* optional */
     }
@@ -786,9 +842,25 @@ window.HRMSFeatures = (function () {
           <button class="btn btn-sm" id="import-holidays-btn">Import federal holidays (2024–2028)</button>
           <button class="btn btn-sm" id="add-holiday-btn">+ Add holiday</button>
         </div>
-        <div id="holidays-list" class="muted">Loading…</div>
+        <div id="holidays-list-usa" class="muted">Loading…</div>
       </div>`
     );
+
+    const role = String(status.user?.role || "").toLowerCase();
+    const isHolidayAdmin = ["admin", "ceo"].includes(role);
+    if (isHolidayAdmin) {
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<div class="card" id="settings-holidays-egy-card">
+          <h3>Egyptian holidays</h3>
+          <p class="muted">Imported inactive by default. When enabled, they affect attendance for everyone (pink columns, Day-OFF prefill). Only Admin can import or toggle.</p>
+          <div class="btn-row" style="margin-bottom:.5rem">
+            <button class="btn btn-sm" id="import-holidays-egy-btn">Import Egyptian holidays (2024–2028)</button>
+          </div>
+          <div id="holidays-list-egy" class="muted">Loading…</div>
+        </div>`
+      );
+    }
 
     root.querySelector("#pw-save").onclick = async () => {
       const fd = new FormData(root.querySelector("#pw-form"));
@@ -811,16 +883,25 @@ window.HRMSFeatures = (function () {
       alert("Tax rules saved.");
     };
 
-    async function loadHolidays() {
+    async function loadHolidaysList(elId, country, { canToggle = true } = {}) {
       const { holidays } = await api("/hrms/holidays");
-      const el = root.querySelector("#holidays-list");
+      const el = root.querySelector(elId);
+      if (!el) return;
+      const filtered = (holidays || []).filter((h) => {
+        const c = String(h.country || "USA").toUpperCase();
+        return country === "EGY" ? c === "EGY" : c !== "EGY";
+      });
       const byYear = {};
-      for (const h of holidays || []) {
+      for (const h of filtered) {
         const y = String(h.date || h.holidayDate || "").slice(0, 4) || "Other";
         if (!byYear[y]) byYear[y] = [];
         byYear[y].push(h);
       }
       const years = Object.keys(byYear).sort();
+      const emptyMsg =
+        country === "EGY"
+          ? "No Egyptian holidays — click Import Egyptian holidays."
+          : "No holidays configured — click Import federal holidays.";
       el.innerHTML =
         years
           .map((year) => {
@@ -828,7 +909,7 @@ window.HRMSFeatures = (function () {
               .map(
                 (h) =>
                   `<label class="adj-row toggle-label" style="display:flex;justify-content:space-between;gap:.5rem">
-                    <span><input type="checkbox" data-holiday-active="${h.id}" ${h.active !== false ? "checked" : ""} />
+                    <span><input type="checkbox" data-holiday-active="${h.id}" ${h.active !== false ? "checked" : ""} ${canToggle ? "" : "disabled"} />
                     ${h.date || h.holidayDate}: ${escapeHtml(h.name)}</span>
                     <button type="button" class="btn btn-sm" data-del-holiday="${h.id}">Delete</button>
                   </label>`
@@ -839,21 +920,34 @@ window.HRMSFeatures = (function () {
               <div style="margin-top:.5rem">${rows}</div>
             </details>`;
           })
-          .join("") || "No holidays configured — click Import federal holidays.";
+          .join("") || emptyMsg;
       el.querySelectorAll("[data-del-holiday]").forEach((b) => {
         b.onclick = async () => {
           await api(`/hrms/holidays/${b.dataset.delHoliday}`, { method: "DELETE" });
-          loadHolidays();
+          loadHolidaysList(elId, country, { canToggle });
         };
       });
       el.querySelectorAll("[data-holiday-active]").forEach((cb) => {
+        if (!canToggle) return;
         cb.onchange = async () => {
-          await api(`/hrms/holidays/${cb.dataset.holidayActive}`, {
-            method: "PATCH",
-            body: JSON.stringify({ active: cb.checked }),
-          });
+          try {
+            await api(`/hrms/holidays/${cb.dataset.holidayActive}`, {
+              method: "PATCH",
+              body: JSON.stringify({ active: cb.checked }),
+            });
+          } catch (e) {
+            alert(e.message);
+            cb.checked = !cb.checked;
+          }
         };
       });
+    }
+
+    async function loadHolidays() {
+      await loadHolidaysList("#holidays-list-usa", "USA", { canToggle: true });
+      if (isHolidayAdmin) {
+        await loadHolidaysList("#holidays-list-egy", "EGY", { canToggle: true });
+      }
     }
     loadHolidays();
     root.querySelector("#import-holidays-btn").onclick = async () => {
@@ -865,6 +959,15 @@ window.HRMSFeatures = (function () {
         alert(e.message);
       }
     };
+    root.querySelector("#import-holidays-egy-btn")?.addEventListener("click", async () => {
+      try {
+        const res = await api("/hrms/holidays/import-egyptian", { method: "POST" });
+        alert(`Imported ${res.count || 0} Egyptian holidays (inactive until you enable them).`);
+        loadHolidays();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
     root.querySelector("#add-holiday-btn").onclick = () => {
       openModal(`
         <div class="modal-header"><h2>Add holiday</h2><button class="btn btn-sm" data-close>✕</button></div>
@@ -944,7 +1047,7 @@ window.HRMSFeatures = (function () {
   }
 
   async function enhanceReports(root, api, state, helpers) {
-    const { downloadFile, fmt } = helpers;
+    const { downloadFile, fmt, openModal, closeModal } = helpers;
     const toolbar = root.querySelector(".page-header .btn-row");
     if (!toolbar || document.getElementById("rpt-turnover-btn")) return;
     const turnoverBtn = document.createElement("button");
@@ -972,6 +1075,74 @@ window.HRMSFeatures = (function () {
       });
     };
     toolbar.append(turnoverBtn, rankBtn);
+
+    const savedCard = document.createElement("div");
+    savedCard.className = "card";
+    savedCard.style.marginTop = "1rem";
+    savedCard.innerHTML = `<h3>Custom reports <button class="btn btn-sm" id="new-saved-report-btn">+ New</button></h3>
+      <div id="saved-reports-list" class="muted">Loading…</div>`;
+    root.querySelector(".page-header")?.after(savedCard);
+
+    try {
+      const { reports, columnSets } = await api("/hrms/saved-reports");
+      const list = savedCard.querySelector("#saved-reports-list");
+      list.innerHTML = reports?.length
+        ? `<table><thead><tr><th>Name</th><th>Type</th><th></th></tr></thead><tbody>${reports
+            .map(
+              (r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.reportType)}</td><td class="btn-row">
+              <button class="btn btn-sm" data-run-report="${r.id}">Export CSV</button>
+              <button class="btn btn-sm btn-danger" data-del-report="${r.id}">Delete</button></td></tr>`
+            )
+            .join("")}</tbody></table>`
+        : "<p>No saved reports yet.</p>";
+      list.querySelectorAll("[data-run-report]").forEach((b) => {
+        b.onclick = () =>
+          downloadFile(`/hrms/saved-reports/${b.dataset.runReport}/run?month=${state.month}`, `report-${state.month}.csv`);
+      });
+      list.querySelectorAll("[data-del-report]").forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm("Delete this saved report?")) return;
+          await api(`/hrms/saved-reports/${b.dataset.delReport}`, { method: "DELETE" });
+          helpers.render();
+        };
+      });
+      savedCard.querySelector("#new-saved-report-btn").onclick = () => {
+        const types = Object.keys(columnSets || {});
+        openModal(
+          `<div class="modal-header"><h2>New saved report</h2><button class="btn btn-sm" data-close>✕</button></div>
+          <form id="saved-report-form" class="modal-body field-grid">
+            <label class="field"><span>Name</span><input name="name" required /></label>
+            <label class="field"><span>Type</span><select name="reportType">${types.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field"><span>Filter unit</span><input name="unit" placeholder="optional" /></label>
+            <label class="field"><span>Filter team</span><input name="team" placeholder="optional" /></label>
+            <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+          </form>`,
+          true
+        );
+        document.getElementById("saved-report-form").onsubmit = async (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.target);
+          const reportType = fd.get("reportType");
+          const filters = {};
+          if (fd.get("unit")) filters.unit = fd.get("unit");
+          if (fd.get("team")) filters.team = fd.get("team");
+          filters.month = state.month;
+          await api("/hrms/saved-reports", {
+            method: "POST",
+            body: JSON.stringify({
+              name: fd.get("name"),
+              reportType,
+              filters,
+              columns: columnSets[reportType] || [],
+            }),
+          });
+          closeModal();
+          helpers.render();
+        };
+      };
+    } catch {
+      savedCard.querySelector("#saved-reports-list").textContent = "Could not load saved reports.";
+    }
   }
 
   function enhanceChanges(root, api) {
@@ -996,6 +1167,8 @@ window.HRMSFeatures = (function () {
   return {
     attendanceDayClass,
     attendanceDayTitle,
+    attendanceDayHolidayName,
+    attendanceHolidaysBannerHtml,
     attendanceBannersHtml,
     initNotificationsBell,
     renderLeavePage,

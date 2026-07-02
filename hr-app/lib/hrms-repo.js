@@ -622,15 +622,16 @@ async function deleteLeaveRequest(id) {
   return { ok: true };
 }
 
-async function readPublicHolidays({ activeOnly = false } = {}) {
+async function readPublicHolidays({ activeOnly = false, country = null } = {}) {
   requireSupabase();
   let q = db().from("public_holidays").select("*").order("holiday_date");
   if (activeOnly) q = q.eq("active", true);
+  if (country) q = q.eq("country", country);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data || []).map((r) => ({
     id: r.id,
-    date: r.holiday_date,
+    date: String(r.holiday_date || "").slice(0, 10),
     name: r.name,
     country: r.country || "USA",
     active: r.active !== false,
@@ -656,15 +657,32 @@ async function seedPublicHolidays(rows, actor) {
     country: r.country || "USA",
     active: r.active !== false,
   }));
-  const { error } = await db().from("public_holidays").upsert(payload, { onConflict: "holiday_date" });
-  if (error) throw new Error(error.message);
+  const { error } = await db().from("public_holidays").upsert(payload, {
+    onConflict: "holiday_date,country",
+    ignoreDuplicates: false,
+  });
+  if (error) {
+    const { error: e2 } = await db().from("public_holidays").upsert(payload, { onConflict: "holiday_date" });
+    if (e2) throw new Error(e2.message);
+  }
   return { count: payload.length };
 }
 
 async function upsertPublicHoliday({ date, name, country }, actor) {
   requireSupabase();
   const row = { holiday_date: date, name, country: country || "USA" };
-  const { data, error } = await db().from("public_holidays").upsert(row, { onConflict: "holiday_date" }).select().single();
+  let { data, error } = await db()
+    .from("public_holidays")
+    .upsert(row, { onConflict: "holiday_date,country" })
+    .select()
+    .single();
+  if (error) {
+    ({ data, error } = await db()
+      .from("public_holidays")
+      .upsert(row, { onConflict: "holiday_date" })
+      .select()
+      .single());
+  }
   if (error) throw new Error(error.message);
   return { id: data.id, date: data.holiday_date, name: data.name, country: data.country };
 }

@@ -133,7 +133,10 @@ function mergeEmployeesForMonth(baseEmployees, store, month) {
   for (const id of collectMonthEmployeeIds(store, month)) {
     if (!id || byId.has(id)) continue;
     const emp = store.getEmployeeById(id);
-    if (emp) byId.set(id, emp);
+    if (!emp) continue;
+    if (isNotYetActiveForMonth(emp, month)) continue;
+    if (isSupersededForMonth(emp, month, byId)) continue;
+    byId.set(id, emp);
   }
   return [...byId.values()];
 }

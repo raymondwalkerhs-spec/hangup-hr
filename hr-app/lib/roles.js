@@ -98,6 +98,15 @@ function canManageAppUsers(username) {
 }
 
 const LEAVE_APPROVERS = ["mark", "raymond", "phoebe"];
+const EXECUTIVE_APPROVERS = LEAVE_APPROVERS;
+
+function canApproveLoanRequest(username) {
+  return EXECUTIVE_APPROVERS.includes(String(username || "").trim().toLowerCase());
+}
+
+function canViewLoanRequests(username) {
+  return canApproveLoanRequest(username);
+}
 
 function canApproveLeave(username) {
   return LEAVE_APPROVERS.includes(String(username || "").trim().toLowerCase());
@@ -273,6 +282,10 @@ function canEditSale(userRole) {
   return false;
 }
 
+function canManageHolidayActivation(userRole) {
+  return ADMIN_ROLES.includes(normalizeRole(userRole?.role || userRole));
+}
+
 module.exports = {
   ROLE_RANK,
   SELF_SCOPED_ROLES,
@@ -285,6 +298,9 @@ module.exports = {
   canApproveLeave,
   canManageSessions,
   LEAVE_APPROVERS,
+  EXECUTIVE_APPROVERS,
+  canApproveLoanRequest,
+  canViewLoanRequests,
   SYSTEM_ADMIN_USERNAME,
   canAccessUnit,
   canAccessEmployee,
@@ -294,6 +310,7 @@ module.exports = {
   canTransferBonus,
   canGrantTransferBonus,
   canManageAll,
+  canManageHolidayActivation,
   canSubmitBonusRequest,
   canApproveBonusRequest,
   canReceiveBonusViaRequest,

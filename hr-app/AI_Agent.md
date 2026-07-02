@@ -10,7 +10,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** `K:\download app hr`
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.0.5-beta.1` (`package.json` → `version`)
+- **Current version:** `1.0.9-beta.2` (`package.json` → `version`)
 
 ---
 
@@ -57,7 +57,8 @@ to Supabase via Express, then re-sync.
 | Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js` |
 | Users CRUD | `lib/users-admin.js`, `lib/roles.js` |
 | Version check | `lib/app-version.js`, `lib/version-sheet.js` |
-| Electron | `electron/main.js` |
+| GitHub in-app updates | `lib/github-updater.js`, `UPDATES.md`, `.github/workflows/release.yml` |
+| Electron | `electron/main.js`, `electron/preload.js` |
 | Build | `scripts/build.ps1`, `package.json` → `build` section |
 | Migrations | `supabase/migrations/`, Supabase MCP `apply_migration` / `execute_sql` |
 | Env template | `.env.example` (never commit real `.env` or secret keys) |
@@ -88,21 +89,56 @@ Service account: `hrsystem@decoded-flag-420721.iam.gserviceaccount.com`
 
 ---
 
-## Supabase MCP
+## Supabase MCP & migrations
 
-- Server name in Cursor: `user-supabase` (also `.cursor/mcp.json`)
-- **DDL:** `apply_migration` with `name` + `query` — **apply pending migrations yourself** whenever schema changes are needed; do not ask the user to run SQL manually if MCP access works
-- **DML / version updates / data imports:** `execute_sql`
+- Server in Cursor: `supabase` (`.cursor/mcp.json` → `project_ref=ugntjwqimgosuiodsnnk`)
+- **Agents must apply migrations themselves** — never ask the user to paste SQL into the Dashboard unless **both** MCP and `npm run apply:migrations` fail with a credentials error.
+
+### Migration order (apply when missing)
+
+1. `20260706_employee_internal_id.sql`
+2. `20260706_app_versions_force_update.sql`
+3. `20260708_finance_hr_attendance.sql`
+
+### How to apply (try in order)
+
+| Method | When |
+|--------|------|
+| **MCP `apply_migration`** | Preferred — `name` + full SQL from `supabase/migrations/*.sql` |
+| **MCP `execute_sql`** | Idempotent one-offs; verify with `list_tables` |
+| **`npm run apply:migrations`** | Shell fallback — needs `SUPABASE_ACCESS_TOKEN` or `SUPABASE_DB_PASSWORD` in `.env` |
+| **Dashboard SQL Editor** | Last resort only if MCP + script fail |
+
+### Verify after apply
+
+```text
+employees.internal_id, employees.fp_number, app_versions.force_update_min_version, loan_requests table
+```
+
+Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('./lib/supabase-client'); ..."`
+
+### When to apply
+
+1. Before using new tables/API routes — `list_tables` / probe columns first
+2. After adding a file under `supabase/migrations/`
+3. On user request (“apply migrations”) or “table/column not found” errors
+4. Re-run is safe (`IF NOT EXISTS`, idempotent DDL)
+
+### Do not
+
+- Ask the user to run SQL if MCP is configured and working
+- Ask for `SUPABASE_SECRET_KEY` — it cannot run DDL (Management API or MCP required)
+- Skip migration verify step before shipping a field-breaking release
+
+---
+
+## Supabase MCP (tools reference)
+
+- **DDL:** `apply_migration` with `name` + `query`
+- **DML / version updates:** `execute_sql`
 - **Inspect:** `list_tables`, `list_migrations`
-- Migration files live in `supabase/migrations/` — read the `.sql` file, then apply via MCP (or `execute_sql` for idempotent one-offs)
+- Migration files: `supabase/migrations/` — read `.sql`, then apply via MCP
 - **Do not** hardcode secrets in docs; keys live in `.env` only
-
-### When to apply migrations
-
-1. Before using new tables/API routes (e.g. `sales`, `bonus_requests`) — verify with `list_tables` first
-2. After adding a new file under `supabase/migrations/`
-3. On user request (“apply migrations”) or when import/scripts fail with “table not found”
-4. Re-run is safe when migrations use `IF NOT EXISTS` / `ON CONFLICT`
 
 ### Data import scripts
 
@@ -127,23 +163,41 @@ Service account: `hrsystem@decoded-flag-420721.iam.gserviceaccount.com`
    - `AI_Agent.md` — if workflows, versions, or architecture changed
 4. **Update live `app_versions` in Supabase** (required — do not skip):
 
+```powershell
+cd "K:\download app hr"
+node scripts/publish-app-version.js --notes "One-line release notes"
+```
+
+| Release kind | When to use | Command |
+|--------------|-------------|---------|
+| **Minor** (optional update warning) | UI tweaks, non-breaking fixes | `node scripts/publish-app-version.js` |
+| **Field-breaking** | New APIs/schema — old EXE breaks for HR/Quality/field staff | `node scripts/publish-app-version.js --field-breaking --min-compatible 1.0.7-beta.1` |
+| **Breaking (all roles)** | Login or data layer incompatible for everyone | `node scripts/publish-app-version.js --breaking` |
+
+- **`--field-breaking`** sets `force_update_min_version` to `package.json` version → blocks **hr, quality, agent, tl, op, rtm** below that version at login (admin/CEO/finance get warning only until they update).
+- **`--breaking`** sets `min_compatible_version` = new version → **everyone** below it is blocked.
+- **Always check:** if the release needs new DB migrations or API shapes, use `--field-breaking` or `--breaking` — do not leave HR on an old EXE that cannot sync.
+
+Manual SQL (fallback):
+
 ```sql
 UPDATE app_versions SET is_current = false WHERE is_current = true;
 
-INSERT INTO app_versions (version, release_date, release_type, min_compatible_version, is_current, notes)
-VALUES ('X.Y.Z', CURRENT_DATE, 'minor', '1.0.0', true, 'One-line release notes')
+INSERT INTO app_versions (version, release_date, release_type, min_compatible_version, force_update_min_version, is_current, notes)
+VALUES ('X.Y.Z', CURRENT_DATE, 'minor', '1.0.7-beta.1', 'X.Y.Z', true, 'One-line release notes')
 ON CONFLICT (version) DO UPDATE SET
   is_current = true,
   release_date = EXCLUDED.release_date,
   release_type = EXCLUDED.release_type,
   min_compatible_version = EXCLUDED.min_compatible_version,
+  force_update_min_version = EXCLUDED.force_update_min_version,
   notes = EXCLUDED.notes;
 ```
 
-- Set `min_compatible_version` higher on **breaking** releases to block old EXEs at login.
+- Apply migration `20260706_app_versions_force_update.sql` once for `force_update_min_version` column.
 - Only **one** row should have `is_current = true`.
 
-5. **Build** Windows EXEs:
+5. **Build** Windows EXEs on **your PC** (primary — unchanged):
 
 ```powershell
 cd "K:\download app hr"
@@ -152,7 +206,17 @@ cd "K:\download app hr"
 
 Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant.
 
-6. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).
+6. **Optional — GitHub in-app patch updates** (does not replace step 5):
+
+```powershell
+npm run package:github -- --full
+npm run publish:github
+# Or: git tag v{version} && git push origin v{version}  → CI workflow in .github/workflows/release.yml
+```
+
+Set `GITHUB_UPDATES_REPO=owner/repo` in packaged `.env`. Full detail: [`UPDATES.md`](UPDATES.md).
+
+7. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).
 
 ---
 
@@ -194,7 +258,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | Topic | Decision |
 |-------|----------|
-| App update hosting | **Not** Supabase Storage (&gt;100 MB per EXE) |
+| App update hosting | **Not** Supabase Storage (&gt;100 MB per EXE). Installers: USB/share folder. **Optional:** GitHub Releases patch zips for in-app update (`UPDATES.md`) |
 | Local SQLite cache | **Keep** — performance layer on each PC |
 | User management | **Raymond only** |
 | Password reset | Manual by Raymond today; `email` column ready for future |
@@ -205,9 +269,11 @@ npm run rebuild:native             # after npm install / Electron version change
 
 ## Current `app_versions` state
 
-| version | is_current | min_compatible_version | notes |
-|---------|------------|------------------------|-------|
-| 1.0.5-beta.1 | **true** | 1.0.0 | Sales, bonus approval, costs/petty cash |
+| version | is_current | min_compatible_version | force_update (field) | notes |
+|---------|------------|------------------------|----------------------|-------|
+| 1.0.9-beta.1 | **true** | 1.0.8-beta.1 | 1.0.9-beta.1 | Finance workflow, FP import, loan approval, custom reports |
+| 1.0.8-beta.1 | false | 1.0.7-beta.1 | 1.0.8-beta.1 | Employee identity, promotions revert, nav, field force-update |
+| 1.0.5-beta.1 | false | 1.0.0 | — | Sales, bonus approval, costs/petty cash |
 | 1.0.4-beta.3 | false | 1.0.0 | Nationality, compliance, employee filters |
 | 1.0.4-beta.2 | false | 1.0.0 | HRMS advanced features |
 | 1.0.2-beta.5 | false | 1.0.0 | UI themes |
@@ -240,7 +306,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 |----|---------|----------|-------|
 | EMP-01 | **Onboarding checklist** | P2 | **Approved** `1.0.4-beta.2` |
 | EMP-02 | **Offboarding workflow** | P2 | **Approved** `1.0.4-beta.2` |
-| EMP-03 | **Probation / contract end alerts** | P2 | Dashboard reminders from `start_date` / contract fields |
+| EMP-03 | **Probation / contract end alerts** | Done | `1.0.9-beta.1` — dashboard + employee fields |
 | EMP-04 | **Org chart** | P3 | **Approved** `1.0.4-beta.2` — read-only org page |
 | EMP-05 | **Employee self-service portal** | P3 | Agents view own attendance, payslips, submit leave requests (web or slim app) |
 
@@ -249,10 +315,10 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | ID | Feature | Priority | Notes |
 |----|---------|----------|-------|
 | ATT-01 | **Leave management** | P1 | **Approved** `1.0.4-beta.2` |
-| ATT-02 | **Public holiday calendar** | P2 | **Approved** `1.0.4-beta.2` — USA federal holidays, pink grid columns |
+| ATT-02 | **Public holiday calendar** | P2 | **Approved** `1.0.4-beta.2` — USA federal holidays; **Egyptian holidays** `1.0.8-beta.1` (admin-only activate, separate Settings card) |
 | ATT-03 | **Shift / roster planning** | P3 | Night shifts, rotating teams, expected vs actual hours |
 | ATT-04 | **Overtime tracking** | P2 | OT hours, rates, approval; feed into payroll |
-| ATT-05 | **Bulk attendance import** | P2 | CSV upload for biometric/export systems |
+| ATT-05 | **Bulk attendance import** | Done | `1.0.9-beta.1` — FP device CSV/XLS + per-month rules |
 
 ### Payroll & compensation
 
@@ -269,7 +335,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | ID | Feature | Priority | Notes |
 |----|---------|----------|-------|
 | HR-01 | **Warning escalation workflow** | P2 | **Approved** `1.0.4-beta.2` — 1st / 2nd / final levels |
-| HR-02 | **Loan approval chain** | P3 | Request → TL → HR → finance before active loan |
+| HR-02 | **Loan approval chain** | Done | `1.0.9-beta.1` — HR request → Mark/Phoebe/Raymond approve |
 | HR-03 | **Commission plan builder** | P2 | **Approved** `1.0.4-beta.2` — commission types CRUD + tier editor |
 
 ### Documents & compliance
@@ -286,7 +352,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 |----|---------|----------|-------|
 | RPT-01 | **Headcount & turnover dashboard** | P2 | **Approved** `1.0.4-beta.2` |
 | RPT-02 | **Attendance summary export** | P2 | **Approved** `1.0.4-beta.2` — rankings CSV |
-| RPT-03 | **Custom report builder** | P3 | Saved filters, scheduled exports |
+| RPT-03 | **Custom report builder** | Done | `1.0.9-beta.1` — saved reports + CSV export |
 | RPT-04 | **Finance handoff pack** | P2 | **Approved** `1.0.4-beta.2` |
 
 ### Admin & platform
@@ -296,17 +362,36 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | ADM-01 | **In-app notifications** | P2 | **Approved** `1.0.4-beta.2` |
 | ADM-02 | **Audit export for Changes tab** | P2 | **Approved** `1.0.4-beta.2` |
 | ADM-03 | **Multi-admin user management** | P3 | Delegate Users tab to more than Raymond (role-gated) |
-| ADM-04 | **Auto-update checker** | P3 | Poll `app_versions` + shared folder URL for new EXE (not Storage) |
+| ADM-04 | **Auto-update checker** | Done | GitHub Releases patch + `app_versions` policy — see [`UPDATES.md`](UPDATES.md) |
 | ADM-05 | **Backup / restore UI** | P2 | Raymond triggers Supabase-aware cache refresh; export config snapshot |
 | ADM-06 | **Localization (EN + AR)** | P3 | RTL layout, bilingual payslips if needed |
+| ADM-07 | **GitHub release channel (Windows)** | Done | Workflow + `bootstrap-github-repo.ps1` — user pushes repo + secrets |
+| ADM-08 | **GitHub release channel (macOS CI)** | Done | `macos-latest` job + `scripts/build-macos.sh` in release workflow |
+| ADM-09 | **macOS code signing** | P2 | Apple cert for Gatekeeper after in-app update (`identity: null` today) |
+
+### Costs & finance
+
+> **Shipped core** in `1.0.5-beta.1`: expenses, petty cash, monthly bills schema, HR/RTM submit.  
+> **Code:** `routes/expenses.js`, `lib/business-repo.js`, `public/js/expenses.js`
+
+| ID | Feature | Priority | Notes |
+|----|---------|----------|-------|
+| FIN-01 | **Expense approve/deny workflow** | Done | `1.0.9-beta.1` |
+| FIN-02 | **Monthly bills CRUD UI** | Done | `1.0.9-beta.1` |
+| FIN-03 | **Business cache invalidation** | Done | `1.0.9-beta.1` |
+| FIN-04 | **Finance create status fix** | Done | `1.0.9-beta.1` |
+| FIN-05 | **Own-pocket settlement** | Done | `1.0.9-beta.1` |
+| FIN-06 | **Petty cash balance guard** | Done | `1.0.9-beta.1` |
+| FIN-07 | **Due-date / overdue alerts** | Done | `1.0.9-beta.1` |
+| FIN-08 | **Denied flow + notifications** | Done | `1.0.9-beta.1` |
+
+**Finance access today:** usernames `mark`, `phoebe`, `raymond` + role `finance` + admin/ceo (`canAccessCostsFull` in `lib/roles.js`). HR/RTM submit only (`canSubmitExpense`).
 
 ### Suggested build order (if user asks “what next?”)
 
-1. **AUTH-01 + AUTH-02** — password flows (email column already exists)  
-2. **ATT-01** — leave management (biggest HRMS gap vs current attendance-only model)  
-3. **DOC-01** — document expiry alerts (low effort, high compliance value)  
-4. **PAY-01** — payroll month lock (protects finance from accidental edits)  
-5. **RPT-01** — headcount dashboard (extends existing Reports page)
+1. **AUTH-01** — forgot password (email column already exists)
+2. **ATT-04** — overtime tracking → payroll feed
+3. **ADM-09** — macOS code signing
 
 _When user approves an item: note approval date + version target in this table and remove “Pending” for that row._
 

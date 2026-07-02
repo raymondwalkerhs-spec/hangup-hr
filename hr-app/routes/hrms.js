@@ -444,6 +444,15 @@ router.post("/holidays", async (req, res) => {
 router.patch("/holidays/:id", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
+    const existing = (await hrms.readPublicHolidays()).find((h) => h.id === req.params.id);
+    if (!existing) return res.status(404).json({ error: "Holiday not found" });
+    if (
+      req.body?.active !== undefined &&
+      String(existing.country || "USA").toUpperCase() === "EGY" &&
+      !roles.canManageHolidayActivation(req.userRole)
+    ) {
+      return res.status(403).json({ error: "Only Admin can activate Egyptian holidays" });
+    }
     const holiday = await hrms.updatePublicHoliday(req.params.id, req.body);
     res.json({ ok: true, holiday });
   } catch (e) {
@@ -464,6 +473,29 @@ router.post("/holidays/import-federal", async (req, res) => {
       body: `${rows.length} rows`,
       entityType: "holiday",
       entityId: "import-federal",
+      includeHr: true,
+    });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/holidays/import-egyptian", async (req, res) => {
+  if (!roles.canManageHolidayActivation(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const { getEgyptianHolidays } = require("../scripts/seed-egyptian-holidays");
+    const rows = getEgyptianHolidays();
+    const result = await hrms.seedPublicHolidays(rows, req.username);
+    await auditNotify.auditNotify({
+      actor: req.username,
+      action: "holiday_import",
+      title: "Egyptian holidays imported",
+      body: `${rows.length} rows (inactive until enabled)`,
+      entityType: "holiday",
+      entityId: "import-egyptian",
       includeHr: true,
     });
     res.json({ ok: true, ...result });
@@ -564,6 +596,107 @@ router.get("/reports/payroll-compare", async (req, res) => {
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/alerts/employment", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR access required" });
+  }
+  try {
+    const days = Math.min(Number(req.query.days) || 60, 180);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const alerts = [];
+    for (const e of store.getEmployees()) {
+      if (e.probation_end_date && e.probation_end_date >= today && e.probation_end_date <= cutoffStr) {
+        alerts.push({
+          type: "probation",
+          employeeId: e.id,
+          name: e.american_name || e.arabic_name || e.id,
+          date: e.probation_end_date,
+        });
+      }
+      if (e.contract_end_date && e.contract_end_date >= today && e.contract_end_date <= cutoffStr) {
+        alerts.push({
+          type: "contract",
+          employeeId: e.id,
+          name: e.american_name || e.arabic_name || e.id,
+          date: e.contract_end_date,
+        });
+      }
+    }
+    alerts.sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ alerts, days });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const customReports = require("../lib/custom-reports");
+
+router.get("/saved-reports", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const reports = await customReports.readSavedReports(req.username);
+    res.json({ reports, columnSets: customReports.COLUMN_SETS });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/saved-reports", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.upsertSavedReport(req.body, req.username);
+    res.json({ ok: true, report });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.patch("/saved-reports/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.upsertSavedReport({ ...req.body, id: req.params.id }, req.username);
+    res.json({ ok: true, report });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.delete("/saved-reports/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    await customReports.deleteSavedReport(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get("/saved-reports/:id/run", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.getSavedReport(req.params.id);
+    if (!report) return res.status(404).json({ error: "Report not found" });
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const csv = await customReports.runReport(report, store, month);
+    res.type("text/csv").attachment(`${report.name.replace(/[^\w-]+/g, "_")}.csv`).send(csv);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

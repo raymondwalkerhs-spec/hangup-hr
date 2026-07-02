@@ -3,9 +3,15 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
 if (-not (Test-Path "credentials\service-account.json")) {
-  Write-Host "ERROR: credentials\service-account.json is missing." -ForegroundColor Red
-  Write-Host "Copy the Google service account key before building."
-  exit 1
+  if ($env:SKIP_CREDENTIALS_CHECK -eq "1" -or $env:CI -eq "true") {
+    New-Item -ItemType Directory -Force -Path "credentials" | Out-Null
+    '{}' | Set-Content "credentials\service-account.json"
+    Write-Host "WARNING: Using stub service-account.json (CI / SKIP_CREDENTIALS_CHECK)." -ForegroundColor Yellow
+  } else {
+    Write-Host "ERROR: credentials\service-account.json is missing." -ForegroundColor Red
+    Write-Host "Copy the Google service account key before building."
+    exit 1
+  }
 }
 
 if (-not (Test-Path ".env")) {
@@ -70,13 +76,23 @@ if ($channel -eq "beta") {
 $buildOutput = Clear-UnpackedOutput -OutputDir $outputDir
 $env:HR_BUILD_OUTPUT = $buildOutput
 
-Write-Host "Installing dependencies..." -ForegroundColor Cyan
-npm install
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($env:CI -eq "true" -and (Test-Path "node_modules")) {
+  Write-Host "CI: using dependencies from workflow (skip npm install)" -ForegroundColor Cyan
+} else {
+  Write-Host "Installing dependencies..." -ForegroundColor Cyan
+  npm install
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
-Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
-npm run rebuild:native
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($env:CI -eq "true") {
+  Write-Host "CI: native modules already rebuilt in workflow" -ForegroundColor Cyan
+} elseif ($env:SKIP_NATIVE_REBUILD -eq "1") {
+  Write-Host "SKIP_NATIVE_REBUILD=1 - skipping electron-rebuild (use prebuilt native modules)" -ForegroundColor Yellow
+} else {
+  Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
+  npm run rebuild:native
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
 # Code signing: electron-builder signs automatically when a certificate is
 # provided via env vars. Set CSC_LINK (path to .pfx/.p12) and CSC_KEY_PASSWORD
@@ -92,6 +108,16 @@ $target = $args[0]
 if (-not $target) { $target = "all" }
 
 $builderArgs = @("--config.directories.output=$buildOutput")
+if ($env:SKIP_NATIVE_REBUILD -eq "1") {
+  $builderArgs += "--config.npmRebuild=false"
+}
+if ($env:CI -eq "true") {
+  $builderArgs += "--publish"
+  $builderArgs += "never"
+} elseif ($env:SKIP_NATIVE_REBUILD -eq "1") {
+  $builderArgs += "--publish"
+  $builderArgs += "never"
+}
 switch ($target) {
   "installer" { npx electron-builder --win nsis @builderArgs }
   "portable"  { npx electron-builder --win portable @builderArgs }

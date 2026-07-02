@@ -32,6 +32,14 @@ function filterExpensesForUser(expenses, userRole, username) {
   );
 }
 
+async function afterExpenseMutation() {
+  try {
+    await business.refreshBusinessCache();
+  } catch {
+    /* cache refresh best-effort */
+  }
+}
+
 router.get("/", async (req, res) => {
   if (!roles.canSubmitExpense(req.userRole, req.username) && !roles.canAccessCostsFull(req.userRole, req.username)) {
     return res.status(403).json({ error: "No permission" });
@@ -85,6 +93,7 @@ router.post("/", async (req, res) => {
         entityId: expense.id,
       });
     }
+    await afterExpenseMutation();
     res.json({ ok: true, expense });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -116,6 +125,7 @@ router.post("/:id/receipt", async (req, res) => {
       { receiptFileId: uploaded.fileId || uploaded.path },
       req.username
     );
+    await afterExpenseMutation();
     res.json({ ok: true, expense: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -171,6 +181,7 @@ router.get("/bills", async (req, res) => {
 router.post("/bills", requireFinance, async (req, res) => {
   try {
     const bill = await business.upsertMonthlyBill(req.body, req.username);
+    await afterExpenseMutation();
     res.json({ ok: true, bill });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -180,7 +191,63 @@ router.post("/bills", requireFinance, async (req, res) => {
 router.delete("/bills/:id", requireFinance, async (req, res) => {
   try {
     await business.deleteMonthlyBill(req.params.id);
+    await afterExpenseMutation();
     res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/:id/approve", requireFinance, async (req, res) => {
+  try {
+    const existing = await business.getExpenseRequest(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.status !== "pending_approval") {
+      return res.status(400).json({ error: "Expense is not pending approval" });
+    }
+    const expense = await business.updateExpenseRequest(
+      req.params.id,
+      { status: "pending", approvedBy: req.username },
+      req.username
+    );
+    await notify.createNotification({
+      username: existing.submittedBy,
+      type: "expense",
+      title: "Expense approved",
+      body: `${existing.vendorName}: ${existing.amount} EGP`,
+      entityType: "expense",
+      entityId: existing.id,
+    });
+    await afterExpenseMutation();
+    res.json({ ok: true, expense });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/:id/deny", requireFinance, async (req, res) => {
+  const { denyReason } = req.body;
+  try {
+    const existing = await business.getExpenseRequest(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.status !== "pending_approval") {
+      return res.status(400).json({ error: "Expense is not pending approval" });
+    }
+    const expense = await business.updateExpenseRequest(
+      req.params.id,
+      { status: "denied", denyReason: denyReason || "", approvedBy: req.username },
+      req.username
+    );
+    await notify.createNotification({
+      username: existing.submittedBy,
+      type: "expense",
+      title: "Expense denied",
+      body: `${existing.vendorName}: ${denyReason || "No reason given"}`,
+      entityType: "expense",
+      entityId: existing.id,
+    });
+    await afterExpenseMutation();
+    res.json({ ok: true, expense });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -225,6 +292,7 @@ router.patch("/:id", requireFinance, async (req, res) => {
       });
     }
 
+    await afterExpenseMutation();
     res.json({ ok: true, expense });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -247,6 +315,7 @@ router.delete("/:id", requireFinance, async (req, res) => {
         entityId: String(prior.id),
       });
     }
+    await afterExpenseMutation();
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.0.8-beta.1",
+  "version": "1.0.9-beta.2",
   "description": "Hangup HR desktop app — live Google Sheets",
   "main": "electron/main.js",
   "scripts": {
@@ -12,7 +12,11 @@
     "dist:portable": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 portable",
     "dist:all": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
     "dist:mac": "node scripts/ensure-macos.js && electron-builder --mac dmg zip",
+    "dist:mac:script": "bash scripts/build-macos.sh",
     "dist:mac:dmg": "node scripts/ensure-macos.js && electron-builder --mac dmg",
+    "package:github": "node scripts/package-github-release.js",
+    "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+    "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
     "push:sheet": "node scripts/push-excel-to-sheet.js",
     "import:excel": "python ../scripts/import_data.py && node scripts/push-excel-to-sheet.js",
     "reconcile:june": "node scripts/reconcile-june.js",
@@ -20,7 +24,9 @@
     "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3",
     "fix:electron": "node node_modules/electron/install.js",
     "test:supabase": "node scripts/test-supabase.js",
-    "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js"
+    "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js",
+    "apply:migrations": "node scripts/apply-pending-migrations.js",
+    "seed:fp-june": "node scripts/seed-june-fp-mappings.js"
   },
   "build": {
     "appId": "com.hangup.hr",
@@ -36,7 +42,8 @@
       "public/**/*",
       "Asset/**/*",
       "app.js",
-      "package.json"
+      "package.json",
+      "node_modules/adm-zip/**/*"
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*"
@@ -117,6 +124,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
+    "adm-zip": "^0.5.18",
     "archiver": "^8.0.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.11.1",
@@ -126,11 +134,13 @@
     "express-session": "^1.18.1",
     "googleapis": "^144.0.0",
     "pdfkit": "^0.16.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "pg": "^8.22.0"
   }
 }

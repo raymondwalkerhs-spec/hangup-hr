@@ -21,8 +21,10 @@
     </div>
   </div>
   <div class="app-shell">
-    <aside class="sidebar">
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
+    <aside class="sidebar" id="app-sidebar">
       <div class="sidebar-brand">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
         <div id="brand-logo-wrap" class="brand-logo-wrap">
           <img src="/img/hr-team.png" alt="HR Team" class="brand-logo" id="brand-logo" />
         </div>
@@ -41,6 +43,7 @@
         <button data-page="bonuses" class="nav-btn">Bonuses</button>
         <button data-page="deductions" class="nav-btn">Deductions</button>
         <button data-page="loans" class="nav-btn">Loans</button>
+        <button data-page="loan-approvals" class="nav-btn hidden" id="nav-loan-approvals">Loan approvals</button>
         <button data-page="salaries" class="nav-btn">Salaries</button>
         <button data-page="reports" class="nav-btn">Reports</button>
         <button data-page="sales" class="nav-btn hidden" id="nav-sales">Sales log</button>

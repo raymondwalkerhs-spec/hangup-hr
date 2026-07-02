@@ -223,9 +223,9 @@ function enrichDeductionForApi(d) {
   };
 }
 
-async function loadVersionCheck() {
+async function loadVersionCheck(userRole = null) {
   const policy = await fetchVersionPolicy();
-  return evaluateVersionCompatibility(getAppVersion(), policy);
+  return evaluateVersionCompatibility(getAppVersion(), policy, userRole);
 }
 
 function versionPayload(check) {
@@ -236,6 +236,8 @@ function versionPayload(check) {
     appVersion: check.appVersion,
     currentVersion: check.currentVersion,
     minCompatibleVersion: check.minCompatibleVersion,
+    forceUpdateMinVersion: check.forceUpdateMinVersion,
+    blockedForRole: check.blockedForRole,
   };
 }
 
@@ -305,14 +307,6 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Username and password required" });
     }
     const users = await fetchAuthUsers();
-    const versionCheck = await loadVersionCheck();
-    if (versionCheck.status === "blocked") {
-      return res.status(403).json({
-        error: versionCheck.message,
-        versionBlocked: true,
-        versionCheck: versionPayload(versionCheck),
-      });
-    }
     const result = await validateLogin(username, password, users);
     if (!result.ok) {
       if (result.terminated) {
@@ -323,9 +317,17 @@ router.post("/login", async (req, res) => {
       }
       return res.status(401).json({ error: "Invalid username or password" });
     }
-    // Only users with a recognised role in the sheet may sign in.
     if (!roles.hasAppAccess(roles.resolveUserRole(result.user, result.role))) {
       return res.status(403).json({ error: "No access assigned. Contact Admin." });
+    }
+    const userRole = roles.resolveUserRole(result.user, result.role).role;
+    const versionCheck = await loadVersionCheck(userRole);
+    if (versionCheck.status === "blocked") {
+      return res.status(403).json({
+        error: versionCheck.message,
+        versionBlocked: true,
+        versionCheck: versionPayload(versionCheck),
+      });
     }
     const { useSupabase } = require("../lib/backend");
     if (useSupabase()) {
@@ -373,15 +375,6 @@ router.get("/session-check", async (req, res) => {
   }
   try {
     await requireOnline();
-    const versionCheck = await loadVersionCheck();
-    if (versionCheck.status === "blocked") {
-      destroySession(session.id);
-      return res.json({
-        action: "version_blocked",
-        message: versionCheck.message,
-        versionCheck: versionPayload(versionCheck),
-      });
-    }
     const users = await fetchAuthUsers();
     const check = await checkSession(session.username, session.password, users);
     if (check.action === "uninstall") {
@@ -392,13 +385,20 @@ router.get("/session-check", async (req, res) => {
       destroySession(session.id);
       return res.json({ action: "admin", message: check.message });
     }
-    // Keep the in-memory session's role in sync with the sheet so role changes
-    // take effect without requiring the user to log out and back in.
     if (check.role !== undefined) session.role = check.role;
-    // If the role was removed (or set to something without access), force logout.
     if (!roles.hasAppAccess(roles.resolveUserRole(session.username, session.role))) {
       destroySession(session.id);
       return res.json({ action: "admin", message: "Access removed. Contact Admin." });
+    }
+    const userRole = roles.resolveUserRole(session.username, session.role).role;
+    const versionCheck = await loadVersionCheck(userRole);
+    if (versionCheck.status === "blocked") {
+      destroySession(session.id);
+      return res.json({
+        action: "version_blocked",
+        message: versionCheck.message,
+        versionCheck: versionPayload(versionCheck),
+      });
     }
     const payload = { action: "ok", username: session.username, appVersion: getAppVersion() };
     const notice = versionPayload(versionCheck);
@@ -458,6 +458,7 @@ router.get("/status", async (req, res) => {
       canEditSales: roles.canEditSale(req.userRole),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
+      canApproveLoan: roles.canApproveLoanRequest(req.username),
     },
     appVersion: getAppVersion(),
     sheetId: store.SHEET_ID,
@@ -488,6 +489,14 @@ router.use("/expenses", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
 }, require("./expenses"));
+router.use("/loan-requests", (req, res, next) => {
+  req.userRole = roles.enrichUserRole(
+    roles.resolveUserRole(req.username, req.appSession?.role),
+    store.getEmployees()
+  );
+  req.userRole.username = req.username;
+  next();
+}, require("./loan-requests"));
 router.use("/hrms", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
@@ -757,6 +766,11 @@ router.patch("/employees/:id/status", async (req, res) => {
   const { status } = req.body;
   if (!status) return res.status(400).json({ error: "Status required" });
   try {
+    if (String(status).trim() === "Deleted") {
+      const result = await store.releaseEmployeeAppId(req.params.id, req.username);
+      await store.refreshCache();
+      return res.json({ ok: true, ...result });
+    }
     const emp = await store.updateEmployee(req.params.id, { status }, req.username);
     res.json({ ok: true, employee: emp });
   } catch (err) {
@@ -776,6 +790,47 @@ router.post("/employees/:id/promote", async (req, res) => {
       { newId, leadRole, effectiveFromMonth, position, team },
       req.username
     );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/employees/:id/revert-promotion", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  try {
+    const result = await store.revertPromotion(req.params.id, req.username);
+    await store.refreshCache();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/employees/:id/change-app-id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const newId = String(req.body?.newId || "").trim();
+  if (!newId) return res.status(400).json({ error: "newId required" });
+  try {
+    const result = await store.changeEmployeeAppId(req.params.id, newId, req.username);
+    await store.refreshCache();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/employees/:id/release-app-id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  try {
+    const result = await store.releaseEmployeeAppId(req.params.id, req.username);
+    await store.refreshCache();
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -867,9 +922,10 @@ router.get("/attendance", async (req, res) => {
   } catch {
     holidays = [];
   }
-  const monthHolidays = holidays.filter(
-    (h) => h.active !== false && String(h.date || "").startsWith(month)
-  );
+  const monthHolidays = holidays.filter((h) => {
+    const d = String(h.date || h.holidayDate || "").slice(0, 10);
+    return h.active !== false && d.startsWith(month);
+  });
 
   const actionPlans = await loadActionPlansSafe();
 
@@ -983,6 +1039,8 @@ router.post("/attendance/batch", async (req, res) => {
       date: r.date,
       status: r.status || "",
       fpLateness: r.fpLateness || null,
+      fpNotes: r.fpNotes || "",
+      leaveNote: r.leaveNote || r.fpNotes || "",
       isWeekendDefault: isWeekend(r.date) && r.status === "Day-OFF",
       transportOverride: r.transportOverride || "",
     });
@@ -990,6 +1048,65 @@ router.post("/attendance/batch", async (req, res) => {
 
   const count = await store.saveAttendanceBatch(normalized, req.username);
   res.json({ ok: true, count });
+});
+
+router.get("/attendance/fp-rules/:month", async (req, res) => {
+  if (!roles.canEditAttendance(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  const fpImport = require("../lib/attendance-fp-import");
+  const config = store.getConfig();
+  const rules = fpImport.getRulesForMonth(config, req.params.month);
+  res.json({ month: req.params.month, rules, defaults: fpImport.DEFAULT_FP_RULES });
+});
+
+router.put("/attendance/fp-rules/:month", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const month = req.params.month;
+  const config = store.getConfig();
+  const byMonth = { ...(config.attendanceFpRulesByMonth || {}) };
+  byMonth[month] = req.body.rules || req.body;
+  await store.saveConfigKey("attendanceFpRulesByMonth", byMonth, req.username);
+  res.json({ ok: true, month, rules: byMonth[month] });
+});
+
+router.post("/attendance/import", async (req, res) => {
+  if (!roles.canEditAttendance(req.userRole)) {
+    return res.status(403).json({ error: "No permission to import attendance" });
+  }
+  const { month, base64, fileName, dryRun, overwritePolicy } = req.body;
+  if (!month || !base64) {
+    return res.status(400).json({ error: "month and base64 required" });
+  }
+  try {
+    await assertMonthNotLocked(month);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    const fpImport = require("../lib/attendance-fp-import");
+    const config = store.getConfig();
+    const rules = fpImport.getRulesForMonth(config, month);
+    const buffer = Buffer.from(base64, "base64");
+    const existing = store.getAttendanceEvents(month);
+    const result = fpImport.processImport({
+      buffer,
+      employees: store.getEmployees(),
+      rules,
+      month,
+      existingRecords: existing,
+      overwritePolicy: overwritePolicy || "skip_manual",
+    });
+    if (!dryRun && result.records.length) {
+      const count = await store.saveAttendanceBatch(result.records, req.username);
+      result.rowsApplied = count;
+    }
+    res.json({ ok: true, dryRun: Boolean(dryRun), ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.put("/attendance/working-days", async (req, res) => {

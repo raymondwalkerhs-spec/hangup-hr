@@ -1,7 +1,7 @@
 # Hangup HR — Feature Overview
 
 *Presentation-style summary of what the app does today.*  
-**Product:** Hangup HR Beta · **Version:** 1.0.7-beta.2 · **Platform:** Windows desktop (Electron)
+**Product:** Hangup HR Beta · **Version:** 1.0.9-beta.1 · **Platform:** Windows desktop (Electron)
 
 ---
 
@@ -38,7 +38,7 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - **Fast local cache** — SQLite on each machine; no waiting on every click  
 - **Auto sync** — saves push to cloud, then refresh quietly  
 - **Audit trail** — every important edit logged (`change_log`)  
-- **Version control** — old app builds can be blocked at login  
+- **Version control** — old app builds can be blocked at login; optional **in-app patch updates** via GitHub Releases  
 - **Role-based access** — CEO, admin, HR, finance, TL, agent  
 
 ### Security
@@ -237,10 +237,12 @@ Same layout everywhere — only colors change.
 
 ## Deployment model
 
-1. Build EXE on a dev machine (`npm run dist:beta`)  
-2. Mark version in Supabase `app_versions`  
-3. Copy installer or portable to HR PCs (USB, shared drive)  
-4. Users sign in — first run syncs all data  
+1. **Apply pending Supabase migrations** (agent: MCP `apply_migration` or `npm run apply:migrations`)
+2. Build EXE on a dev machine (`.\scripts\build.ps1 all`, or `SKIP_NATIVE_REBUILD=1` when prebuilt natives exist) — **primary distribution**
+3. Mark version in Supabase `app_versions`
+4. Copy installer or portable to HR PCs (USB, shared drive)
+5. Users sign in — first run syncs all data
+6. *(Optional)* Publish GitHub patch release so installed PCs can **Update now** without a new installer — see [`UPDATES.md`](UPDATES.md)
 
 *App updates are not pushed through Supabase Storage (installers are ~90 MB each).*
 
@@ -270,4 +272,4 @@ Same layout everywhere — only colors change.
 
 ---
 
-*Last updated for release **1.0.6-beta.1** · See [`CHANGELOG.md`](CHANGELOG.md) for version history.*
+*Last updated for release **1.0.8-beta.1** · See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).*
