@@ -77,8 +77,11 @@ jobs:
           GITHUB_UPDATES_REPO=${{ github.repository }}
           "@ | Set-Content .env
 
-      - run: npm ci
-      - run: npm run rebuild:native
+      - run: npm ci --ignore-scripts
+      - name: Rebuild native modules (Windows)
+        run: npx @electron/rebuild -f -w better-sqlite3
+        env:
+          npm_config_build_from_source: "false"
 
       - name: Fetch previous release manifests
         run: node scripts/fetch-release-manifest.js --tag=${{ needs.resolve-tag.outputs.tag }}
@@ -137,7 +140,7 @@ jobs:
           GITHUB_UPDATES_REPO=${{ github.repository }}
           EOF
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run rebuild:native
 
       - name: Fetch previous release manifests

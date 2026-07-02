@@ -34,10 +34,18 @@ OUTPUT_DIR="${HR_BUILD_OUTPUT:-dist}"
 export HR_BUILD_OUTPUT="$OUTPUT_DIR"
 
 echo "Installing dependencies..."
-npm install
+if [[ -d node_modules && "${CI:-}" == "true" ]]; then
+  echo "CI: using dependencies from workflow (skip npm install)"
+else
+  npm install
+fi
 
 echo "Rebuilding native modules for Electron..."
-npm run rebuild:native
+if [[ "${CI:-}" == "true" ]]; then
+  npx @electron/rebuild -f -w better-sqlite3
+else
+  npm run rebuild:native
+fi
 
 echo "Building macOS dmg + zip..."
 npx electron-builder --mac dmg zip --config.directories.output="$OUTPUT_DIR"
