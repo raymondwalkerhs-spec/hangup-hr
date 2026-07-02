@@ -8,7 +8,7 @@
 # First GitHub update release (no previous manifest on GitHub):
 #   .\scripts\publish-github-release.ps1 -IncludeFull
 #
-# Also ship Setup + Portable on GitHub (large, slow — usually unnecessary):
+# Also ship Setup + Portable on GitHub (large, slow - usually unnecessary):
 #   .\scripts\publish-github-release.ps1 -IncludeInstaller
 param(
   [string]$Tag = "",
@@ -55,20 +55,29 @@ if (-not (Test-Path $unpacked)) {
 $env:HR_BUILD_OUTPUT = (Resolve-Path $dist).Path
 
 Write-Host "Fetching previous release manifest (for patch diff)..." -ForegroundColor Cyan
-node scripts/fetch-release-manifest.js --tag=$version 2>&1 | Out-Host
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+node scripts/fetch-release-manifest.js --tag=$version 2>&1 | Write-Host
+$ErrorActionPreference = $prevEap
 
 Write-Host "Packaging win-unpacked for v$version..." -ForegroundColor Cyan
 $packageArgs = @("scripts/package-github-release.js")
 if ($IncludeFull) { $packageArgs += "--full" }
-node @packageArgs
+$ErrorActionPreference = "Continue"
+node @packageArgs 2>&1 | Write-Host
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# If no patch was produced, auto-build full zip unless user opted out.
+# If no patch was produced, auto-build full zip once.
 $patchZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue |
   Where-Object { $_.Name -match [regex]::Escape($version) })
-if (-not $patchZips.Count -and -not $IncludeFull) {
-  Write-Host "No patch zip — building full win-unpacked zip for this release..." -ForegroundColor Yellow
-  node scripts/package-github-release.js --full
+$fullZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-full.zip" -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match [regex]::Escape($version) })
+if (-not $patchZips.Count -and -not $fullZips.Count -and -not $IncludeFull) {
+  Write-Host "No patch zip - building full win-unpacked zip for this release..." -ForegroundColor Yellow
+  $ErrorActionPreference = "Continue"
+  node scripts/package-github-release.js --full 2>&1 | Write-Host
+  $ErrorActionPreference = $prevEap
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
@@ -121,13 +130,17 @@ if (-not $Notes) {
 
 $releaseExists = $false
 if (-not $Recreate) {
+  $ErrorActionPreference = "Continue"
   & gh release view $Tag 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+  $ErrorActionPreference = $prevEap
 }
 
 if ($Recreate) {
   Write-Host "Recreate: removing existing release/tag $Tag if present..." -ForegroundColor Yellow
+  $ErrorActionPreference = "Continue"
   & gh release delete $Tag -y 2>$null | Out-Null
+  $ErrorActionPreference = $prevEap
   $releaseExists = $false
 }
 
