@@ -65,7 +65,27 @@ function isVersionLessThan(appVersion, requiredVersion) {
   return compareVersions(appVersion, requiredVersion) < 0;
 }
 
-function evaluateVersionCompatibility(appVersion, policy) {
+const FORCE_UPDATE_ROLES = new Set([
+  "hr",
+  "quality",
+  "agent",
+  "tl",
+  "op",
+  "rtm",
+  "office_assistant",
+]);
+
+function normalizeRoleKey(role) {
+  return String(role || "")
+    .trim()
+    .toLowerCase();
+}
+
+function isForceUpdateRole(role) {
+  return FORCE_UPDATE_ROLES.has(normalizeRoleKey(role));
+}
+
+function evaluateVersionCompatibility(appVersion, policy, userRole = null) {
   const version = appVersion || getAppVersion();
   if (!policy?.currentVersion) {
     return { status: "ok", appVersion: version };
@@ -74,6 +94,8 @@ function evaluateVersionCompatibility(appVersion, policy) {
   const currentVersion = policy.currentVersion;
   const minCompatibleVersion =
     policy.minCompatibleVersion || policy.currentVersion;
+  const forceUpdateMinVersion = policy.forceUpdateMinVersion || null;
+  const roleKey = normalizeRoleKey(userRole);
 
   if (isVersionLessThan(version, minCompatibleVersion)) {
     return {
@@ -81,9 +103,29 @@ function evaluateVersionCompatibility(appVersion, policy) {
       appVersion: version,
       currentVersion,
       minCompatibleVersion,
+      forceUpdateMinVersion,
+      blockedForRole: roleKey || null,
       message:
         policy.blockedMessage ||
         `This app version (${version}) is no longer supported. Contact Admin for version ${currentVersion}.`,
+    };
+  }
+
+  if (
+    forceUpdateMinVersion &&
+    isForceUpdateRole(roleKey) &&
+    isVersionLessThan(version, forceUpdateMinVersion)
+  ) {
+    return {
+      status: "blocked",
+      appVersion: version,
+      currentVersion,
+      minCompatibleVersion,
+      forceUpdateMinVersion,
+      blockedForRole: roleKey,
+      message:
+        policy.fieldBlockedMessage ||
+        `HR and field staff must update to version ${forceUpdateMinVersion} or newer (you have ${version}). Contact Admin for the latest EXE.`,
     };
   }
 
@@ -93,6 +135,7 @@ function evaluateVersionCompatibility(appVersion, policy) {
       appVersion: version,
       currentVersion,
       minCompatibleVersion,
+      forceUpdateMinVersion,
       message:
         policy.updateMessage ||
         `A newer version (${currentVersion}) is available. Please ask Admin for the latest build.`,
@@ -104,6 +147,7 @@ function evaluateVersionCompatibility(appVersion, policy) {
     appVersion: version,
     currentVersion,
     minCompatibleVersion,
+    forceUpdateMinVersion,
   };
 }
 
@@ -112,4 +156,6 @@ module.exports = {
   compareVersions,
   isVersionLessThan,
   evaluateVersionCompatibility,
+  FORCE_UPDATE_ROLES,
+  isForceUpdateRole,
 };

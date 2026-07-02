@@ -87,6 +87,7 @@ async function readConfig() {
     transportAllowanceMonthly: Number(out.transportAllowanceMonthly) || 3000,
     taxRules: out.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 },
     orgStructure: out.orgStructure || null,
+    attendanceFpRulesByMonth: out.attendanceFpRulesByMonth || {},
   };
 }
 

@@ -335,6 +335,7 @@ function mapExpense(r) {
     archivedBy: r.archived_by || "",
     archivedAt: r.archived_at || null,
     paidAt: r.paid_at || null,
+    denyReason: r.deny_reason || "",
     createdAt: r.created_at,
   };
 }
@@ -381,11 +382,12 @@ async function getExpenseRequest(id) {
 async function createExpenseRequest(payload, actor) {
   requireSupabase();
   const needsExec = ["hr", "rtm"].includes(String(payload.submitterRole || "").toLowerCase());
+  const defaultStatus = needsExec ? "pending_approval" : payload.status || "pending";
   const row = {
     vendor_name: payload.vendorName,
     description: payload.description || "",
     amount: Number(payload.amount),
-    status: needsExec ? "pending_approval" : payload.status || "pending_approval",
+    status: defaultStatus,
     priority: payload.priority || "normal",
     starred: payload.starred === true,
     due_date: payload.dueDate || null,
@@ -421,6 +423,7 @@ async function updateExpenseRequest(id, patch, actor) {
     archivedBy: "archived_by",
     archivedAt: "archived_at",
     paidAt: "paid_at",
+    denyReason: "deny_reason",
   };
   for (const [k, col] of Object.entries(fields)) {
     if (patch[k] !== undefined) row[col] = patch[k];
@@ -485,8 +488,14 @@ async function addPettyCashTransaction({ fundId, transactionType, amount, notes,
   let balance = Number(fund.balance);
   const amt = Number(amount);
   if (transactionType === "deposit" || transactionType === "adjustment") balance += amt;
-  else if (transactionType === "withdrawal") balance -= amt;
-  else throw new Error("Invalid transaction type");
+  else if (transactionType === "withdrawal") {
+    if (balance < amt) {
+      throw new Error(
+        `Insufficient petty cash balance (${balance.toFixed(2)} EGP available, ${amt.toFixed(2)} EGP needed)`
+      );
+    }
+    balance -= amt;
+  } else throw new Error("Invalid transaction type");
 
   const ledgerRow = {
     fund_id: fundId,
@@ -625,6 +634,7 @@ async function syncPettyCashForExpense({ prior, expense, patch, actor }) {
       for (const row of existing.slice(1)) {
         await db().from("petty_cash_ledger").delete().eq("id", row.id);
       }
+      existing.length = 1;
       await recalculatePettyCashFundBalances(primary.fund_id);
     }
     if (Number(primary.amount) !== Number(expense.amount) || primary.fund_id !== fundId) {
@@ -705,6 +715,7 @@ async function upsertMonthlyBill(payload, actor) {
     status: payload.status || "pending",
     starred: payload.starred === true,
     notes: payload.notes || "",
+    last_paid_at: payload.lastPaidAt || null,
     created_by: actor,
     updated_at: new Date().toISOString(),
   };
@@ -726,6 +737,19 @@ async function deleteMonthlyBill(id) {
 }
 
 // --- Sync helpers for cache ---
+
+async function refreshBusinessCache() {
+  requireSupabase();
+  const [expenses, bills] = await Promise.all([
+    readExpenseRequests({}, { skipCache: true }),
+    readMonthlyBills({ skipCache: true }),
+  ]);
+  if (cache.isCacheWarm()) {
+    cache.setBusinessCache("expenses", expenses);
+    cache.setBusinessCache("monthly_bills", bills);
+  }
+  return { expenses: expenses.length, bills: bills.length };
+}
 
 async function readAllBonusRequests() {
   return readBonusRequests({});
@@ -769,6 +793,7 @@ module.exports = {
   readMonthlyBills,
   upsertMonthlyBill,
   deleteMonthlyBill,
+  refreshBusinessCache,
   readAllBonusRequests,
   readAllSales,
 };

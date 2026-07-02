@@ -2,13 +2,14 @@
 
 **Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.0.5-beta.1`
+**Current version:** `1.0.9-beta.2`
 
 | Document | Purpose |
 |----------|---------|
 | [`TUTORIAL.md`](TUTORIAL.md) | Day-to-day user guide |
 | [`FEATURES.md`](FEATURES.md) | Feature overview (presentation-style) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
+| [`UPDATES.md`](UPDATES.md) | **Installer vs GitHub in-app updates** |
 | [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Database / legacy sheet layout |
 | [`AI_Agent.md`](AI_Agent.md) | Agent context, release checklist, architecture |
 
@@ -56,11 +57,17 @@ Connectivity check: `npm run test:supabase`
 
 ### Migrations & live database
 
-Schema changes are versioned in `supabase/migrations/`. **Cursor agents with Supabase MCP access should apply pending migrations directly** (`apply_migration` / `execute_sql` on server `user-supabase`) — do not leave new tables unapplied when shipping features that depend on them.
+Schema changes live in `supabase/migrations/`.
 
-To apply manually (fallback): Supabase Dashboard → SQL Editor → paste the migration file contents.
+**Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-After schema changes that ship a new app version, update `app_versions` (see `AI_Agent.md` release checklist).
+**Pending for 1.0.9-beta.x** (if not yet applied):
+
+1. `20260706_employee_internal_id.sql`
+2. `20260706_app_versions_force_update.sql`
+3. `20260708_finance_hr_attendance.sql`
+
+After schema changes, update `app_versions` (see `AI_Agent.md` release checklist).
 
 ---
 
@@ -146,6 +153,9 @@ If Electron fails to start: `npm run fix:electron`
 | `npm start` | Run from source (Electron) |
 | `npm run dist:beta` | Beta channel build → `dist-beta-v2\` |
 | `npm run dist:all` | Installer + portable → `dist\` |
+| `npm run package:github` | Patch/full update zips for GitHub Releases |
+| `npm run publish:github` | Upload update assets to GitHub (`gh` CLI) |
+| `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
 | `npm run test:supabase` | Check Supabase env and clients |
 | `npm run migrate:supabase` | One-time Sheets → Postgres import |
@@ -196,6 +206,15 @@ Each build embeds `package.json` version. On login and every ~5 minutes the app 
 
 **On every release:** bump `package.json`, update docs, set `app_versions` in Supabase, build and distribute EXE.
 
+### Two update channels (see [`UPDATES.md`](UPDATES.md))
+
+| Channel | Use for |
+|---------|---------|
+| **Installer / portable EXE** (`.\scripts\build.ps1`) | New PCs, USB handoff, full reinstall — **primary, on your PC** |
+| **GitHub patch update** (in-app “Update now”) | PCs already installed — changed files only, no new installer |
+
+GitHub updates do **not** replace building installers locally.
+
 ```sql
 UPDATE app_versions SET is_current = false WHERE is_current = true;
 
@@ -218,7 +237,7 @@ ON CONFLICT (version) DO UPDATE SET
 - Do not expose the secret key in a public web client.  
 - Distribute EXE only to trusted HR PCs; treat `.env` as confidential on build machines.
 
-App updates are **not** delivered via Supabase Storage (installers are ~90 MB). Copy the new EXE manually (USB, shared folder, etc.). Version enforcement uses `app_versions` only.
+App updates are **not** delivered via Supabase Storage (installers are ~90 MB). Copy the new EXE manually (USB, shared folder, etc.), or use **GitHub in-app patch updates** for PCs that already have the app — see [`UPDATES.md`](UPDATES.md). Version enforcement uses `app_versions` only.
 
 ---
 
@@ -233,7 +252,8 @@ Settings → **Appearance** — six themes (Light, Dark, Grey, Dark wine, Dark g
 1. Bump `package.json`  
 2. Update `CHANGELOG.md`, `TUTORIAL.md`, `README.md`, `FEATURES.md` if features changed  
 3. Update `app_versions` in Supabase  
-4. `npm run dist:beta` (or `.\scripts\build.ps1`)  
+4. `.\scripts\build.ps1 all` — **installer + portable on your PC** (unchanged)  
 5. Distribute new EXE to HR PCs  
+6. *(Optional)* `npm run package:github -- --full` then `npm run publish:github` — patch updates via GitHub  
 
-See [`AI_Agent.md`](AI_Agent.md) for agent automation details.
+See [`UPDATES.md`](UPDATES.md) and [`AI_Agent.md`](AI_Agent.md) for the full update workflow.

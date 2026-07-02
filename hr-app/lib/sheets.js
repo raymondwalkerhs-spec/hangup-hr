@@ -173,6 +173,7 @@ const EMPLOYEE_STATUSES = [
   "OUT BUT STILL GET PAID",
   "Promoted",
   "Out",
+  "Deleted",
   "",
 ];
 
@@ -278,6 +279,12 @@ function mapEmployeeRow(r) {
     promoted_from_id: String(r["Promoted From ID"] || r.promoted_from_id || "").trim() || null,
     lead_role: String(r["Lead Role"] || r.lead_role || "").trim() || null,
     effective_from_month: String(r["Effective From Month"] || r.effective_from_month || "").trim() || null,
+    internal_id: r.internal_id || null,
+    archived_app_id: r.archived_app_id || null,
+    deleted_at: r.deleted_at || null,
+    fp_number: r.fp_number || r["FP Number"] || null,
+    probation_end_date: r.probation_end_date || r["Probation End Date"] || null,
+    contract_end_date: r.contract_end_date || r["Contract End Date"] || null,
   };
 }
 

@@ -62,6 +62,7 @@ async function fetchVersionPolicyFromSupabase() {
     releaseDate: r.release_date || "",
     releaseType: r.release_type || "minor",
     minCompatibleVersion: r.min_compatible_version || "",
+    forceUpdateMinVersion: r.force_update_min_version || "",
     isCurrent: r.is_current === true,
     notes: r.notes || "",
   }));
@@ -71,10 +72,12 @@ async function fetchVersionPolicyFromSupabase() {
   const minCompatibleVersion =
     current.minCompatibleVersion ||
     (releaseType === "major" ? current.version : entries[0]?.version || current.version);
+  const forceUpdateMinVersion = current.forceUpdateMinVersion || null;
 
   return {
     currentVersion: current.version,
     minCompatibleVersion,
+    forceUpdateMinVersion,
     releaseType,
     releaseDate: current.releaseDate,
     updateMessage: current.notes
@@ -82,6 +85,9 @@ async function fetchVersionPolicyFromSupabase() {
       : "",
     blockedMessage: current.notes
       ? `This app version is no longer supported. ${current.notes} Contact Admin for version ${current.version}.`
+      : "",
+    fieldBlockedMessage: forceUpdateMinVersion
+      ? `This build is too old for HR and field staff. Install version ${forceUpdateMinVersion} or newer. ${current.notes || ""}`.trim()
       : "",
     entries,
   };

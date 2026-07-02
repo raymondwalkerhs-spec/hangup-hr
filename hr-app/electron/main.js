@@ -212,6 +212,28 @@ async function bootstrap() {
     await handleTerminated();
   });
 
+  const githubUpdater = require("../lib/github-updater");
+
+  ipcMain.handle("check-github-update", async () => {
+    try {
+      return await githubUpdater.checkForGitHubUpdate();
+    } catch (err) {
+      return { enabled: false, error: err.message || String(err) };
+    }
+  });
+
+  ipcMain.handle("apply-github-update", async () => {
+    const info = await githubUpdater.checkForGitHubUpdate();
+    if (!info?.updateAvailable) throw new Error("No update available");
+    if (!info.assetUrl) throw new Error("No update package found for this platform");
+    await githubUpdater.applyGitHubUpdate(info);
+    return { ok: true, version: info.latest, installRoot: githubUpdater.getInstallRoot() };
+  });
+
+  ipcMain.handle("relaunch-app", () => {
+    githubUpdater.relaunchApp();
+  });
+
   pollTimer = setInterval(pollSession, POLL_MS);
 }
 

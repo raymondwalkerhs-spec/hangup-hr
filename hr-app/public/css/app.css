@@ -379,13 +379,44 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  z-index: 200;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s ease;
 }
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  backdrop-filter: blur(2px);
+}
+.sidebar-backdrop.visible {
+  opacity: 1;
+}
+.nav-toggle {
+  display: none;
+  border: none;
+  background: rgba(255,255,255,.14);
+  color: #fff;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: .5rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.nav-toggle:hover { background: rgba(255,255,255,.22); }
+.nav-toggle:active { transform: scale(0.94); }
 .sidebar-brand {
   padding: 1.25rem;
   display: flex;
   align-items: center;
   gap: .75rem;
   border-bottom: 1px solid rgba(255,255,255,.1);
+  flex-wrap: wrap;
 }
 .brand-icon {
   width: 40px; height: 40px;
@@ -439,10 +470,15 @@ body {
   font-weight: 500;
   text-align: left;
   font-size: .9rem;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
 }
 .nav-btn.active, .nav-btn:hover {
   background: rgba(255,255,255,.12);
   color: #fff;
+}
+.nav-btn:active { transform: scale(0.98); }
+.nav-btn.active {
+  box-shadow: inset 3px 0 0 rgba(255,255,255,.85);
 }
 
 .main-content { flex: 1; padding: 1.5rem 2rem; overflow: auto; max-width: 1600px; }
@@ -1029,6 +1065,59 @@ tr.clickable { cursor: pointer; }
   color: #f8c8dc;
 }
 
+.att-day-head {
+  min-width: 4.5rem;
+  vertical-align: bottom;
+  line-height: 1.2;
+}
+.att-day-head-label {
+  font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.att-holiday-head-name {
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-top: 0.2rem;
+  max-width: 5.5rem;
+  white-space: normal;
+  word-break: break-word;
+  opacity: 0.95;
+}
+.att-holiday-cell-note {
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 0.15rem;
+  max-width: 5rem;
+  white-space: normal;
+  word-break: break-word;
+  pointer-events: none;
+}
+.att-holidays-banner {
+  margin-bottom: 0.75rem;
+}
+.att-holidays-list {
+  margin: 0.35rem 0 0.25rem 1.1rem;
+  padding: 0;
+}
+.att-holidays-list li {
+  margin: 0.15rem 0;
+}
+.alert-info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a5f;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+}
+[data-theme="dark"] .alert-info {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
 .notif-bell {
   margin-top: 0.35rem;
   position: relative;
@@ -1067,9 +1156,35 @@ tr.clickable { cursor: pointer; }
 }
 
 @media (max-width: 900px) {
-  .app-shell { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: relative; }
-  .sidebar-nav { flex-direction: row; flex-wrap: wrap; }
+  .app-shell { flex-direction: row; }
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .sidebar-backdrop { display: block; }
+  .sidebar-backdrop.hidden { pointer-events: none; }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: min(280px, 88vw);
+    transform: translateX(-105%);
+    box-shadow: none;
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0,0,0,.35);
+  }
+  .sidebar-nav {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow-y: auto;
+    max-height: calc(100vh - 11rem);
+    padding-bottom: 1rem;
+  }
+  .sidebar-nav .nav-btn {
+    width: 100%;
+    text-align: left;
+  }
+  .main-content { padding: 1rem; width: 100%; }
   .field-grid { grid-template-columns: 1fr; }
 }
 
@@ -1124,7 +1239,23 @@ tr.clickable { cursor: pointer; }
 .theme-swatch-girly-pink::before { background: #fff1f5; }
 .theme-swatch-girly-pink::after { background: #9d174d; }
 
-.deductions-section-title {
+.stub-badge {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 600;
+  padding: .15rem .45rem;
+  border-radius: .35rem;
+  background: var(--warning-bg, #fef3c7);
+  color: var(--warning-text, #92400e);
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+.identity-note {
+  grid-column: 1 / -1;
+  font-size: .82rem;
+  color: var(--muted);
+  margin: 0;
+}
   font-size: 1rem;
   margin: 0 0 .35rem;
 }

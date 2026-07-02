@@ -76,6 +76,48 @@ async function collectNotifications(username, role) {
 
       }
 
+      const roles = require("./roles");
+      if (roles.canApproveLoanRequest(username)) {
+        const loanReq = require("./loan-requests-repo");
+        const pendingLoans = await loanReq.readLoanRequests({ status: "pending" });
+        for (const r of pendingLoans.slice(0, 8)) {
+          items.push({
+            id: `loan-req-${r.id}`,
+            type: "loan_request",
+            title: "Loan request pending approval",
+            body: `${r.employeeId}: ${r.totalAmount} EGP`,
+            createdAt: r.createdAt,
+          });
+        }
+      }
+
+      const u = String(username || "").toLowerCase();
+      if (roles.FINANCE_ACCESS_USERS.includes(u)) {
+        const business = require("./business-repo");
+        const expenses = await business.readExpenseRequests({ excludeArchived: true });
+        const today = new Date().toISOString().slice(0, 10);
+        for (const e of expenses.filter((x) => x.status === "pending_approval").slice(0, 5)) {
+          items.push({
+            id: `exp-approval-${e.id}`,
+            type: "expense",
+            title: "Expense needs approval",
+            body: `${e.vendorName}: ${e.amount} EGP`,
+            createdAt: e.createdAt,
+          });
+        }
+        for (const e of expenses
+          .filter((x) => x.dueDate && x.dueDate < today && !["paid", "archived", "denied"].includes(x.status))
+          .slice(0, 5)) {
+          items.push({
+            id: `exp-overdue-${e.id}`,
+            type: "expense",
+            title: "Overdue expense",
+            body: `${e.vendorName}: due ${e.dueDate}`,
+            createdAt: e.createdAt,
+          });
+        }
+      }
+
 
 
       const docs = store.getEmployeeDocuments();

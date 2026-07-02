@@ -97,7 +97,19 @@ Key-value application settings.
 | value | `[6,0]` | JSON or plain string |
 
 Common keys: `defaultWeekendDays`, `weekendDayNames`, `latenessRules`,
-`workingDaysByMonth`, `hideOutEmployees`, `transportAllowanceMonthly`.
+`workingDaysByMonth`, `hideOutEmployees`, `transportAllowanceMonthly`, `attendanceFpRulesByMonth`.
+
+**Employees (Supabase `employees`) — added 1.0.9-beta.1:**
+
+| Column | Field | Notes |
+|--------|-------|-------|
+| fp_number | `fp_number` | Biometric enroll ID |
+| probation_end_date | `probation_end_date` | Dashboard alerts |
+| contract_end_date | `contract_end_date` | Dashboard alerts |
+
+**`loan_requests` (1.0.9-beta.1):** pending → approved/denied; links to `employee_loans` on approve.
+
+**`saved_reports` (1.0.9-beta.1):** saved CSV report definitions (employees / attendance / payroll).
 
 ---
 
@@ -111,6 +123,7 @@ One row per employee per day.
 | date | `date` | `YYYY-MM-DD` |
 | status | `status` | Attended, Half Day, NSNC, Lateness A/B, … |
 | fp_lateness | `fpLateness` | Fingerprint lateness flag |
+| fp_notes | `fpNotes` | Import punch summary |
 | weekend_default | `weekendDefault` | TRUE/FALSE |
 | transport_override | `transportOverride` | full / half / none (optional column) |
 | updated_by | `updatedBy` | Username |

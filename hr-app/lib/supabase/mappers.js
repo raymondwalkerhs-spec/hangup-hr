@@ -40,6 +40,12 @@ function mapEmployeeFromDb(r) {
     "Effective From Month": r.effective_from_month,
     "Depart Date": r.depart_date,
     notice_type: r.notice_type,
+    internal_id: r.internal_id || null,
+    archived_app_id: r.archived_app_id || null,
+    deleted_at: r.deleted_at || null,
+    fp_number: r.fp_number || r["FP Number"] || null,
+    probation_end_date: r.probation_end_date || r["Probation End Date"] || null,
+    contract_end_date: r.contract_end_date || r["Contract End Date"] || null,
     "Work Permit": r.work_permit,
     "Insurance Status": r.insurance_status,
     "Insurance Type": r.insurance_type,
@@ -49,7 +55,7 @@ function mapEmployeeFromDb(r) {
 }
 
 function employeeToDb(emp) {
-  return {
+  const row = {
     id: emp.id,
     american_name: emp.american_name || null,
     arabic_name: emp.arabic_name || null,
@@ -85,8 +91,14 @@ function employeeToDb(emp) {
     effective_from_month: emp.effective_from_month || null,
     depart_date: emp.depart_date || null,
     notice_type: emp.notice_type || null,
+    fp_number: emp.fp_number || null,
+    probation_end_date: emp.probation_end_date || null,
+    contract_end_date: emp.contract_end_date || null,
     updated_at: new Date().toISOString(),
   };
+  if (emp.archived_app_id != null) row.archived_app_id = emp.archived_app_id;
+  if (emp.deleted_at != null) row.deleted_at = emp.deleted_at;
+  return row;
 }
 
 function mapAttendanceFromDb(r) {
@@ -95,6 +107,7 @@ function mapAttendanceFromDb(r) {
     date: String(r.date).slice(0, 10),
     status: r.status || "",
     fpLateness: r.fp_lateness || null,
+    fpNotes: r.fp_notes || "",
     isWeekendDefault: boolFromDb(r.weekend_default),
     transportOverride: r.transport_override || "",
     paidLeave: boolFromDb(r.paid_leave),
@@ -112,6 +125,7 @@ function attendanceToDb(record, updatedBy) {
     transport_override: record.transportOverride || "",
     paid_leave: boolToDb(record.paidLeave),
     leave_note: record.leaveNote || "",
+    fp_notes: record.fpNotes || "",
     updated_by: updatedBy,
     updated_at: new Date().toISOString(),
   };
