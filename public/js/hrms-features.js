@@ -68,51 +68,110 @@ window.HRMSFeatures = (function () {
   }
 
   async function initNotificationsBell(api, state) {
-    const brand = document.querySelector(".sidebar-brand > div");
-    if (!brand || document.getElementById("hr-notif-bell")) return;
-    const btn = document.createElement("button");
-    btn.id = "hr-notif-bell";
-    btn.className = "btn btn-sm btn-ghost notif-bell";
-    btn.type = "button";
-    btn.title = "Notifications";
-    btn.innerHTML = '🔔 <span id="hr-notif-count" class="notif-count hidden">0</span>';
-    brand.appendChild(btn);
-    const panel = document.createElement("div");
-    panel.id = "hr-notif-panel";
-    panel.className = "notif-panel hidden";
-    document.body.appendChild(panel);
+    const mount = document.getElementById("sidebar-notif-wrap");
+    if (!mount || document.getElementById("hr-notif-bell")) return;
 
-    async function refresh() {
+    let lastCount = 0;
+    let lastTopId = "";
+
+    function playNotifSound() {
       try {
-        const { notifications } = await api("/hrms/notifications");
-        const items = notifications || [];
-        const countEl = document.getElementById("hr-notif-count");
-        if (countEl) {
-          countEl.textContent = String(items.length);
-          countEl.classList.toggle("hidden", items.length === 0);
-        }
-        panel.innerHTML =
-          items.length === 0
-            ? '<p class="muted" style="padding:.75rem">No notifications</p>'
-            : items
-                .map(
-                  (n) => `<div class="notif-item"><strong>${escapeHtml(n.title)}</strong><p class="muted">${escapeHtml(n.body || "")}</p></div>`
-                )
-                .join("");
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.36);
+        osc.onended = () => ctx.close().catch(() => {});
       } catch {
         /* ignore */
       }
     }
 
+    const btn = document.createElement("button");
+    btn.id = "hr-notif-bell";
+    btn.className = "btn btn-sm btn-ghost notif-bell";
+    btn.type = "button";
+    btn.title = "Notifications";
+    btn.setAttribute("aria-label", "Notifications");
+    btn.innerHTML = '🔔 <span id="hr-notif-count" class="notif-count hidden">0</span>';
+    mount.appendChild(btn);
+
+    const panel = document.createElement("div");
+    panel.id = "hr-notif-panel";
+    panel.className = "notif-panel hidden";
+    panel.setAttribute("role", "menu");
+    document.body.appendChild(panel);
+
+    function positionPanel() {
+      const rect = btn.getBoundingClientRect();
+      panel.style.top = `${Math.round(rect.bottom + 8)}px`;
+      panel.style.left = `${Math.round(Math.min(rect.left, window.innerWidth - 340))}px`;
+    }
+
+    async function refresh(playSound = false) {
+      try {
+        const { notifications } = await api("/hrms/notifications");
+        const items = notifications || [];
+        const countEl = document.getElementById("hr-notif-count");
+        const topId = items[0]?.id || items[0]?.title || "";
+        if (playSound && items.length > 0 && (items.length > lastCount || topId !== lastTopId)) {
+          playNotifSound();
+        }
+        lastCount = items.length;
+        lastTopId = topId;
+        if (countEl) {
+          countEl.textContent = String(items.length);
+          countEl.classList.toggle("hidden", items.length === 0);
+        }
+        btn.classList.toggle("notif-bell-has-items", items.length > 0);
+        panel.innerHTML =
+          items.length === 0
+            ? '<p class="muted notif-empty">No notifications</p>'
+            : `<div class="notif-panel-header"><strong>Notifications</strong><span class="muted">${items.length}</span></div>` +
+              items
+                .map(
+                  (n) =>
+                    `<div class="notif-item" role="menuitem"><strong>${escapeHtml(n.title)}</strong><p class="muted">${escapeHtml(n.body || "")}</p></div>`
+                )
+                .join("");
+      } catch (err) {
+        const countEl = document.getElementById("hr-notif-count");
+        if (countEl) {
+          countEl.textContent = "!";
+          countEl.classList.remove("hidden");
+          countEl.title = err?.message || "Could not load notifications";
+        }
+      }
+    }
+
     btn.onclick = (e) => {
       e.stopPropagation();
-      panel.classList.toggle("hidden");
-      refresh();
+      const open = !panel.classList.contains("hidden");
+      if (open) {
+        panel.classList.add("hidden");
+      } else {
+        positionPanel();
+        panel.classList.remove("hidden");
+        refresh(false);
+      }
     };
     document.addEventListener("click", () => panel.classList.add("hidden"));
+    window.addEventListener("resize", () => {
+      if (!panel.classList.contains("hidden")) positionPanel();
+    });
     panel.addEventListener("click", (e) => e.stopPropagation());
-    refresh();
-    setInterval(refresh, 120000);
+    await refresh(false);
+    setInterval(() => refresh(true), 120000);
   }
 
   async function renderLeavePage(root, api, state, helpers) {

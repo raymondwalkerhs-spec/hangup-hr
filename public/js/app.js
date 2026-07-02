@@ -129,7 +129,10 @@ function closeSidebarNav() {
   backdrop?.classList.remove("visible");
   backdrop?.classList.add("hidden");
   const toggle = document.getElementById("nav-toggle");
-  if (toggle) toggle.setAttribute("aria-expanded", "false");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Open menu");
+  }
 }
 
 function openSidebarNav() {
@@ -138,7 +141,10 @@ function openSidebarNav() {
   backdrop?.classList.remove("hidden");
   requestAnimationFrame(() => backdrop?.classList.add("visible"));
   const toggle = document.getElementById("nav-toggle");
-  if (toggle) toggle.setAttribute("aria-expanded", "true");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-label", "Close menu");
+  }
 }
 
 function initSidebarNav() {
@@ -154,6 +160,34 @@ function initSidebarNav() {
   window.addEventListener("resize", () => {
     if (window.innerWidth > 900) closeSidebarNav();
   });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSidebarNav();
+  });
+}
+
+function navPageAlias(page) {
+  if (page === "leave") return "requests";
+  return page;
+}
+
+function canNavigateToPage(page) {
+  const btn = document.querySelector(`.nav-btn[data-page="${page}"]`);
+  if (!btn) return false;
+  if (btn.classList.contains("hidden")) return false;
+  return true;
+}
+
+function syncNavActiveState(page) {
+  document.querySelectorAll(".nav-btn").forEach((b) => {
+    const match = b.dataset.page === page && !b.classList.contains("hidden");
+    b.classList.toggle("active", match);
+  });
+}
+
+function ensureNavPageAllowed(page) {
+  const normalized = navPageAlias(page);
+  if (canNavigateToPage(normalized)) return normalized;
+  return "dashboard";
 }
 
 const NATIONALITY_ALIASES = {
@@ -1034,6 +1068,13 @@ function applyChangesButtonVisibility() {
   const loanApprovalsBtn = document.getElementById("nav-loan-approvals");
   if (loanApprovalsBtn) {
     loanApprovalsBtn.classList.toggle("hidden", state.user?.canApproveLoan !== true);
+  }
+  const active = ensureNavPageAllowed(state.page || "dashboard");
+  if (active !== state.page) {
+    state.page = active;
+    syncNavActiveState(active);
+  } else {
+    syncNavActiveState(active);
   }
 }
 
@@ -4348,10 +4389,9 @@ async function renderChanges(root) {
 }
 
 function navigate(page) {
-  state.page = page;
-  document.querySelectorAll(".nav-btn").forEach((b) =>
-    b.classList.toggle("active", b.dataset.page === page)
-  );
+  const next = ensureNavPageAllowed(navPageAlias(page));
+  state.page = next;
+  syncNavActiveState(next);
   closeSidebarNav();
   render();
 }
@@ -4380,6 +4420,8 @@ async function render() {
     org: "Loading organization…",
     sales: "Loading sales…",
     costs: "Loading costs…",
+    "team-dashboard": "Loading team dashboards…",
+    "loan-approvals": "Loading loan approvals…",
   };
   if (!appReady) {
     root.innerHTML = pageSkeleton(labels[page] || "Loading…");
@@ -4423,10 +4465,17 @@ async function render() {
       });
     } else if (page === "team-dashboard" && window.TeamDashboardModule) {
       await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, { escapeHtml });
-    } else if (page === "costs" && window.ExpensesModule) {
+    }     else if (page === "costs" && window.ExpensesModule) {
       await window.ExpensesModule.renderCostsPage(root, api, state, {
         escapeHtml, fmt, openModal, closeModal,
       });
+    } else {
+      renderErrorCard(
+        root,
+        `This section is not available for your account or failed to load.`,
+        () => navigate("dashboard")
+      );
+      return;
     }
     if (stale()) return;
     appReady = true;

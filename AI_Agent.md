@@ -10,7 +10,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** `K:\download app hr`
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.0.9-beta.3` (`package.json` → `version`)
+- **Current version:** `1.0.9-beta.4` (`package.json` → `version`)
 
 ---
 

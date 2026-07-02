@@ -4,8 +4,14 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.0.9-beta.4] — 2026-07-03
+
 ### Fixed
-- **GitHub publish:** Uploads `win-unpacked` patch zip (changed files only) + manifest — not installer EXEs. Use `-IncludeInstaller` only when EXEs are needed on GitHub.
+- **Notifications:** Bell moved to visible sidebar header; panel positions correctly; plays sound on new items; shows error badge if API fails.
+- **Sidebar:** Scrollable nav on desktop; active state respects hidden items; blocked pages redirect to dashboard; Escape closes mobile drawer.
+
+### Changed
+- **GitHub publish:** Uploads `win-unpacked` patch zip (changed files only), not installer EXEs.
 
 ## [1.0.9-beta.3] — 2026-07-03
 
