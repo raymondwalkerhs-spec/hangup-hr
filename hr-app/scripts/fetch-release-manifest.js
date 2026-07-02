@@ -2,6 +2,7 @@
  * Download update manifests from the previous GitHub Release (for patch diff in CI or fresh clones).
  * Usage: GITHUB_UPDATES_REPO=owner/repo node scripts/fetch-release-manifest.js [--tag=v1.0.8]
  */
+require("dotenv").config();
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
@@ -15,7 +16,15 @@ function githubHeaders() {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hangup-HR-Manifest-Fetch",
   };
-  const token = process.env.GITHUB_TOKEN || process.env.GITHUB_UPDATES_TOKEN;
+  let token = process.env.GITHUB_TOKEN || process.env.GITHUB_UPDATES_TOKEN;
+  if (!token) {
+    try {
+      const { execSync } = require("child_process");
+      token = execSync("gh auth token", { encoding: "utf8" }).trim();
+    } catch {
+      /* gh not available */
+    }
+  }
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }

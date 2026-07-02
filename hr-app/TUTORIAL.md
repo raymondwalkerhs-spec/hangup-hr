@@ -91,7 +91,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 - **HR / RTM** submit receipts → **pending approval** until finance approves.  
 - **Finance** (Mark, Phoebe, Raymond): approve/deny, mark paid, petty cash, monthly bills.  
-- **Petty cash:** balance shown before pay; insufficient funds blocked.  
+- **Petty cash:** balance shown before pay; insufficient funds blocked; **Edit** on posted deposits in the ledger.  
 - **Own pocket:** mark paid → **Settle** with employee Instapay reference.
 
 ---

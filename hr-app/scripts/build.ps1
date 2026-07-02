@@ -126,6 +126,16 @@ switch ($target) {
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# Remove stale EXEs from this output folder so future publishes stay fast.
+Get-ChildItem $buildOutput -Filter "*.exe" -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -notmatch [regex]::Escape((Get-Content package.json -Raw | ConvertFrom-Json).version) } |
+  ForEach-Object {
+    Write-Host "Pruning stale $($_.Name)" -ForegroundColor DarkGray
+    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    $bm = "$($_.FullName).blockmap"
+    if (Test-Path $bm) { Remove-Item $bm -Force -ErrorAction SilentlyContinue }
+  }
+
 Write-Host ""
 Write-Host "Build complete. Output in ${buildOutput}\:" -ForegroundColor Green
 Get-ChildItem $buildOutput -Filter "*.exe" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ('  ' + $_.Name) }
