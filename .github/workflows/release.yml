@@ -2,7 +2,7 @@
 # Windows: installer/portable still built on your PC via scripts/build.ps1
 # This workflow publishes GitHub Release patch/full zips for in-app updates.
 #
-# Required secrets: SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY, SESSION_SECRET
+# Required: either SERVICE_ACCOUNT_JSON (full .env file text) OR individual SUPABASE_* + SESSION_SECRET secrets
 # Optional: CSC_LINK, CSC_KEY_PASSWORD (Windows code signing)
 
 name: Release (update packages)
@@ -60,6 +60,7 @@ jobs:
       - name: Prepare build environment
         shell: pwsh
         env:
+          ENV_FILE_SECRET: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
@@ -67,8 +68,12 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path credentials | Out-Null
           '{}' | Set-Content credentials/service-account.json
-          if (-not $env:SESSION_SECRET) { $env:SESSION_SECRET = "ci-release-placeholder-change-in-prod" }
-          @"
+          if ($env:ENV_FILE_SECRET) {
+            Set-Content -Path .env -Value $env:ENV_FILE_SECRET -NoNewline
+            Add-Content -Path .env -Value "`nGITHUB_UPDATES_REPO=${{ github.repository }}"
+          } else {
+            if (-not $env:SESSION_SECRET) { $env:SESSION_SECRET = "ci-release-placeholder-change-in-prod" }
+            @"
           DATA_BACKEND=supabase
           SUPABASE_URL=$env:SUPABASE_URL
           SUPABASE_SECRET_KEY=$env:SUPABASE_SECRET_KEY
@@ -76,6 +81,7 @@ jobs:
           SESSION_SECRET=$env:SESSION_SECRET
           GITHUB_UPDATES_REPO=${{ github.repository }}
           "@ | Set-Content .env
+          }
 
       - run: npm ci --ignore-scripts
       - name: Rebuild native modules (Windows)
@@ -123,6 +129,7 @@ jobs:
 
       - name: Prepare build environment
         env:
+          ENV_FILE_SECRET: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
@@ -130,8 +137,12 @@ jobs:
         run: |
           mkdir -p credentials
           echo '{}' > credentials/service-account.json
-          if [ -z "$SESSION_SECRET" ]; then SESSION_SECRET="ci-release-placeholder-change-in-prod"; fi
-          cat > .env <<EOF
+          if [ -n "$ENV_FILE_SECRET" ]; then
+            printf '%s\n' "$ENV_FILE_SECRET" > .env
+            echo "GITHUB_UPDATES_REPO=${{ github.repository }}" >> .env
+          else
+            if [ -z "$SESSION_SECRET" ]; then SESSION_SECRET="ci-release-placeholder-change-in-prod"; fi
+            cat > .env <<EOF
           DATA_BACKEND=supabase
           SUPABASE_URL=$SUPABASE_URL
           SUPABASE_SECRET_KEY=$SUPABASE_SECRET_KEY
@@ -139,6 +150,7 @@ jobs:
           SESSION_SECRET=$SESSION_SECRET
           GITHUB_UPDATES_REPO=${{ github.repository }}
           EOF
+          fi
 
       - run: npm ci --ignore-scripts
       - run: npm run rebuild:native
