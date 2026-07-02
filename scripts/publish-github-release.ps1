@@ -1,21 +1,39 @@
-# Publish a release to GitHub after a LOCAL build (installer workflow unchanged).
-# Requires: gh CLI logged in, tag already matches package.json version.
+# Publish a GitHub release from win-unpacked (patch zip = changed files only).
+# Does NOT upload installer EXEs unless -IncludeInstaller is passed.
 #
 # Typical flow on your PC:
 #   .\scripts\build.ps1 all
-#   npm run package:github -- --full
 #   .\scripts\publish-github-release.ps1
 #
-# Or with a explicit tag:
-#   .\scripts\publish-github-release.ps1 -Tag v1.0.9-beta.1 -Notes "Bug fixes"
+# First GitHub update release (no previous manifest on GitHub):
+#   .\scripts\publish-github-release.ps1 -IncludeFull
+#
+# Also ship Setup + Portable on GitHub (large, slow — usually unnecessary):
+#   .\scripts\publish-github-release.ps1 -IncludeInstaller
 param(
   [string]$Tag = "",
   [string]$Notes = "",
-  [switch]$Draft
+  [switch]$Draft,
+  [switch]$IncludeFull,
+  [switch]$IncludeInstaller,
+  [switch]$Recreate
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
+
+# Load .env for GITHUB_UPDATES_REPO / tokens (used by manifest fetch).
+if (Test-Path ".env") {
+  Get-Content ".env" | ForEach-Object {
+    if ($_ -match '^\s*([^#=]+)=(.*)$') {
+      $key = $matches[1].Trim()
+      $val = $matches[2].Trim().Trim('"')
+      if (-not [Environment]::GetEnvironmentVariable($key)) {
+        Set-Item -Path "env:$key" -Value $val
+      }
+    }
+  }
+}
 
 $pkg = Get-Content package.json -Raw | ConvertFrom-Json
 $version = $pkg.version
@@ -28,56 +46,101 @@ if (-not (Test-Path $dist)) {
   exit 1
 }
 
-# Only upload assets for the current package.json version (skip stale EXEs from prior builds).
+$unpacked = Join-Path $dist "win-unpacked"
+if (-not (Test-Path $unpacked)) {
+  Write-Host "ERROR: $unpacked not found. Run .\scripts\build.ps1 first (needs win-unpacked)." -ForegroundColor Red
+  exit 1
+}
+
+$env:HR_BUILD_OUTPUT = (Resolve-Path $dist).Path
+
+Write-Host "Fetching previous release manifest (for patch diff)..." -ForegroundColor Cyan
+node scripts/fetch-release-manifest.js --tag=$version 2>&1 | Out-Host
+
+Write-Host "Packaging win-unpacked for v$version..." -ForegroundColor Cyan
+$packageArgs = @("scripts/package-github-release.js")
+if ($IncludeFull) { $packageArgs += "--full" }
+node @packageArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# If no patch was produced, auto-build full zip unless user opted out.
+$patchZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match [regex]::Escape($version) })
+if (-not $patchZips.Count -and -not $IncludeFull) {
+  Write-Host "No patch zip — building full win-unpacked zip for this release..." -ForegroundColor Yellow
+  node scripts/package-github-release.js --full
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
 function Test-VersionAsset {
   param([string]$Name)
   return $Name -match [regex]::Escape($version)
 }
 
-$zips = Get-ChildItem $dist -Filter "Hangup-HR-*.zip" -ErrorAction SilentlyContinue |
-  Where-Object { Test-VersionAsset $_.Name }
-$exes = Get-ChildItem $dist -Filter "*.exe" -ErrorAction SilentlyContinue |
-  Where-Object { Test-VersionAsset $_.Name }
-$manifests = Get-ChildItem "$dist\update-manifests" -Filter "*-latest.json" -ErrorAction SilentlyContinue
+$uploads = [System.Collections.Generic.List[string]]::new()
 
-$skipped = @(
-  Get-ChildItem $dist -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { -not (Test-VersionAsset $_.Name) }
-  Get-ChildItem $dist -Filter "Hangup-HR-*.zip" -ErrorAction SilentlyContinue | Where-Object { -not (Test-VersionAsset $_.Name) }
-)
-if ($skipped.Count) {
-  Write-Host "Skipping $($skipped.Count) stale asset(s) not matching v$version" -ForegroundColor DarkGray
+$patchZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue |
+  Where-Object { Test-VersionAsset $_.Name })
+$fullZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-full.zip" -ErrorAction SilentlyContinue |
+  Where-Object { Test-VersionAsset $_.Name })
+
+foreach ($z in $patchZips) { $uploads.Add($z.FullName) }
+foreach ($z in $fullZips) { $uploads.Add($z.FullName) }
+
+$manifestDir = Join-Path $dist "update-manifests"
+if (Test-Path $manifestDir) {
+  Get-ChildItem $manifestDir -Filter "*-latest.json" -ErrorAction SilentlyContinue |
+    ForEach-Object { $uploads.Add($_.FullName) }
 }
 
-if (-not $zips -and -not $exes) {
-  Write-Host "No release assets for v$version in $dist. Run:" -ForegroundColor Yellow
-  Write-Host "  .\scripts\build.ps1 all"
-  Write-Host "  npm run package:github -- --full"
+if ($IncludeInstaller) {
+  Get-ChildItem $dist -Filter "*.exe" -ErrorAction SilentlyContinue |
+    Where-Object { Test-VersionAsset $_.Name } |
+    ForEach-Object { $uploads.Add($_.FullName) }
+}
+
+if (-not $patchZips.Count -and -not $fullZips.Count) {
+  Write-Host "No patch or full zip created." -ForegroundColor Yellow
+  Write-Host "  First GitHub update? Re-run with -IncludeFull" -ForegroundColor Yellow
+  Write-Host "  Or ensure the previous release has win-x64-latest.json uploaded." -ForegroundColor Yellow
+  if (-not $IncludeInstaller) { exit 1 }
+}
+
+if (-not $uploads.Count) {
+  Write-Host "Nothing to upload." -ForegroundColor Red
   exit 1
 }
 
-$uploads = @()
-$uploads += $zips | ForEach-Object { $_.FullName }
-$uploads += $exes | ForEach-Object { $_.FullName }
-$uploads += $manifests | ForEach-Object { $_.FullName }
+$totalMb = ($uploads | ForEach-Object { (Get-Item $_).Length } | Measure-Object -Sum).Sum / 1MB
+Write-Host "Uploading $($uploads.Count) asset(s), $([math]::Round($totalMb, 1)) MB total:" -ForegroundColor Cyan
+foreach ($u in $uploads) { Write-Host "  $(Split-Path $u -Leaf)" -ForegroundColor DarkGray }
 
 if (-not $Notes) {
   $Notes = "Hangup HR $version - see CHANGELOG.md"
 }
 
 $releaseExists = $false
-& gh release view $Tag 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+if (-not $Recreate) {
+  & gh release view $Tag 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+}
+
+if ($Recreate) {
+  Write-Host "Recreate: removing existing release/tag $Tag if present..." -ForegroundColor Yellow
+  & gh release delete $Tag -y 2>$null | Out-Null
+  $releaseExists = $false
+}
 
 if ($releaseExists) {
-  Write-Host "Release $Tag exists - uploading $($uploads.Count) asset(s) with --clobber..." -ForegroundColor Cyan
-  & gh release upload $Tag $uploads --clobber
+  Write-Host "Release $Tag exists - uploading with --clobber..." -ForegroundColor Cyan
+  & gh release upload $Tag $uploads.ToArray() --clobber
 } else {
   $ghArgs = @("release", "create", $Tag, "--title", "Hangup HR $version", "--notes", $Notes)
   if ($Draft) { $ghArgs = @("release", "create", $Tag, "--draft", "--title", "Hangup HR $version", "--notes", $Notes) }
-  $ghArgs += $uploads
-  Write-Host "Creating GitHub release $Tag with $($uploads.Count) asset(s)..." -ForegroundColor Cyan
+  $ghArgs += $uploads.ToArray()
+  Write-Host "Creating GitHub release $Tag..." -ForegroundColor Cyan
   & gh @ghArgs
 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Done. Set GITHUB_UPDATES_REPO in packaged .env to your owner/repo slug." -ForegroundColor Green
+Write-Host "Done. In-app updater uses patch zip from win-unpacked (not EXEs)." -ForegroundColor Green

@@ -260,8 +260,9 @@ function main() {
   }
 
   if (!created.length) {
-    console.error("No update packages created. Build first (dist:portable on Windows or dist:mac on macOS).");
-    process.exit(1);
+    console.log("No update packages created (no file changes or no previous manifest).");
+    console.log("Use --full for a full win-unpacked zip, or publish with -IncludeFull.");
+    return;
   }
 
   console.log("");

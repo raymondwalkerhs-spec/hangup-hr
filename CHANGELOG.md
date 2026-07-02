@@ -4,6 +4,9 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+### Fixed
+- **GitHub publish:** Uploads `win-unpacked` patch zip (changed files only) + manifest — not installer EXEs. Use `-IncludeInstaller` only when EXEs are needed on GitHub.
+
 ## [1.0.9-beta.3] — 2026-07-03
 
 ### Fixed

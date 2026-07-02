@@ -206,12 +206,12 @@ cd "K:\download app hr"
 
 Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant.
 
-6. **Optional — GitHub in-app patch updates** (does not replace step 5):
+6. **Optional — GitHub in-app patch updates** (does not replace step 5; uploads **win-unpacked** diff only, not EXEs):
 
 ```powershell
-npm run package:github -- --full
-npm run publish:github
-# Or: git tag v{version} && git push origin v{version}  → CI workflow in .github/workflows/release.yml
+.\scripts\publish-github-release.ps1
+# First time on GitHub: .\scripts\publish-github-release.ps1 -IncludeFull
+# Broken draft release:  .\scripts\publish-github-release.ps1 -Recreate
 ```
 
 Set `GITHUB_UPDATES_REPO=owner/repo` in packaged `.env`. Full detail: [`UPDATES.md`](UPDATES.md).

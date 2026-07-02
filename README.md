@@ -153,8 +153,8 @@ If Electron fails to start: `npm run fix:electron`
 | `npm start` | Run from source (Electron) |
 | `npm run dist:beta` | Beta channel build → `dist-beta-v2\` |
 | `npm run dist:all` | Installer + portable → `dist\` |
-| `npm run package:github` | Patch/full update zips for GitHub Releases |
-| `npm run publish:github` | Upload update assets to GitHub (`gh` CLI) |
+| `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
+| `npm run publish:github` | Package + upload patch zip + manifest to GitHub (not EXEs) |
 | `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
 | `npm run test:supabase` | Check Supabase env and clients |
@@ -254,6 +254,6 @@ Settings → **Appearance** — six themes (Light, Dark, Grey, Dark wine, Dark g
 3. Update `app_versions` in Supabase  
 4. `.\scripts\build.ps1 all` — **installer + portable on your PC** (unchanged)  
 5. Distribute new EXE to HR PCs  
-6. *(Optional)* `npm run package:github -- --full` then `npm run publish:github` — patch updates via GitHub  
+6. *(Optional)* `.\scripts\publish-github-release.ps1` — patch update via GitHub (`win-unpacked` diff, not EXEs). First time: add `-IncludeFull`.  
 
 See [`UPDATES.md`](UPDATES.md) and [`AI_Agent.md`](AI_Agent.md) for the full update workflow.
