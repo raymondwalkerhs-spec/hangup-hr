@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS loan_requests (
   reviewed_by text,
   reviewed_at timestamptz,
   deny_reason text DEFAULT '',
-  created_loan_id uuid REFERENCES employee_loans(id) ON DELETE SET NULL,
+  created_loan_id text REFERENCES employee_loans(id) ON DELETE SET NULL,
   created_year_month text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
