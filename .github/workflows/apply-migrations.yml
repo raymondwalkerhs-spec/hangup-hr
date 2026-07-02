@@ -1,0 +1,71 @@
+# Apply pending Supabase DDL migrations (workflow_dispatch).
+# Requires SERVICE_ACCOUNT_JSON (full .env) or individual SUPABASE_* secrets.
+# Optional: SUPABASE_ACCESS_TOKEN secret for Management API DDL.
+
+name: Apply Supabase migrations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Prepare .env
+        env:
+          ENV_FILE_SECRET: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -n "$ENV_FILE_SECRET" ]; then
+            printf '%s\n' "$ENV_FILE_SECRET" > .env
+          else
+            cat > .env <<EOF
+          DATA_BACKEND=supabase
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+          SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
+          EOF
+          fi
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN=$SUPABASE_ACCESS_TOKEN" >> .env
+          fi
+          if [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            echo "SUPABASE_DB_PASSWORD=$SUPABASE_DB_PASSWORD" >> .env
+          fi
+
+      - run: npm ci --ignore-scripts
+
+      - name: Apply migrations
+        run: npm run apply:migrations
+
+      - name: Verify schema
+        run: |
+          node -e "
+          require('dotenv').config();
+          const { getSupabaseAdmin } = require('./lib/supabase-client');
+          (async () => {
+            const db = getSupabaseAdmin();
+            for (const t of ['loan_requests', 'saved_reports']) {
+              const r = await db.from(t).select('id').limit(1);
+              if (r.error) throw new Error(t + ': ' + r.error.message);
+              console.log(t, 'ok');
+            }
+            const e = await db.from('employees').select('fp_number').limit(1);
+            if (e.error) throw new Error(e.error.message);
+            console.log('employees.fp_number ok');
+          })().catch(e => { console.error(e); process.exit(1); });
+          "

@@ -1,7 +1,7 @@
 # Hangup HR — Feature Overview
 
 *Presentation-style summary of what the app does today.*  
-**Product:** Hangup HR Beta · **Version:** 1.0.7-beta.2 · **Platform:** Windows desktop (Electron)
+**Product:** Hangup HR Beta · **Version:** 1.0.9-beta.1 · **Platform:** Windows desktop (Electron)
 
 ---
 
@@ -237,11 +237,12 @@ Same layout everywhere — only colors change.
 
 ## Deployment model
 
-1. Build EXE on a dev machine (`.\scripts\build.ps1 all`) — **primary distribution**  
-2. Mark version in Supabase `app_versions`  
-3. Copy installer or portable to HR PCs (USB, shared drive)  
-4. Users sign in — first run syncs all data  
-5. *(Optional)* Publish GitHub patch release so installed PCs can **Update now** without a new installer — see [`UPDATES.md`](UPDATES.md)
+1. **Apply pending Supabase migrations** (agent: MCP `apply_migration` or `npm run apply:migrations`)
+2. Build EXE on a dev machine (`.\scripts\build.ps1 all`, or `SKIP_NATIVE_REBUILD=1` when prebuilt natives exist) — **primary distribution**
+3. Mark version in Supabase `app_versions`
+4. Copy installer or portable to HR PCs (USB, shared drive)
+5. Users sign in — first run syncs all data
+6. *(Optional)* Publish GitHub patch release so installed PCs can **Update now** without a new installer — see [`UPDATES.md`](UPDATES.md)
 
 *App updates are not pushed through Supabase Storage (installers are ~90 MB each).*
 

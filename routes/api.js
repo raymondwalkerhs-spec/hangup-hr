@@ -458,6 +458,7 @@ router.get("/status", async (req, res) => {
       canEditSales: roles.canEditSale(req.userRole),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
+      canApproveLoan: roles.canApproveLoanRequest(req.username),
     },
     appVersion: getAppVersion(),
     sheetId: store.SHEET_ID,
@@ -488,6 +489,14 @@ router.use("/expenses", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
 }, require("./expenses"));
+router.use("/loan-requests", (req, res, next) => {
+  req.userRole = roles.enrichUserRole(
+    roles.resolveUserRole(req.username, req.appSession?.role),
+    store.getEmployees()
+  );
+  req.userRole.username = req.username;
+  next();
+}, require("./loan-requests"));
 router.use("/hrms", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
@@ -1030,6 +1039,8 @@ router.post("/attendance/batch", async (req, res) => {
       date: r.date,
       status: r.status || "",
       fpLateness: r.fpLateness || null,
+      fpNotes: r.fpNotes || "",
+      leaveNote: r.leaveNote || r.fpNotes || "",
       isWeekendDefault: isWeekend(r.date) && r.status === "Day-OFF",
       transportOverride: r.transportOverride || "",
     });
@@ -1037,6 +1048,65 @@ router.post("/attendance/batch", async (req, res) => {
 
   const count = await store.saveAttendanceBatch(normalized, req.username);
   res.json({ ok: true, count });
+});
+
+router.get("/attendance/fp-rules/:month", async (req, res) => {
+  if (!roles.canEditAttendance(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  const fpImport = require("../lib/attendance-fp-import");
+  const config = store.getConfig();
+  const rules = fpImport.getRulesForMonth(config, req.params.month);
+  res.json({ month: req.params.month, rules, defaults: fpImport.DEFAULT_FP_RULES });
+});
+
+router.put("/attendance/fp-rules/:month", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const month = req.params.month;
+  const config = store.getConfig();
+  const byMonth = { ...(config.attendanceFpRulesByMonth || {}) };
+  byMonth[month] = req.body.rules || req.body;
+  await store.saveConfigKey("attendanceFpRulesByMonth", byMonth, req.username);
+  res.json({ ok: true, month, rules: byMonth[month] });
+});
+
+router.post("/attendance/import", async (req, res) => {
+  if (!roles.canEditAttendance(req.userRole)) {
+    return res.status(403).json({ error: "No permission to import attendance" });
+  }
+  const { month, base64, fileName, dryRun, overwritePolicy } = req.body;
+  if (!month || !base64) {
+    return res.status(400).json({ error: "month and base64 required" });
+  }
+  try {
+    await assertMonthNotLocked(month);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    const fpImport = require("../lib/attendance-fp-import");
+    const config = store.getConfig();
+    const rules = fpImport.getRulesForMonth(config, month);
+    const buffer = Buffer.from(base64, "base64");
+    const existing = store.getAttendanceEvents(month);
+    const result = fpImport.processImport({
+      buffer,
+      employees: store.getEmployees(),
+      rules,
+      month,
+      existingRecords: existing,
+      overwritePolicy: overwritePolicy || "skip_manual",
+    });
+    if (!dryRun && result.records.length) {
+      const count = await store.saveAttendanceBatch(result.records, req.username);
+      result.rowsApplied = count;
+    }
+    res.json({ ok: true, dryRun: Boolean(dryRun), ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.put("/attendance/working-days", async (req, res) => {

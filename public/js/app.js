@@ -1031,6 +1031,10 @@ function applyChangesButtonVisibility() {
     const showCosts = state.user?.canAccessCosts === true || state.user?.canSubmitExpense === true;
     costsBtn.classList.toggle("hidden", !showCosts);
   }
+  const loanApprovalsBtn = document.getElementById("nav-loan-approvals");
+  if (loanApprovalsBtn) {
+    loanApprovalsBtn.classList.toggle("hidden", state.user?.canApproveLoan !== true);
+  }
 }
 
 async function refreshStatus() {
@@ -1762,6 +1766,10 @@ function employeeFormFields(emp = {}) {
     ${paymentMethodFieldsHtml(emp)}
     <label class="field"><span>Phone</span><input name="phone" value="${emp.phone || ""}" /></label>
     <label class="field"><span>Email</span><input name="email" value="${emp.email || ""}" /></label>
+    <label class="field"><span>Employment date</span><input name="employment_date" type="date" value="${(emp.employment_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>Probation end</span><input name="probation_end_date" type="date" value="${(emp.probation_end_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>Contract end</span><input name="contract_end_date" type="date" value="${(emp.contract_end_date || "").slice(0, 10)}" /></label>
+    <label class="field"><span>FP number (biometric)</span><input name="fp_number" value="${emp.fp_number || ""}" placeholder="Device enroll ID" /></label>
     ${nationalityFormFieldsHtml(emp)}
   </form>`;
 }
@@ -2675,6 +2683,7 @@ async function renderAttendance(root) {
       `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
     ).join("")}</select>
     <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
+    ${data.canEdit ? '<button class="btn btn-primary" id="import-fp-btn">Import FP file</button><button class="btn" id="fp-rules-btn">FP rules</button>' : ""}
     ${hideOutToggle()}
     <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
     <div class="table-wrap attendance-grid"><table>
@@ -2744,7 +2753,145 @@ async function renderAttendance(root) {
       alert(e.message);
     }
   });
+  root.querySelector("#import-fp-btn")?.addEventListener("click", () => openFpImportModal());
+  root.querySelector("#fp-rules-btn")?.addEventListener("click", () => openFpRulesModal());
   bindAttendanceGridEvents(root, ctx);
+}
+
+async function fileToBase64Att(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function openFpImportModal() {
+  openModal(`
+    <div class="modal-header"><h2>Import fingerprint attendance — ${monthLabel(state.month)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <form id="fp-import-form" class="modal-body field-grid">
+      <label class="field" style="grid-column:1/-1"><span>CSV or XLS export from device</span>
+        <input type="file" name="file" accept=".csv,.xls,.xlsx" required /></label>
+      <label class="field"><span>On conflict</span>
+        <select name="overwritePolicy">
+          <option value="skip_manual">Skip days with manual edits</option>
+          <option value="overwrite">Overwrite all</option>
+        </select></label>
+      <div class="form-actions" style="grid-column:1/-1">
+        <button type="button" class="btn" id="fp-preview-btn">Preview</button>
+        <button type="submit" class="btn btn-primary">Apply import</button>
+      </div>
+      <div id="fp-preview-area" class="table-wrap" style="grid-column:1/-1;max-height:16rem;overflow:auto"></div>
+    </form>`, true);
+  let lastPreview = null;
+  document.getElementById("fp-preview-btn").onclick = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(document.getElementById("fp-import-form"));
+    const file = fd.get("file");
+    if (!file?.size) return alert("Choose a file first");
+    try {
+      const base64 = await fileToBase64Att(file);
+      lastPreview = await api("/attendance/import", {
+        method: "POST",
+        body: JSON.stringify({
+          month: state.month,
+          base64,
+          fileName: file.name,
+          dryRun: true,
+          overwritePolicy: fd.get("overwritePolicy"),
+        }),
+      });
+      const area = document.getElementById("fp-preview-area");
+      const rows = lastPreview.preview || [];
+      area.innerHTML = rows.length
+        ? `<table><thead><tr><th>FP</th><th>Date</th><th>In</th><th>Out</th><th>Status</th></tr></thead>
+        <tbody>${rows.slice(0, 100).map((r) => `<tr><td>${escapeHtml(r.fpNumber || "")}</td><td>${r.date}</td><td>${r.checkIn || "—"}</td><td>${r.checkOut || "—"}</td><td>${escapeHtml(r.status)}</td></tr>`).join("")}</tbody></table>
+        ${lastPreview.unmatchedFp?.length ? `<p class="muted">Unmatched FP IDs: ${lastPreview.unmatchedFp.join(", ")}</p>` : ""}`
+        : "<p class='muted'>No rows matched this month.</p>";
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+  document.getElementById("fp-import-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const file = fd.get("file");
+    if (!file?.size) return alert("Choose a file");
+    if (!confirm(`Apply FP import for ${monthLabel(state.month)}?`)) return;
+    try {
+      const base64 = await fileToBase64Att(file);
+      const res = await api("/attendance/import", {
+        method: "POST",
+        body: JSON.stringify({
+          month: state.month,
+          base64,
+          fileName: file.name,
+          dryRun: false,
+          overwritePolicy: fd.get("overwritePolicy"),
+        }),
+      });
+      closeModal();
+      alert(`Imported ${res.rowsApplied || res.records?.length || 0} day(s). Skipped ${res.rowsSkipped || 0}.`);
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+}
+
+async function openFpRulesModal() {
+  const data = await api(`/attendance/fp-rules/${state.month}`);
+  const r = data.rules?.checkIn || {};
+  const o = data.rules?.checkOut || {};
+  openModal(`
+    <div class="modal-header"><h2>FP rules — ${monthLabel(state.month)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <form id="fp-rules-form" class="modal-body field-grid">
+      <h4 style="grid-column:1/-1">Check-in</h4>
+      <label class="field"><span>On time before</span><input name="onTimeBefore" value="${r.onTimeBefore || "14:50"}" /></label>
+      <label class="field"><span>Lateness A until</span><input name="latenessAUntil" value="${r.latenessAUntil || "15:00"}" /></label>
+      <label class="field"><span>Lateness B until</span><input name="latenessBUntil" value="${r.latenessBUntil || "15:30"}" /></label>
+      <label class="field"><span>Quarter day until</span><input name="quarterDayUntil" value="${r.quarterDayUntil || "17:00"}" /></label>
+      <label class="field"><span>Half day after</span><input name="halfDayAfter" value="${r.halfDayAfter || "17:00"}" /></label>
+      <h4 style="grid-column:1/-1">Check-out</h4>
+      <label class="field"><span>Expected</span><input name="expected" value="${o.expected || "12:00"}" /></label>
+      <label class="field"><span>Grace until</span><input name="graceUntil" value="${o.graceUntil || "13:00"}" /></label>
+      <label class="field"><span>Half day from</span><input name="halfDayFrom" value="${o.halfDayFrom || "19:00"}" /></label>
+      <label class="field"><span>Half day until</span><input name="halfDayUntil" value="${o.halfDayUntil || "22:00"}" /></label>
+      <label class="field"><span>Quarter day from</span><input name="quarterDayFrom" value="${o.quarterDayFrom || "22:00"}" /></label>
+      <label class="field"><span>Quarter day until</span><input name="quarterDayUntil" value="${o.quarterDayUntil || "23:55"}" /></label>
+      <label class="field" style="grid-column:1/-1"><span>Note</span><textarea name="note" rows="2">${escapeHtml(o.note || "")}</textarea></label>
+      <div class="form-actions" style="grid-column:1/-1"><button type="submit" class="btn btn-primary">Save rules</button></div>
+    </form>`, true);
+  document.getElementById("fp-rules-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const rules = {
+      checkIn: {
+        onTimeBefore: fd.get("onTimeBefore"),
+        latenessAUntil: fd.get("latenessAUntil"),
+        latenessBUntil: fd.get("latenessBUntil"),
+        quarterDayUntil: fd.get("quarterDayUntil"),
+        halfDayAfter: fd.get("halfDayAfter"),
+      },
+      checkOut: {
+        expected: fd.get("expected"),
+        graceUntil: fd.get("graceUntil"),
+        halfDayFrom: fd.get("halfDayFrom"),
+        halfDayUntil: fd.get("halfDayUntil"),
+        quarterDayFrom: fd.get("quarterDayFrom"),
+        quarterDayUntil: fd.get("quarterDayUntil"),
+        note: fd.get("note"),
+      },
+    };
+    try {
+      await api(`/attendance/fp-rules/${state.month}`, { method: "PUT", body: JSON.stringify({ rules }) });
+      closeModal();
+      showSaveIndicator("FP rules saved", "saved");
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 }
 
 async function renderPayroll(root) {
@@ -2946,7 +3093,8 @@ async function openEmployeeLoansModal(employeeId) {
     <div class="modal-body">
       <div class="stack">${loans || '<p class="muted">No loans for this employee.</p>'}</div>
       <div class="card" style="margin-top:1rem">
-        <h4>New loan</h4>
+        <h4>Request loan</h4>
+        <p class="muted" style="margin:.25rem 0 .5rem">Submitted to Mark / Phoebe / Raymond for approval before payroll deductions start.</p>
         <form id="loan-form" class="field-grid">
           <label class="field"><span>Total amount (EGP)</span><input name="totalAmount" type="number" min="1" required /></label>
           <label class="field"><span>Per salary (EGP)</span><input name="installmentAmount" type="number" min="1" placeholder="500" /></label>
@@ -2955,7 +3103,7 @@ async function openEmployeeLoansModal(employeeId) {
           <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
         </form>
         <p class="muted" style="margin:.5rem 0 0">Enter either per-salary amount or number of salaries (e.g. 1,000 loan → 500 × 2 salaries).</p>
-        <button class="btn btn-primary btn-sm" id="save-loan-btn" style="margin-top:.5rem">Create loan</button>
+        <button class="btn btn-primary btn-sm" id="save-loan-btn" style="margin-top:.5rem">Submit loan request</button>
       </div>
     </div>`,
     true
@@ -2964,7 +3112,7 @@ async function openEmployeeLoansModal(employeeId) {
   document.getElementById("save-loan-btn").onclick = async () => {
     const fd = new FormData(document.getElementById("loan-form"));
     try {
-      await api("/loans", {
+      await api("/loan-requests", {
         method: "POST",
         body: JSON.stringify({
           employeeId,
@@ -2977,6 +3125,7 @@ async function openEmployeeLoansModal(employeeId) {
         }),
       });
       closeModal();
+      alert("Loan request submitted for executive approval.");
       openEmployeeLoansModal(employeeId);
     } catch (e) {
       alert(e.message);
@@ -3434,6 +3583,44 @@ async function renderDeductions(root) {
   bindMonthNav(root);
 }
 
+async function renderLoanApprovalsPage(root) {
+  if (!state.user?.canApproveLoan) {
+    root.innerHTML = '<p class="muted">Executive approval access only (Mark, Phoebe, Raymond).</p>';
+    return;
+  }
+  const data = await api("/loan-requests?status=pending");
+  const requests = data.requests || [];
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Loan approvals</h1><p class="muted">${requests.length} pending · visible to executives only</p></div></div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Employee</th><th class="text-right">Total</th><th>Installment</th><th>Submitted by</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${requests.length ? requests.map((r) => `<tr>
+        <td>${escapeHtml(r.employeeId)}</td>
+        <td class="text-right">${fmt(r.totalAmount)}</td>
+        <td>${fmt(r.installmentAmount)} × ${r.installmentsCount || "—"}</td>
+        <td>${escapeHtml(r.submittedBy)}</td>
+        <td>${escapeHtml(r.notes || "—")}</td>
+        <td class="btn-row">
+          <button class="btn btn-sm btn-primary" data-loan-approve="${r.id}">Approve</button>
+          <button class="btn btn-sm" data-loan-deny="${r.id}">Deny</button>
+        </td>
+      </tr>`).join("") : '<tr><td colspan="6" class="muted">No pending loan requests</td></tr>'}
+      </tbody></table></div>`;
+  root.querySelectorAll("[data-loan-approve]").forEach((btn) => {
+    btn.onclick = async () => {
+      await api(`/loan-requests/${btn.dataset.loanApprove}/approve`, { method: "POST" });
+      render();
+    };
+  });
+  root.querySelectorAll("[data-loan-deny]").forEach((btn) => {
+    btn.onclick = async () => {
+      const reason = prompt("Deny reason (optional):") || "";
+      await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, { method: "POST", body: JSON.stringify({ denyReason: reason }) });
+      render();
+    };
+  });
+}
+
 async function renderLoansPage(root) {
   const [loanData, empData] = await Promise.all([
     api("/loans"),
@@ -3769,7 +3956,7 @@ async function renderReports(root) {
       setButtonLoading(btn, false);
     }
   };
-  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt }).catch(() => {});
+  window.HRMSFeatures?.enhanceReports(root, api, state, { downloadFile, fmt, openModal, closeModal }).catch(() => {});
 }
 
 async function renderSettings(root) {
@@ -4208,6 +4395,7 @@ async function render() {
     else if (page === "bonuses") await renderBonuses(root);
     else if (page === "deductions") await renderDeductions(root);
     else if (page === "loans") await renderLoansPage(root);
+    else if (page === "loan-approvals") await renderLoanApprovalsPage(root);
     else if (page === "salaries") await renderSalaries(root);
     else if (page === "reports") await renderReports(root);
     else if (page === "leave" || page === "requests") {

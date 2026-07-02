@@ -728,14 +728,32 @@ window.HRMSFeatures = (function () {
   async function enhanceDashboard(root, api) {
     try {
       const { expiring } = await api("/documents/expiring");
-      if (!expiring?.length) return;
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `<h3>Documents expiring (60 days)</h3><ul>${expiring
-        .slice(0, 8)
-        .map((d) => `<li>${escapeHtml(d.employeeId)}: ${escapeHtml(d.docType)} — ${d.expiry}</li>`)
-        .join("")}</ul>`;
-      root.querySelector(".grid-2")?.appendChild(card);
+      if (expiring?.length) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `<h3>Documents expiring (60 days)</h3><ul>${expiring
+          .slice(0, 8)
+          .map((d) => `<li>${escapeHtml(d.employeeId)}: ${escapeHtml(d.docType)} — ${d.expiry}</li>`)
+          .join("")}</ul>`;
+        root.querySelector(".grid-2")?.appendChild(card);
+      }
+    } catch {
+      /* optional */
+    }
+    try {
+      const { alerts } = await api("/hrms/alerts/employment?days=60");
+      if (alerts?.length) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `<h3>Probation / contract ending (60 days)</h3><ul>${alerts
+          .slice(0, 10)
+          .map(
+            (a) =>
+              `<li>${escapeHtml(a.employeeId)} (${escapeHtml(a.name)}): ${a.type === "probation" ? "Probation" : "Contract"} ends ${a.date}</li>`
+          )
+          .join("")}</ul>`;
+        root.querySelector(".grid-2")?.appendChild(card);
+      }
     } catch {
       /* optional */
     }
@@ -1029,7 +1047,7 @@ window.HRMSFeatures = (function () {
   }
 
   async function enhanceReports(root, api, state, helpers) {
-    const { downloadFile, fmt } = helpers;
+    const { downloadFile, fmt, openModal, closeModal } = helpers;
     const toolbar = root.querySelector(".page-header .btn-row");
     if (!toolbar || document.getElementById("rpt-turnover-btn")) return;
     const turnoverBtn = document.createElement("button");
@@ -1057,6 +1075,74 @@ window.HRMSFeatures = (function () {
       });
     };
     toolbar.append(turnoverBtn, rankBtn);
+
+    const savedCard = document.createElement("div");
+    savedCard.className = "card";
+    savedCard.style.marginTop = "1rem";
+    savedCard.innerHTML = `<h3>Custom reports <button class="btn btn-sm" id="new-saved-report-btn">+ New</button></h3>
+      <div id="saved-reports-list" class="muted">Loading…</div>`;
+    root.querySelector(".page-header")?.after(savedCard);
+
+    try {
+      const { reports, columnSets } = await api("/hrms/saved-reports");
+      const list = savedCard.querySelector("#saved-reports-list");
+      list.innerHTML = reports?.length
+        ? `<table><thead><tr><th>Name</th><th>Type</th><th></th></tr></thead><tbody>${reports
+            .map(
+              (r) => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.reportType)}</td><td class="btn-row">
+              <button class="btn btn-sm" data-run-report="${r.id}">Export CSV</button>
+              <button class="btn btn-sm btn-danger" data-del-report="${r.id}">Delete</button></td></tr>`
+            )
+            .join("")}</tbody></table>`
+        : "<p>No saved reports yet.</p>";
+      list.querySelectorAll("[data-run-report]").forEach((b) => {
+        b.onclick = () =>
+          downloadFile(`/hrms/saved-reports/${b.dataset.runReport}/run?month=${state.month}`, `report-${state.month}.csv`);
+      });
+      list.querySelectorAll("[data-del-report]").forEach((b) => {
+        b.onclick = async () => {
+          if (!confirm("Delete this saved report?")) return;
+          await api(`/hrms/saved-reports/${b.dataset.delReport}`, { method: "DELETE" });
+          helpers.render();
+        };
+      });
+      savedCard.querySelector("#new-saved-report-btn").onclick = () => {
+        const types = Object.keys(columnSets || {});
+        openModal(
+          `<div class="modal-header"><h2>New saved report</h2><button class="btn btn-sm" data-close>✕</button></div>
+          <form id="saved-report-form" class="modal-body field-grid">
+            <label class="field"><span>Name</span><input name="name" required /></label>
+            <label class="field"><span>Type</span><select name="reportType">${types.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+            <label class="field"><span>Filter unit</span><input name="unit" placeholder="optional" /></label>
+            <label class="field"><span>Filter team</span><input name="team" placeholder="optional" /></label>
+            <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+          </form>`,
+          true
+        );
+        document.getElementById("saved-report-form").onsubmit = async (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.target);
+          const reportType = fd.get("reportType");
+          const filters = {};
+          if (fd.get("unit")) filters.unit = fd.get("unit");
+          if (fd.get("team")) filters.team = fd.get("team");
+          filters.month = state.month;
+          await api("/hrms/saved-reports", {
+            method: "POST",
+            body: JSON.stringify({
+              name: fd.get("name"),
+              reportType,
+              filters,
+              columns: columnSets[reportType] || [],
+            }),
+          });
+          closeModal();
+          helpers.render();
+        };
+      };
+    } catch {
+      savedCard.querySelector("#saved-reports-list").textContent = "Could not load saved reports.";
+    }
   }
 
   function enhanceChanges(root, api) {

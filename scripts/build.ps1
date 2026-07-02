@@ -86,6 +86,8 @@ if ($env:CI -eq "true" -and (Test-Path "node_modules")) {
 
 if ($env:CI -eq "true") {
   Write-Host "CI: native modules already rebuilt in workflow" -ForegroundColor Cyan
+} elseif ($env:SKIP_NATIVE_REBUILD -eq "1") {
+  Write-Host "SKIP_NATIVE_REBUILD=1 - skipping electron-rebuild (use prebuilt native modules)" -ForegroundColor Yellow
 } else {
   Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
   npm run rebuild:native
@@ -106,7 +108,13 @@ $target = $args[0]
 if (-not $target) { $target = "all" }
 
 $builderArgs = @("--config.directories.output=$buildOutput")
+if ($env:SKIP_NATIVE_REBUILD -eq "1") {
+  $builderArgs += "--config.npmRebuild=false"
+}
 if ($env:CI -eq "true") {
+  $builderArgs += "--publish"
+  $builderArgs += "never"
+} elseif ($env:SKIP_NATIVE_REBUILD -eq "1") {
   $builderArgs += "--publish"
   $builderArgs += "never"
 }

@@ -599,6 +599,107 @@ router.get("/reports/payroll-compare", async (req, res) => {
   }
 });
 
+router.get("/alerts/employment", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR access required" });
+  }
+  try {
+    const days = Math.min(Number(req.query.days) || 60, 180);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + days);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const alerts = [];
+    for (const e of store.getEmployees()) {
+      if (e.probation_end_date && e.probation_end_date >= today && e.probation_end_date <= cutoffStr) {
+        alerts.push({
+          type: "probation",
+          employeeId: e.id,
+          name: e.american_name || e.arabic_name || e.id,
+          date: e.probation_end_date,
+        });
+      }
+      if (e.contract_end_date && e.contract_end_date >= today && e.contract_end_date <= cutoffStr) {
+        alerts.push({
+          type: "contract",
+          employeeId: e.id,
+          name: e.american_name || e.arabic_name || e.id,
+          date: e.contract_end_date,
+        });
+      }
+    }
+    alerts.sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ alerts, days });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const customReports = require("../lib/custom-reports");
+
+router.get("/saved-reports", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const reports = await customReports.readSavedReports(req.username);
+    res.json({ reports, columnSets: customReports.COLUMN_SETS });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/saved-reports", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.upsertSavedReport(req.body, req.username);
+    res.json({ ok: true, report });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.patch("/saved-reports/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.upsertSavedReport({ ...req.body, id: req.params.id }, req.username);
+    res.json({ ok: true, report });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.delete("/saved-reports/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    await customReports.deleteSavedReport(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get("/saved-reports/:id/run", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && !roles.canViewPayroll(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const report = await customReports.getSavedReport(req.params.id);
+    if (!report) return res.status(404).json({ error: "Report not found" });
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const csv = await customReports.runReport(report, store, month);
+    res.type("text/csv").attachment(`${report.name.replace(/[^\w-]+/g, "_")}.csv`).send(csv);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.get("/exports/changelog", async (req, res) => {
   if (!roles.canViewLogs(req.userRole)) return res.status(403).json({ error: "Forbidden" });
   try {

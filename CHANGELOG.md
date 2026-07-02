@@ -4,9 +4,34 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.0.9-beta.2] — 2026-07-02
+
+### Fixed
+- **FP import:** Never overwrites manually entered attendance (including weekday Day-OFF); only empty days and auto weekend placeholders are filled.
+- **Build:** `SKIP_NATIVE_REBUILD=1` skips electron-rebuild when prebuilt native modules are present (VS 2022/18 node-gyp issues).
+
 ### Added
-- **GitHub in-app updates:** Patch zips (changed files only) + full zip fallback; “Update now” in desktop app. Documented in [`UPDATES.md`](UPDATES.md). Local installer builds unchanged.
-- **Egyptian holidays:** Separate Settings card (admin-only import/activate); inactive by default; affects attendance when enabled.
+- **`npm run apply:migrations`** — applies pending Supabase DDL (`internal_id`, `force_update_min_version`, finance/FP schema).
+- Agent docs: migrations are applied by the agent (Supabase MCP or script), not delegated to the user.
+
+### Pending (Supabase)
+- Run `npm run apply:migrations` or MCP `apply_migration` for: `20260706_employee_internal_id.sql`, `20260706_app_versions_force_update.sql`, `20260708_finance_hr_attendance.sql`
+
+## [1.0.9-beta.1] — 2026-07-02
+
+### Added
+- **Costs / finance (FIN-01–08):** Executive approval queue for HR/RTM expenses; monthly bills CRUD; own-pocket settlement; petty cash balance guard; overdue/denied notifications; cache refresh after mutations.
+- **Loan approvals (HR-02):** HR submits loan requests; Mark / Phoebe / Raymond approve (hidden from other users).
+- **FP attendance import (ATT-05):** CSV/XLS upload, per-month check-in/out rules, `fp_number` on employees, June seed script.
+- **Probation / contract alerts (EMP-03):** Dashboard reminders 60 days before end dates.
+- **Custom reports (RPT-03):** Save filters and export CSV (employees, attendance, payroll).
+
+### Fixed
+- **Petty cash:** Block overdraft; hardened ledger reconcile when editing paid expenses.
+- **Finance submit:** Finance users create expenses as `pending` (not `pending_approval`).
+
+### Applied (Supabase)
+- `20260708_finance_hr_attendance.sql` — `fp_number`, probation/contract dates, `loan_requests`, `saved_reports`, `attendance_imports`
 
 ## [1.0.8-beta.1] — 2026-07-02
 

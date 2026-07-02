@@ -44,7 +44,7 @@ $uploads += $exes | ForEach-Object { $_.FullName }
 $uploads += $manifests | ForEach-Object { $_.FullName }
 
 if (-not $Notes) {
-  $Notes = "Hangup HR $version — see CHANGELOG.md"
+  $Notes = "Hangup HR $version - see CHANGELOG.md"
 }
 
 $ghArgs = @("release", "create", $Tag, "--title", "Hangup HR $version")
@@ -52,7 +52,7 @@ if ($Draft) { $ghArgs += "--draft" }
 $ghArgs += "--notes", $Notes
 $ghArgs += $uploads
 
-Write-Host "Creating GitHub release $Tag with $($uploads.Count) asset(s)…" -ForegroundColor Cyan
+Write-Host "Creating GitHub release $Tag with $($uploads.Count) asset(s)..." -ForegroundColor Cyan
 & gh @ghArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

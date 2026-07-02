@@ -2,7 +2,7 @@
 
 **Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.0.8-beta.1`
+**Current version:** `1.0.9-beta.2`
 
 | Document | Purpose |
 |----------|---------|
@@ -57,11 +57,17 @@ Connectivity check: `npm run test:supabase`
 
 ### Migrations & live database
 
-Schema changes are versioned in `supabase/migrations/`. **Cursor agents with Supabase MCP access should apply pending migrations directly** (`apply_migration` / `execute_sql` on server `user-supabase`) — do not leave new tables unapplied when shipping features that depend on them.
+Schema changes live in `supabase/migrations/`.
 
-To apply manually (fallback): Supabase Dashboard → SQL Editor → paste the migration file contents.
+**Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-After schema changes that ship a new app version, update `app_versions` (see `AI_Agent.md` release checklist).
+**Pending for 1.0.9-beta.x** (if not yet applied):
+
+1. `20260706_employee_internal_id.sql`
+2. `20260706_app_versions_force_update.sql`
+3. `20260708_finance_hr_attendance.sql`
+
+After schema changes, update `app_versions` (see `AI_Agent.md` release checklist).
 
 ---
 
