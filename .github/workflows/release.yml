@@ -48,7 +48,8 @@ jobs:
 
   build-windows:
     needs: resolve-tag
-    runs-on: windows-latest
+    # windows-latest may ship VS 2026 (v18) before node-gyp supports it; 2022 image is stable for native rebuilds.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
@@ -98,6 +99,7 @@ jobs:
       - name: Build portable + unpacked
         shell: pwsh
         env:
+          CI: "true"
           SKIP_CREDENTIALS_CHECK: "1"
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -163,6 +165,7 @@ jobs:
 
       - name: Build macOS dmg + zip
         env:
+          CI: "true"
           SKIP_CREDENTIALS_CHECK: "1"
         run: bash scripts/build-macos.sh
 

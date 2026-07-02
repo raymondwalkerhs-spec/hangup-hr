@@ -76,13 +76,21 @@ if ($channel -eq "beta") {
 $buildOutput = Clear-UnpackedOutput -OutputDir $outputDir
 $env:HR_BUILD_OUTPUT = $buildOutput
 
-Write-Host "Installing dependencies..." -ForegroundColor Cyan
-npm install
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($env:CI -eq "true" -and (Test-Path "node_modules")) {
+  Write-Host "CI: using dependencies from workflow (skip npm install)" -ForegroundColor Cyan
+} else {
+  Write-Host "Installing dependencies..." -ForegroundColor Cyan
+  npm install
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
-Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
-npm run rebuild:native
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($env:CI -eq "true") {
+  Write-Host "CI: native modules already rebuilt in workflow" -ForegroundColor Cyan
+} else {
+  Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
+  npm run rebuild:native
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
 # Code signing: electron-builder signs automatically when a certificate is
 # provided via env vars. Set CSC_LINK (path to .pfx/.p12) and CSC_KEY_PASSWORD
@@ -98,6 +106,10 @@ $target = $args[0]
 if (-not $target) { $target = "all" }
 
 $builderArgs = @("--config.directories.output=$buildOutput")
+if ($env:CI -eq "true") {
+  $builderArgs += "--publish"
+  $builderArgs += "never"
+}
 switch ($target) {
   "installer" { npx electron-builder --win nsis @builderArgs }
   "portable"  { npx electron-builder --win portable @builderArgs }
