@@ -5415,6 +5415,7 @@ async function boot() {
       const warm = await api("/sync/status");
       if (warm.warm) {
         syncOk = true;
+        await refreshStatus().catch(() => {});
         await render();
       } else throw e;
     } catch {

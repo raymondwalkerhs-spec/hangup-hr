@@ -368,7 +368,8 @@ router.post("/login", async (req, res) => {
     if (!roles.hasAppAccess(roles.resolveUserRole(result.user, result.role))) {
       return res.status(403).json({ error: "No access assigned. Contact Admin." });
     }
-    const userRole = roles.resolveUserRole(result.user, result.role).role;
+    const normalizedRole = roles.normalizeRole(result.role);
+    const userRole = normalizedRole;
     const versionCheck = await loadVersionCheck(userRole);
     if (versionCheck.status === "blocked") {
       return res.status(403).json({
@@ -385,7 +386,7 @@ router.post("/login", async (req, res) => {
         /* non-fatal */
       }
     }
-    const session = createSession(result.user, password, result.role, {
+    const session = createSession(result.user, password, normalizedRole, {
       deviceLabel: req.body.deviceLabel || "Desktop",
       ip: req.ip,
     });

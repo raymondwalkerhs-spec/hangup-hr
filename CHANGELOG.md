@@ -4,6 +4,15 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.8] — 2026-07-04
+
+### Fixed
+- **False “Reinstall required”:** packaged apps use `app.getAppPath()` — if Electron is running, install is healthy (no bad asar probe)
+- **GitHub update trap:** latest GitHub release was still v1.3.6 (broken RBAC build); ship v1.3.8 as current
+- **Raymond / superadmin role:** login stores canonical role (`superadmin` → `admin`); DB roles normalized via `scripts/normalize-app-user-roles.js`
+- **RBAC role aliases:** permission catalog and version checks understand `superadmin`, `administrator`, etc.
+- **Warm-cache boot fallback:** `refreshStatus()` before render on error recovery path
+
 ## [1.3.7] — 2026-07-04
 
 ### Fixed
