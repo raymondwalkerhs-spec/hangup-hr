@@ -116,7 +116,6 @@ function requireAuth(req, res, next) {
       destroySession(valid.id);
       return res.status(401).json({ error: "Access revoked. Contact Admin." });
     }
-    await rolePermissions.loadOverrides().catch(() => {});
     next();
   };
   run().catch(next);

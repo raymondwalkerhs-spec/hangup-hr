@@ -4,6 +4,13 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.6.1] — 2026-07-04
+
+### Fixed
+- **Login stall after RBAC:** removed blocking `loadOverrides()` from every authenticated request; preload once at server start with deduplicated Supabase fetch
+- **Warm-cache boot:** call `refreshStatus()` before first render so nav/permissions load immediately
+- **False “Reinstall required” banner:** `installHealth` uses `process.resourcesPath/app.asar` and skips check in unpackaged dev mode
+
 ## [1.3.6] — 2026-07-04
 
 ### Added

@@ -20,6 +20,13 @@ function createApp() {
   app.use(express.static(path.join(__dirname, "public")));
   app.use("/api", apiRoutes);
   app.use("/api/supabase", require("./routes/supabase"));
+  try {
+    require("./lib/role-permissions")
+      .loadOverrides()
+      .catch((err) => console.warn("[startup] RBAC preload:", err.message || err));
+  } catch {
+    /* non-fatal */
+  }
   app.use((err, req, res, next) => {
     console.error(err);
     if (!res.headersSent) {

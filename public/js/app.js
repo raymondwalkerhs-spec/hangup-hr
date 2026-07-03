@@ -5402,6 +5402,7 @@ async function boot() {
   try {
     if (cacheWarm) {
       syncOk = true;
+      await refreshStatus().catch(() => {});
       await render();
       initialSync().then(() => refreshStatus()).catch(() => {});
     } else {
