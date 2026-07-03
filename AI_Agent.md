@@ -12,7 +12,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.3.0` (`package.json` → `version`)
+- **Current version:** `1.3.6` (`package.json` → `version`)
 
 ---
 
@@ -25,6 +25,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 | Auth users | `app_users` (bcrypt passwords, optional `email` column) |
 | Version policy | `app_versions` table (`lib/version-sheet.js`) |
 | Documents | Supabase Storage bucket `hr-documents` |
+| Sale recordings / confirmations | Supabase Storage `hr-documents` → `sales-attachments/{saleId}/…` (signed share URLs, ~7 days) |
 | Local cache | SQLite per PC (`better-sqlite3`) — **keep this**; do not read Postgres on every UI click |
 | Legacy Sheets | **Removed from runtime** — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
 
@@ -104,6 +105,11 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 6. `20260711_v112_clients_breaks.sql` — sales clients/products/prices, break schedules, settings revision
 7. `20260712_org_registration.sql` — agent self-registration, daily PIN, org unit managers
 8. `20260713_agent_training_phases.sql` — 4-week agent training program
+9. `20260714_registration_identity_training.sql` — national ID, passport, training_passed
+10. `20260715_rbac_payslip_grants.sql` — payslip_visible_to_agent, sales grant expires_at
+11. `20260716_app_role_permissions.sql` — admin Access Control overrides
+
+See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 
 ---
 
@@ -117,6 +123,26 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 | **HS-Back-End** | No OP — reports to CEO; teams: HR, Quality, RTM, Finance, Admins |
 | **HR manager** | Phoebe (`HR-Phoebe`) — `node scripts/link-phoebe-hr-manager.js` |
 | **Team names** | `node scripts/normalize-team-names.js` — strip `"Team "`, dedupe per unit |
+
+### Role access (v1.3.4+ defaults, v1.3.6+ overrides)
+
+Central helpers in `lib/roles.js`; flags on `GET /status` → `applyChangesButtonVisibility()` in `app.js`.
+
+**v1.3.6:** Admin/CEO **Access Control** page writes overrides to `app_role_permissions`. Resolver: `lib/role-permissions.js` + catalog `lib/permission-catalog.js`. **Empty table = v1.3.4 hardcoded matrix.** Login (`hasAppAccess`) is never overridden. Username gates (Users tab, leave/loan approvers) stay in code.
+
+API: `GET /rbac/catalog`, `GET /rbac/overrides`, `PUT /rbac/overrides`, `POST /rbac/reset` (admin/ceo only).
+
+Sales column permissions remain in `sales_field_permissions` (linked from Access Control page).
+
+| Role | Employees | Org edit | Sales | Payslip | Equipment |
+|------|-----------|----------|-------|---------|-----------|
+| **Agent** | Self row, docs upload, no card/filters | Own team + OP view | Status, device, customer only; no export | My payslip when HR releases | Hidden |
+| **TL** | Team roster read-only; no edit others | View | Team scope; OP can grant 24h wider view | — | View |
+| **OP** | Unit roster | View | Unit scope; grant temp visibility | — | View |
+| **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | View |
+| **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + column permissions (RTM/admin) | Full + release to agent | Full |
+
+**Notes:** HR/admin read employee warnings; TL/OP/quality/RTM can add notes without reading list.
 
 ---
 
@@ -135,9 +161,17 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 - Quality/RTM: unit toggles HS-1/2/3 (default all on)
 - **Sales catalog (Settings):** RTM + Admin only — clients, devices, price tiers, break schedules
 - **TL/OP submit:** When catalog has active clients, must select client + device + price (UI + server `validateAndResolveCatalogSale`)
-- **Quality attachments:** Dropbox `DROPBOX_ACCESS_TOKEN` needs read + sharing scopes; inline audio in quality ticket
+- **Sale attachments (1.3.1+):** Upload/play/download via **Supabase Storage** only — no Dropbox in the app. **Share link** = signed URL (regenerate anytime; ~7 days validity).
+- **Legacy Dropbox files:** One-time migration before wide rollout:
+
+```powershell
+# Needs fresh DROPBOX_ACCESS_TOKEN (files.content.read) in .env — token expires quickly
+npm run migrate:sale-attachments
+```
+
+Script: `scripts/migrate-sale-attachments-to-supabase.js` — downloads from Dropbox paths in DB, uploads to `sales-attachments/…`, updates `sales_attachments` rows.
+- **Sales export (1.3.0+):** CSV / Excel / PDF from Sales log (filtered list or single sale).
 - Device fix from `Asset/Sales All Data.csv`: `node scripts/fix-sale-devices-from-csv.js`
-- Dropbox link repair: `node scripts/audit-dropbox-sales.js --fix-links`
 
 ---
 
@@ -149,12 +183,13 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 
 ## In-app updater — permanent rules (CRITICAL)
 
-1. **Never** PowerShell `Expand-Archive` for update zips
-2. **Never** adm-zip `extractAllTo` on Windows
-3. **Always** `lib/zip-extract.js` + `lib/update-integrity.js`
-4. Patch zips include `fileHashes`; verify before publish: `npm run verify:update -- <zip>`
-5. Deferred `.hr-pending` swap for `app.asar` on restart (Windows + macOS)
-6. Bootstrap: `node scripts/apply-github-patch-standalone.js` (app closed)
+1. **In-app updates use full installs only** — no patch zip overlays in the app
+2. **Windows NSIS:** download `Setup.exe` from GitHub → silent `/S` → app quits
+3. **Windows portable / macOS:** download full zip → stage → atomic swap on restart
+4. **Never** PowerShell `Expand-Archive` for update zips (manual scripts use `lib/zip-extract.js`)
+5. **Always** validate `app.asar` with `lib/update-integrity.js` before swap
+6. **Publish:** `publish-github-release.ps1` must upload `Setup.exe` every release
+7. **Emergency manual patch:** `node scripts/apply-github-patch-standalone.js` (app closed)
 
 Full detail: [`UPDATES.md`](UPDATES.md)
 
@@ -203,6 +238,7 @@ Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('.
 | Script | Purpose |
 |--------|---------|
 | `scripts/migrate-sheets-to-supabase.js` | One-time Sheets → Postgres |
+| `scripts/migrate-sale-attachments-to-supabase.js` | Legacy Dropbox sale files → Supabase (`npm run migrate:sale-attachments`) |
 | `scripts/import-june-sales.js` | June MLA-Ray CSV → `sales` + employee teams |
 | `scripts/seed-equipment.js` | Equipment registry seed |
 | `scripts/backfill-employment-periods.js` | Employment period backfill |
@@ -263,20 +299,21 @@ ON CONFLICT (version) DO UPDATE SET
 
 Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant (or `dist-build\` if `dist\` is locked).
 
-6. **Optional — GitHub in-app patch updates** (does not replace step 5):
+6. **Optional — GitHub in-app updates** (does not replace step 5):
 
 ```powershell
-.\scripts\build.ps1
-# Ensure previous manifest: gh release download vPREV -p win-x64-latest.json -D dist\update-manifests --clobber
+.\scripts\build.ps1 all
+node scripts/fetch-all-release-manifests.js
 npm run package:github -- --full
-npm run verify:update -- dist\Hangup-HR-{version}-win-x64-patch-from-*.zip
 npm run verify:update -- dist\Hangup-HR-{version}-win-x64-full.zip
-.\scripts\publish-github-release.ps1
+.\scripts\publish-github-release.ps1 -IncludeFull
 ```
 
-7. **macOS DMG** — push tag `v{version}` to GitHub; CI job `build-macos` produces `.dmg` + `mac-x64`/`mac-arm64` patch zips. Or on a Mac: `bash scripts/build-macos.sh` then `npm run package:github -- --full`.
+In-app updater uses **Setup.exe** (NSIS silent) on Windows and **full zips** on portable/mac. Patch zips are CI/manual only.
 
-8. **Apply patch to Raymond's PC** (if in-app update broken):
+7. **macOS DMG** — push tag `v{version}` to GitHub; CI job `build-macos` produces `.dmg` + mac full zips. Or on a Mac: `bash scripts/build-macos.sh` then `npm run package:github -- --full`.
+
+8. **Manual recovery** (if in-app update broken on old builds):
 
 ```powershell
 # Close Hangup HR first!
@@ -325,7 +362,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | Topic | Decision |
 |-------|----------|
-| App update hosting | **Not** Supabase Storage (&gt;100 MB per EXE). Installers: USB/share folder. **Optional:** GitHub Releases patch zips for in-app update (`UPDATES.md`) |
+| App update hosting | **Not** Supabase Storage (&gt;100 MB per EXE). Installers: USB/share folder. **Optional:** GitHub Releases — Setup.exe + full zips for in-app update (`UPDATES.md`) |
 | Local SQLite cache | **Keep** — performance layer on each PC |
 | User management | **Raymond only** |
 | Password reset | Manual by Raymond today; `email` column ready for future |
@@ -338,7 +375,10 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.2.4** | **true** | Permanent updater fix (safe zip + ASAR checksums); training program; org/registration |
+| **1.3.1** | **true** | Supabase-only sale attachments; migrate script; multi-version GitHub patches |
+| 1.3.0 | false | Sales export; catalog validation; quality audio; registration identity |
+| 1.2.5 | false | Updater integrity |
+| 1.2.4 | false | Permanent updater fix (safe zip + ASAR checksums); training program; org/registration |
 | 1.2.3 | false | Org hierarchy, agent registration, sales date filter, device CSV fix |
 | 1.2.2 | false | Windows updater Expand-Archive fix (partial — superseded by 1.2.4) |
 | 1.2.0 | false | Sales catalog, break schedules, session ID, Dropbox attachments |
@@ -434,7 +474,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | ADM-01 | **In-app notifications** | P2 | **Approved** `1.0.4-beta.2` |
 | ADM-02 | **Audit export for Changes tab** | P2 | **Approved** `1.0.4-beta.2` |
 | ADM-03 | **Multi-admin user management** | P3 | Delegate Users tab to more than Raymond (role-gated) |
-| ADM-04 | **Auto-update checker** | Done | GitHub Releases patch + `app_versions` policy — see [`UPDATES.md`](UPDATES.md) |
+| ADM-04 | **Auto-update checker** | Done | GitHub Releases — NSIS silent + full app swap; `app_versions` policy — see [`UPDATES.md`](UPDATES.md) |
 | ADM-05 | **Backup / restore UI** | P2 | Raymond triggers Supabase-aware cache refresh; export config snapshot |
 | ADM-06 | **Localization (EN + AR)** | P3 | RTL layout, bilingual payslips if needed |
 | ADM-07 | **GitHub release channel (Windows)** | Done | Workflow + `bootstrap-github-repo.ps1` — user pushes repo + secrets |

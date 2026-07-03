@@ -9,6 +9,8 @@ const { requireOnline, isOnline, verifyBackendAccess } = require("../lib/network
 const { getCacheDir } = require("../lib/cache");
 const store = require("../lib/data-store");
 const roles = require("../lib/roles");
+const rolePermissions = require("../lib/role-permissions");
+const permissionCatalog = require("../lib/permission-catalog");
 const { getAppVersion, evaluateVersionCompatibility } = require("../lib/app-version");
 const { fetchVersionPolicy } = require("../lib/version-sheet");
 const {
@@ -114,6 +116,7 @@ function requireAuth(req, res, next) {
       destroySession(valid.id);
       return res.status(401).json({ error: "Access revoked. Contact Admin." });
     }
+    await rolePermissions.loadOverrides().catch(() => {});
     next();
   };
   run().catch(next);
@@ -290,10 +293,18 @@ router.get("/version-info", async (req, res) => {
     } catch {
       /* non-fatal */
     }
+    let installHealth = { ok: true };
+    try {
+      const githubUpdater = require("../lib/github-updater");
+      installHealth = githubUpdater.getInstallHealth();
+    } catch {
+      /* non-fatal */
+    }
     res.json({
       appVersion,
       versionCheck: versionPayload(check),
       githubUpdate,
+      installHealth,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -511,6 +522,12 @@ router.get("/status", async (req, res) => {
   } catch (err) {
     dropboxHealth = { configured: false, error: err.message };
   }
+  let agentPayslipAvailable = false;
+  if (["agent", "office_assistant"].includes(req.userRole?.role) && req.userRole?.employeeId) {
+    const emp = store.getEmployeeById(req.userRole.employeeId);
+    const adj = store.getPayrollAdjustment(roles.localYearMonth(), req.userRole.employeeId);
+    agentPayslipAvailable = roles.canViewAgentPayslip(req.userRole, emp, adj);
+  }
   res.json({
     online,
     backendOk,
@@ -542,6 +559,20 @@ router.get("/status", async (req, res) => {
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
       canApproveLoan: roles.canApproveLoanRequest(req.realUsername || req.username),
+      canManageOrg: roles.canManageOrgStructure(req.userRole),
+      canManageEmployees: roles.canManageEmployees(req.userRole),
+      canViewEmployeeNotes: roles.canViewEmployeeNotes(req.userRole),
+      canWriteEmployeeNotes: roles.canWriteEmployeeNotes(req.userRole),
+      canExportSales: roles.canExportSales(req.userRole),
+      canViewEquipment: roles.canViewEquipment(req.userRole),
+      canViewDashboardPayroll: roles.canViewDashboardPayroll(req.userRole),
+      canViewDashboardFull: roles.canViewDashboardFull(req.userRole),
+      canUseEmployeeFilters: roles.canUseEmployeeFilters(req.userRole),
+      canAddEmployee: roles.canAddEmployee(req.userRole),
+      canGrantSalesVisibility: roles.canGrantSalesVisibility(req.userRole),
+      canManageSalesFieldPermissions: roles.canManageSalesFieldPermissions(req.userRole),
+      canManageAccessControl: roles.canManageAccessControl(req.userRole),
+      canViewAgentPayslipNav: agentPayslipAvailable,
     },
     impersonation: {
       active: Boolean(req.impersonatingAs),
@@ -553,6 +584,67 @@ router.get("/status", async (req, res) => {
     supabaseUrl: process.env.SUPABASE_URL || null,
     cacheDir: getCacheDir(),
   });
+});
+
+function assertAccessControlAdmin(req, res) {
+  if (!roles.canManageAccessControl(req.userRole)) {
+    res.status(403).json({ error: "Admin or CEO only" });
+    return false;
+  }
+  return true;
+}
+
+router.get("/rbac/catalog", async (req, res) => {
+  if (!assertAccessControlAdmin(req, res)) return;
+  try {
+    const defaults = permissionCatalog.getDefaultMatrix();
+    res.json({
+      roles: permissionCatalog.MANAGEABLE_ROLES,
+      categories: permissionCatalog.listCategories(),
+      permissions: permissionCatalog.listPermissions(),
+      defaults,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+router.get("/rbac/overrides", async (req, res) => {
+  if (!assertAccessControlAdmin(req, res)) return;
+  try {
+    const overrides = await rolePermissions.listOverrides();
+    const effective = await rolePermissions.getEffectiveMatrix();
+    res.json({ overrides, effective });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+router.put("/rbac/overrides", async (req, res) => {
+  if (!assertAccessControlAdmin(req, res)) return;
+  try {
+    const entries = Array.isArray(req.body?.entries) ? req.body.entries : req.body;
+    if (!Array.isArray(entries)) {
+      return res.status(400).json({ error: "Expected { entries: [...] }" });
+    }
+    const result = await rolePermissions.saveOverrides(entries, req.realUsername || req.username);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+router.post("/rbac/reset", async (req, res) => {
+  if (!assertAccessControlAdmin(req, res)) return;
+  try {
+    const role = req.body?.role;
+    if (!role) return res.status(400).json({ error: "role required" });
+    const keys = Array.isArray(req.body?.permissionKeys) ? req.body.permissionKeys : null;
+    const result = await rolePermissions.resetRole(role, keys);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
 });
 
 router.get("/impersonate/users", async (req, res) => {
@@ -720,7 +812,7 @@ router.get("/org/managers", async (_req, res) => {
 });
 
 router.put("/org/managers/:unit", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
     await orgHierarchy.upsertUnitManager(req.params.unit, req.body || {}, req.username);
     res.json({ ok: true });
@@ -787,6 +879,10 @@ router.get("/employees/next-id", (req, res) => {
   const { unit, backendPool, leadRole } = req.query;
   if (leadRole) {
     const role = String(leadRole).toUpperCase();
+    if (role === "AGENT") {
+      if (!unit) return res.status(400).json({ error: "unit required for Agent role" });
+      return res.json({ suggestedId: store.suggestNextId(unit, backendPool) });
+    }
     const backendRoles = require("../lib/employee-ids").BACKEND_TRANSFER_ROLES;
     if (backendRoles.includes(role)) {
       return res.json({ suggestedId: store.suggestNextId("HS-Back-End", role) });
@@ -799,6 +895,19 @@ router.get("/employees/next-id", (req, res) => {
   }
   if (!unit) return res.status(400).json({ error: "unit required" });
   res.json({ suggestedId: store.suggestNextId(unit, backendPool) });
+});
+
+router.get("/employees/available-ids", (req, res) => {
+  if (!roles.canManageEmployees(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const unit = String(req.query.unit || "").trim();
+  if (!unit) return res.status(400).json({ error: "unit required" });
+  const backendPool = req.query.backendPool || null;
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const idGen = require("../lib/id-generator");
+  const employees = store.getEmployees({ hideOut: false, includeDeleted: true });
+  res.json({ unit, ids: idGen.listAvailableIds(employees, unit, backendPool, limit) });
 });
 
 const {
@@ -832,6 +941,12 @@ router.get("/employees", (req, res) => {
   employees = companyContext.filterEmployeesByCompany(employees, company);
   employees = roles.filterEmployeesForUser(employees, req.userRole);
   employees = employeePrivacy.sanitizeEmployees(employees, req.userRole?.role);
+  if (roles.canViewEmployeeNotes(req.userRole)) {
+    employees = employees.map((e) => ({
+      ...e,
+      hasWarnings: store.getEmployeeWarnings(e.id).length > 0,
+    }));
+  }
   const units = store.getUnits();
   const positions = [
     ...new Set(employees.map((e) => e.position).filter(Boolean)),
@@ -1623,15 +1738,36 @@ router.get("/payroll/pdf", async (req, res) => {
   res.type("application/pdf").attachment(`payroll-${month}.pdf`).send(pdf);
 });
 
-router.get("/payroll/:employeeId", async (req, res) => {
-  if (!roles.canViewBonusesDeductions(req.userRole)) {
-    return res.status(403).json({ error: "No permission to view payroll" });
+router.get("/payroll/my-payslip/available", (req, res) => {
+  if (!["agent", "office_assistant"].includes(req.userRole?.role) || !req.userRole?.employeeId) {
+    return res.json({ available: false });
   }
-  const month = req.query.month || new Date().toISOString().slice(0, 7);
+  const month = req.query.month || roles.localYearMonth();
+  const emp = store.getEmployeeById(req.userRole.employeeId);
+  const adjustment = store.getPayrollAdjustment(month, emp?.id);
+  const available = roles.canViewAgentPayslip(req.userRole, emp, adjustment);
+  res.json({ available, month, employeeId: req.userRole.employeeId });
+});
+
+router.get("/payroll/:employeeId", async (req, res) => {
+  const month = req.query.month || roles.localYearMonth();
   const emp = store.getEmployeeById(req.params.employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
   if (!assertEmployeeInCompanyContext(emp, req)) {
     return res.status(404).json({ error: "Employee not found" });
+  }
+  const adjustment = store.getPayrollAdjustment(month, emp.id);
+  const agentSelf =
+    (req.userRole.role === "agent" || req.userRole.role === "office_assistant") &&
+    req.userRole.employeeId === emp.id;
+  if (agentSelf) {
+    if (!roles.canViewAgentPayslip(req.userRole, emp, adjustment)) {
+      return res.status(403).json({ error: "Payslip not released for this month" });
+    }
+  } else if (!roles.canViewBonusesDeductions(req.userRole)) {
+    return res.status(403).json({ error: "No permission to view payroll" });
+  } else if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access" });
   }
 
   const bundle = await loadEmployeePayslipBundle(emp, month);
@@ -1643,14 +1779,15 @@ router.get("/payroll/:employeeId", async (req, res) => {
     splitStatuses: SPLIT_STATUSES.filter((s) => s !== "cancelled"),
     employee: emp,
     adjustment: store.getPayrollAdjustment(month, emp.id),
-    bonuses: bundle.bonusEvents,
-    deductions: bundle.deductionEvents,
+    bonuses: agentSelf ? [] : bundle.bonusEvents,
+    deductions: agentSelf ? [] : bundle.deductionEvents,
     attendance: bundle.attendanceRecords,
     bonusTypes: bonusTypesForCompany(req.query.company),
     deductionTypes: DEDUCTION_TYPES,
     commissionTypes: store.getCommissionTypes(),
     commissionTiers: store.getPayrollExtras(month).commissionTiers,
     payslipGateNotes: bundle.payslipGateNotes || [],
+    viewOnly: agentSelf,
   });
 });
 
@@ -2052,6 +2189,8 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
     payrollStatus: req.body.payrollStatus || "pending",
     transportEligible: req.body.transportEligible === true,
     monthNotes: req.body.monthNotes || "",
+    noPayroll: req.body.noPayroll === true,
+    payslipVisibleToAgent: req.body.payslipVisibleToAgent === true,
     salesCount: Number(req.body.salesCount) || 0,
   };
   const saved = await store.upsertPayrollAdjustment(record, req.username);
@@ -2237,16 +2376,26 @@ router.get("/payroll/history/:employeeId", async (req, res) => {
 router.get("/warnings/:employeeId", (req, res) => {
   const emp = store.getEmployeeById(req.params.employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+  if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access" });
+  }
+  if (!roles.canViewEmployeeNotes(req.userRole)) {
+    return res.json({ warnings: [], writeOnly: roles.canWriteEmployeeNotes(req.userRole) });
+  }
   res.json({ warnings: store.getEmployeeWarnings(req.params.employeeId) });
 });
 
 router.post("/warnings", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) {
-    return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canWriteEmployeeNotes(req.userRole)) {
+    return res.status(403).json({ error: "No permission to add notes" });
   }
   const { employeeId, date, type, title, content, severity, warningLevel } = req.body;
   if (!employeeId || !content) {
     return res.status(400).json({ error: "employeeId and content required" });
+  }
+  const emp = store.getEmployeeById(employeeId);
+  if (!emp || !roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access to this employee" });
   }
   const saved = await store.addEmployeeWarning(
     { employeeId, date, type, title, content, severity, warningLevel },
@@ -2430,16 +2579,41 @@ router.get("/documents/:employeeId", (req, res) => {
   });
 });
 
-router.post("/documents", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) {
-    return res.status(403).json({ error: "HR/admin only" });
+router.get("/documents/:employeeId/:docId/file", async (req, res) => {
+  const emp = store.getEmployeeById(req.params.employeeId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access" });
   }
+  const docs = store.getEmployeeDocuments(req.params.employeeId);
+  const doc = docs.find(
+    (d) => String(d.id) === req.params.docId || String(d.driveFileId) === req.params.docId
+  );
+  if (!doc?.driveFileId) return res.status(404).json({ error: "Document not found" });
+  try {
+    const documents = require("../lib/documents");
+    const { stream, mimeType } = await documents.getDriveFileStream(doc.driveFileId);
+    res.setHeader("Content-Type", mimeType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(doc.fileName || "document")}"`);
+    stream.pipe(res);
+  } catch (err) {
+    res.status(404).json({ error: err.message || "File not found" });
+  }
+});
+
+router.post("/documents", async (req, res) => {
   const { employeeId, docType, fileName, contentBase64, notes, expiry, noExpiry } = req.body;
   if (!employeeId || !contentBase64 || !fileName) {
     return res.status(400).json({ error: "employeeId, fileName, contentBase64 required" });
   }
   const emp = store.getEmployeeById(employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const isSelf =
+    req.userRole?.employeeId === employeeId &&
+    ["agent", "office_assistant"].includes(req.userRole?.role);
+  if (!roles.canManageAll(req.userRole) && !isSelf) {
+    return res.status(403).json({ error: "No permission" });
+  }
 
   const fs = require("fs");
   const os = require("os");
@@ -2643,12 +2817,19 @@ router.get("/exports/payments", async (req, res) => {
 });
 
 router.get("/payslip/:employeeId/pdf", async (req, res) => {
+  const month = req.query.month || roles.localYearMonth();
+  const emp = store.getEmployeeById(req.params.employeeId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const adjustment = store.getPayrollAdjustment(month, emp.id);
+  const agentSelf =
+    (req.userRole.role === "agent" || req.userRole.role === "office_assistant") &&
+    req.userRole.employeeId === emp.id;
+  if (agentSelf) {
+    return res.status(403).json({ error: "PDF export not available for agents" });
+  }
   if (!roles.canViewBonusesDeductions(req.userRole)) {
     return res.status(403).json({ error: "No permission" });
   }
-  const month = req.query.month || new Date().toISOString().slice(0, 7);
-  const emp = store.getEmployeeById(req.params.employeeId);
-  if (!emp) return res.status(404).json({ error: "Employee not found" });
   if (!roles.canAccessEmployee(req.userRole, emp)) {
     return res.status(403).json({ error: "No access" });
   }

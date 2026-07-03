@@ -4,7 +4,7 @@
 
 **Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.2.0`
+**Current version:** `1.3.6`
 
 | Document | Purpose |
 |----------|---------|
@@ -12,7 +12,8 @@
 | [`FEATURES.md`](FEATURES.md) | Feature overview (presentation-style) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 | [`UPDATES.md`](UPDATES.md) | **Installer vs GitHub in-app updates** |
-| [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Redirect → [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
+| [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Redirect → [`DB_SCHEMA.md`](DB_SCHEMA.md) |
+| [`DB_SCHEMA.md`](DB_SCHEMA.md) | **Supabase schema** — tables, migrations, RLS |
 | [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) | **Historical** Google Sheet layout — never use in production |
 | [`AI_Agent.md`](AI_Agent.md) | Agent context, release checklist, architecture |
 
@@ -64,7 +65,11 @@ Schema changes live in `supabase/migrations/`.
 
 **Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260711_v112_clients_breaks.sql`).
+**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260716_app_role_permissions.sql`).
+
+### Access Control (v1.3.6+)
+
+Admin/CEO users see **Access Control** in the sidebar. Role permission overrides are stored in `app_role_permissions`. An empty table preserves built-in defaults. See [`DB_SCHEMA.md`](DB_SCHEMA.md) and [`lib/permission-catalog.js`](lib/permission-catalog.js).
 
 After schema changes, update `app_versions` (see `AI_Agent.md` release checklist).
 
@@ -83,11 +88,11 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Assets** | Equipment registry and assignments |
 | **Documents** | Upload, expiry alerts, bulk ZIP export |
 | **Reporting** | Monthly HR report, turnover, attendance rankings |
-| **Sales** | MLA-Ray dynamic form, field permissions, Dropbox attachments, approval workflow |
+| **Sales** | MLA-Ray form, catalog, Supabase attachments, export CSV/Excel/PDF, approval workflow |
 | **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners |
 | **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
 | **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab |
-| **Updates** | GitHub patch check for all users; in-app prompt/confirm modals |
+| **Updates** | GitHub update check for all users; silent NSIS installer or full app replace |
 | **Admin** | Notifications bell, change log export, session registry (Raymond), user management |
 
 Full detail: [`FEATURES.md`](FEATURES.md)
@@ -159,7 +164,7 @@ If Electron fails to start: `npm run fix:electron`
 | `npm start` | Run from source (Electron) |
 | `npm run dist:all` | Installer + portable → `dist\` |
 | `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
-| `npm run publish:github` | Package + upload patch zip + manifest to GitHub (not EXEs) |
+| `npm run publish:github` | Package + upload Setup.exe, zips, manifests to GitHub |
 | `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
 | `npm run test:supabase` | Check Supabase env and clients |
@@ -216,7 +221,7 @@ Each build embeds `package.json` version. On login and every ~5 minutes the app 
 | Channel | Use for |
 |---------|---------|
 | **Installer / portable EXE** (`.\scripts\build.ps1`) | New PCs, USB handoff, full reinstall — **primary, on your PC** |
-| **GitHub patch update** (in-app “Update now”) | PCs already installed — changed files only, no new installer |
+| **GitHub in-app update** (in-app “Update now”) | PCs already installed — silent Setup.exe (NSIS) or full app zip (mac/portable) |
 
 GitHub updates do **not** replace building installers locally.
 
@@ -231,7 +236,7 @@ ON CONFLICT (version) DO UPDATE SET
   notes = EXCLUDED.notes;
 ```
 
-**Live current version:** `1.2.0` — confirm in Supabase `app_versions` after each release.
+**Live current version:** `1.3.1` — confirm in Supabase `app_versions` after each release.
 
 ---
 
@@ -242,7 +247,7 @@ ON CONFLICT (version) DO UPDATE SET
 - Do not expose the secret key in a public web client.  
 - Distribute EXE only to trusted HR PCs; treat `.env` as confidential on build machines.
 
-App updates are **not** delivered via Supabase Storage (installers are ~90 MB). Copy the new EXE manually (USB, shared folder, etc.), or use **GitHub in-app patch updates** for PCs that already have the app — see [`UPDATES.md`](UPDATES.md). Version enforcement uses `app_versions` only.
+App updates are **not** delivered via Supabase Storage (installers are ~90 MB). Copy the new EXE manually (USB, shared folder, etc.), or use **GitHub in-app updates** (silent installer / full app) for PCs that already have the app — see [`UPDATES.md`](UPDATES.md). Version enforcement uses `app_versions` only.
 
 ---
 
@@ -259,6 +264,6 @@ Settings → **Appearance** — six themes (Light, Dark, Grey, Dark wine, Dark g
 3. Update `app_versions` in Supabase  
 4. `.\scripts\build.ps1 all` — **installer + portable on your PC** (unchanged)  
 5. Distribute new EXE to HR PCs  
-6. *(Optional)* `.\scripts\publish-github-release.ps1` — patch update via GitHub (`win-unpacked` diff, not EXEs). First time: add `-IncludeFull`.  
+6. *(Optional)* `.\scripts\publish-github-release.ps1 -IncludeFull` — in-app update via GitHub (Setup.exe + full zips).  
 
 See [`UPDATES.md`](UPDATES.md) and [`AI_Agent.md`](AI_Agent.md) for the full update workflow.

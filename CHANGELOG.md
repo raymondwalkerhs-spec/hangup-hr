@@ -4,6 +4,71 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.6] — 2026-07-04
+
+### Added
+- **Access Control** admin page (admin/ceo) — manage role permissions across the app
+- `app_role_permissions` table — DB overrides merged with hardcoded defaults in `lib/roles.js`
+- Permission catalog (`lib/permission-catalog.js`) and resolver (`lib/role-permissions.js`)
+- API: `GET/PUT /rbac/catalog`, `/rbac/overrides`, `POST /rbac/reset`
+- `npm run apply:migrations` — extended to apply migrations through `20260716`
+- [`DB_SCHEMA.md`](DB_SCHEMA.md) — canonical Supabase schema documentation
+
+### Changed
+- All feature `can*` helpers in `lib/roles.js` respect DB overrides; empty table = v1.3.4 behavior
+- Login / `hasAppAccess()` unchanged — overrides never block sign-in
+- `/status` exposes `canManageAccessControl` for admin nav
+
+### Fixed
+- Migration apply script now probes and applies `20260707`–`20260716` (org registration, training, payslip grants, RBAC)
+
+## [1.3.4] — 2026-07-03
+
+### Added
+- Central RBAC helpers in `lib/roles.js` exposed via `/status` for consistent nav and API gates
+- Agent **My payslip** page (view-only when HR enables “Show payslip to agent” per month)
+- `GET /employees/available-ids` — pick free IDs within a unit prefix
+- `GET /documents/:employeeId/:docId/file` — view uploaded employee documents
+- Temporary (24h) sales visibility grants with `expires_at` on `sales_visibility_grants`
+
+### Changed
+- **Organization:** team create/edit/relocate gated to admin/ceo/hr; agents see own team + OP only
+- **Employees:** agents get read-only self row (no card modal, no filters); TL/OP cannot open edit cards
+- **Notes:** HR/admin read; TL/OP/quality/RTM can write without reading history
+- **Sales:** agents see status, device, customer name only; no export; RTM/admin manage column permissions
+- **Dashboard:** hides company stats/net payroll for agents; scoped quick actions
+- **Settings:** agents see theme + profile only (no holidays, session ID, hide-out)
+- **Equipment** nav hidden for agents; API gated
+- Price tier settings: inline edit with save tick (replaces Edit/Delete buttons)
+- Holidays settings: all years collapsed by default
+- Employee search debounced; toolbar overflow fixed; `downloadFile` session key fixed
+
+### Fixed
+- Reposition **effective month** uses local timezone (not UTC `toISOString`)
+- `GET /employees/next-id?leadRole=Agent` uses unit-based ID suggestion
+- Manual app ID changes validated against unit prefix
+- Team relocate reports skipped agents (non-dialing / no ID rule)
+- `noPayroll` and `payslipVisibleToAgent` persist on payroll adjustments
+
+## [1.3.3] — 2026-07-03
+
+### Fixed
+- **Invalid package app.asar:** Disable Electron embedded ASAR integrity fuse at pack time (`afterPack`) so replacing `app.asar` + `.exe` via in-app update no longer bricks launch
+- **Update failures no longer block startup:** corrupt/missing `app.asar` shows a reinstall banner on the login page instead of a fatal dialog
+- **NSIS in-app update:** kill Hangup HR processes before silent installer runs (avoids locked files)
+- **Atomic swap:** never delete `.hr-backup` — archive to `.hr-backup.archived-<timestamp>` instead
+- **Portable full zip:** require main `.exe` in update payload alongside `app.asar`
+- **`publish-github-release.ps1`:** resolve `gh.exe` when not on PATH
+
+## [1.3.2] — 2026-07-03
+
+### Changed
+- **GitHub in-app updates:** Installer-primary — Windows NSIS silent `Setup.exe`; macOS full `.app` bundle replace; portable Windows full zip with atomic swap. No more in-app patch overlays (avoids corrupt `app.asar`).
+
+### Added
+- Startup recovery: `recoverOrCompleteUpdate()` — finish interrupted swaps, restore from `.hr-backup` if `app.asar` is invalid
+- `publish-github-release.ps1` always uploads `Setup.exe` (required for NSIS in-app updates)
+
 ## [1.3.1] — 2026-07-03
 
 ### Changed

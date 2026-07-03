@@ -28,7 +28,11 @@ window.SalesModule = (function () {
   }
 
   function canManagePermissions() {
-    return ["hr", "admin", "ceo"].includes(state.user?.role);
+    return state.user?.canManageSalesFieldPermissions === true || ["admin", "ceo", "rtm", "hr"].includes(state.user?.role);
+  }
+
+  function canExportSalesList() {
+    return state.user?.canExportSales === true;
   }
 
   function isQualityAgent() {
@@ -479,18 +483,21 @@ window.SalesModule = (function () {
         </div>`
       : "";
 
+    const showPriceCol = !["agent", "office_assistant"].includes(state.user?.role);
+    const colCount = showPriceCol ? 7 : 6;
+
     root.innerHTML = `
       <div class="page-header">
         <div><h1>Sales log</h1><p class="muted">${headerLabel} · ${sales.length} records · Filtered by <strong>submission date</strong></p></div>
         <div class="btn-row">
           ${canSubmit() && !isQualityAgent() ? '<button class="btn btn-primary" id="add-sale-btn">+ Add sale</button>' : ""}
           ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-perms-btn">Column permissions</button>' : ""}
-          <select id="sales-export-format" class="search-input" style="width:auto;min-width:6rem" title="Export format">
+          ${canExportSalesList() ? `<select id="sales-export-format" class="search-input" style="width:auto;min-width:6rem;flex:0 0 auto" title="Export format">
             <option value="csv">CSV</option>
             <option value="xlsx">Excel</option>
             <option value="pdf">PDF</option>
           </select>
-          <button class="btn btn-sm" id="sales-export-btn" type="button" title="Export current list (filters + date range)">Export list</button>
+          <button class="btn btn-sm" id="sales-export-btn" type="button" title="Export current list (filters + date range)">Export list</button>` : ""}
         </div>
       </div>
       ${unitToggleHtml}
@@ -505,7 +512,7 @@ window.SalesModule = (function () {
         <div class="card card-stat card-stat-click" data-filter="denied"><strong>${statSum(dashboard, "denied")}</strong><span class="muted">Denied</span></div>
       </div>
       <div class="table-wrap card"><table>
-        <thead><tr><th>Date</th><th>Customer</th><th>Device</th><th>Agent</th><th>Status</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Customer</th><th>Device</th>${showPriceCol ? "<th>Agent</th>" : ""}<th>Status</th>${showPriceCol ? "<th>Price</th>" : ""}<th></th></tr></thead>
         <tbody>${sales.length ? sales.map((s) => {
           const agent = empById.get(s.agentId);
           const agentName = agent ? (agent.american_name || s.agentId) : s.agentId;
@@ -513,11 +520,11 @@ window.SalesModule = (function () {
             ? `<br><span class="muted">Postdated from ${s.submissionDate}</span>` : "";
           return `<tr>
             <td>${s.submissionDate || s.effectiveDate}${postNote}</td>
-            <td><strong>${escapeHtml(s.fullName)}</strong><br><span class="muted">${escapeHtml(s.phoneNumber)}</span></td>
+            <td><strong>${escapeHtml(s.fullName)}</strong>${showPriceCol ? `<br><span class="muted">${escapeHtml(s.phoneNumber)}</span>` : ""}</td>
             <td>${escapeHtml(deviceLabel(s.device || s.formData?.deviceType))}</td>
-            <td>${escapeHtml(s.agentId)}<br><span class="muted">${escapeHtml(agentName)}</span></td>
+            ${showPriceCol ? `<td>${escapeHtml(s.agentId)}<br><span class="muted">${escapeHtml(agentName)}</span></td>` : ""}
             <td><span class="badge">${escapeHtml(s.status)}</span></td>
-            <td>${s.price != null ? fmt(s.price) : "—"}</td>
+            ${showPriceCol ? `<td>${s.price != null ? fmt(s.price) : "—"}</td>` : ""}
             <td class="btn-row">
               ${canFullEditSale() ? `<button class="btn btn-sm" data-edit-sale="${s.id}">Edit</button>` : ""}
               ${canWorkQualityTicket() && !canFullEditSale() ? `<button class="btn btn-sm btn-primary" data-quality-ticket="${s.id}">Open ticket</button>` : ""}
@@ -525,10 +532,10 @@ window.SalesModule = (function () {
               ${canApprove() && s.status === "pending" ? `<button class="btn btn-sm" data-approve="${s.id}">Approve</button>
                 <button class="btn btn-sm btn-danger" data-deny="${s.id}">Deny</button>` : ""}
               ${canApprove() ? `<button class="btn btn-sm" data-callback="${s.id}">Callback</button>` : ""}
-              <button class="btn btn-sm" data-export-sale="${s.id}" title="Export this sale">Export</button>
+              ${canExportSalesList() ? `<button class="btn btn-sm" data-export-sale="${s.id}" title="Export this sale">Export</button>` : ""}
             </td>
           </tr>`;
-        }).join("") : `<tr><td colspan="7" class="muted">No sales in this ${periodLabel.toLowerCase()} period</td></tr>`}
+        }).join("") : `<tr><td colspan="${colCount}" class="muted">No sales in this ${periodLabel.toLowerCase()} period</td></tr>`}
         </tbody>
       </table></div>`;
 
@@ -1027,5 +1034,5 @@ window.SalesModule = (function () {
     });
   }
 
-  return { renderSalesPage };
+  return { renderSalesPage, openSalesPermissionsModal };
 })();

@@ -31,6 +31,12 @@ async function probeState(db) {
     v109b5: false,
     v110: false,
     v112: false,
+    holidays_country: false,
+    org_registration: false,
+    training_phases: false,
+    registration_identity: false,
+    rbac_payslip: false,
+    app_role_permissions: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -49,6 +55,18 @@ async function probeState(db) {
   state.v110 = !prm.error;
   const sc = await db.from("sales_clients").select("id").limit(1);
   state.v112 = !sc.error;
+  const ph = await db.from("public_holidays").select("country").limit(1);
+  state.holidays_country = !ph.error;
+  const ot = await db.from("org_teams").select("tl_employee_id").limit(1);
+  state.org_registration = !ot.error;
+  const atp = await db.from("agent_training_programs").select("employee_id").limit(1);
+  state.training_phases = !atp.error;
+  const nid = await db.from("employees").select("national_id").limit(1);
+  state.registration_identity = !nid.error;
+  const pva = await db.from("payroll_adjustments").select("payslip_visible_to_agent").limit(1);
+  state.rbac_payslip = !pva.error;
+  const arp = await db.from("app_role_permissions").select("role").limit(1);
+  state.app_role_permissions = !arp.error;
   return state;
 }
 
@@ -69,6 +87,12 @@ function filesToApply(state) {
   if (!state.v109b5) files.push("20260709_v109b5_sprint.sql");
   if (!state.v110) files.push("20260710_v110_relations.sql");
   if (!state.v112) files.push("20260711_v112_clients_breaks.sql");
+  if (!state.holidays_country) files.push("20260707_holidays_country_unique.sql");
+  if (!state.org_registration) files.push("20260712_org_registration.sql");
+  if (!state.training_phases) files.push("20260713_agent_training_phases.sql");
+  if (!state.registration_identity) files.push("20260714_registration_identity_training.sql");
+  if (!state.rbac_payslip) files.push("20260715_rbac_payslip_grants.sql");
+  if (!state.app_role_permissions) files.push("20260716_app_role_permissions.sql");
   return files;
 }
 
@@ -194,7 +218,10 @@ async function main() {
   if (remaining.length) {
     throw new Error(`Verification failed — still missing: ${remaining.join(", ")}`);
   }
-  console.log("Verified: internal_id, force_update_min_version, fp_number, loan_requests, v109b5 sprint, v110 relations, v112 clients/breaks.");
+  console.log(
+    "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
+      "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions."
+  );
 }
 
 main().catch((err) => {

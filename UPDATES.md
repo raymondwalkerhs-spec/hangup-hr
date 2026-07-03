@@ -8,9 +8,9 @@ Hangup HR uses **two separate distribution channels**. They work together but do
 |---------|------------------|-------------|------|
 | **NSIS installer** (your PC build or CI) | Full first-time install | New PCs, reinstall | ~130–180 MB |
 | **macOS DMG** (Mac or CI `build-macos`) | Full first-time install on Mac | New Macs, reinstall | ~150–200 MB |
-| **GitHub patch update** (in-app) | Changed files only | PCs already running the app | Usually a few MB |
+| **GitHub in-app update** | Silent NSIS installer (Windows) or full `.app` replace (macOS) | PCs already running the app | ~130–180 MB (NSIS) / ~150–200 MB (mac full zip) |
 
-**Your local build workflow:** run `.\scripts\build.ps1 installer` on Windows (NSIS Setup) or `./scripts/build-macos.sh` on a Mac (DMG). GitHub in-app updates use patch/full zips — not the installers.
+**Your local build workflow:** run `.\scripts\build.ps1 all` on Windows (NSIS Setup + portable) or `./scripts/build-macos.sh` on a Mac (DMG). GitHub in-app updates use **Setup.exe** (NSIS) or **full zips** — not patch overlays.
 
 ---
 
@@ -25,9 +25,8 @@ Hangup HR uses **two separate distribution channels**. They work together but do
 
 ┌─────────────────────────────────────────────────────────────────┐
 │  GITHUB RELEASES (in-app updates — optional add-on)              │
-│  npm run package:github  →  patch zip + full zip                  │
-│  gh release / CI workflow  →  assets on GitHub                   │
-│  Desktop app checks releases → "Update now" overlays files       │
+│  Setup.exe + full zips published to GitHub Releases              │
+│  Desktop app → "Update now" → silent installer or full app swap  │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -38,59 +37,88 @@ Hangup HR uses **two separate distribution channels**. They work together but do
 
 ---
 
-## v1.3.0 release checklist
+## v1.3.6 release checklist
 
-1. Bump `package.json` → `1.3.0`
-2. `node scripts/audit-dropbox-sales.js --fix-links` (if attachments missing links)
-3. Windows: `.\scripts\build.ps1 installer` then `npm run package:github -- --full`
-4. `npm run verify:update -- dist/update-manifests/win-x64-full.zip` (or patch zip)
-5. Push tag `v1.3.0` → CI builds macOS DMG (`build-macos` job — no longer optional fail)
-6. Update `app_versions` in Supabase to `1.3.0`
-7. Run [`scripts/qa-smoke-checklist.md`](scripts/qa-smoke-checklist.md)
+1. Bump `package.json` → `1.3.6`
+2. `npm run apply:migrations` — includes `20260716_app_role_permissions.sql`
+3. Windows: `$env:SKIP_NATIVE_REBUILD="1"; .\scripts\build.ps1 installer`
+4. Verify: `node scripts/verify-update-package.js dist\Hangup-HR-*-win-x64-full.zip`
+5. Push tag `v1.3.6` → CI builds Windows NSIS + macOS DMG (`.github/workflows/release.yml`)
+6. `node scripts/publish-app-version.js --version 1.3.6 --notes "Admin Access Control + RBAC DB overrides"`
+
+## v1.3.1 release checklist
+
+1. Bump `package.json` → `1.3.1`
+2. **Migrate legacy sale files** (one-time, before wide rollout):
+
+```powershell
+# Fresh DROPBOX_ACCESS_TOKEN in .env (files.content.read) — generate in Dropbox App Console
+npm run migrate:sale-attachments
+```
+
+3. Windows: `.\scripts\build.ps1 installer` then `.\scripts\clean-dist.ps1`
+4. `node scripts/fetch-all-release-manifests.js` (optional — seeds multi-version patch manifests)
+5. `npm run package:github -- --full` (builds patch zips for **multiple** prior versions + full zip)
+6. `npm run verify:update -- dist-build2\Hangup-HR-1.3.1-win-x64-full.zip`
+7. `.\scripts\publish-github-release.ps1 -IncludeFull`
+8. Push tag `v1.3.1` → CI builds macOS DMG
+9. `node scripts/publish-app-version.js --version 1.3.1`
+10. Run [`scripts/qa-smoke-checklist.md`](scripts/qa-smoke-checklist.md)
+
+### Multi-version patches (CI / manual only)
+
+`package-github-release.js --full` still builds patch zips for **emergency manual apply** (`apply-github-patch-standalone.js`). The **in-app updater does not use patch zips** — it uses Setup.exe (NSIS) or full zips only.
 
 ---
 
-## What gets updated in-place
+## What the in-app updater does
 
-The in-app updater replaces files inside the **unpacked install folder**:
-
-| Install type | Update root | User data preserved |
-|--------------|-------------|---------------------|
-| Portable EXE folder | Folder containing the portable `.exe` | `HangupHR-data\` |
-| NSIS installed app | `Program Files\…\` unpacked files | `%AppData%` / portable data dir |
-| `win-unpacked\` dev run | `dist\win-unpacked\` | Local cache dirs |
-| macOS `.app` in Applications | `Hangup HR Beta.app/Contents` | `HangupHR-data` in app folder / userData |
+| Install type | Update method | User data preserved |
+|--------------|---------------|---------------------|
+| **NSIS** (default HR PCs) | Downloads `Setup.exe`, runs silent `/S` upgrade | `%AppData%` / `HangupHR-data` |
+| **Portable** Windows | Downloads `win-x64-full.zip`, stages + atomic folder swap on restart | `HangupHR-data\` beside portable EXE |
+| **macOS `.app`** | Downloads `mac-{arch}-full.zip`, replaces entire `.app` bundle on restart | `HangupHR-data` / userData |
+| `win-unpacked\` dev run | Full zip atomic swap | Local cache dirs |
 
 **Never overwritten:** `HangupHR-data\`, `hr-cache\`, `.env`
 
 ### macOS notes
 
-- In-app update overlays files inside the **`.app` bundle** (`Contents/`). Users should run the `.app` directly (not only mount a DMG once and discard).
+- In-app update **replaces the whole `.app` bundle** (not file-by-file overlay inside `Contents/`).
 - Builds are **unsigned** today (`identity: null` in `package.json`). After update, macOS Gatekeeper may require **System Settings → Privacy & Security → Open Anyway** until ADM-09 (code signing) ships.
-- CI builds on `macos-latest` via `scripts/build-macos.sh`; assets: `Hangup-HR-{version}-mac-x64-full.zip` and `mac-arm64` when both arches are built.
+- CI builds on `macos-latest` via `scripts/build-macos.sh`; assets: `Hangup-HR-{version}-mac-x64-full.zip` and `mac-arm64-full.zip`.
+
+### Windows NSIS notes
+
+- Test silent upgrade before wide rollout: install vN, publish vN+1 with Setup.exe on GitHub, click **Update now** — app closes, installer upgrades in place, shortcut unchanged.
+- `publish-github-release.ps1` **always uploads Setup.exe** (required for in-app updates).
 
 ---
 
 ## Release asset naming
 
-Each GitHub Release should include:
+Each GitHub Release must include (for in-app updates):
 
 | Asset | Purpose |
 |-------|---------|
-| `Hangup-HR-{version}-win-x64-patch-from-{prev}.zip` | **Preferred** — only changed files since previous version |
-| `Hangup-HR-{version}-win-x64-full.zip` | Fallback when user skipped a version |
-| `win-x64-latest.json` | Manifest for next release’s patch diff |
-| `Hangup-HR-Beta-v2-Setup-{version}.exe` | *(optional on GitHub)* — same as your local installer |
-| `Hangup-HR-Beta-v2-Portable-{version}.exe` | *(optional on GitHub)* — same as your local portable |
+| `Hangup-HR-Beta-v2-Setup-{version}.exe` | **Required** — in-app update on NSIS installs (silent `/S`) |
+| `Hangup-HR-{version}-win-x64-full.zip` | Portable Windows + dev `win-unpacked` |
+| `win-x64-latest.json` | Manifest for CI patch packaging (not used in-app) |
+
+Optional (CI / manual recovery):
+
+| Asset | Purpose |
+|-------|---------|
+| `Hangup-HR-{version}-win-x64-patch-from-{prev}.zip` | Manual apply only (`apply-github-patch-standalone.js`) |
+| `Hangup-HR-Beta-v2-Portable-{version}.exe` | Optional on GitHub (`-IncludeExtras`) |
 
 macOS (CI or local Mac build):
 
 | Asset | Purpose |
 |-------|---------|
-| `Hangup-HR-{version}-mac-x64-patch-from-{prev}.zip` | Patch for Intel Mac |
-| `Hangup-HR-{version}-mac-arm64-patch-from-{prev}.zip` | Patch for Apple Silicon |
-| `Hangup-HR-{version}-mac-x64-full.zip` / `mac-arm64-full.zip` | Full fallback per arch |
-| `mac-x64-latest.json` / `mac-arm64-latest.json` | Manifests for next patch diff |
+| `Hangup-HR-{version}-mac-x64-full.zip` / `mac-arm64-full.zip` | **Required** — in-app update replaces full `.app` |
+| `Hangup-HR-{version}-mac-*-patch-from-{prev}.zip` | Manual / CI only (not used in-app) |
+| `mac-x64-latest.json` / `mac-arm64-latest.json` | Manifests for CI patch diff |
 
 electron-builder outputs `.app` bundles under `dist/mac-x64/` and `dist/mac-arm64/` — `package-github-release.js` discovers these automatically.
 
@@ -105,12 +133,11 @@ Patch zips contain an `update-info.json` with `removed` file paths (deleted in t
 3. App checks **GitHub Releases** for **every signed-in user** (and on the login page when configured):
    - Boot, session poll (~5 min), background interval (~30 min), tab visibility return
    - Requires `GITHUB_UPDATES_REPO` in packaged `.env`; private repos need `GITHUB_UPDATES_TOKEN`
-4. If a newer release exists:
-   - On **previous version** → download **patch zip** (small).
-   - On **older skipped version** → download **full zip**.
-5. User clicks **Update now** in the popup.
-6. Files are extracted over the install folder; app restarts.
-7. **No new installer run** — same shortcut, same data folder.
+4. If a newer release exists, **Update now** downloads:
+   - **Windows NSIS** → `Setup.exe` (~130 MB), runs silent installer, app closes.
+   - **Windows portable** → `win-x64-full.zip`, staged atomic swap on restart.
+   - **macOS** → `mac-{arch}-full.zip`, replaces entire `.app` on restart.
+5. User data and shortcuts are preserved.
 
 ---
 
@@ -139,9 +166,9 @@ Patch zips contain an `update-info.json` with `removed` file paths (deleted in t
    - First release for a platform → **full zip** only.
    - Next releases → **patch zip** (diff vs `dist\update-manifests\`) + **full zip** with `--full`.
 
-7. Publish to GitHub:
+7. Publish to GitHub (uploads Setup.exe + zips automatically):
    ```powershell
-   .\scripts\publish-github-release.ps1 -Notes "See CHANGELOG.md"
+   .\scripts\publish-github-release.ps1 -IncludeFull
    ```
    Or push a tag and let CI publish (see below).
 
@@ -207,7 +234,7 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 | `npm run package:github` | Patch zip only (if previous manifest exists) |
 | `npm run package:github -- --full` | Patch + full zip |
 | `npm run verify:update -- <zip>` | **Required before publish** — extract + ASAR + SHA-256 check |
-| `.\scripts\publish-github-release.ps1` | Upload zips/manifests to GitHub via `gh` CLI |
+| `.\scripts\publish-github-release.ps1` | Upload Setup.exe + zips/manifests to GitHub via `gh` CLI |
 | `node scripts/apply-github-patch-standalone.js` | Manual patch when in-app updater broken (close app first) |
 | `node scripts/fetch-release-manifest.js` | Download previous manifests (CI / fresh clone) |
 
@@ -217,7 +244,7 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 | File | Role |
 |------|------|
-| `lib/github-updater.js` | Check releases, pick patch vs full, apply update |
+| `lib/github-updater.js` | Check releases; NSIS silent install / full app or portable swap |
 | `lib/zip-extract.js` | Safe zip extraction (adm-zip per-entry; **never** PowerShell `Expand-Archive`) |
 | `lib/update-integrity.js` | ASAR header + SHA-256 verification before copying files |
 | `scripts/package-github-release.js` | Build patch/full zips + manifests + `fileHashes` (win + mac) |
@@ -238,12 +265,11 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 | Issue | Fix |
 |-------|-----|
-| **Invalid package app.asar** | Fixed in **1.2.4+** — was corrupted zip extract. Upgrade via standalone script or full zip. Never use PowerShell `Expand-Archive` for update zips. |
+| **Invalid package app.asar** | App restores from `.hr-backup` on startup if possible. Otherwise use **Update now** (full installer/zip) or run Setup.exe manually. |
 | No update popup | Set `GITHUB_UPDATES_REPO` (+ `GITHUB_UPDATES_TOKEN` if private) in packaged `.env` and rebuild |
-| Patch not created | Download `win-x64-latest.json` from previous release into `dist/update-manifests/` before `package:github` |
-| User on old version gets large download | Expected — full zip fallback |
-| Update fails while app running | Normal for `app.asar` — updater writes `.hr-pending` and finishes on **restart** |
-| Stuck on 1.2.0–1.2.3 updater | Close app; run `node scripts/apply-github-patch-standalone.js --install-dir "…\\Hangup HR Beta"` |
+| NSIS update fails | Ensure GitHub release includes `*Setup-{version}.exe`. Run `.\scripts\build.ps1 all` before `publish-github-release.ps1` |
+| Portable/mac update stuck | Restart app — startup completes atomic swap from `hangup-hr-atomic-swap.json` |
+| Stuck on old patch-only updater (≤1.3.1) | Close app; run Setup.exe manually or `node scripts/apply-github-patch-standalone.js` |
 | Private repo rate limits | Set `GITHUB_UPDATES_TOKEN` in `.env` |
 | CI build fails on credentials | Uses `SKIP_CREDENTIALS_CHECK=1` stub — normal for Actions |
 | macOS update blocked by Gatekeeper | Unsigned build — allow in Privacy & Security; plan ADM-09 signing |
