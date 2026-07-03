@@ -483,7 +483,6 @@ router.patch("/:id", async (req, res) => {
 });
 
 const salesCatalog = require("../lib/sales-field-catalog");
-const dropbox = require("../lib/dropbox");
 const saleStorage = require("../lib/sale-attachment-storage");
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");
@@ -546,7 +545,6 @@ router.get("/field-catalog", async (req, res) => {
       attachmentKinds: salesCatalog.listAttachmentKindsForRole(role),
       permissions: perms,
       storageConfigured: saleStorage.isConfigured(),
-      dropboxConfigured: dropbox.isConfigured(),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -692,29 +690,22 @@ router.get("/attachments/:attachmentId/share-link", async (req, res) => {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
     if (access.error) return res.status(access.status).json({ error: access.error });
     const att = access.att;
-    const path = att.dropboxPath;
-    if (path && saleStorage.isSupabaseStoragePath(path)) {
-      const { url, expiresInDays } = await saleStorage.createShareUrl(path);
-      await business.updateSaleAttachmentDropboxLink(att.id, url);
-      return res.json({
-        url,
-        expiresInDays,
-        storage: "supabase",
-        note: `Signed link (~${expiresInDays} days). Use Share link again anytime to refresh.`,
+    const storagePath = att.dropboxPath;
+    if (!storagePath || !saleStorage.isSupabaseStoragePath(storagePath)) {
+      return res.status(400).json({
+        error: "File not in Supabase storage. Run migrate-sale-attachments-to-supabase if this is a legacy sale.",
       });
     }
-    if (att.dropboxLink) return res.json({ url: att.dropboxLink, storage: "dropbox" });
-    if (!path) return res.status(400).json({ error: "No storage path for this file" });
-    if (!dropbox.isConfigured()) {
-      return res.status(503).json({ error: "Legacy Dropbox file but Dropbox is not configured" });
-    }
-    const url = await dropbox.ensureSharedLink(path);
-    if (!url) return res.status(503).json({ error: "Could not create Dropbox share link" });
+    const { url, expiresInDays } = await saleStorage.createShareUrl(storagePath);
     await business.updateSaleAttachmentDropboxLink(att.id, url);
-    res.json({ url });
+    res.json({
+      url,
+      expiresInDays,
+      storage: "supabase",
+      note: `Signed link (~${expiresInDays} days). Use Share link again anytime to refresh.`,
+    });
   } catch (err) {
-    const code = dropbox.isScopeError?.(err) ? 503 : 500;
-    res.status(code).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -334,10 +334,9 @@ async function main() {
   }
 
   if (!SKIP_ATTACH) {
-    saleStorage.resetDropboxCache();
     try {
       await saleStorage.ensureDropboxReady();
-      console.log("Attachment backend: dropbox (URL → Dropbox save_url, no local download)");
+      console.log("Attachment backend: Supabase Storage (URL → upload)");
     } catch (err) {
       console.error(err.message);
       if (!ATTACHMENTS_ONLY) throw err;

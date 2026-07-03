@@ -91,7 +91,7 @@ jobs:
           npm_config_build_from_source: "false"
 
       - name: Fetch previous release manifests
-        run: node scripts/fetch-release-manifest.js --tag=${{ needs.resolve-tag.outputs.tag }}
+        run: node scripts/fetch-all-release-manifests.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_UPDATES_REPO: ${{ github.repository }}
@@ -165,7 +165,7 @@ jobs:
       - run: npm run rebuild:native
 
       - name: Fetch previous release manifests
-        run: node scripts/fetch-release-manifest.js --tag=${{ needs.resolve-tag.outputs.tag }}
+        run: node scripts/fetch-all-release-manifests.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_UPDATES_REPO: ${{ github.repository }}

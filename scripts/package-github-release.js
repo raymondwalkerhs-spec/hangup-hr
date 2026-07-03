@@ -161,7 +161,62 @@ function findMacAppBundles(dist) {
   return results;
 }
 
-function packagePlatform({ sourceDir, platform, version, dist, manifestDir, fromVersion, includeFull }) {
+function listPreviousManifests(manifestDir, platform, buildingVersion) {
+  if (!fs.existsSync(manifestDir)) return [];
+  const byVersion = new Map();
+  for (const file of fs.readdirSync(manifestDir)) {
+    const m = file.match(new RegExp(`^${platform.replace(/-/g, "\\-")}-(.+)\\.json$`));
+    if (!m) continue;
+    const tag = m[1];
+    if (tag === "latest" || tag === buildingVersion) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(manifestDir, file), "utf8"));
+      if (!data?.version || data.version === buildingVersion || !data.files) continue;
+      if (!byVersion.has(data.version)) byVersion.set(data.version, data);
+    } catch {
+      /* skip corrupt */
+    }
+  }
+  return [...byVersion.values()].sort((a, b) => String(b.version).localeCompare(String(a.version)));
+}
+
+function buildPatchZip({ sourceDir, platform, version, dist, prevManifest, nextFiles }) {
+  const prevVersion = prevManifest.version;
+  const prevFiles = prevManifest.files || {};
+  const diff = diffManifests(prevFiles, nextFiles);
+  const patchFiles = diff.files.filter((rel) => !shouldSkipPatch(rel));
+  if (!patchFiles.length && !diff.removed.length) return null;
+
+  const staging = path.join(dist, `.patch-staging-${platform}-${prevVersion}`);
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(staging, { recursive: true });
+
+  for (const rel of patchFiles) {
+    copyFileToStaging(sourceDir, rel, staging);
+  }
+
+  const updateInfo = {
+    type: "patch",
+    fromVersion: prevVersion,
+    toVersion: version,
+    platform,
+    changed: diff.changed.filter((r) => !shouldSkipPatch(r)).length,
+    added: diff.added.filter((r) => !shouldSkipPatch(r)).length,
+    removed: diff.removed,
+    files: patchFiles,
+    fileHashes: Object.fromEntries(
+      patchFiles.filter((rel) => nextFiles[rel]?.sha256).map((rel) => [rel, nextFiles[rel].sha256])
+    ),
+  };
+  fs.writeFileSync(path.join(staging, "update-info.json"), JSON.stringify(updateInfo, null, 2));
+
+  const patchZip = path.join(dist, `Hangup-HR-${version}-${platform}-patch-from-${prevVersion}.zip`);
+  zipDirectory(staging, patchZip);
+  fs.rmSync(staging, { recursive: true, force: true });
+  return { patchZip, patchFiles: patchFiles.length };
+}
+
+function packagePlatform({ sourceDir, platform, version, dist, manifestDir, fromVersion, includeFull, multiPatch }) {
   if (!fs.existsSync(sourceDir)) {
     console.log(`SKIP: ${sourceDir} not found`);
     return [];
@@ -182,49 +237,45 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
   fs.writeFileSync(path.join(manifestDir, `${platform}-${version}.json`), JSON.stringify(manifestOut, null, 2));
   fs.writeFileSync(path.join(manifestDir, `${platform}-latest.json`), JSON.stringify(manifestOut, null, 2));
 
-  if (prevVersion && prevFiles && Object.keys(prevFiles).length) {
-    const diff = diffManifests(prevFiles, nextFiles);
-      const patchFiles = diff.files.filter((rel) => !shouldSkipPatch(rel));
-      if (patchFiles.length || diff.removed.length) {
-      const staging = path.join(dist, `.patch-staging-${platform}`);
-      fs.rmSync(staging, { recursive: true, force: true });
-      fs.mkdirSync(staging, { recursive: true });
+  const patchTargets = multiPatch
+    ? listPreviousManifests(manifestDir, platform, version)
+    : prevVersion && prevFiles && Object.keys(prevFiles).length
+      ? [{ version: prevVersion, files: prevFiles }]
+      : [];
 
-      for (const rel of patchFiles) {
-        copyFileToStaging(sourceDir, rel, staging);
-      }
+  if (!patchTargets.length && prevVersion && prevFiles && Object.keys(prevFiles).length) {
+    patchTargets.push({ version: prevVersion, files: prevFiles });
+  }
 
-      const updateInfo = {
-        type: "patch",
-        fromVersion: prevVersion,
-        toVersion: version,
-        platform,
-        changed: diff.changed.filter((r) => !shouldSkipPatch(r)).length,
-        added: diff.added.filter((r) => !shouldSkipPatch(r)).length,
-        removed: diff.removed,
-        files: patchFiles,
-        fileHashes: Object.fromEntries(
-          patchFiles.filter((rel) => nextFiles[rel]?.sha256).map((rel) => [rel, nextFiles[rel].sha256])
-        ),
-      };
-      fs.writeFileSync(path.join(staging, "update-info.json"), JSON.stringify(updateInfo, null, 2));
-
-      const patchZip = path.join(
-        dist,
-        `Hangup-HR-${version}-${platform}-patch-from-${prevVersion}.zip`
-      );
-      zipDirectory(staging, patchZip);
-      const patchSize = fs.statSync(patchZip).size;
-      console.log(
-        `Created patch ${path.basename(patchZip)} (${patchFiles.length} files, ${formatBytes(patchSize)})`
-      );
-      created.push(patchZip);
-      fs.rmSync(staging, { recursive: true, force: true });
-    } else {
-      console.log(`No file changes for ${platform} since ${prevVersion} — patch skipped.`);
+  const patchedFrom = new Set();
+  for (const prevManifest of patchTargets) {
+    if (!prevManifest?.version || patchedFrom.has(prevManifest.version)) continue;
+    const built = buildPatchZip({
+      sourceDir,
+      platform,
+      version,
+      dist,
+      prevManifest,
+      nextFiles,
+    });
+    if (!built) {
+      console.log(`No file changes for ${platform} since ${prevManifest.version} — patch skipped.`);
+      continue;
     }
-  } else {
-    console.log(`No previous manifest for ${platform} — patch skipped (use --full for first release).`);
+    patchedFrom.add(prevManifest.version);
+    const patchSize = fs.statSync(built.patchZip).size;
+    console.log(
+      `Created patch ${path.basename(built.patchZip)} (${built.patchFiles} files, ${formatBytes(patchSize)})`
+    );
+    created.push(built.patchZip);
+  }
+
+  if (!patchedFrom.size && !multiPatch) {
+    if (prevVersion && prevFiles && Object.keys(prevFiles).length) {
+      console.log(`No file changes for ${platform} since ${prevVersion} — patch skipped.`);
+    } else {
+      console.log(`No previous manifest for ${platform} — patch skipped (use --full for first release).`);
+    }
   }
 
   if (includeFull || !prevVersion) {
@@ -241,6 +292,7 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
 function main() {
   const args = process.argv.slice(2);
   const includeFull = args.includes("--full");
+  const multiPatch = args.includes("--multi-patch") || args.includes("--full");
   const fromArg = args.find((a) => a.startsWith("--from-version="));
   const fromVersion = fromArg ? fromArg.split("=")[1] : null;
 
@@ -264,6 +316,7 @@ function main() {
       manifestDir,
       fromVersion,
       includeFull,
+      multiPatch,
     })
   );
 
@@ -278,6 +331,7 @@ function main() {
         manifestDir,
         fromVersion,
         includeFull,
+        multiPatch,
       })
     );
   }
@@ -292,7 +346,11 @@ function main() {
   console.log(`Upload to GitHub Releases (tag v${version}):`);
   for (const z of created) console.log(`  ${z}`);
   console.log("");
-  console.log("Users on the previous version download the patch; others use the full zip.");
+  if (multiPatch) {
+    console.log("Multi-patch: users on any listed from-version can patch-update.");
+  } else {
+    console.log("Users on the previous version download the patch; others use the full zip.");
+  }
 }
 
 main();

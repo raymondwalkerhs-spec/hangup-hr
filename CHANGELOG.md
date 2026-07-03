@@ -4,6 +4,17 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-07-03
+
+### Changed
+- **Sale attachments:** Supabase only (no Dropbox in app). Run `npm run migrate:sale-attachments` once with a valid `DROPBOX_ACCESS_TOKEN` to copy legacy files from Dropbox into Supabase.
+- **GitHub updates:** Multi-version patch zips — users on older releases (not only the previous version) can patch-update.
+
+### Added
+- `scripts/migrate-sale-attachments-to-supabase.js` — migrates legacy Dropbox paths to `sales-attachments/…` in Supabase
+- `scripts/fetch-all-release-manifests.js` — builds patch zips from multiple prior versions
+- `scripts/clean-dist.ps1` — removes stale installer/update artifacts
+
 ## [1.3.0] — 2026-07-03
 
 ### Added

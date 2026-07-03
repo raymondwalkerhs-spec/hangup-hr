@@ -54,10 +54,13 @@ if (-not (Test-Path $unpacked)) {
 
 $env:HR_BUILD_OUTPUT = (Resolve-Path $dist).Path
 
-Write-Host "Fetching previous release manifest (for patch diff)..." -ForegroundColor Cyan
+Write-Host "Fetching previous release manifests (for patch diff)..." -ForegroundColor Cyan
 $prevEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-node scripts/fetch-release-manifest.js --tag=$version 2>&1 | Write-Host
+node scripts/fetch-all-release-manifests.js 2>&1 | Write-Host
+if ($LASTEXITCODE -ne 0) {
+  node scripts/fetch-release-manifest.js --tag=$version 2>&1 | Write-Host
+}
 $ErrorActionPreference = $prevEap
 
 Write-Host "Packaging win-unpacked for v$version..." -ForegroundColor Cyan
