@@ -1,5 +1,5 @@
 /**
- * Admin Access Control — role permission matrix UI.
+ * Admin Access Control — pick role first, then edit permissions.
  */
 window.AccessControlModule = (function () {
   let catalog = null;
@@ -54,6 +54,10 @@ window.AccessControlModule = (function () {
     const perms = catalog?.permissions || [];
     const groups = groupByCategory(perms);
     const categories = catalog?.categories || Object.keys(groups);
+    const roleTitle = root.querySelector("#rbac-selected-role-title");
+    if (roleTitle) {
+      roleTitle.textContent = `Access for ${roleLabel(selectedRole)}`;
+    }
 
     let rows = "";
     for (const cat of categories) {
@@ -119,18 +123,17 @@ window.AccessControlModule = (function () {
     if (saveBtn) saveBtn.disabled = pending.size === 0;
     const status = root.querySelector("#rbac-status");
     if (status) {
-      status.textContent = pending.size ? `${pending.size} unsaved change(s)` : "";
+      status.textContent = pending.size ? `${pending.size} unsaved change(s) for ${roleLabel(selectedRole)}` : "";
     }
   }
 
-  function bindRoleTabs(root) {
-    root.querySelectorAll("[data-rbac-role]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        selectedRole = btn.dataset.rbacRole;
-        root.querySelectorAll("[data-rbac-role]").forEach((b) => b.classList.toggle("active", b === btn));
-        renderMatrix(root);
-        updateSaveState(root);
-      });
+  function bindRolePicker(root) {
+    const sel = root.querySelector("#rbac-role-select");
+    if (!sel) return;
+    sel.addEventListener("change", () => {
+      selectedRole = sel.value;
+      renderMatrix(root);
+      updateSaveState(root);
     });
   }
 
@@ -139,7 +142,7 @@ window.AccessControlModule = (function () {
       <div class="page-header flex-between">
         <div>
           <h1>Access Control</h1>
-          <p class="muted">Role-based permissions. Empty overrides use built-in defaults (v1.3.4 behavior).</p>
+          <p class="muted">Choose a role, then set what that role may do. Per-user exceptions are on the Users page.</p>
         </div>
         <div class="btn-row">
           <button class="btn btn-sm" id="rbac-sales-perms" type="button">Sales column permissions</button>
@@ -148,8 +151,14 @@ window.AccessControlModule = (function () {
         </div>
       </div>
       <p id="rbac-status" class="muted small"></p>
-      <div class="card">
-        <div class="rbac-role-tabs btn-row" id="rbac-role-tabs"></div>
+      <div class="card rbac-layout">
+        <div class="rbac-role-picker">
+          <label class="field"><span>1. Select role</span>
+            <select id="rbac-role-select" class="rbac-role-select"></select>
+          </label>
+          <p class="muted small" style="margin:.5rem 0 0">2. Toggle permissions below for that role only.</p>
+        </div>
+        <h3 id="rbac-selected-role-title" class="rbac-role-heading">Access for Agent</h3>
         <div id="rbac-matrix-wrap"></div>
       </div>`;
 
@@ -161,15 +170,12 @@ window.AccessControlModule = (function () {
       return;
     }
 
-    const tabs = root.querySelector("#rbac-role-tabs");
-    tabs.innerHTML = (catalog.roles || [])
-      .map(
-        (r) =>
-          `<button type="button" class="btn btn-sm ${r === selectedRole ? "active" : ""}" data-rbac-role="${r}">${roleLabel(r)}</button>`
-      )
+    const sel = root.querySelector("#rbac-role-select");
+    sel.innerHTML = (catalog.roles || [])
+      .map((r) => `<option value="${r}" ${r === selectedRole ? "selected" : ""}>${roleLabel(r)}</option>`)
       .join("");
 
-    bindRoleTabs(root);
+    bindRolePicker(root);
     renderMatrix(root);
     updateSaveState(root);
 

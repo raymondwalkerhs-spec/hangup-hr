@@ -696,6 +696,8 @@ tr.clickable { cursor: pointer; }
 }
 .alert-info { background: var(--alert-info-bg); color: var(--alert-info-text); border: 1px solid var(--alert-info-border); }
 .alert-warn { background: var(--alert-warn-bg); color: var(--alert-warn-text); border: 1px solid var(--alert-warn-border); }
+.alert-danger { background: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4; }
+[data-theme="dark"] .alert-danger { background: #3b1212; color: #fca5a5; border: 1px solid #7f1d1d; }
 
 .modal-backdrop {
   position: fixed; inset: 0;
@@ -849,20 +851,24 @@ tr.clickable { cursor: pointer; }
 .emp-cell-compact span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 8rem; }
 
 .search-input {
-  min-width: 220px;
+  min-width: 0;
+  flex: 1 1 12rem;
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: .5rem;
   padding: .5rem .75rem;
   background: var(--input-bg);
   color: var(--text);
 }
-.field-search .search-input { min-width: 260px; max-width: 100%; }
+.field-search .search-input { min-width: 12rem; max-width: 100%; }
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: .75rem 1rem;
   align-items: flex-end;
   margin-bottom: 1rem;
+  max-width: 100%;
+  overflow: hidden;
 }
 .field-inline { margin: 0; min-width: 0; }
 .users-toolbar,
@@ -1592,9 +1598,13 @@ tr.clickable { cursor: pointer; }
   margin-top: 0.35rem;
 }
 
-.sales-perms-modal { padding-top: 0.25rem; }
-.sales-perms-wrap { max-height: 70vh; overflow: auto; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; }
-.sales-perms-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
+.sales-perms-modal { padding-top: 0.25rem; min-width: min(96vw, 1400px); }
+#modal-root .modal-card:has(.sales-perms-modal) { max-width: min(96vw, 1420px); width: 96vw; }
+.sales-perms-wrap { max-height: 75vh; overflow: auto; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; }
+.sales-perms-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.9rem; }
+.sales-perms-table-wide .perm-cell { min-width: 4.5rem; }
+.sales-perms-table-wide .perm-field-name { min-width: 220px; max-width: 280px; }
+.sales-perms-table-wide .perm-group-head { min-width: 9rem; }
 .sales-perms-table thead th {
   position: sticky;
   top: 0;
@@ -1626,7 +1636,12 @@ tr.clickable { cursor: pointer; }
 .sales-perms-table .perm-field-name { padding: 0.4rem 0.6rem; vertical-align: middle; }
 .sales-perms-table .perm-field-name strong { display: block; }
 .sales-perms-table .perm-field-name .muted { font-size: 0.72rem; }
-.sales-perms-table .perm-cell { text-align: center; padding: 0.25rem; border-bottom: 1px solid var(--border, #f1f5f9); }
+.sales-perms-table .perm-cell { text-align: center; padding: 0.35rem; border-bottom: 1px solid var(--border, #f1f5f9); }
+.rbac-layout { padding: 1rem 1.25rem; }
+.rbac-role-picker { max-width: 320px; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border, #e2e8f0); }
+.rbac-role-select { width: 100%; font-size: 1rem; padding: 0.45rem 0.6rem; }
+.rbac-role-heading { margin: 0 0 0.75rem; font-size: 1.1rem; }
+.rbac-table { width: 100%; }
 .perm-check { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; cursor: pointer; }
 .perm-check-edit span { color: var(--accent, #4f46e5); }
 .sale-attachments-block h4 { margin-bottom: 0.35rem; }

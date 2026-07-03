@@ -25,7 +25,10 @@ router.get("/org-structure", async (req, res) => {
   try {
     const companyCtx = require("../lib/company-context");
     const company = companyCtx.parseCompanyContext(req.query.company);
-    const structure = await hrms.getLiveOrgStructure(company);
+    let structure = await hrms.getLiveOrgStructure(company);
+    if (roles.canViewOrgAgentScope(req.userRole)) {
+      structure = hrms.filterOrgStructureForAgent(structure, req.userRole);
+    }
     res.json(structure);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -42,7 +45,7 @@ router.get("/teams", async (_req, res) => {
 });
 
 router.post("/teams", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
     const team = await hrms.createOrgTeam(req.body, req.username);
     res.status(201).json({ ok: true, team });
@@ -52,7 +55,7 @@ router.post("/teams", async (req, res) => {
 });
 
 router.patch("/teams/:id", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
     const team = await hrms.updateOrgTeam(req.params.id, req.body, req.username);
     res.json({ ok: true, team });
@@ -62,7 +65,7 @@ router.patch("/teams/:id", async (req, res) => {
 });
 
 router.post("/teams/:id/relocate", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
     const newUnit = String(req.body?.unit || "").trim();
     if (!newUnit) return res.status(400).json({ error: "unit required" });
@@ -79,7 +82,7 @@ router.post("/teams/:id/relocate", async (req, res) => {
 });
 
 router.delete("/teams/:id", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
     const result = await hrms.deleteOrgTeam(req.params.id, req.username);
     await store.refreshCache();
@@ -313,7 +316,10 @@ router.put("/clearance/:employeeId/:itemKey", async (req, res) => {
   }
 });
 
-router.get("/equipment", async (_req, res) => {
+router.get("/equipment", async (req, res) => {
+  if (!roles.canViewEquipment(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
   try {
     const [equipment, assignments] = await Promise.all([
       hrms.readAllEquipment(),
@@ -326,6 +332,9 @@ router.get("/equipment", async (_req, res) => {
 });
 
 router.get("/equipment/:employeeId", async (req, res) => {
+  if (!roles.canViewEquipment(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
   try {
     const assignments = await hrms.readEquipmentAssignments(req.params.employeeId);
     res.json({ assignments });
@@ -508,7 +517,10 @@ router.delete("/leave/:id", async (req, res) => {
   }
 });
 
-router.get("/holidays", async (_req, res) => {
+router.get("/holidays", async (req, res) => {
+  if (!roles.canViewSettingsSection(req.userRole, "holidays")) {
+    return res.status(403).json({ error: "No permission to view holidays" });
+  }
   try {
     res.json({ holidays: await hrms.readPublicHolidays() });
   } catch (e) {
@@ -517,7 +529,9 @@ router.get("/holidays", async (_req, res) => {
 });
 
 router.post("/holidays", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canViewSettingsSection(req.userRole, "holidays")) {
+    return res.status(403).json({ error: "No permission to manage holidays" });
+  }
   try {
     const h = await hrms.upsertPublicHoliday(req.body, req.username);
     res.json({ ok: true, holiday: h });
@@ -527,7 +541,9 @@ router.post("/holidays", async (req, res) => {
 });
 
 router.patch("/holidays/:id", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canViewSettingsSection(req.userRole, "holidays")) {
+    return res.status(403).json({ error: "No permission to manage holidays" });
+  }
   try {
     const existing = (await hrms.readPublicHolidays()).find((h) => h.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Holiday not found" });
@@ -546,7 +562,9 @@ router.patch("/holidays/:id", async (req, res) => {
 });
 
 router.post("/holidays/import-federal", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canViewSettingsSection(req.userRole, "holidays")) {
+    return res.status(403).json({ error: "No permission to manage holidays" });
+  }
   try {
     const { getUsFederalHolidays } = require("../scripts/seed-us-federal-holidays");
     const rows = getUsFederalHolidays();
@@ -590,7 +608,9 @@ router.post("/holidays/import-egyptian", async (req, res) => {
 });
 
 router.delete("/holidays/:id", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canViewSettingsSection(req.userRole, "holidays")) {
+    return res.status(403).json({ error: "No permission to manage holidays" });
+  }
   try {
     await hrms.deletePublicHoliday(req.params.id);
     res.json({ ok: true });

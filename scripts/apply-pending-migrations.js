@@ -37,6 +37,7 @@ async function probeState(db) {
     registration_identity: false,
     rbac_payslip: false,
     app_role_permissions: false,
+    app_user_permissions: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -67,6 +68,8 @@ async function probeState(db) {
   state.rbac_payslip = !pva.error;
   const arp = await db.from("app_role_permissions").select("role").limit(1);
   state.app_role_permissions = !arp.error;
+  const aup = await db.from("app_user_permissions").select("username").limit(1);
+  state.app_user_permissions = !aup.error;
   return state;
 }
 
@@ -93,6 +96,7 @@ function filesToApply(state) {
   if (!state.registration_identity) files.push("20260714_registration_identity_training.sql");
   if (!state.rbac_payslip) files.push("20260715_rbac_payslip_grants.sql");
   if (!state.app_role_permissions) files.push("20260716_app_role_permissions.sql");
+  if (!state.app_user_permissions) files.push("20260717_app_user_permissions.sql");
   return files;
 }
 

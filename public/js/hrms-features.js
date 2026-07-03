@@ -244,8 +244,11 @@ window.HRMSFeatures = (function () {
       openModal,
       closeModal,
       canManagePayrollEvents,
+      canManageOrgStructure,
     } = helpers;
-    const canManage = typeof canManagePayrollEvents === "function" && canManagePayrollEvents();
+    const canManage =
+      (typeof canManageOrgStructure === "function" && canManageOrgStructure()) ||
+      (typeof canManagePayrollEvents === "function" && canManagePayrollEvents());
     const eq = typeof employeesQuery === "function" ? employeesQuery() : "";
     const [structure, empData, teamsRes, mgrRes] = await Promise.all([
       api(`/hrms/org-structure${eq}`),
@@ -279,17 +282,22 @@ window.HRMSFeatures = (function () {
         .join("");
     }
 
+    function isTlEmployee(e) {
+      return /^TL/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "tl";
+    }
+
     function tlOptions(teamName, selected) {
-      const tls = employees.filter((e) => {
-        const t = String(e.team || "").replace(/^team\s+/i, "");
-        return t === teamName && (/^TL/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "tl");
-      });
-      return tls
-        .map(
-          (e) =>
-            `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`
-        )
-        .join("");
+      const normTeam = (t) => String(t || "").replace(/^team\s+/i, "").trim();
+      const onTeam = employees.filter((e) => normTeam(e.team) === normTeam(teamName) && isTlEmployee(e));
+      const otherTls = employees.filter((e) => isTlEmployee(e) && normTeam(e.team) !== normTeam(teamName));
+      const agents = employees.filter(
+        (e) => !isTlEmployee(e) && String(e.status || "").toLowerCase() !== "out"
+      );
+      const opt = (e) =>
+        `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`;
+      return `<optgroup label="TLs on ${esc(teamName)}">${onTeam.map(opt).join("") || '<option disabled>(none on team)</option>'}</optgroup>
+        <optgroup label="Other TLs">${otherTls.map(opt).join("") || '<option disabled>(none)</option>'}</optgroup>
+        <optgroup label="Agents (unusual)">${agents.slice(0, 80).map(opt).join("")}</optgroup>`;
     }
 
     const teamNames = [...new Set(allTeams.map((t) => t.name).concat(employees.map((e) => e.team).filter(Boolean)))].sort();
@@ -374,15 +382,15 @@ window.HRMSFeatures = (function () {
           const pending = pendRes.pending || [];
           pendingBlock = pending.length
             ? `<section class="card" style="margin-bottom:1rem"><h3>Pending agent registrations (${pending.length})</h3>
-              <div class="table-wrap"><table><thead><tr><th>Full name</th><th>American name</th><th>Nationality</th><th>ID / Passport</th><th>Unit</th><th>Team</th><th>Phone</th><th></th></tr></thead>
+              <div class="table-wrap"><table><thead><tr><th>Full name</th><th>American name</th><th>Nationality</th><th>ID / Passport</th><th>Unit</th><th>Phone</th><th>Submitted</th><th></th></tr></thead>
               <tbody>${pending.map((p) => `<tr>
                 <td>${esc(p.fullName || p.arabicName || "—")}</td>
                 <td>${esc(p.americanName)}</td>
                 <td>${esc(p.nationality || "—")}</td>
                 <td>${esc(p.nationalId || p.passportNumber || "—")}</td>
                 <td>${esc(p.unit || "—")}</td>
-                <td>${esc(p.team || "—")}</td>
                 <td>${esc(p.phone || "—")}</td>
+                <td class="muted">${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}</td>
                 <td class="btn-row">
                   <button type="button" class="btn btn-sm btn-primary" data-approve-reg="${esc(p.id)}">Approve</button>
                   <button type="button" class="btn btn-sm btn-danger" data-reject-reg="${esc(p.id)}">Reject</button>
@@ -457,14 +465,33 @@ window.HRMSFeatures = (function () {
     });
 
     root.querySelectorAll(".org-tl-select").forEach((sel) => {
+      const prev = sel.value;
       sel.addEventListener("change", async () => {
+        const teamId = sel.dataset.teamId;
+        const teamCard = sel.closest(".org-team-card");
+        const teamName = teamCard?.dataset?.team || "";
+        const emp = employees.find((x) => String(x.id) === String(sel.value));
+        if (!emp) return;
+        const isAgentPick = !isTlEmployee(emp);
+        const normTeam = (t) => String(t || "").replace(/^team\s+/i, "").trim();
+        const crossTeam = isTlEmployee(emp) && normTeam(emp.team) !== normTeam(teamName);
+        if (isAgentPick || crossTeam) {
+          const msg = isAgentPick
+            ? `Assign agent ${emp.id} as TL for team "${teamName}"? This is unusual.`
+            : `Assign TL ${emp.id} from team "${emp.team || "?"}" to lead "${teamName}"?`;
+          if (!confirm(msg) || !confirm("Please confirm again — this changes team leadership.")) {
+            sel.value = prev;
+            return;
+          }
+        }
         try {
-          await api(`/hrms/teams/${sel.dataset.teamId}`, {
+          await api(`/hrms/teams/${teamId}`, {
             method: "PATCH",
             body: JSON.stringify({ tlEmployeeId: sel.value }),
           });
           await renderOrgPage(root, api, helpers);
         } catch (e) {
+          sel.value = prev;
           alert(e.message);
         }
       });
@@ -520,10 +547,19 @@ window.HRMSFeatures = (function () {
           if (!teamId) return alert("Select a team to assign, or create a new one below.");
           const team = allTeams.find((t) => t.id === teamId);
           if (!team) return;
-          await api(`/hrms/teams/${team.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ name: team.name, unit, dialsSales: team.dialsSales !== false, displayOrder: team.displayOrder || 0 }),
-          });
+          if (team.unit && team.unit !== unit) {
+            if (!confirm(`Move "${team.name}" from ${team.unit} to ${unit}? All agents on this team will be updated.`)) return;
+            const reassignIds = confirm("Reassign dialing agent IDs for the new unit prefix?");
+            await api(`/hrms/teams/${team.id}/relocate`, {
+              method: "POST",
+              body: JSON.stringify({ unit, reassignIds }),
+            });
+          } else {
+            await api(`/hrms/teams/${team.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ name: team.name, unit, dialsSales: team.dialsSales !== false, displayOrder: team.displayOrder || 0 }),
+            });
+          }
           closeModal();
           await renderOrgPage(root, api, helpers);
         };
@@ -620,7 +656,10 @@ window.HRMSFeatures = (function () {
               body: JSON.stringify({ unit: newUnit, reassignIds }),
             });
             const n = (res.changes || []).length;
-            alert(`Team moved. ${n} agent${n === 1 ? "" : "s"} updated.`);
+            const skipped = (res.skipped || []).length;
+            alert(
+              `Team moved. ${n} agent${n === 1 ? "" : "s"} updated.${skipped ? ` ${skipped} skipped (not dialing agents or no ID rule).` : ""}`
+            );
             closeModal();
             await renderOrgPage(root, api, helpers);
           } catch (err) {
@@ -629,17 +668,52 @@ window.HRMSFeatures = (function () {
         };
         document.getElementById("save-edit-team").onclick = async () => {
           const fd = new FormData(document.getElementById("edit-team-form"));
-          await api(`/hrms/teams/${team.id}`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              name: fd.get("name"),
-              unit: fd.get("unit"),
-              dialsSales: fd.get("dialsSales") === "true",
-              displayOrder: Number(fd.get("displayOrder")) || 0,
-            }),
-          });
-          closeModal();
-          await renderOrgPage(root, api, helpers);
+          const newUnit = String(fd.get("unit") || "").trim();
+          const payload = {
+            name: fd.get("name"),
+            unit: newUnit,
+            dialsSales: fd.get("dialsSales") === "true",
+            displayOrder: Number(fd.get("displayOrder")) || 0,
+          };
+          try {
+            if (newUnit && newUnit !== team.unit) {
+              if (
+                !confirm(
+                  `Move "${team.name}" from ${team.unit} to ${newUnit}? All agents on this team will be updated.`
+                )
+              ) {
+                return;
+              }
+              const reassignIds = confirm("Reassign dialing agent IDs for the new unit prefix?");
+              await api(`/hrms/teams/${team.id}/relocate`, {
+                method: "POST",
+                body: JSON.stringify({ unit: newUnit, reassignIds }),
+              });
+              if (
+                payload.name !== team.name ||
+                payload.dialsSales !== (team.dialsSales !== false) ||
+                payload.displayOrder !== (team.displayOrder ?? 0)
+              ) {
+                await api(`/hrms/teams/${team.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    name: payload.name,
+                    dialsSales: payload.dialsSales,
+                    displayOrder: payload.displayOrder,
+                  }),
+                });
+              }
+            } else {
+              await api(`/hrms/teams/${team.id}`, {
+                method: "PATCH",
+                body: JSON.stringify(payload),
+              });
+            }
+            closeModal();
+            await renderOrgPage(root, api, helpers);
+          } catch (err) {
+            alert(err.message || "Save failed");
+          }
         };
       };
     });
@@ -1304,6 +1378,9 @@ window.HRMSFeatures = (function () {
     const { isChangesViewer, escapeHtml, openModal, closeModal } = helpers;
     const status = await api("/status");
     const taxRules = status.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 };
+    const canHolidays = status.user?.canViewSettingsHolidays === true;
+    const canManagePayroll =
+      status.user?.canManageEmployees === true || ["admin", "ceo", "hr"].includes(String(status.user?.role || ""));
 
     const grid = root.querySelector(".grid-2");
     if (!grid) return;
@@ -1318,14 +1395,20 @@ window.HRMSFeatures = (function () {
         </form>
         <button class="btn btn-primary btn-sm" id="pw-save">Update password</button>
       </div>
-      <div class="card" id="settings-tax-card">
+      ${
+        canManagePayroll
+          ? `<div class="card" id="settings-tax-card">
         <h3>Tax rules (finance)</h3>
         <p class="muted">Rates default to 0% until configured.</p>
         <label class="field"><span>Income tax %</span><input id="tax-income" type="number" min="0" max="100" step="0.01" value="${taxRules.incomeTaxRate || 0}" /></label>
         <label class="field"><span>Social insurance %</span><input id="tax-social" type="number" min="0" max="100" step="0.01" value="${taxRules.socialInsuranceRate || 0}" /></label>
         <button class="btn btn-sm" id="tax-save">Save tax rules</button>
-      </div>
-      <div class="card" id="settings-holidays-card">
+      </div>`
+          : ""
+      }
+      ${
+        canHolidays
+          ? `<div class="card" id="settings-holidays-card">
         <h3>Federal holidays (USA)</h3>
         <p class="muted">Disabled holidays are excluded from attendance prefill. Manual grid edits always win.</p>
         <div class="btn-row" style="margin-bottom:.5rem">
@@ -1334,10 +1417,12 @@ window.HRMSFeatures = (function () {
         </div>
         <div id="holidays-list-usa" class="muted">Loading…</div>
       </div>`
+          : ""
+      }`
     );
 
     const role = String(status.user?.role || "").toLowerCase();
-    const isHolidayAdmin = ["admin", "ceo"].includes(role);
+    const isHolidayAdmin = ["admin", "ceo"].includes(role) && canHolidays;
     if (isHolidayAdmin) {
       grid.insertAdjacentHTML(
         "beforeend",
@@ -1362,7 +1447,7 @@ window.HRMSFeatures = (function () {
       root.querySelector("#pw-form").reset();
     };
 
-    root.querySelector("#tax-save").onclick = async () => {
+    root.querySelector("#tax-save")?.addEventListener("click", async () => {
       await api("/settings/tax-rules", {
         method: "PUT",
         body: JSON.stringify({
@@ -1371,7 +1456,7 @@ window.HRMSFeatures = (function () {
         }),
       });
       alert("Tax rules saved.");
-    };
+    });
 
     async function loadHolidaysList(elId, country, { canToggle = true } = {}) {
       const { holidays } = await api("/hrms/holidays");
@@ -1405,7 +1490,7 @@ window.HRMSFeatures = (function () {
                   </label>`
               )
               .join("");
-            return `<details class="holiday-year-block" ${Number(year) >= 2024 ? "open" : ""}>
+            return `<details class="holiday-year-block">
               <summary><strong>${year}</strong> (${byYear[year].length})</summary>
               <div style="margin-top:.5rem">${rows}</div>
             </details>`;
@@ -1439,43 +1524,45 @@ window.HRMSFeatures = (function () {
         await loadHolidaysList("#holidays-list-egy", "EGY", { canToggle: true });
       }
     }
-    loadHolidays();
-    root.querySelector("#import-holidays-btn").onclick = async () => {
-      try {
-        const res = await api("/hrms/holidays/import-federal", { method: "POST" });
-        alert(`Imported ${res.count || 0} federal holidays.`);
-        loadHolidays();
-      } catch (e) {
-        alert(e.message);
-      }
-    };
-    root.querySelector("#import-holidays-egy-btn")?.addEventListener("click", async () => {
-      try {
-        const res = await api("/hrms/holidays/import-egyptian", { method: "POST" });
-        alert(`Imported ${res.count || 0} Egyptian holidays (inactive until you enable them).`);
-        loadHolidays();
-      } catch (e) {
-        alert(e.message);
-      }
-    });
-    root.querySelector("#add-holiday-btn").onclick = () => {
-      openModal(`
+    if (canHolidays) {
+      loadHolidays();
+      root.querySelector("#import-holidays-btn")?.addEventListener("click", async () => {
+        try {
+          const res = await api("/hrms/holidays/import-federal", { method: "POST" });
+          alert(`Imported ${res.count || 0} federal holidays.`);
+          loadHolidays();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      root.querySelector("#import-holidays-egy-btn")?.addEventListener("click", async () => {
+        try {
+          const res = await api("/hrms/holidays/import-egyptian", { method: "POST" });
+          alert(`Imported ${res.count || 0} Egyptian holidays (inactive until you enable them).`);
+          loadHolidays();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      root.querySelector("#add-holiday-btn")?.addEventListener("click", () => {
+        openModal(`
         <div class="modal-header"><h2>Add holiday</h2><button class="btn btn-sm" data-close>✕</button></div>
         <form id="holiday-form" class="modal-body field-grid">
           <label class="field"><span>Date</span><input name="date" type="date" required /></label>
           <label class="field"><span>Name</span><input name="name" required /></label>
         </form>
         <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="save-holiday">Save</button></div>`);
-      document.getElementById("save-holiday").onclick = async () => {
-        const fd = new FormData(document.getElementById("holiday-form"));
-        await api("/hrms/holidays", {
-          method: "POST",
-          body: JSON.stringify({ date: fd.get("date"), name: fd.get("name"), country: "USA" }),
-        });
-        closeModal();
-        loadHolidays();
-      };
-    };
+        document.getElementById("save-holiday").onclick = async () => {
+          const fd = new FormData(document.getElementById("holiday-form"));
+          await api("/hrms/holidays", {
+            method: "POST",
+            body: JSON.stringify({ date: fd.get("date"), name: fd.get("name"), country: "USA" }),
+          });
+          closeModal();
+          loadHolidays();
+        };
+      });
+    }
 
     if (isChangesViewer() || ["hr", "admin", "ceo"].includes(String(status.user?.role || "").toLowerCase())) {
       grid.insertAdjacentHTML(

@@ -4364,7 +4364,7 @@ async function openEmployeeWarningsModal(employeeId) {
     } catch (e) {
       alert(e.message);
     }
-  };
+  });
 }
 
 async function renderMyPayslip(root) {
@@ -4576,7 +4576,7 @@ async function openEmployeeDocsModal(employeeId) {
     } catch (e) {
       alert(e.message);
     }
-  };
+  });
 }
 
 async function renderReports(root) {
@@ -4658,7 +4658,11 @@ async function renderSettings(root) {
       : Promise.resolve(null),
   ]);
   const emp = profileEmp?.employee || null;
-  const canPhoto = Boolean(emp);
+  const canPhoto = Boolean(emp) && status.user?.canViewSettingsProfilePhoto !== false;
+  const canTheme = status.user?.canViewSettingsTheme !== false;
+  const canSync = status.user?.canViewSettingsSync !== false;
+  const canHideOut = status.user?.canViewSettingsHideOut === true;
+  const canSession = status.user?.canViewSettingsSession === true;
 
   const changeLogCard = showLogs
     ? `
@@ -4728,14 +4732,14 @@ async function renderSettings(root) {
     </div>`;
   }
 
-  const displayCard = canManagePayrollEvents()
+  const displayCard = canHideOut
     ? `<div class="card">
         <h3>Display</h3>
         <label class="toggle-label"><input type="checkbox" id="set-hide-out" ${status.hideOutEmployees ? "checked" : ""} /> Hide out / inactive employees</label>
         <p class="muted">When enabled, employees with status "Out" or blank inactive rows are hidden from lists.</p>
       </div>`
     : "";
-  const adminMetaCards = canManagePayrollEvents()
+  const adminMetaCards = canSession
     ? `<div class="card">
         <h3>App version</h3>
         <p><strong>${escapeHtml(status.appVersion || "unknown")}</strong></p>
@@ -4753,18 +4757,26 @@ async function renderSettings(root) {
     <div class="page-header"><h1>Settings</h1></div>
     <div class="grid-2">
       ${profilePhotoCard}
-      <div class="card">
+      ${
+        canTheme
+          ? `<div class="card">
         <h3>Appearance</h3>
         <p class="muted">Color theme for this device. Layout and sidebar structure stay the same.</p>
         <div class="theme-picker" id="theme-picker">${themeOptions}</div>
-      </div>
+      </div>`
+          : ""
+      }
       ${displayCard}
       ${adminMetaCards}
-      <div class="card">
+      ${
+        canSync
+          ? `<div class="card">
         <h3>Data sync</h3>
         <p class="muted">Last sync: ${status.lastSync ? timeAgo(status.lastSync) : "Never"}</p>
         <button class="btn btn-primary" id="settings-refresh">Refresh from server</button>
-      </div>
+      </div>`
+          : ""
+      }
     </div>
     ${impersonateCard ? `<div class="grid-2">${impersonateCard}</div>` : ""}
     ${changeLogCard}`;
@@ -4783,7 +4795,7 @@ async function renderSettings(root) {
       method: "PUT",
       body: JSON.stringify({ hide: state.hideOut }),
     });
-  };
+  });
   root.querySelector("#settings-refresh").onclick = () => refreshData();
   if (canPhoto && emp) {
     bindProfilePhotoUpload(emp.id, async () => {
@@ -4827,11 +4839,13 @@ async function renderUsers(root) {
     return;
   }
 
-  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false, q: "" };
+  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false, q: "", unit: "", team: "", role: "" };
   const data = await api("/admin/users");
   let users = data.users || [];
-  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "office_assistant", "agent"];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
   const statuses = data.statuses || ["active", "inactive", "terminated"];
+  const unitOptions = data.units || [];
+  const teamOptions = data.teams || [];
 
   if (state.usersFilter.status === "inactive") {
     users = users.filter((u) => (u.status || "").toLowerCase() === "inactive");
@@ -4840,11 +4854,20 @@ async function renderUsers(root) {
   } else if (state.usersFilter.status === "no-login") {
     users = users.filter((u) => !u.employeeId);
   }
+  if (state.usersFilter.unit) {
+    users = users.filter((u) => String(u.employeeUnit || "") === state.usersFilter.unit);
+  }
+  if (state.usersFilter.team) {
+    users = users.filter((u) => String(u.employeeTeam || "") === state.usersFilter.team);
+  }
+  if (state.usersFilter.role) {
+    users = users.filter((u) => String(u.role || "").toLowerCase() === state.usersFilter.role);
+  }
 
   const searchQ = String(state.usersFilter.q || "").trim().toLowerCase();
   if (searchQ) {
     users = users.filter((u) => {
-      const hay = [u.username, u.employeeId, u.employeeName, u.email, u.employeeTeam, u.role]
+      const hay = [u.username, u.employeeId, u.employeeName, u.email, u.employeeTeam, u.employeeUnit, u.role]
         .map((x) => String(x || "").toLowerCase())
         .join(" ");
       return hay.includes(searchQ);
@@ -4872,9 +4895,12 @@ async function renderUsers(root) {
   };
 
   const renderRow = (u) => `<tr>
-    <td><strong>${escapeHtml(u.username)}</strong>${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
+    <td><strong>${escapeHtml(u.username)}</strong>
+      ${u.hasExceptionAccess ? '<br><span class="badge badge-warn" style="font-size:.65rem">Exception access</span>' : ""}
+      ${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
     <td>${u.employeeId ? escapeHtml(u.employeeId) : '<span class="muted">—</span>'}</td>
     <td class="muted">${u.employeeName ? escapeHtml(u.employeeName) : "—"}</td>
+    <td class="muted">${u.employeeUnit ? escapeHtml(u.employeeUnit) : "—"}</td>
     <td class="muted">${u.employeeTeam ? escapeHtml(u.employeeTeam) : "—"}</td>
     <td class="muted">${u.email ? escapeHtml(u.email) : "—"}</td>
     <td><span class="badge badge-status">${escapeHtml(u.role || "—")}</span></td>
@@ -4903,24 +4929,55 @@ async function renderUsers(root) {
     tableBody = [...groups.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(
-        ([team, list]) => `<tr class="users-group-row"><td colspan="10"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(renderRow).join("")}`
+        ([team, list]) => `<tr class="users-group-row"><td colspan="11"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(renderRow).join("")}`
       )
       .join("");
   } else {
     tableBody = users.map(renderRow).join("");
   }
 
+  let pendingRegHtml = "";
+  if (state.user?.canApproveRegistration) {
+    try {
+      const pendRes = await api("/registration/pending");
+      const pending = pendRes.pending || [];
+      if (pending.length) {
+        pendingRegHtml = `<section class="card" style="margin-bottom:1rem">
+          <h3>Pending agent registrations (${pending.length})</h3>
+          <p class="muted">Approve on Organization page or here. Creates inactive employee + login; team assigned later.</p>
+          <div class="table-wrap"><table><thead><tr>
+            <th>American name</th><th>Full name</th><th>Unit</th><th>Phone</th><th></th>
+          </tr></thead><tbody>
+            ${pending.map((p) => `<tr>
+              <td>${escapeHtml(p.americanName || "—")}</td>
+              <td>${escapeHtml(p.fullName || p.arabicName || "—")}</td>
+              <td>${escapeHtml(p.unit || "—")}</td>
+              <td>${escapeHtml(p.phone || "—")}</td>
+              <td class="btn-row">
+                <button type="button" class="btn btn-sm btn-primary" data-approve-reg="${escapeHtml(p.id)}">Approve</button>
+                <button type="button" class="btn btn-sm btn-danger" data-reject-reg="${escapeHtml(p.id)}">Reject</button>
+              </td>
+            </tr>`).join("")}
+          </tbody></table></div>
+        </section>`;
+      }
+    } catch {
+      /* optional */
+    }
+  }
+
   root.innerHTML = `
     <div class="page-header flex-between">
       <div>
         <h1>App users</h1>
-        <p class="muted">Manage sign-ins, roles, and auto-created inactive employee logins.</p>
+        <p class="muted">Manage sign-ins, roles, and per-user exception access.</p>
       </div>
       <div class="btn-row">
         <button class="btn btn-sm" id="sync-emp-logins-btn">Sync employee logins</button>
         <button class="btn btn-primary" id="add-user-btn">+ Add user</button>
       </div>
     </div>
+    ${pendingRegHtml}
     <div class="toolbar users-toolbar">
       <label class="field field-inline field-search"><span>Search</span>
         <input type="search" id="users-search" class="search-input" placeholder="Username, name, ID, email, team…" value="${escapeHtml(state.usersFilter.q || "")}" />
@@ -4931,6 +4988,24 @@ async function renderUsers(root) {
           <option value="active" ${state.usersFilter.status === "active" ? "selected" : ""}>Active</option>
           <option value="inactive" ${state.usersFilter.status === "inactive" ? "selected" : ""}>Inactive</option>
           <option value="no-login" ${state.usersFilter.status === "no-login" ? "selected" : ""}>No employee link</option>
+        </select>
+      </label>
+      <label class="field field-inline"><span>Unit</span>
+        <select id="users-filter-unit">
+          <option value="">All</option>
+          ${unitOptions.map((u) => `<option value="${escapeHtml(u)}" ${state.usersFilter.unit === u ? "selected" : ""}>${escapeHtml(u)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field field-inline"><span>Team</span>
+        <select id="users-filter-team">
+          <option value="">All</option>
+          ${teamOptions.map((t) => `<option value="${escapeHtml(t)}" ${state.usersFilter.team === t ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="field field-inline"><span>Role</span>
+        <select id="users-filter-role">
+          <option value="">All</option>
+          ${roles.map((r) => `<option value="${r}" ${state.usersFilter.role === r ? "selected" : ""}>${r}</option>`).join("")}
         </select>
       </label>
       <label class="field field-inline"><span>Sort by</span>
@@ -4944,9 +5019,9 @@ async function renderUsers(root) {
     </div>
     <div class="table-wrap"><table>
       <thead><tr>
-        <th>Username</th><th>Employee ID</th><th>Name</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
+        <th>Username</th><th>Employee ID</th><th>Name</th><th>Unit</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
       </tr></thead>
-      <tbody>${tableBody || `<tr><td colspan="10" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`}
+      <tbody>${tableBody || `<tr><td colspan="11" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`}
       </tbody>
     </table></div>`;
 
@@ -4976,6 +5051,41 @@ async function renderUsers(root) {
     state.usersFilter.groupTeam = e.target.checked;
     renderUsers(root);
   };
+  root.querySelector("#users-filter-unit")?.addEventListener("change", (e) => {
+    state.usersFilter.unit = e.target.value;
+    renderUsers(root);
+  });
+  root.querySelector("#users-filter-team")?.addEventListener("change", (e) => {
+    state.usersFilter.team = e.target.value;
+    renderUsers(root);
+  });
+  root.querySelector("#users-filter-role")?.addEventListener("change", (e) => {
+    state.usersFilter.role = e.target.value;
+    renderUsers(root);
+  });
+  root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Approve this registration? Creates employee + inactive login (no team yet).")) return;
+      try {
+        const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
+        alert(`Approved. Username: ${res.username}\nTemp password: ${res.tempPassword}\nAssign team on Organization page.`);
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
+  root.querySelectorAll("[data-reject-reg]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Reject this registration?")) return;
+      try {
+        await api(`/registration/${btn.dataset.rejectReg}/reject`, { method: "POST", body: "{}" });
+        render();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
   root.querySelector("#add-user-btn").onclick = () => openUserFormModal({ roles, statuses });
   root.querySelectorAll("[data-activate-user]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -5075,13 +5185,13 @@ function openUserFormModal({ roles, statuses, user = null }) {
       <h2>${isEdit ? "Edit user" : "Add user"}</h2>
       <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
     </div>
-    <form id="user-form" class="modal-body">
+    <form id="user-form" class="modal-body modal-body-scroll">
       <label class="field">
         <span>Username</span>
         <input name="username" required ${isEdit ? "readonly" : ""} value="${escapeHtml(user?.username || "")}" autocomplete="off" />
       </label>
       <label class="field">
-        <span>Email <span class="muted">(optional — for future password reset)</span></span>
+        <span>Email <span class="muted">(optional)</span></span>
         <input type="email" name="email" value="${escapeHtml(user?.email || "")}" autocomplete="email" placeholder="name@company.com" />
       </label>
       <label class="field">
@@ -5089,23 +5199,78 @@ function openUserFormModal({ roles, statuses, user = null }) {
         <input type="password" name="password" ${isEdit ? "" : "required minlength=\"4\""} autocomplete="new-password" />
       </label>
       <label class="field">
-        <span>Role / access level</span>
-        <select name="role" required>${roleOpts}</select>
+        <span>1. Role</span>
+        <select name="role" id="user-form-role" required>${roleOpts}</select>
+        <p class="muted small">Base access comes from this role (Access Control page).</p>
       </label>
       <label class="field">
         <span>Status</span>
         <select name="status" required>${statusOpts}</select>
       </label>
-      <p class="muted" style="font-size:.85rem;margin:0">
-        <strong>active</strong> — can sign in ·
-        <strong>inactive</strong> — blocked ·
-        <strong>terminated</strong> — removed access
-      </p>
+      ${isEdit ? `<div id="user-exception-access" class="card card-flat" style="margin-top:1rem;padding:.75rem">
+        <h4 style="margin:0 0 .5rem">2. Exception access <span class="muted">(optional)</span></h4>
+        <p class="muted small">Override role defaults for this user only. Unlisted permissions use the role default.</p>
+        <div id="user-perm-overrides" class="muted">Loading…</div>
+        <button type="button" class="btn btn-sm" id="user-clear-exceptions" style="margin-top:.5rem">Clear all exceptions</button>
+      </div>` : `<p class="muted small">New users get role access only. Assign team on Organization after linking an employee.</p>`}
     </form>
     <div class="modal-footer">
       <button type="button" class="btn" data-close>Cancel</button>
       <button type="submit" form="user-form" class="btn btn-primary">${isEdit ? "Save changes" : "Create user"}</button>
     </div>`);
+
+  const exceptionState = new Map();
+  let roleDefaults = {};
+
+  async function loadExceptionAccess() {
+    if (!isEdit || !user?.username) return;
+    const wrap = document.getElementById("user-perm-overrides");
+    if (!wrap) return;
+    try {
+      const [cat, permData] = await Promise.all([
+        api("/rbac/catalog"),
+        api(`/admin/users/${encodeURIComponent(user.username)}/permissions`),
+      ]);
+      const defaults = permData.defaults || {};
+      roleDefaults = defaults;
+      const overrides = Object.fromEntries((permData.overrides || []).map((o) => [o.permissionKey, o.allowed]));
+      const perms = cat.permissions || [];
+      let html = "";
+      for (const p of perms) {
+        const roleDefault = defaults[p.key];
+        const hasOverride = overrides[p.key] !== undefined;
+        const effective = hasOverride ? overrides[p.key] : roleDefault;
+        if (hasOverride) exceptionState.set(p.key, overrides[p.key]);
+        html += `<label class="toggle-label user-perm-row" style="display:flex;gap:.5rem;align-items:flex-start;margin:.35rem 0">
+          <input type="checkbox" data-user-perm="${p.key}" ${effective ? "checked" : ""} ${hasOverride ? "" : ""} />
+          <span><strong>${escapeHtml(p.label)}</strong>
+            <span class="muted small"> — role default: ${roleDefault ? "Allow" : "Deny"}${hasOverride ? " · <em>exception</em>" : ""}</span></span>
+        </label>`;
+      }
+      wrap.innerHTML = html || "<span class='muted'>No permissions</span>";
+      wrap.querySelectorAll("[data-user-perm]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const key = input.dataset.userPerm;
+          const roleDef = defaults[key];
+          if (input.checked === roleDef) exceptionState.delete(key);
+          else exceptionState.set(key, input.checked);
+        });
+      });
+    } catch (e) {
+      wrap.innerHTML = `<span class="muted">${escapeHtml(e.message || "Could not load permissions")}</span>`;
+    }
+  }
+
+  loadExceptionAccess();
+  document.getElementById("user-clear-exceptions")?.addEventListener("click", () => {
+    exceptionState.clear();
+    document.querySelectorAll("[data-user-perm]").forEach((input) => {
+      const key = input.dataset.userPerm;
+      input.checked = Boolean(roleDefaults[key]);
+    });
+    const btn = document.getElementById("user-clear-exceptions");
+    if (btn) btn.dataset.cleared = "1";
+  });
 
   document.getElementById("user-form").onsubmit = async (e) => {
     e.preventDefault();
@@ -5125,6 +5290,16 @@ function openUserFormModal({ roles, statuses, user = null }) {
           method: "PUT",
           body: JSON.stringify(payload),
         });
+        if (exceptionState.size) {
+          await api(`/admin/users/${encodeURIComponent(user.username)}/permissions`, {
+            method: "PUT",
+            body: JSON.stringify({
+              entries: [...exceptionState.entries()].map(([permissionKey, allowed]) => ({ permissionKey, allowed })),
+            }),
+          });
+        } else if (user.hasExceptionAccess && document.getElementById("user-clear-exceptions")?.dataset?.cleared) {
+          await api(`/admin/users/${encodeURIComponent(user.username)}/permissions`, { method: "DELETE" });
+        }
       } else {
         if (!payload.password) throw new Error("Password is required for new users");
         await api("/admin/users", {

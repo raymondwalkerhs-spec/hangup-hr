@@ -4,6 +4,28 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.9] — 2026-07-04
+
+### Added
+- **Per-user access overrides** — exception permissions on App Users (`app_user_permissions`, migration `20260717`)
+- **Access Control:** role-first permission editor; `submitSales`, `workQualityTicket` keys; separate HR vs Admin sales column UI
+- **Registration workflow** — unit-only signup, daily PIN, pending queue on Organization/Users; OP/HR approve creates next free employee ID
+- **App Users filters** — unit, team, role on Users page
+
+### Changed
+- **Organization:** Save / assign team auto-relocates when unit changes (Office, HS3 OP, etc.); TL picker allows any TL with double confirm
+- **Settings UI** — display, session, theme, sync, profile photo, holidays respect Access Control flags from `/status`
+- **Impersonation dropdown** — shows American name + username (Raymond testing)
+
+### Fixed
+- **Blank screen after 1.3.8 update** — JavaScript syntax errors in `public/js/app.js` (`};` → `});` on event listeners)
+- **Registration approve “ID already exists”** — allocates next truly available ID (reserved + in-use)
+- **Agent without linked employee ID** — Employees/Attendance show nobody (not full directory)
+- **Agents in Settings** — federal/Egyptian holiday cards hidden unless `settingsHolidays` granted
+- **Unassigned agents on Organization** — see themselves under “Unassigned (no team)” using live employee team, not stale login team
+- **Team relocate ID collision** — safe ID allocation when reassigning dialing agents
+- **Settings permissions** — Access Control toggles now apply to UI and API (hide-out, holidays, session)
+
 ## [1.3.8] — 2026-07-04
 
 ### Fixed

@@ -25,7 +25,7 @@ router.post("/apply", async (req, res) => {
     res.status(201).json({
       ok: true,
       message:
-        "Registration submitted. After OP/Admin approval you will receive your User ID (login). Mark or Raymond must activate your account.",
+        "Registration submitted. After OP/Admin approval you will receive your User ID (login).",
       request: row,
     });
   } catch (err) {

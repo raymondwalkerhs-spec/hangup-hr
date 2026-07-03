@@ -4,7 +4,7 @@
 
 **Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.3.7`
+**Current version:** `1.3.9`
 
 | Document | Purpose |
 |----------|---------|

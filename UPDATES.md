@@ -37,6 +37,16 @@ Hangup HR uses **two separate distribution channels**. They work together but do
 
 ---
 
+## v1.3.9 release checklist
+
+1. Bump `package.json` → `1.3.9`
+2. `npm run apply:migrations` — includes `20260717_app_user_permissions.sql`
+3. Windows: `.\scripts\build.ps1 all`
+4. Verify: `node scripts/verify-update-package.js dist\Hangup-HR-*-win-x64-full.zip`
+5. `.\scripts\publish-github-release.ps1 -IncludeFull -IncludeExtras`
+6. Push tag `v1.3.9` → CI builds macOS DMG + uploads to same release (`.github/workflows/release.yml`)
+7. `node scripts/publish-app-version.js --field-breaking --notes "RBAC fixes, registration, access scoping — install 1.3.9"`
+
 ## v1.3.6 release checklist
 
 1. Bump `package.json` → `1.3.6`

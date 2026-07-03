@@ -1,26 +1,48 @@
-# Publish a GitHub release from win-unpacked (patch zip = changed files only).
-# Does NOT upload installer EXEs unless -IncludeInstaller is passed.
+# Publish a GitHub release from win-unpacked + NSIS Setup.exe (required for in-app updates).
 #
 # Typical flow on your PC:
 #   .\scripts\build.ps1 all
-#   .\scripts\publish-github-release.ps1
+#   .\scripts\publish-github-release.ps1 -IncludeFull
 #
 # First GitHub update release (no previous manifest on GitHub):
 #   .\scripts\publish-github-release.ps1 -IncludeFull
 #
-# Also ship Setup + Portable on GitHub (large, slow - usually unnecessary):
-#   .\scripts\publish-github-release.ps1 -IncludeInstaller
+# Also ship Portable + DMG on GitHub (optional):
+#   .\scripts\publish-github-release.ps1 -IncludeFull -IncludeExtras
 param(
   [string]$Tag = "",
   [string]$Notes = "",
   [switch]$Draft,
   [switch]$IncludeFull,
+  [switch]$IncludeExtras,
   [switch]$IncludeInstaller,
   [switch]$Recreate
 )
 
+if ($IncludeInstaller -and -not $IncludeExtras) {
+  $IncludeExtras = $true
+}
+
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
+
+$ghExe = $null
+$ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+if ($ghCmd) {
+  $ghExe = $ghCmd.Source
+} else {
+  foreach ($candidate in @(
+    "${env:ProgramFiles}\GitHub CLI\gh.exe",
+    "${env:ProgramFiles(x86)}\GitHub CLI\gh.exe",
+    "$env:LOCALAPPDATA\Programs\GitHub CLI\gh.exe"
+  )) {
+    if (Test-Path $candidate) { $ghExe = $candidate; break }
+  }
+}
+if (-not $ghExe) {
+  Write-Host "ERROR: GitHub CLI (gh) not found. Install from https://cli.github.com/ or add gh to PATH." -ForegroundColor Red
+  exit 1
+}
 
 # Load .env for GITHUB_UPDATES_REPO / tokens (used by manifest fetch).
 if (Test-Path ".env") {
@@ -105,8 +127,17 @@ if (Test-Path $manifestDir) {
     ForEach-Object { $uploads.Add($_.FullName) }
 }
 
-if ($IncludeInstaller) {
-  Get-ChildItem $dist -Filter "*Setup*.exe" -ErrorAction SilentlyContinue |
+$setupExes = @(Get-ChildItem $dist -Filter "*Setup*.exe" -ErrorAction SilentlyContinue |
+  Where-Object { Test-VersionAsset $_.Name })
+foreach ($s in $setupExes) { $uploads.Add($s.FullName) }
+
+if (-not $setupExes.Count) {
+  Write-Host "WARNING: No *Setup*.exe for v$version in $dist - NSIS in-app updates will fail." -ForegroundColor Yellow
+  Write-Host "  Run .\scripts\build.ps1 all or installer first." -ForegroundColor Yellow
+}
+
+if ($IncludeExtras) {
+  Get-ChildItem $dist -Filter "*Portable*.exe" -ErrorAction SilentlyContinue |
     Where-Object { Test-VersionAsset $_.Name } |
     ForEach-Object { $uploads.Add($_.FullName) }
   Get-ChildItem $dist -Filter "*.dmg" -ErrorAction SilentlyContinue |
@@ -114,11 +145,11 @@ if ($IncludeInstaller) {
     ForEach-Object { $uploads.Add($_.FullName) }
 }
 
-if (-not $patchZips.Count -and -not $fullZips.Count) {
-  Write-Host "No patch or full zip created." -ForegroundColor Yellow
+if (-not $patchZips.Count -and -not $fullZips.Count -and -not $setupExes.Count) {
+  Write-Host "No patch, full zip, or Setup.exe created." -ForegroundColor Yellow
   Write-Host "  First GitHub update? Re-run with -IncludeFull" -ForegroundColor Yellow
   Write-Host "  Or ensure the previous release has win-x64-latest.json uploaded." -ForegroundColor Yellow
-  if (-not $IncludeInstaller) { exit 1 }
+  exit 1
 }
 
 if (-not $uploads.Count) {
@@ -137,7 +168,7 @@ if (-not $Notes) {
 $releaseExists = $false
 if (-not $Recreate) {
   $ErrorActionPreference = "Continue"
-  & gh release view $Tag 2>$null | Out-Null
+  & $ghExe release view $Tag 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
   $ErrorActionPreference = $prevEap
 }
@@ -145,21 +176,21 @@ if (-not $Recreate) {
 if ($Recreate) {
   Write-Host "Recreate: removing existing release/tag $Tag if present..." -ForegroundColor Yellow
   $ErrorActionPreference = "Continue"
-  & gh release delete $Tag -y 2>$null | Out-Null
+  & $ghExe release delete $Tag -y 2>$null | Out-Null
   $ErrorActionPreference = $prevEap
   $releaseExists = $false
 }
 
 if ($releaseExists) {
   Write-Host "Release $Tag exists - uploading with --clobber..." -ForegroundColor Cyan
-  & gh release upload $Tag $uploads.ToArray() --clobber
+  & $ghExe release upload $Tag $uploads.ToArray() --clobber
 } else {
   $ghArgs = @("release", "create", $Tag, "--title", "Hangup HR $version", "--notes", $Notes)
   if ($Draft) { $ghArgs = @("release", "create", $Tag, "--draft", "--title", "Hangup HR $version", "--notes", $Notes) }
   $ghArgs += $uploads.ToArray()
   Write-Host "Creating GitHub release $Tag..." -ForegroundColor Cyan
-  & gh @ghArgs
+  & $ghExe @ghArgs
 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Done. In-app updater uses patch zip from win-unpacked (not EXEs)." -ForegroundColor Green
+Write-Host 'Done. In-app updater uses Setup.exe (NSIS) + full zips (portable/mac).' -ForegroundColor Green

@@ -11,6 +11,7 @@ const store = require("../lib/data-store");
 const roles = require("../lib/roles");
 const rolePermissions = require("../lib/role-permissions");
 const permissionCatalog = require("../lib/permission-catalog");
+const registration = require("../lib/registration");
 const { getAppVersion, evaluateVersionCompatibility } = require("../lib/app-version");
 const { fetchVersionPolicy } = require("../lib/version-sheet");
 const {
@@ -555,7 +556,10 @@ router.get("/status", async (req, res) => {
       canSubmitBonusRequest: roles.canSubmitBonusRequest(req.userRole),
       canApproveBonusRequest: roles.canApproveBonusRequest(req.userRole),
       canViewSales: roles.canViewSales(req.userRole),
+      canSubmitSales: roles.canSubmitSales(req.userRole),
       canEditSales: roles.canEditSale(req.userRole),
+      canWorkQualityTicket: roles.canWorkQualityTicket(req.userRole),
+      canApproveRegistration: registration.canApproveRegistration(req.userRole?.role),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
       canApproveLoan: roles.canApproveLoanRequest(req.realUsername || req.username),
@@ -569,6 +573,12 @@ router.get("/status", async (req, res) => {
       canViewDashboardFull: roles.canViewDashboardFull(req.userRole),
       canUseEmployeeFilters: roles.canUseEmployeeFilters(req.userRole),
       canAddEmployee: roles.canAddEmployee(req.userRole),
+      canViewSettingsHolidays: roles.canViewSettingsSection(req.userRole, "holidays"),
+      canViewSettingsSession: roles.canViewSettingsSection(req.userRole, "session"),
+      canViewSettingsHideOut: roles.canViewSettingsSection(req.userRole, "hideOut"),
+      canViewSettingsSync: roles.canViewSettingsSection(req.userRole, "sync"),
+      canViewSettingsTheme: roles.canViewSettingsSection(req.userRole, "theme"),
+      canViewSettingsProfilePhoto: roles.canViewSettingsSection(req.userRole, "profilePhoto"),
       canGrantSalesVisibility: roles.canGrantSalesVisibility(req.userRole),
       canManageSalesFieldPermissions: roles.canManageSalesFieldPermissions(req.userRole),
       canManageAccessControl: roles.canManageAccessControl(req.userRole),
@@ -656,12 +666,13 @@ router.get("/impersonate/users", async (req, res) => {
     const employees = store.getEmployees();
     const empById = new Map(employees.map((e) => [e.id, e]));
     const users = (await usersAdmin.listAppUsers()).map((u) => {
-      const emp = u.employeeId ? empById.get(u.employeeId) : null;
+      const empId = u.employee_id || u.employeeId || null;
+      const emp = empId ? empById.get(empId) : null;
       return {
         username: u.username,
         role: u.role,
         status: u.status,
-        employeeId: u.employeeId || null,
+        employeeId: empId,
         employeeName: emp?.american_name || emp?.arabic_name || null,
       };
     });
@@ -750,7 +761,6 @@ router.use("/hrms", (req, res, next) => {
   next();
 }, require("./hrms"));
 
-const registration = require("../lib/registration");
 const orgHierarchy = require("../lib/org-hierarchy");
 
 router.get("/registration/daily-pin", async (req, res) => {
@@ -2123,8 +2133,8 @@ router.get("/changelog", async (req, res) => {
 });
 
 router.put("/settings/hide-out", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) {
-    return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canViewSettingsSection(req.userRole, "hideOut")) {
+    return res.status(403).json({ error: "No permission to change hide-out setting" });
   }
   const { hide } = req.body;
   await store.setHideOutEmployees(hide !== false, req.username);

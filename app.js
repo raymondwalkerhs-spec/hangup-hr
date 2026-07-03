@@ -24,6 +24,9 @@ function createApp() {
     require("./lib/role-permissions")
       .loadOverrides()
       .catch((err) => console.warn("[startup] RBAC preload:", err.message || err));
+    require("./lib/user-permissions")
+      .loadOverrides()
+      .catch((err) => console.warn("[startup] user-permissions preload:", err.message || err));
   } catch {
     /* non-fatal */
   }

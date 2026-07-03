@@ -17,7 +17,7 @@
     <p class="made-by muted">Made and maintained by <strong>Mostafa Gomaa</strong></p>
     <p id="app-version-line" class="muted version-line"></p>
     <div id="login-update-banner" class="alert alert-warn hidden" style="margin-bottom:1rem;text-align:left">
-      <strong>Update available</strong>
+      <strong id="login-update-title">Update available</strong>
       <p id="login-update-msg" class="muted" style="margin:.35rem 0"></p>
       <button type="button" class="btn btn-sm btn-primary" id="login-update-btn" style="margin-top:.35rem;display:none">Update now</button>
     </div>
@@ -64,7 +64,7 @@
           <label class="field"><span>Unit</span>
             <select id="reg-unit"><option value="HS-3">HS-3</option><option value="HS-1">HS-1</option><option value="HS-2">HS-2></select>
           </label>
-          <label class="field"><span>Team</span><input id="reg-team" placeholder="e.g. Tris" /></label>
+          <p class="muted small">Team is assigned later by Admin/HR after approval.</p>
           <button type="button" class="btn btn-primary btn-sm" id="reg-submit">Submit registration</button>
           <p id="reg-msg" class="muted hidden" style="margin-top:.5rem"></p>
         </div>
@@ -104,6 +104,41 @@
       });
     }
 
+    function showLoginUpdateBanner({ title, message, urgent }) {
+      const banner = document.getElementById("login-update-banner");
+      const titleEl = document.getElementById("login-update-title");
+      const msg = document.getElementById("login-update-msg");
+      const btn = document.getElementById("login-update-btn");
+      if (!banner || !msg) return;
+      banner.classList.remove("hidden");
+      banner.classList.toggle("alert-warn", !urgent);
+      banner.classList.toggle("alert-danger", Boolean(urgent));
+      if (titleEl) titleEl.textContent = title || "Update available";
+      msg.textContent = message;
+      if (btn && window.hrDesktop?.applyGitHubUpdate) {
+        btn.style.display = "inline-block";
+        btn.disabled = false;
+        btn.textContent = "Update now";
+        btn.onclick = async () => {
+          btn.disabled = true;
+          btn.textContent = "Downloading…";
+          try {
+            const result = await window.hrDesktop.applyGitHubUpdate();
+            if (result?.needsQuit) {
+              btn.textContent = "Installer started…";
+              return;
+            }
+            btn.textContent = "Restarting…";
+            setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
+          } catch (e) {
+            btn.disabled = false;
+            btn.textContent = "Update now";
+            alert(e.message || "Update failed");
+          }
+        };
+      }
+    }
+
     async function loadVersionInfo() {
       try {
         const res = await fetch("/api/version-info");
@@ -116,33 +151,34 @@
           setLoginBlocked(data.versionCheck.message);
           return;
         }
+        if (data.installHealth && !data.installHealth.ok) {
+          showLoginUpdateBanner({
+            title: "Reinstall required",
+            message: data.installHealth.message,
+            urgent: true,
+          });
+        }
         const githubInfo =
           data.githubUpdate ||
           (await fetch("/api/github-update").then((r) => (r.ok ? r.json() : null)).catch(() => null));
         if (githubInfo?.enabled && githubInfo.updateAvailable) {
-          const banner = document.getElementById("login-update-banner");
-          const msg = document.getElementById("login-update-msg");
+          if (data.installHealth && !data.installHealth.ok) {
+            const msg = document.getElementById("login-update-msg");
+            if (msg) {
+              msg.textContent += ` Version ${githubInfo.latest} is ready on GitHub.`;
+            }
+          } else {
+            showLoginUpdateBanner({
+              title: "Update available",
+              message: `Version ${githubInfo.latest} is on GitHub (you have ${githubInfo.current || data.appVersion}). ${
+                githubInfo.updateDescription || "Update now to install the latest version."
+              }`,
+              urgent: false,
+            });
+          }
+        } else if (data.installHealth && !data.installHealth.ok) {
           const btn = document.getElementById("login-update-btn");
-          if (banner && msg) {
-            banner.classList.remove("hidden");
-            msg.textContent = `Version ${githubInfo.latest} is on GitHub (you have ${githubInfo.current || data.appVersion}). Sign in to update in-app, or install the latest build.`;
-          }
-          if (btn && window.hrDesktop?.applyGitHubUpdate) {
-            btn.style.display = "inline-block";
-            btn.onclick = async () => {
-              btn.disabled = true;
-              btn.textContent = "Downloading…";
-              try {
-                await window.hrDesktop.applyGitHubUpdate();
-                btn.textContent = "Restarting…";
-                setTimeout(() => window.hrDesktop.relaunchApp?.(), 800);
-              } catch (e) {
-                btn.disabled = false;
-                btn.textContent = "Update now";
-                alert(e.message || "Update failed");
-              }
-            };
-          }
+          if (btn) btn.style.display = "none";
         }
       } catch (_) {}
     }
@@ -189,7 +225,6 @@
             passportNumber: document.getElementById("reg-passport")?.value?.trim(),
             phone: document.getElementById("reg-phone")?.value?.trim(),
             unit: document.getElementById("reg-unit")?.value,
-            team: document.getElementById("reg-team")?.value?.trim(),
           }),
         });
         const data = await res.json();

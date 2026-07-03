@@ -273,7 +273,7 @@ router.get("/visibility-grants", async (req, res) => {
 });
 
 router.post("/visibility-grants", async (req, res) => {
-  const { granteeUsername, scopeType, scopeValue } = req.body;
+  const { granteeUsername, scopeType, scopeValue, temporaryHours } = req.body;
   if (!granteeUsername || !scopeType) {
     return res.status(400).json({ error: "granteeUsername and scopeType required" });
   }
@@ -289,8 +289,14 @@ router.post("/visibility-grants", async (req, res) => {
     if (req.userRole.role === "tl" && granteeRole === "agent" && scopeType !== "team") {
       return res.status(403).json({ error: "TL cannot grant cross-team visibility to agents" });
     }
+    const hours = temporaryHours != null ? Number(temporaryHours) : null;
     const grant = await business.createSalesVisibilityGrant(
-      { granteeUsername, scopeType, scopeValue },
+      {
+        granteeUsername,
+        scopeType,
+        scopeValue,
+        temporaryHours: hours || (["tl", "agent"].includes(granteeRole) ? 24 : null),
+      },
       req.username
     );
     res.json({ ok: true, grant });
@@ -309,6 +315,9 @@ router.delete("/visibility-grants/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  if (!roles.canSubmitSales(req.userRole)) {
+    return res.status(403).json({ error: "You may not submit new sales" });
+  }
   const {
     phoneNumber,
     fullName,
@@ -420,7 +429,12 @@ router.patch("/:id", async (req, res) => {
       patch.status = "pending";
       patch.feedback = feedback || existing.feedback;
     } else if (req.body.edit === true || (!action && roles.canEditSale(req.userRole))) {
-      if (!roles.canEditSale(req.userRole)) {
+      const ticketOnly = req.body.qualityTicket === true;
+      if (ticketOnly) {
+        if (!roles.canWorkQualityTicket(req.userRole)) {
+          return res.status(403).json({ error: "No permission for quality tickets" });
+        }
+      } else if (!roles.canEditSale(req.userRole)) {
         return res.status(403).json({ error: "No permission to edit sales" });
       }
       const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
@@ -491,6 +505,9 @@ router.get("/export", async (req, res) => {
   if (!roles.canViewSales(req.userRole)) {
     return res.status(403).json({ error: "No permission" });
   }
+  if (!roles.canExportSales(req.userRole)) {
+    return res.status(403).json({ error: "Export not allowed for your role" });
+  }
   try {
     const employees = scopedEmployees(req);
     const grants = await business.readSalesVisibilityGrants(req.username);
@@ -552,8 +569,8 @@ router.get("/field-catalog", async (req, res) => {
 });
 
 router.put("/field-permissions/:fieldKey", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) {
-    return res.status(403).json({ error: "Admin only" });
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM/HR only" });
   }
   try {
     const perm = await business.upsertSalesFieldPermission(req.params.fieldKey, req.body);
@@ -565,8 +582,8 @@ router.put("/field-permissions/:fieldKey", async (req, res) => {
 });
 
 router.post("/field-permissions/seed", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) {
-    return res.status(403).json({ error: "Admin only" });
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM/HR only" });
   }
   try {
     const { getSupabaseAdmin } = require("../lib/supabase-client");

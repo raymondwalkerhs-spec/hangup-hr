@@ -234,8 +234,18 @@ async function bootstrap() {
     const info = await githubUpdater.checkForGitHubUpdate();
     if (!info?.updateAvailable) throw new Error("No update available");
     if (!info.assetUrl && !info.assetId) throw new Error("No update package found for this platform");
-    await githubUpdater.applyGitHubUpdate(info);
-    return { ok: true, version: info.latest, installRoot: githubUpdater.getInstallRoot() };
+    const result = await githubUpdater.applyGitHubUpdate(info);
+    if (result?.needsQuit) {
+      setTimeout(() => app.quit(), 500);
+    }
+    return {
+      ok: true,
+      version: info.latest,
+      installRoot: githubUpdater.getInstallRoot(),
+      method: result?.method,
+      needsQuit: Boolean(result?.needsQuit),
+      needsRelaunch: Boolean(result?.needsRelaunch),
+    };
   });
 
   ipcMain.handle("relaunch-app", () => {
@@ -261,7 +271,16 @@ if (!gotSingleInstanceLock) {
 
   loadEnvironment();
 
-  app.whenReady().then(bootstrap).catch((err) => {
+  app.whenReady().then(async () => {
+    const githubUpdater = require("../lib/github-updater");
+    const recovery = githubUpdater.recoverOrCompleteUpdate();
+    if (recovery?.action === "exit") return;
+    if (recovery?.installHealth && !recovery.installHealth.ok) {
+      process.env.HR_INSTALL_HEALTH = JSON.stringify(recovery.installHealth);
+    }
+
+    await bootstrap();
+  }).catch((err) => {
     showFatalError("Hangup HR — Startup error", err.message || String(err));
     app.quit();
   });

@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.3.0 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.3.9 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -165,9 +165,16 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 ---
 
+## 1.3.1 highlights
+
+- **Sale attachments → Supabase** — recordings and confirmations in `hr-documents` / `sales-attachments/`; signed share links (no Dropbox in app)
+- **Legacy migration** — `npm run migrate:sale-attachments` (one-time; needs valid `DROPBOX_ACCESS_TOKEN`)
+- **Multi-version patch updates** — GitHub releases ship patch zips from several prior versions (not only N−1)
+
 ## 1.3.0 highlights
 
-- **Quality ticket audio** — reliable inline playback, download, Dropbox share (MIME + error handling)
+- **Sales export** — CSV, Excel, or PDF for filtered sales or a single sale
+- **Quality ticket audio** — reliable inline playback, download, signed share links
 - **Sales catalog** — RTM/Admin edit clients, devices, price tiers; TL/OP must use catalog when configured
 - **App users search** — filter by username, name, employee ID, email, team
 - **Equipment** — agent picker toolbar + deep links (`#equipment?employee=HS3-08`)
@@ -179,7 +186,7 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Break schedules** — timed break reminders with dismissible popup
 - **Session ID + single-device login** — one active session; 10h server idle revoke
 - **Remember password** on login (optional, device-only)
-- **Sale attachments** — download, delete, replace, Dropbox share link; Dropbox-only for new uploads
+- **Sale attachments** (legacy) — were on Dropbox until 1.3.1 migration
 - **GitHub updater** — patch/full zips for Windows and macOS
 
 ## 1.1.0 highlights
@@ -222,7 +229,8 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 - Per-sale records with **dynamic MLA-Ray form** (device types, customer fields)
 - **Field-level permissions** — admin matrix controls which roles see/edit each field
-- **Dropbox attachments** (required for new uploads when `DROPBOX_ACCESS_TOKEN` is configured)
+- **Supabase attachments** (1.3.1+) — recordings and confirmations in Storage; signed share links (~7 days, refresh via Share link)
+- **Export** (1.3.0+) — CSV, Excel, or PDF for current filters or one sale
 - Statuses: **passed**, **pending**, **postdated**, **denied**, **callback**
 - TL/OP submissions require RTM/HR/quality/admin approval
 - Weekly dashboard on **Sales** page and dashboard widget

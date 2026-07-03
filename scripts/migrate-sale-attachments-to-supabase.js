@@ -2,8 +2,8 @@
 /**
  * Migrate legacy sale attachments (Dropbox paths) → Supabase Storage.
  *
- * Primary source: Airtable URLs in Asset/Sales All Data.csv (no Dropbox token needed).
- * Fallback: Dropbox API download when DROPBOX_ACCESS_TOKEN is valid.
+ * Primary source: fresh Airtable URLs in CSV (default: Asset/NEW Sales  - confirmation Links for migration.csv).
+ * Fallback: Dropbox API when DROPBOX_ACCESS_TOKEN is valid.
  *
  * Usage:
  *   node scripts/migrate-sale-attachments-to-supabase.js
@@ -73,11 +73,19 @@ function parseDateField(raw) {
 const DRY_RUN = process.argv.includes("--dry-run");
 const FROM_DROPBOX = process.argv.includes("--from-dropbox");
 const csvArg = process.argv.find((a) => a.startsWith("--csv="));
-const CSV_PATH = path.resolve(
-  __dirname,
-  "..",
-  csvArg ? csvArg.split("=")[1] : "Asset/Sales All Data.csv"
-);
+const DEFAULT_CSV_CANDIDATES = [
+  "Asset/NEW Sales  - confirmation Links for migration.csv",
+  "Asset/Sales All Data.csv",
+];
+function resolveCsvPath() {
+  if (csvArg) return path.resolve(__dirname, "..", csvArg.split("=")[1]);
+  for (const rel of DEFAULT_CSV_CANDIDATES) {
+    const p = path.resolve(__dirname, "..", rel);
+    if (fs.existsSync(p)) return p;
+  }
+  return path.resolve(__dirname, "..", DEFAULT_CSV_CANDIDATES[1]);
+}
+const CSV_PATH = resolveCsvPath();
 
 function normFileName(name) {
   return String(name || "")
@@ -181,22 +189,22 @@ async function migrateOne(att, sale, csvHit) {
   let buffer;
   let source = "unknown";
 
-  if (dropbox.isConfigured() && (att.dropbox_path || "").startsWith("/")) {
+  if (csvHit?.url) {
+    try {
+      const { fetchUrl } = require("../lib/url-fetch");
+      ({ buffer } = await fetchUrl(csvHit.url));
+      source = "airtable";
+    } catch (err) {
+      errors.push(`airtable: ${err.message}`);
+    }
+  }
+
+  if (!buffer && dropbox.isConfigured() && (att.dropbox_path || "").startsWith("/")) {
     try {
       buffer = await downloadLegacyBuffer(att);
       source = "dropbox";
     } catch (err) {
       errors.push(`dropbox: ${err.message}`);
-    }
-  }
-
-  if (!buffer && csvHit?.url) {
-    try {
-      const { fetchUrl } = require("../lib/url-fetch");
-      ({ buffer } = await fetchUrl(csvHit.url));
-      source = "csv";
-    } catch (err) {
-      errors.push(`csv: ${err.message}`);
     }
   }
 
@@ -236,7 +244,8 @@ async function main() {
   if (!FROM_DROPBOX) {
     try {
       csvIndex = buildCsvAttachmentIndex();
-      console.log(`CSV attachment index: ${csvIndex.size} sales with files (${CSV_PATH})`);
+      console.log(`Airtable CSV index: ${csvIndex.size} sales with files`);
+      console.log(`  ${CSV_PATH}`);
     } catch (err) {
       console.warn(`CSV index skipped: ${err.message}`);
     }

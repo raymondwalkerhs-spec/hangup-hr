@@ -485,10 +485,11 @@ window.HRSalesConfigBreaks = (function () {
               const priceRows = (p.prices || [])
                 .map(
                   (pr) =>
-                    `<li class="adj-row" style="margin:.2rem 0;padding-left:1rem">
-                      <span>${escapeHtml(pr.label)} — $${pr.price}</span>
-                      <button type="button" class="btn btn-sm" data-edit-price="${pr.id}" data-product-id="${p.id}">Edit price</button>
-                      <button type="button" class="btn btn-sm btn-danger" data-del-price="${pr.id}">Delete</button>
+                    `<li class="price-tier-row adj-row" style="margin:.2rem 0;padding-left:1rem;gap:.35rem;flex-wrap:wrap" data-price-id="${pr.id}" data-product-id="${p.id}">
+                      <input type="text" class="price-tier-label" value="${escapeHtml(pr.label)}" style="min-width:6rem;flex:1" />
+                      <input type="number" class="price-tier-price" min="0" step="0.01" value="${Number(pr.price) || 0}" style="width:5rem" />
+                      <button type="button" class="btn btn-sm btn-primary price-tier-save" title="Save">✓</button>
+                      <button type="button" class="btn btn-sm btn-danger" data-del-price="${pr.id}" title="Delete">✕</button>
                     </li>`
                 )
                 .join("");
@@ -547,18 +548,24 @@ window.HRSalesConfigBreaks = (function () {
           refreshClients();
         };
       });
+      el.querySelectorAll(".price-tier-save").forEach((btn) => {
+        btn.onclick = async () => {
+          const row = btn.closest(".price-tier-row");
+          const priceId = row?.dataset.priceId;
+          const productId = row?.dataset.productId;
+          const label = row?.querySelector(".price-tier-label")?.value?.trim();
+          const priceVal = row?.querySelector(".price-tier-price")?.value;
+          const price = priceVal === "" || priceVal == null ? 0 : Number(priceVal);
+          if (!label) return alert("Label required");
+          await api(`/sales-config/prices/${priceId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ productId, label, price }),
+          });
+          refreshClients();
+        };
+      });
       el.querySelectorAll("[data-add-price]").forEach((btn) => {
         btn.onclick = () => openPriceModal(btn.dataset.addPrice);
-      });
-      el.querySelectorAll("[data-edit-price]").forEach((btn) => {
-        const productId = btn.dataset.productId;
-        let price = null;
-        for (const c of clients) {
-          const p = c.products?.find((x) => x.id === productId);
-          price = p?.prices?.find((pr) => pr.id === btn.dataset.editPrice);
-          if (price) break;
-        }
-        btn.onclick = () => openPriceModal(productId, price);
       });
       el.querySelectorAll("[data-del-price]").forEach((btn) => {
         btn.onclick = async () => {

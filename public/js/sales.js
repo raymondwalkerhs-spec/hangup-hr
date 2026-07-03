@@ -24,7 +24,7 @@ window.SalesModule = (function () {
   }
 
   function canSubmit() {
-    return state.user?.canViewSales !== false;
+    return state.user?.canSubmitSales === true;
   }
 
   function canManagePermissions() {
@@ -45,7 +45,7 @@ window.SalesModule = (function () {
   }
 
   function canWorkQualityTicket() {
-    return isQualityAgent() || ["rtm", "hr", "admin", "ceo"].includes(state.user?.role);
+    return state.user?.canWorkQualityTicket === true;
   }
 
   function defaultQualityAttachKinds() {
@@ -695,7 +695,7 @@ window.SalesModule = (function () {
       ? catalog.attachmentKinds
       : defaultQualityAttachKinds();
     const formData = sale?.formData || {};
-    const qualityFields = (catalog.fields || []).filter((f) => f.section === "quality");
+    const qualityFields = (catalog.fields || []).filter((f) => f.section === "quality" && f.canEdit !== false);
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
 
     function qFieldHtml(f) {
@@ -736,7 +736,7 @@ window.SalesModule = (function () {
     document.getElementById("quality-ticket-form").onsubmit = async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const body = { edit: true, formData: {} };
+      const body = { edit: true, qualityTicket: true, formData: {} };
       for (const [k, v] of fd.entries()) body.formData[k] = v;
       try {
         await api(`/sales/${sale.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -915,7 +915,10 @@ window.SalesModule = (function () {
     { key: "op", label: "OP", roles: ["op"] },
     { key: "quality", label: "Quality", roles: ["quality"] },
     { key: "rtm", label: "RTM", roles: ["rtm"] },
-    { key: "admin", label: "Admin/HR", roles: ["admin", "hr", "finance", "ceo"] },
+    { key: "pr", label: "Public relations", roles: ["public_relations"] },
+    { key: "admin", label: "Admin", roles: ["admin", "ceo"] },
+    { key: "hr", label: "HR", roles: ["hr"] },
+    { key: "finance", label: "Finance", roles: ["finance"] },
   ];
 
   function groupHasAllRoles(list, groupRoles) {
@@ -972,8 +975,8 @@ window.SalesModule = (function () {
         <button class="btn btn-sm" data-close>✕</button>
       </div>
       <div class="modal-body modal-body-scroll sales-perms-modal">
-        <p class="muted">Control which role groups can view or edit each MLA-Ray column. Changes apply on the next save.</p>
-        <div class="table-wrap sales-perms-wrap"><table class="sales-perms-table">
+        <p class="muted">Control which role groups can view or edit each MLA-Ray column. HR and Admin are separate — HR does not get quality fields unless enabled here.</p>
+        <div class="table-wrap sales-perms-wrap"><table class="sales-perms-table sales-perms-table-wide">
           <thead><tr><th class="perm-sticky-col">Field</th>${headerCells}</tr>
           <tr><th class="perm-sticky-col"></th>${subHeader}</tr></thead>
           <tbody>${rowsBySection}</tbody>
