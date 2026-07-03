@@ -9,8 +9,8 @@ require("dotenv").config();
 process.env.DATA_BACKEND = "sheets";
 
 const bcrypt = require("bcrypt");
-const sheets = require("../lib/sheets");
-const { fetchAuthUsers } = require("../lib/auth-sheet");
+const sheets = require("./lib/sheets");
+const { fetchAuthUsers } = require("./lib/auth-sheet");
 const { fetchVersionPolicy } = require("../lib/version-sheet");
 const { getSupabaseAdmin } = require("../lib/supabase-client");
 const m = require("../lib/supabase/mappers");

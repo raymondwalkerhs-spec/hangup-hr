@@ -248,7 +248,7 @@ window.HRMSFeatures = (function () {
     const canManage = typeof canManagePayrollEvents === "function" && canManagePayrollEvents();
     const eq = typeof employeesQuery === "function" ? employeesQuery() : "";
     const [structure, empData, teamsRes] = await Promise.all([
-      api("/hrms/org-structure"),
+      api(`/hrms/org-structure${eq}`),
       api(`/employees${eq}`).catch(() => ({ employees: [] })),
       api("/hrms/teams").catch(() => ({ teams: [], orgUnits: ["HS-1", "HS-2", "HS-3", "HS-MGMT"] })),
     ]);
@@ -336,10 +336,22 @@ window.HRMSFeatures = (function () {
       btn.onclick = (e) => {
         e.preventDefault();
         const unit = btn.dataset.addTeamUnit;
+        const unassignedTeams = allTeams.filter((t) => !t.unit || t.unit !== unit);
+        const teamPickOpts = unassignedTeams.length
+          ? unassignedTeams.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${esc(t.unit || "unassigned")})</option>`).join("")
+          : allTeams.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
         openModal(`
           <div class="modal-header"><h2>Add team — ${esc(unit)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+          <div class="modal-body field-grid">
+            <label class="field"><span>Assign existing team</span>
+              <select id="assign-existing-team"><option value="">— Create new below —</option>${teamPickOpts}</select>
+            </label>
+            <button type="button" class="btn btn-sm btn-primary" id="assign-team-btn">Assign selected team to ${esc(unit)}</button>
+            <hr style="grid-column:1/-1" />
+            <p class="muted" style="grid-column:1/-1">Or create a new team:</p>
+          </div>
           <form id="new-team-form" class="modal-body field-grid">
-            <label class="field"><span>Team name</span><input name="name" required placeholder="e.g. Kate" /></label>
+            <label class="field"><span>Team name</span><input name="name" placeholder="e.g. Kate" /></label>
             <label class="field"><span>Unit</span>
               <select name="unit">${orgUnits.map((u) => `<option value="${esc(u)}" ${u === unit ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>
             </label>
@@ -348,9 +360,23 @@ window.HRMSFeatures = (function () {
             </label>
             <label class="field"><span>Display order</span><input name="displayOrder" type="number" value="0" /></label>
           </form>
-          <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="save-new-team">Create</button></div>`);
+          <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="save-new-team">Create new team</button></div>`);
+        document.getElementById("assign-team-btn").onclick = async () => {
+          const teamId = document.getElementById("assign-existing-team")?.value;
+          if (!teamId) return alert("Select a team to assign, or create a new one below.");
+          const team = allTeams.find((t) => t.id === teamId);
+          if (!team) return;
+          await api(`/hrms/teams/${team.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ name: team.name, unit, dialsSales: team.dialsSales !== false, displayOrder: team.displayOrder || 0 }),
+          });
+          closeModal();
+          await renderOrgPage(root, api, helpers);
+        };
         document.getElementById("save-new-team").onclick = async () => {
           const fd = new FormData(document.getElementById("new-team-form"));
+          const name = String(fd.get("name") || "").trim();
+          if (!name) return alert("Enter a team name");
           await api("/hrms/teams", {
             method: "POST",
             body: JSON.stringify({
@@ -433,16 +459,20 @@ window.HRMSFeatures = (function () {
     const equipment = data.equipment || [];
     const assignments = data.assignments || [];
     const employees = empData.employees || [];
+    const filterEmp = state.hrmsEmployeeFilter || "";
     const equipById = new Map(equipment.map((e) => [e.id, e]));
-    const activeRows = assignments
+    let activeRows = assignments
       .filter((a) => !a.returnedAt)
       .map((a) => ({ assignment: a, equipment: equipById.get(a.equipmentId) }))
       .filter((r) => r.equipment);
+    if (filterEmp) {
+      activeRows = activeRows.filter((r) => r.assignment.employeeId === filterEmp);
+    }
     const empById = (id) => employees.find((x) => x.id === id);
 
     root.innerHTML = `
       <div class="page-header flex-between">
-        <div><h1>Equipment</h1><p class="muted">Devices issued to agents — unit comes from the employee record</p></div>
+        <div><h1>Equipment</h1><p class="muted">Devices issued to agents — unit comes from the employee record${filterEmp ? ` · filtered: <strong>${escapeHtml(filterEmp)}</strong> <button class="btn btn-sm" id="clear-equip-filter">Show all</button>` : ""}</p></div>
         <button class="btn btn-primary btn-sm" id="add-equipment-btn">+ Issue device</button>
       </div>
       <div class="table-wrap"><table>
@@ -463,6 +493,11 @@ window.HRMSFeatures = (function () {
           })
           .join("") || '<tr><td colspan="5" class="muted">No equipment currently issued</td></tr>'}</tbody>
       </table></div>`;
+
+    root.querySelector("#clear-equip-filter")?.addEventListener("click", () => {
+      state.hrmsEmployeeFilter = "";
+      renderEquipmentPage(root, api, helpers);
+    });
 
     root.querySelector("#add-equipment-btn").onclick = () => {
       openModal(`
@@ -594,7 +629,7 @@ window.HRMSFeatures = (function () {
                 .join("")}
             </div>
           </details>
-          <details style="margin-top:.75rem">
+          <details id="hrms-offboarding-section" style="margin-top:.75rem">
             <summary>Offboarding & clearance</summary>
             <label class="toggle-label"><input type="checkbox" id="off-revoke" ${off.revokeAccess ? "checked" : ""} /> Revoke access</label>
             <label class="toggle-label"><input type="checkbox" id="off-final-pay" ${off.finalPay ? "checked" : ""} /> Final pay</label>

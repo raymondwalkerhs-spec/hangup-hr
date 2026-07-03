@@ -9,7 +9,7 @@ const { loadEnvironment } = require("../lib/app-bootstrap");
 
 loadEnvironment();
 
-const sheets = require("../lib/sheets");
+const sheets = require("./lib/sheets");
 
 async function main() {
   const month = process.argv[2];

@@ -4,9 +4,8 @@ const {
   validateLogin,
   checkSession,
 } = require("../lib/auth");
-const { createSession, getSession, destroySession } = require("../lib/session-store");
-const { requireOnline, isOnline, verifyGoogleSheetsAccess } = require("../lib/network");
-const { resolveCredentialsPath } = require("../lib/google-auth");
+const { createSession, getSession, destroySession, validateSession } = require("../lib/session-store");
+const { requireOnline, isOnline, verifyBackendAccess } = require("../lib/network");
 const { getCacheDir } = require("../lib/cache");
 const store = require("../lib/data-store");
 const roles = require("../lib/roles");
@@ -18,10 +17,12 @@ const {
   employeeDisplayName,
   ATTENDANCE_STATUSES,
   isPayrollEligible,
+  applyDepartAutoOutForMonth,
+  isLockedDepartDay,
 } = require("../lib/attendance");
-const { buildPayroll, calcPayrollRow, BONUS_TYPES, DEDUCTION_TYPES } = require("../lib/payroll");
+const { buildPayroll, calcPayrollRow, BONUS_TYPES, DEDUCTION_TYPES, bonusTypesForCompany } = require("../lib/payroll");
 const { PAYROLL_STATUSES: PROFILE_STATUSES } = require("../lib/month-profile");
-const { SPLIT_KINDS, SPLIT_STATUSES, validateSplit, applyPayrollSplits, buildSplitMaps } = require("../lib/payroll-splits");
+const { SPLIT_KINDS, SPLIT_STATUSES, validateSplit, applyPayrollSplits, buildSplitMaps, buildValidationContext } = require("../lib/payroll-splits");
 const {
   getMonthCalendar,
   parseYearMonth,
@@ -66,24 +67,32 @@ function sessionFromRequest(req) {
 }
 
 function requireAuth(req, res, next) {
-  const session = sessionFromRequest(req);
-  if (!session) {
-    return res.status(401).json({ error: "Not logged in" });
-  }
-  req.appSession = session;
-  req.username = session.username;
-  req.userRole = roles.enrichUserRole(
-    roles.resolveUserRole(session.username, session.role),
-    store.getEmployees()
-  );
-  req.userRole.username = session.username;
-  // Safety net: if the user's role was removed/changed to something without
-  // access, drop the session so the client bounces back to the login screen.
-  if (!roles.hasAppAccess(req.userRole)) {
-    destroySession(session.id);
-    return res.status(401).json({ error: "Access revoked. Contact Admin." });
-  }
-  next();
+  const run = async () => {
+    const session = sessionFromRequest(req);
+    if (!session) {
+      return res.status(401).json({ error: "Not logged in" });
+    }
+    const valid = await validateSession(session.id);
+    if (!valid) {
+      return res.status(401).json({ error: "Session expired or revoked", sessionRevoked: true });
+    }
+    req.appSession = valid;
+    req.username = valid.username;
+    req.userRole = roles.enrichUserRole(
+      roles.resolveUserRole(valid.username, valid.role),
+      store.getEmployees(),
+      store.getAppUserEmployeeId(valid.username)
+        ? { employee_id: store.getAppUserEmployeeId(valid.username) }
+        : null
+    );
+    req.userRole.username = valid.username;
+    if (!roles.hasAppAccess(req.userRole)) {
+      destroySession(valid.id);
+      return res.status(401).json({ error: "Access revoked. Contact Admin." });
+    }
+    next();
+  };
+  run().catch(next);
 }
 
 function parseHideOut(req) {
@@ -121,7 +130,7 @@ function listRecentMonths(count = 12) {
 
 async function loadEmployeePayslipBundle(emp, month) {
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month).filter((r) => r.employeeId === emp.id);
   const bonusEvents = store.getBonusEvents(month, emp.id);
   const deductionEvents = store.getDeductionEvents(month, emp.id);
@@ -250,12 +259,30 @@ router.get("/version-info", async (req, res) => {
     } catch {
       /* sheet unavailable — report app version only */
     }
+    let githubUpdate = null;
+    try {
+      const githubUpdater = require("../lib/github-updater");
+      githubUpdate = await githubUpdater.checkForGitHubUpdate();
+    } catch {
+      /* non-fatal */
+    }
     res.json({
       appVersion,
       versionCheck: versionPayload(check),
+      githubUpdate,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/github-update", async (req, res) => {
+  try {
+    const githubUpdater = require("../lib/github-updater");
+    const info = await githubUpdater.checkForGitHubUpdate();
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ enabled: false, error: err.message });
   }
 });
 
@@ -263,9 +290,9 @@ router.get("/health", async (req, res) => {
   const health = {
     ok: true,
     online: await isOnline(),
+    backend: "supabase",
     cacheDir: null,
-    credentials: null,
-    sheets: null,
+    backendCheck: null,
     errors: [],
   };
 
@@ -277,20 +304,7 @@ router.get("/health", async (req, res) => {
   }
 
   try {
-    const credPath = resolveCredentialsPath();
-    const fs = require("fs");
-    health.credentials = { path: credPath, exists: fs.existsSync(credPath) };
-    if (!health.credentials.exists) {
-      health.ok = false;
-      health.errors.push("Service account credentials file is missing.");
-    }
-  } catch (err) {
-    health.ok = false;
-    health.errors.push(`Credentials: ${err.message}`);
-  }
-
-  try {
-    health.sheets = await verifyGoogleSheetsAccess();
+    health.backendCheck = await verifyBackendAccess();
   } catch (err) {
     health.ok = false;
     health.errors.push(err.message);
@@ -337,10 +351,17 @@ router.post("/login", async (req, res) => {
         /* non-fatal */
       }
     }
-    const session = createSession(result.user, result.password, result.role, {
+    const session = createSession(result.user, password, result.role, {
       deviceLabel: req.body.deviceLabel || "Desktop",
       ip: req.ip,
     });
+    if (useSupabase()) {
+      try {
+        await hrms.revokeOtherSessionsForUser(result.user, session.id);
+      } catch {
+        /* non-fatal */
+      }
+    }
     req.session.appSessionId = session.id;
     const payload = {
       ok: true,
@@ -374,36 +395,61 @@ router.get("/session-check", async (req, res) => {
     return res.status(401).json({ error: "Not logged in" });
   }
   try {
+    const valid = await validateSession(session.id);
+    if (!valid) {
+      return res.json({ action: "session_revoked", message: "Session expired or signed in elsewhere." });
+    }
     await requireOnline();
     const users = await fetchAuthUsers();
-    const check = await checkSession(session.username, session.password, users);
+    const check = await checkSession(valid.username, valid.password, users);
     if (check.action === "uninstall") {
-      destroySession(session.id);
+      destroySession(valid.id);
       return res.json({ action: "uninstall" });
     }
     if (check.action === "admin") {
-      destroySession(session.id);
+      destroySession(valid.id);
       return res.json({ action: "admin", message: check.message });
     }
-    if (check.role !== undefined) session.role = check.role;
-    if (!roles.hasAppAccess(roles.resolveUserRole(session.username, session.role))) {
-      destroySession(session.id);
+    if (check.role !== undefined) valid.role = check.role;
+    if (!roles.hasAppAccess(roles.resolveUserRole(valid.username, valid.role))) {
+      destroySession(valid.id);
       return res.json({ action: "admin", message: "Access removed. Contact Admin." });
     }
-    const userRole = roles.resolveUserRole(session.username, session.role).role;
+    const userRole = roles.resolveUserRole(valid.username, valid.role).role;
     const versionCheck = await loadVersionCheck(userRole);
     if (versionCheck.status === "blocked") {
-      destroySession(session.id);
+      destroySession(valid.id);
       return res.json({
         action: "version_blocked",
         message: versionCheck.message,
         versionCheck: versionPayload(versionCheck),
       });
     }
-    const payload = { action: "ok", username: session.username, appVersion: getAppVersion() };
+    const payload = {
+      action: "ok",
+      username: valid.username,
+      sessionId: valid.id,
+      appVersion: getAppVersion(),
+    };
     const notice = versionPayload(versionCheck);
     if (notice?.status === "update_recommended") {
       payload.versionNotice = notice;
+    }
+    try {
+      const { getRevision } = require("../lib/settings-revision");
+      const breaksRepo = require("../lib/break-schedules-repo");
+      payload.settingsRevision = await getRevision();
+      const empLink = store.getAppUserEmployeeId(valid.username);
+      const enriched = roles.enrichUserRole(
+        roles.resolveUserRole(valid.username, valid.role),
+        store.getEmployees(),
+        empLink ? { employee_id: empLink } : null
+      );
+      const breaks = await breaksRepo.readBreakSchedules();
+      const activeBreak = breaksRepo.activeBreakForUser(breaks, enriched);
+      if (activeBreak) payload.activeBreak = activeBreak;
+    } catch {
+      /* optional */
     }
     res.json(payload);
   } catch (err) {
@@ -413,17 +459,16 @@ router.get("/session-check", async (req, res) => {
 
 router.use(requireAuth);
 
-// Placed before the ensureSynced middleware so the username + online/offline
-// badge still render even when the Google Sheets sync is failing.
+// Badge still renders when sync is failing.
 router.get("/status", async (req, res) => {
   let online = await isOnline();
-  let sheetsOk = false;
+  let backendOk = false;
   try {
     await Promise.race([
-      verifyGoogleSheetsAccess(),
+      verifyBackendAccess(),
       new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 6000)),
     ]);
-    sheetsOk = true;
+    backendOk = true;
     online = true;
   } catch {
     /* keep online flag from probe */
@@ -431,9 +476,9 @@ router.get("/status", async (req, res) => {
   const config = store.getConfig();
   res.json({
     online,
-    sheetsOk,
+    backendOk,
     live: true,
-    dataBackend: require("../lib/backend").getBackendName(),
+    dataBackend: "supabase",
     lastSync: store.getLastSync()?.toISOString() || null,
     hideOutEmployees: config.hideOutEmployees !== false,
     taxRules: config.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 },
@@ -461,30 +506,42 @@ router.get("/status", async (req, res) => {
       canApproveLoan: roles.canApproveLoanRequest(req.username),
     },
     appVersion: getAppVersion(),
-    sheetId: store.SHEET_ID,
-    authSheetId: require("../lib/auth").AUTH_SHEET_ID,
-    credentialsPath: resolveCredentialsPath(),
+    supabaseUrl: process.env.SUPABASE_URL || null,
     cacheDir: getCacheDir(),
   });
 });
 
 router.use("/admin/users", require("./admin-users"));
 router.use("/bonus-requests", (req, res, next) => {
+  const empLink = store.getAppUserEmployeeId(req.username);
   req.userRole = roles.enrichUserRole(
     roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees()
+    store.getEmployees(),
+    empLink ? { employee_id: empLink } : null
   );
   req.userRole.username = req.username;
   next();
 }, require("./bonus-requests"));
 router.use("/sales", (req, res, next) => {
+  const empLink = store.getAppUserEmployeeId(req.username);
   req.userRole = req.userRole || roles.enrichUserRole(
     roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees()
+    store.getEmployees(),
+    empLink ? { employee_id: empLink } : null
   );
   req.userRole.username = req.username;
   next();
 }, require("./sales"));
+router.use("/sales-config", (req, res, next) => {
+  const empLink = store.getAppUserEmployeeId(req.username);
+  req.userRole = req.userRole || roles.enrichUserRole(
+    roles.resolveUserRole(req.username, req.appSession?.role),
+    store.getEmployees(),
+    empLink ? { employee_id: empLink } : null
+  );
+  req.userRole.username = req.username;
+  next();
+}, require("./sales-config"));
 router.use("/expenses", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
@@ -831,7 +888,11 @@ router.post("/employees/:id/release-app-id", async (req, res) => {
   try {
     const result = await store.releaseEmployeeAppId(req.params.id, req.username);
     await store.refreshCache();
-    res.json({ ok: true, ...result });
+    res.json({
+      ok: true,
+      ...result,
+      employees: store.getEmployees({ hideOut: false, includeDeleted: true }),
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -903,6 +964,7 @@ router.get("/attendance", async (req, res) => {
   const config = store.getConfig();
   let records = store.getAttendanceEvents(month);
   records = buildMonthSkeleton(employees, month, records);
+  records = applyDepartAutoOutForMonth(employees, records, month);
 
   const empIds = new Set(employees.map((e) => e.id));
   const monthRecords = records.filter((r) => empIds.has(r.employeeId));
@@ -992,6 +1054,10 @@ router.post("/attendance", async (req, res) => {
     await assertCanEditAttendanceDate(employeeId, date);
   } catch (err) {
     return res.status(400).json({ error: err.message });
+  }
+
+  if (isLockedDepartDay(emp, date)) {
+    return res.status(400).json({ error: "Days after depart date are locked as OUT." });
   }
 
   const record = {
@@ -1260,7 +1326,7 @@ router.get("/payroll", async (req, res) => {
   if (unit) employees = employees.filter((e) => e.unit === unit);
 
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const bonusEvents = store.getBonusEvents(month);
   const deductionEvents = store.getDeductionEvents(month);
@@ -1303,7 +1369,7 @@ router.get("/payroll", async (req, res) => {
     payroll,
     workingDays,
     monthLock,
-    bonusTypes: BONUS_TYPES,
+    bonusTypes: bonusTypesForCompany(req.query.company),
     deductionTypes: DEDUCTION_TYPES,
     commissionTypes: store.getCommissionTypes(),
     commissionTiers,
@@ -1332,7 +1398,7 @@ router.get("/payroll/pdf", async (req, res) => {
   if (unit) employees = employees.filter((e) => e.unit === unit);
 
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const bonusEvents = store.getBonusEvents(month);
   const deductionEvents = store.getDeductionEvents(month);
@@ -1395,10 +1461,11 @@ router.get("/payroll/:employeeId", async (req, res) => {
     bonuses: bundle.bonusEvents,
     deductions: bundle.deductionEvents,
     attendance: bundle.attendanceRecords,
-    bonusTypes: BONUS_TYPES,
+    bonusTypes: bonusTypesForCompany(req.query.company),
     deductionTypes: DEDUCTION_TYPES,
     commissionTypes: store.getCommissionTypes(),
     commissionTiers: store.getPayrollExtras(month).commissionTiers,
+    payslipGateNotes: bundle.payslipGateNotes || [],
   });
 });
 
@@ -1411,6 +1478,8 @@ router.get("/bonuses", (req, res) => {
   const employees = filterEmployeesForRequest(store.getEmployeesForMonth(month), req);
   const deductions = store.getDeductionEvents(month);
   let bonuses = store.getBonusEvents(month, employeeId || undefined);
+  const empIds = new Set(employees.map((e) => e.id));
+  bonuses = bonuses.filter((b) => empIds.has(b.employeeId));
   if (!employeeId) {
     bonuses = roles.filterBonusesForUser(bonuses, deductions, req.userRole, employees);
   } else if (!roles.scopedEmployeeIds(employees, req.userRole).has(employeeId)) {
@@ -1426,7 +1495,7 @@ router.get("/bonuses", (req, res) => {
   }
   res.json({
     bonuses,
-    types: BONUS_TYPES,
+    types: bonusTypesForCompany(req.query.company),
   });
 });
 
@@ -1456,6 +1525,19 @@ router.post("/bonuses", async (req, res) => {
 
   const emp = store.getEmployeeById(employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+
+  const allowedTypes = bonusTypesForCompany(
+    companyContext.isInHs2Scope(emp) ? "hs2" : req.query.company
+  );
+  if (!allowedTypes.includes(bonusType)) {
+    return res.status(400).json({ error: `Bonus type not allowed for this employee: ${bonusType}` });
+  }
+
+  try {
+    await assertMonthNotLocked(String(date).slice(0, 7));
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   try {
     require("../lib/bonus-guards").assertBonusAllowedForEmployee(emp, date);
@@ -1610,6 +1692,8 @@ router.get("/deductions", (req, res) => {
   const employeeId = req.query.employeeId || "";
   const employees = filterEmployeesForRequest(store.getEmployeesForMonth(month), req);
   let deductions = store.getDeductionEvents(month, employeeId || undefined);
+  const empIds = new Set(employees.map((e) => e.id));
+  deductions = deductions.filter((d) => empIds.has(d.employeeId));
   if (!employeeId) {
     deductions = roles.filterDeductionsForUser(deductions, req.userRole, employees);
   } else if (!roles.scopedEmployeeIds(employees, req.userRole).has(employeeId)) {
@@ -1699,7 +1783,8 @@ router.delete("/deductions", async (req, res) => {
 });
 
 router.get("/position-rates", (req, res) => {
-  res.json({ rates: store.getPositionRates() });
+  const month = req.query.month || new Date().toISOString().slice(0, 7);
+  res.json({ month, rates: store.getPositionRates(month) });
 });
 
 router.get("/changelog", async (req, res) => {
@@ -1788,6 +1873,19 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
   res.json({ ok: true, adjustment: saved });
 });
 
+router.post("/payroll-adjustments/:employeeId/recalc-sales-count", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const month = req.body.yearMonth || req.query.month || new Date().toISOString().slice(0, 7);
+  try {
+    const saved = await store.recalcSalesCountForEmployee(month, req.params.employeeId, req.username);
+    res.json({ ok: true, adjustment: saved, salesCount: saved?.salesCount ?? 0 });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post("/payroll-adjustments/init-month", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) {
     return res.status(403).json({ error: "HR/admin only" });
@@ -1820,6 +1918,42 @@ router.get("/payroll-splits", (req, res) => {
   res.json({ splits, splitKinds: SPLIT_KINDS, splitStatuses: SPLIT_STATUSES.filter((s) => s !== "cancelled") });
 });
 
+async function getSplitValidationContext(employeeId, yearMonth, excludeSplitId = null) {
+  const emp = store.getEmployeeById(employeeId);
+  if (!emp) return null;
+  const config = store.getConfig();
+  const rates = store.getPositionRates(month);
+  const records = store.getAttendanceEvents(yearMonth).filter((r) => r.employeeId === employeeId);
+  const bonusEvents = store.getBonusEvents(yearMonth, employeeId);
+  const deductionEvents = store.getDeductionEvents(yearMonth, employeeId);
+  const adjustment = store.getPayrollAdjustment(yearMonth, employeeId);
+  const actionPlans = await loadActionPlansSafe();
+  const gate = await payrollGates.getPayrollBlockers(employeeId, yearMonth, emp).catch(() => ({ payslipNotes: [] }));
+  const summary = summarizeEmployeeMonth(emp, records, config, actionPlans.filter((p) => p.employeeId === employeeId && p.status === "active"));
+  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(yearMonth);
+  const raw = calcPayrollRow(
+    emp,
+    summary,
+    yearMonth,
+    config,
+    rates,
+    bonusEvents,
+    deductionEvents,
+    adjustment,
+    records,
+    commissionTiers,
+    loans,
+    loanPayments,
+    actionPlans,
+    gate.payslipNotes || []
+  );
+  const allPayrollSplits = store.getAllPayrollSplits();
+  const splitMaps = buildSplitMaps(allPayrollSplits, yearMonth);
+  const splitsForMonth = splitMaps.byEmployeeMonth.get(employeeId) || [];
+  const deferredIn = splitMaps.deferredIn.get(employeeId) || [];
+  return buildValidationContext(raw.netSalary, splitsForMonth, deferredIn, excludeSplitId);
+}
+
 router.post("/payroll-splits", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) {
     return res.status(403).json({ error: "HR/admin only" });
@@ -1837,7 +1971,8 @@ router.post("/payroll-splits", async (req, res) => {
     deferToMonth: deferToMonth || "",
     notes: notes || "",
   };
-  const err = validateSplit(split);
+  const ctx = await getSplitValidationContext(employeeId, yearMonth);
+  const err = validateSplit(split, ctx);
   if (err) return res.status(400).json({ error: err });
   const saved = await store.createPayrollSplit(split, req.username);
   res.json({ ok: true, split: saved });
@@ -1857,7 +1992,8 @@ router.patch("/payroll-splits/:id", async (req, res) => {
     yearMonth: existing.yearMonth,
     amount: req.body.amount != null ? Number(req.body.amount) : existing.amount,
   };
-  const err = validateSplit(merged);
+  const ctx = await getSplitValidationContext(existing.employeeId, existing.yearMonth, existing.id);
+  const err = validateSplit(merged, ctx);
   if (err) return res.status(400).json({ error: err });
   const saved = await store.updatePayrollSplitRecord(merged, req.username);
   res.json({ ok: true, split: saved });
@@ -1884,7 +2020,7 @@ router.get("/payroll/history/:employeeId", async (req, res) => {
   }
   const months = listRecentMonths(Number(req.query.months) || 12);
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const history = [];
 
   for (const ym of months) {
@@ -1938,12 +2074,17 @@ router.put("/position-rates", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) {
     return res.status(403).json({ error: "HR/admin only" });
   }
-  const { position, monthlySalary } = req.body;
+  const { position, monthlySalary, yearMonth } = req.body;
+  const month = yearMonth || req.query.month || new Date().toISOString().slice(0, 7);
   if (!position || monthlySalary == null) {
     return res.status(400).json({ error: "position and monthlySalary required" });
   }
-  const rate = await store.upsertPositionRate(position, Number(monthlySalary), req.username);
-  res.json({ ok: true, rate });
+  try {
+    const rate = await store.upsertPositionRate(position, Number(monthlySalary), req.username, month);
+    res.json({ ok: true, rate });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.delete("/position-rates/:position", async (req, res) => {
@@ -1951,12 +2092,13 @@ router.delete("/position-rates/:position", async (req, res) => {
     return res.status(403).json({ error: "HR/admin only" });
   }
   const position = decodeURIComponent(req.params.position);
+  const month = req.query.month || new Date().toISOString().slice(0, 7);
   const inUse = store.getEmployees().some((e) => e.position === position);
   if (inUse) {
     return res.status(400).json({ error: `Position "${position}" is assigned to employees` });
   }
   try {
-    await store.deletePositionRate(position, req.username);
+    await store.deletePositionRate(position, req.username, month);
     const auditNotify = require("../lib/notify-routing");
     await auditNotify.auditNotify({
       actor: req.username,
@@ -2014,7 +2156,10 @@ router.put("/commission-tiers", async (req, res) => {
 
 router.get("/loans", (req, res) => {
   const employeeId = req.query.employeeId || "";
-  const loans = store.getEmployeeLoans(employeeId || undefined);
+  let loans = store.getEmployeeLoans(employeeId || undefined);
+  const employees = filterEmployeesForRequest(store.getEmployees({ hideOut: false }), req);
+  const empIds = new Set(employees.map((e) => e.id));
+  loans = loans.filter((l) => empIds.has(l.employeeId));
   res.json({ loans });
 });
 
@@ -2147,7 +2292,7 @@ router.get("/reports/monthly", async (req, res) => {
   employees = filterEmployeesForRequest(employees, req);
 
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const adjustments = store.getPayrollAdjustments(month);
   const attendanceMap = store.buildAttendanceMap(month);
@@ -2195,7 +2340,7 @@ router.get("/reports/monthly/pdf", async (req, res) => {
   employees = filterEmployeesForRequest(employees, req);
 
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const adjustments = store.getPayrollAdjustments(month);
   const attendanceMap = store.buildAttendanceMap(month);
@@ -2242,7 +2387,7 @@ router.get("/exports/payments", async (req, res) => {
   let employees = store.getEmployeesForMonth(month, { hideOut });
   employees = filterEmployeesForRequest(employees, req);
   const config = store.getConfig();
-  const rates = store.getPositionRates();
+  const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const adjustments = store.getPayrollAdjustments(month);
   const attendanceMap = store.buildAttendanceMap(month);
@@ -2325,18 +2470,89 @@ router.get("/payslip/:employeeId/pdf", async (req, res) => {
 
   const bundle = await loadEmployeePayslipBundle(emp, month);
   const { buildPayslipPdf } = require("../lib/payslip-pdf");
-  const pdf = await buildPayslipPdf(bundle.payslip, month, {
+  let payslip = bundle.payslip;
+  const splitId = req.query.splitId;
+  if (splitId) {
+    const split = (payslip.splits || []).find((s) => s.id === splitId && s.status === "received");
+    if (!split) return res.status(404).json({ error: "Split not found" });
+    payslip = {
+      ...payslip,
+      netSalary: split.amount,
+      remainingBalance: split.amount,
+      calculatedNet: split.amount,
+      monthNotes: [payslip.monthNotes, `Payment split: ${fmtCurrency(split.amount)} EGP — ${split.notes || ""}`].filter(Boolean).join("\n"),
+    };
+  }
+  const pdf = await buildPayslipPdf(payslip, month, {
     bonusEvents: bundle.bonusEvents,
     deductionEvents: bundle.deductionEvents,
     attendanceRecords: bundle.attendanceRecords,
     config: bundle.config,
     employees: bundle.employees,
+    payslipGateNotes: bundle.payslipGateNotes || [],
+    splitLabel: splitId ? `Split payment` : null,
   });
   const safeName = (bundle.payslip.name || emp.id).replace(/[^\w\s-]+/g, "").trim().replace(/\s+/g, "-");
+  const suffix = splitId ? `-split` : "";
   res
     .type("application/pdf")
-    .attachment(`payslip-${emp.id}-${safeName}-${month}.pdf`)
+    .attachment(`payslip-${emp.id}-${safeName}-${month}${suffix}.pdf`)
     .send(pdf);
+});
+
+function fmtCurrency(n) {
+  return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+}
+
+router.get("/payslip/:employeeId/splits-zip", async (req, res) => {
+  if (!roles.canViewBonusesDeductions(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  const month = req.query.month || new Date().toISOString().slice(0, 7);
+  const emp = store.getEmployeeById(req.params.employeeId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access" });
+  }
+  const bundle = await loadEmployeePayslipBundle(emp, month);
+  const received = (bundle.payslip.splits || []).filter((s) => s.status === "received");
+  if (!received.length) {
+    return res.status(404).json({ error: "No received payment splits for this month" });
+  }
+  const archiver = require("archiver");
+  const { buildPayslipPdf } = require("../lib/payslip-pdf");
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  const chunks = [];
+  archive.on("data", (c) => chunks.push(c));
+  const done = new Promise((resolve, reject) => {
+    archive.on("end", () => resolve(Buffer.concat(chunks)));
+    archive.on("error", reject);
+  });
+  for (const split of received) {
+    const slip = {
+      ...bundle.payslip,
+      netSalary: split.amount,
+      remainingBalance: split.amount,
+      calculatedNet: split.amount,
+      monthNotes: [bundle.payslip.monthNotes, `Payment split: ${fmtCurrency(split.amount)} EGP`].filter(Boolean).join("\n"),
+    };
+    const pdf = await buildPayslipPdf(slip, month, {
+      bonusEvents: bundle.bonusEvents,
+      deductionEvents: bundle.deductionEvents,
+      attendanceRecords: bundle.attendanceRecords,
+      config: bundle.config,
+      employees: bundle.employees,
+      payslipGateNotes: bundle.payslipGateNotes || [],
+      splitLabel: `Split ${split.id}`,
+    });
+    archive.append(pdf, { name: `payslip-${emp.id}-${month}-split-${split.amount}.pdf` });
+  }
+  archive.finalize();
+  const zip = await done;
+  res
+    .type("application/zip")
+    .attachment(`payslip-splits-${emp.id}-${month}.zip`)
+    .send(zip);
 });
 
 router.get("/exports/documents-zip", async (req, res) => {

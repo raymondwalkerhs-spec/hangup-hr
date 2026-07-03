@@ -1,8 +1,10 @@
 # Hangup HR — Desktop App
 
+> **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
+
 **Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.0.9-beta.4`
+**Current version:** `1.2.0`
 
 | Document | Purpose |
 |----------|---------|
@@ -10,7 +12,8 @@
 | [`FEATURES.md`](FEATURES.md) | Feature overview (presentation-style) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 | [`UPDATES.md`](UPDATES.md) | **Installer vs GitHub in-app updates** |
-| [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Database / legacy sheet layout |
+| [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Redirect → [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
+| [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) | **Historical** Google Sheet layout — never use in production |
 | [`AI_Agent.md`](AI_Agent.md) | Agent context, release checklist, architecture |
 
 There is **no browser / localhost mode** — the app runs only as the packaged Electron desktop EXE.
@@ -35,7 +38,7 @@ Supabase (Postgres + Storage + app_users)
 - **Documents:** Supabase Storage bucket `hr-documents` (legacy Google Drive file IDs still open until re-uploaded)  
 - **Version policy:** `app_versions` table — old EXEs can be blocked or warned at login  
 
-Legacy `DATA_BACKEND=sheets` is still in code for migration only; production uses Supabase.
+Legacy `DATA_BACKEND=sheets` is **removed** — app throws at startup if set. Historical sheet docs: [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 ---
 
@@ -61,11 +64,7 @@ Schema changes live in `supabase/migrations/`.
 
 **Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-**Pending for 1.0.9-beta.x** (if not yet applied):
-
-1. `20260706_employee_internal_id.sql`
-2. `20260706_app_versions_force_update.sql`
-3. `20260708_finance_hr_attendance.sql`
+**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260711_v112_clients_breaks.sql`).
 
 After schema changes, update `app_versions` (see `AI_Agent.md` release checklist).
 
@@ -84,6 +83,11 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Assets** | Equipment registry and assignments |
 | **Documents** | Upload, expiry alerts, bulk ZIP export |
 | **Reporting** | Monthly HR report, turnover, attendance rankings |
+| **Sales** | MLA-Ray dynamic form, field permissions, Dropbox attachments, approval workflow |
+| **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners |
+| **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
+| **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab |
+| **Updates** | GitHub patch check for all users; in-app prompt/confirm modals |
 | **Admin** | Notifications bell, change log export, session registry (Raymond), user management |
 
 Full detail: [`FEATURES.md`](FEATURES.md)
@@ -102,17 +106,19 @@ Full detail: [`FEATURES.md`](FEATURES.md)
 ### Recommended build
 
 ```powershell
-cd "K:\download app hr"
-npm run dist:beta
+cd "F:\download app hr"   # repo root
+npm run dist:all
+# or
+.\scripts\build.ps1 all
 ```
 
-Outputs in **`dist-beta-v2\`**:
+Outputs in **`dist\`** (or **`dist-build\`** if `dist\` is locked):
 
 | File | Purpose |
 |------|---------|
-| `Hangup-HR-Beta-v2-Setup-1.0.4-beta.3.exe` | Installer |
-| `Hangup-HR-Beta-v2-Portable-1.0.4-beta.3.exe` | Portable (USB / folder) |
-| `win-unpacked\Hangup HR Beta.exe` | Unpacked dev-style run |
+| `Hangup-HR-Beta-v2-Setup-{version}.exe` | Installer |
+| `Hangup-HR-Beta-v2-Portable-{version}.exe` | Portable (USB / folder) |
+| `win-unpacked\Hangup HR Beta.exe` | Unpacked (used for GitHub patch zips) |
 
 Other scripts:
 
@@ -151,7 +157,6 @@ If Electron fails to start: `npm run fix:electron`
 | Command | Purpose |
 |---------|---------|
 | `npm start` | Run from source (Electron) |
-| `npm run dist:beta` | Beta channel build → `dist-beta-v2\` |
 | `npm run dist:all` | Installer + portable → `dist\` |
 | `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
 | `npm run publish:github` | Package + upload patch zip + manifest to GitHub (not EXEs) |
@@ -196,7 +201,7 @@ Action Improvement Plan weeks apply extra rules (e.g. Lateness A = 75 EGP, tripl
 
 ## Version policy
 
-Each build embeds `package.json` version. On login and every ~5 minutes the app checks `app_versions`:
+Each build embeds `package.json` version. On login and every ~5 minutes the app checks `app_versions`. Separately, **all users** get a GitHub Releases check (boot, login banner, ~30 min interval) when `GITHUB_UPDATES_REPO` is set.
 
 | Result | Behaviour |
 |--------|-----------|
@@ -226,7 +231,7 @@ ON CONFLICT (version) DO UPDATE SET
   notes = EXCLUDED.notes;
 ```
 
-**Live current version:** `1.0.4-beta.3`
+**Live current version:** `1.2.0` — confirm in Supabase `app_versions` after each release.
 
 ---
 

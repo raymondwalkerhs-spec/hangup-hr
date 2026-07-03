@@ -5,8 +5,8 @@
  */
 require("dotenv").config();
 
-const { getSheetsAuth, getSheetsClient } = require("../lib/google-auth");
-const { AUTH_SHEET_ID } = require("../lib/auth-sheet");
+const { getSheetsAuth, getSheetsClient } = require("./lib/google-auth");
+const { AUTH_SHEET_ID } = require("./lib/auth-sheet");
 const { VERSION_SHEET_TAB } = require("../lib/version-sheet");
 const { getAppVersion } = require("../lib/app-version");
 

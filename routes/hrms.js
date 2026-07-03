@@ -728,4 +728,45 @@ router.get("/exports/finance-handoff", async (req, res) => {
   }
 });
 
+router.post("/attendance/bulk-dayoff", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const date = String(req.body?.date || "").slice(0, 10);
+  const scope = req.body?.scope || "federal_active";
+  if (!date) return res.status(400).json({ error: "date required" });
+
+  try {
+    await assertMonthNotLocked(date.slice(0, 7));
+    const holidays = await hrms.readPublicHolidays();
+    const holiday = holidays.find((h) => String(h.date || h.holidayDate || "").slice(0, 10) === date);
+    if (scope === "federal_active" && (!holiday || holiday.country === "EGY")) {
+      return res.status(400).json({ error: "Date is not an active US federal holiday." });
+    }
+
+    const month = date.slice(0, 7);
+    const employees = store
+      .getEmployeesForMonth(month, { hideOut: false })
+      .filter((e) => e.status === "Active" || e.status === "Paused");
+    const records = employees.map((emp) => ({
+      employeeId: emp.id,
+      date,
+      status: "Day-OFF",
+      isWeekendDefault: false,
+    }));
+    const count = records.length
+      ? await store.saveAttendanceBatch(records, req.username)
+      : 0;
+    res.json({ ok: true, count, date });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+function assertMonthNotLocked(month) {
+  return hrms.getPayrollMonthLock(month).then((lock) => {
+    if (lock?.locked) throw new Error(`Payroll for ${month} is locked.`);
+  });
+}
+
 module.exports = router;

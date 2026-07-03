@@ -4,7 +4,7 @@ const roles = require("../lib/roles");
 const usersAdmin = require("../lib/users-admin");
 const hrms = require("../lib/hrms-repo");
 const { getSession, destroySession } = require("../lib/session-store");
-const { useSupabase } = require("../lib/backend");
+const { fetchAuthUsers } = require("../lib/auth");
 
 const router = express.Router();
 
@@ -13,15 +13,20 @@ router.put("/change-password", async (req, res) => {
   if (!currentPassword || !newPassword || String(newPassword).length < 4) {
     return res.status(400).json({ error: "Current and new password (min 4 chars) required" });
   }
-  if (!useSupabase()) return res.status(503).json({ error: "Requires Supabase backend" });
 
   const session = req.appSession;
-  const valid = await bcrypt.compare(currentPassword, session.password);
+  const users = await fetchAuthUsers();
+  const record = users.find((u) => u.user.toLowerCase() === session.username.toLowerCase());
+  if (!record) return res.status(400).json({ error: "User not found" });
+
+  const valid = record.passwordIsHash
+    ? await bcrypt.compare(String(currentPassword), record.password)
+    : record.password === currentPassword;
   if (!valid) return res.status(400).json({ error: "Current password is incorrect" });
 
   try {
     await usersAdmin.updateAppUser(session.username, { password: newPassword }, session.username);
-    session.password = await bcrypt.hash(String(newPassword), 10);
+    session.password = String(newPassword);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });

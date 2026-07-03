@@ -1,7 +1,9 @@
 # Hangup HR — Feature Overview
 
+> **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
+
 *Presentation-style summary of what the app does today.*  
-**Product:** Hangup HR Beta · **Version:** 1.0.9-beta.1 · **Platform:** Windows desktop (Electron)
+**Product:** Hangup HR · **Version:** 1.2.0 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -38,7 +40,9 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - **Fast local cache** — SQLite on each machine; no waiting on every click  
 - **Auto sync** — saves push to cloud, then refresh quietly  
 - **Audit trail** — every important edit logged (`change_log`)  
-- **Version control** — old app builds can be blocked at login; optional **in-app patch updates** via GitHub Releases  
+- **Version control** — old app builds can be blocked at login (`app_versions`)
+- **In-app updates** — GitHub Releases patch/full zips; checked for **all users** (not role-gated)
+- **Desktop UX** — in-app modals replace broken Electron `prompt()` / `confirm()` (beta.6)
 - **Role-based access** — CEO, admin, HR, finance, TL, agent  
 
 ### Security
@@ -46,7 +50,9 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - Passwords hashed (bcrypt)  
 - Server-side API only — secret key never exposed to the browser layer  
 - Row Level Security on database (deny public access; app server bypasses)  
-- Session timeout after 10 minutes idle  
+- Session timeout after 10 minutes idle (client); server revokes after **10 hours** idle  
+- **One active session per user** — signing in elsewhere revokes the old device  
+- Session ID shown in Settings (for support)  
 - Raymond can revoke active sessions  
 
 ---
@@ -110,7 +116,9 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - PDF per employee per month  
 - Bonus and deduction line items  
 - Action Improvement Plan section when applicable  
-- Offboarding / clearance banners when pending  
+- Offboarding / clearance banners when pending — with links to complete workflows
+- **No payroll** month toggle for excluded employees
+- **Per-split PDF** export and **splits ZIP** for commission breakdowns
 
 ### Action Improvement Plan (AIP)
 
@@ -157,6 +165,40 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 ---
 
+## 1.2.0 highlights
+
+- **Sales catalog in Settings** — clients, products, device types, and prices (replaces hard-coded lists)
+- **Break schedules** — timed break reminders with dismissible popup
+- **Session ID + single-device login** — one active session; 10h server idle revoke
+- **Remember password** on login (optional, device-only)
+- **Sale attachments** — download, delete, replace, Dropbox share link; Dropbox-only for new uploads
+- **GitHub updater** — patch/full zips for Windows and macOS
+
+## 1.1.0 highlights
+
+- Full sales import from `Asset/Sales All Data.csv` (`node scripts/import-sales-all-data.js`)
+- Month-scoped position rates on Salaries (per-month snapshots)
+- Sale reviewer/verifier/agent assignment notifications
+- Payslip sales count recalc from sales; OUT clearance warning on open
+
+## 1.0.9-beta.7 highlights
+
+- **Supabase-only runtime** — Google Sheets code removed from app startup
+- **Session fix** — no more false “access changed” kick every 5 minutes
+- **Sales:** Employee dropdowns for reviewer/verifier; agent/closer locked on edit; month filters
+- **Payroll splits:** Training bonus type; defer with custom amount (max = gross payable)
+- **Federal OFF:** Batch day-off without Sheets API calls
+
+## 1.0.9-beta.5–6 highlights
+
+- **OUT / depart:** worked-in-month payroll eligibility, auto-OUT after depart date
+- **Federal holidays:** bulk day-off for active employees on configured holidays
+- **Release app ID:** rewrites foreign keys with confirm modal + loading state
+- **HS-2 scope:** bonuses, deductions, org filtered by company context toggle
+- **Users:** activate inactive employee logins; owner accounts protected
+- **GitHub updates:** universal check on boot, login, session poll, visibility change
+- **UI polish:** theme-safe animations, modal/button feedback
+
 ## v1.0.6 highlights
 
 - **Sales edit** + day/week/month dashboard with status filters  
@@ -168,13 +210,15 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Action Plan Week** (formerly AIP) · lifecycle modals  
 - **Payroll** hide zero net · **Nationality** dropdown + aliases  
 
-## Sales (1.0.5+)
+## Sales (1.0.5+; MLA-Ray 1.0.9-beta.5+)
 
-- Per-sale records: phone, customer name, device (bracelet/necklace/smartwatch), agent, closer  
-- Statuses: **passed**, **pending**, **postdated**, **denied**, **callback**  
-- TL/OP submissions require RTM/HR/quality/admin approval  
-- Weekly dashboard on **Sales** page and dashboard widget  
-- Role-scoped visibility + optional cross-team grants from OP/RTM  
+- Per-sale records with **dynamic MLA-Ray form** (device types, customer fields)
+- **Field-level permissions** — admin matrix controls which roles see/edit each field
+- **Dropbox attachments** (required for new uploads when `DROPBOX_ACCESS_TOKEN` is configured)
+- Statuses: **passed**, **pending**, **postdated**, **denied**, **callback**
+- TL/OP submissions require RTM/HR/quality/admin approval
+- Weekly dashboard on **Sales** page and dashboard widget
+- Role-scoped visibility + optional cross-team grants from OP/RTM
 
 ## Bonus approval (1.0.5)
 
@@ -272,4 +316,4 @@ Same layout everywhere — only colors change.
 
 ---
 
-*Last updated for release **1.0.8-beta.1** · See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).*
+*Last updated for release **1.2.0** · See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).*

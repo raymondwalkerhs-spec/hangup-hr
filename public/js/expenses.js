@@ -167,10 +167,20 @@ window.ExpensesModule = (function () {
       };
     });
     root.querySelectorAll("[data-deny]").forEach((btn) => {
-      btn.onclick = async () => {
-        const reason = prompt("Deny reason (optional):") || "";
-        await api(`/expenses/${btn.dataset.deny}/deny`, { method: "POST", body: JSON.stringify({ denyReason: reason }) });
-        renderCostsPage(root, api, state, helpers);
+      btn.onclick = () => {
+        openPromptModal({
+          title: "Deny expense",
+          message: "Optional denial reason:",
+          placeholder: "Reason",
+          confirmLabel: "Deny",
+          onSubmit: async (reason) => {
+            await api(`/expenses/${btn.dataset.deny}/deny`, {
+              method: "POST",
+              body: JSON.stringify({ denyReason: reason }),
+            });
+            renderCostsPage(root, api, state, helpers);
+          },
+        });
       };
     });
     root.querySelectorAll("[data-bill-edit]").forEach((btn) => {
@@ -178,10 +188,17 @@ window.ExpensesModule = (function () {
       if (bill) btn.onclick = () => openBillModal(api, helpers, billTypes, bill, () => renderCostsPage(root, api, state, helpers));
     });
     root.querySelectorAll("[data-bill-delete]").forEach((btn) => {
-      btn.onclick = async () => {
-        if (!confirm("Delete this bill?")) return;
-        await api(`/expenses/bills/${btn.dataset.billDelete}`, { method: "DELETE" });
-        renderCostsPage(root, api, state, helpers);
+      btn.onclick = () => {
+        openConfirmModal({
+          title: "Delete bill",
+          message: "Delete this bill?",
+          confirmLabel: "Delete",
+          danger: true,
+          onConfirm: async () => {
+            await api(`/expenses/bills/${btn.dataset.billDelete}`, { method: "DELETE" });
+            renderCostsPage(root, api, state, helpers);
+          },
+        });
       };
     });
     root.querySelectorAll("[data-bill-paid]").forEach((btn) => {
@@ -233,13 +250,20 @@ window.ExpensesModule = (function () {
       };
     });
     root.querySelectorAll("[data-archive]").forEach((btn) => {
-      btn.onclick = async () => {
-        const num = prompt("Cash receipt number (optional):") || "";
-        await api(`/expenses/${btn.dataset.archive}`, {
-          method: "PATCH",
-          body: JSON.stringify({ status: "archived", cashReceiptNumber: num }),
+      btn.onclick = () => {
+        openPromptModal({
+          title: "Archive expense",
+          message: "Optional cash receipt number:",
+          placeholder: "Receipt #",
+          confirmLabel: "Archive",
+          onSubmit: async (num) => {
+            await api(`/expenses/${btn.dataset.archive}`, {
+              method: "PATCH",
+              body: JSON.stringify({ status: "archived", cashReceiptNumber: num }),
+            });
+            renderCostsPage(root, api, state, helpers);
+          },
         });
-        renderCostsPage(root, api, state, helpers);
       };
     });
     root.querySelectorAll("[data-deposit]").forEach((btn) => {

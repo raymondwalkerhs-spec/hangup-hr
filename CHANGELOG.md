@@ -4,6 +4,73 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-03
+
+### Added
+- **Sales settings:** Clients, products, and prices in **Settings → Sales** (`sales_clients`, `sales_client_products`, `sales_client_prices`)
+- **Break schedules:** Admin-defined breaks with in-app popup reminders (`break_schedules`; dismiss per session)
+- **Session security:** Server session ID in Settings; **one active session per user**; other devices revoked after **10h idle**
+- **Login:** Optional **Save password on this device** (localStorage, device-only)
+- **Sale attachments:** Download, delete, replace, and **Dropbox share link**; **Dropbox-only** storage for new sales attachments
+- **GitHub updater:** Windows + macOS patch/full zips and manifests (`package-github-release.js`, CI `build-macos` job)
+
+### Changed
+- **Sales import:** `import-sales-all-data.js` — `--attachments-only` completed (226/226 Dropbox attachments)
+- **Settings revision:** `app_settings_revision` bumps when sales catalog or breaks change (clients reload in UI)
+
+### Applied (Supabase)
+- `20260710_v110_relations.sql`, `20260711_v112_clients_breaks.sql`
+
+## [1.1.0] — 2026-07-03
+
+### Added
+- **Sales backfill:** `node scripts/import-sales-all-data.js` — replace all sales from `Asset/Sales All Data.csv` with full `form_data`, Airtable→Dropbox attachments (`--dry-run`, `--skip-attachments`)
+- **Month-scoped position rates:** `position_rate_monthly` table; Salaries page scoped to selected month; init-month copies prior month snapshots
+- **Sale assignment notifications:** `sale_reviewer_assigned`, `sale_verifier_assigned`, `sale_agent_assigned` (employee id → login username)
+- **Payroll sales count:** Recalc from sales button on payslip; auto on init-month
+- **Audit scripts:** `scripts/audit-relations.js`, `scripts/audit-dropbox-sales.js` (`--fix-links`)
+
+### Changed
+- **Unified relations:** `enrichUserRole` prefers `app_users.employee_id`; sales writes sync `agent_internal_id` / `closer_internal_id`
+- **Team dashboard:** Unassigned sales warning in day totals
+- **OUT payslip:** Clearance/equipment warning banner on payslip open (links to offboarding)
+
+## [1.0.9-beta.7] — 2026-07-03
+
+### Fixed
+- **Session:** Login stores plaintext for periodic check — fixes false “Your access was changed” logout every ~5 min
+- **Release ID:** `deleteEmployee` works (Supabase-only backend; stub release path)
+- **Federal OFF:** Batch attendance write — no Google Sheets quota errors
+- **Position rates:** Save errors surfaced; add-position form submit works
+
+### Changed
+- **Supabase-only runtime:** Removed Google Sheets from `lib/backend.js`, connectivity, auth, changelog, documents
+- Legacy Sheets code moved to `scripts/legacy/` — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md)
+- **Sales:** Reviewer/verifier employee dropdowns; agent/closer read-only on edit; month filter by agent/closer
+- **Payroll splits:** `training_bonus` type; defer with custom amount (validated against gross payable)
+
+## [1.0.9-beta.6] — 2026-07-03
+
+### Added
+- GitHub update check for all users on boot, session poll, and login (with `GITHUB_UPDATES_TOKEN`)
+- In-app prompt/confirm modals replacing Electron-broken `prompt()` / `confirm()` on sales, expenses, payroll
+
+### Changed
+- `.env` cleaned for Supabase-only (Sheets/Drive vars removed from production config)
+- UI motion: modal fade-in, button press feedback, page transitions, stat card hover
+
+## [1.0.9-beta.5] — 2026-07-03
+
+### HR sprint
+- Supabase-only health/status; entity mappers extracted from Sheets
+- OUT/depart: worked-in-month payroll, auto-OUT after depart date, federal holiday bulk day-off
+- Payslip: offboarding warnings with links, no-payroll toggle, per-split PDF export
+- Release app ID: FK rewrites + confirm modal + loading state
+- Users: owner skip rules, inactive employee logins, fix-app-users script
+- HS2: company filter on bonuses/deductions/org
+- Org: assign existing team to unit; position add modal
+- Sales: MLA-Ray dynamic form, field permissions API, Dropbox attachments
+
 ## [1.0.9-beta.4] — 2026-07-03
 
 ### Fixed

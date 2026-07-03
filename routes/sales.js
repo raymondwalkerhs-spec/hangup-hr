@@ -8,7 +8,8 @@ const roles = require("../lib/roles");
 const store = require("../lib/data-store");
 const companyContext = require("../lib/company-context");
 const notify = require("../lib/notify-store");
-const { fetchAuthUsers } = require("../lib/auth");
+const notifyRouting = require("../lib/notify-routing");
+const salesFieldAccess = require("../lib/sales-field-access");
 
 const router = express.Router();
 
@@ -27,10 +28,11 @@ function enrichSaleAgent(emp) {
   return { team: emp?.team || "", unit: emp?.unit || "" };
 }
 
-async function notifySaleEvent(sale, type, title, body, extraUsers = []) {
-  const users = new Set(extraUsers.map((u) => String(u).toLowerCase()));
+async function notifySaleEvent(sale, type, title, body, extraEmployeeIds = []) {
+  const empIds = [...(extraEmployeeIds || [])];
+  if (sale.agentId) empIds.push(sale.agentId);
+  const users = new Set(await notifyRouting.resolveUsernamesForEmployees(empIds));
   users.add(String(sale.submittedBy).toLowerCase());
-  if (sale.agentId) users.add(String(sale.agentId).toLowerCase());
   await notify.createNotificationsForUsers([...users], {
     type,
     title,
@@ -40,26 +42,76 @@ async function notifySaleEvent(sale, type, title, body, extraUsers = []) {
   });
 }
 
+async function notifySaleAssignments(sale, prev = {}) {
+  const prevForm = prev.formData || {};
+  const newForm = sale.formData || {};
+  const tasks = [];
+  if (newForm.reviewer && newForm.reviewer !== prevForm.reviewer) {
+    tasks.push(
+      notifyRouting.notifySaleAssignment({
+        sale,
+        type: "sale_reviewer_assigned",
+        title: "Sale assigned for review",
+        body: `${sale.fullName} — review requested`,
+        employeeIds: [newForm.reviewer],
+      })
+    );
+  }
+  if (newForm.assignVerifier && newForm.assignVerifier !== prevForm.assignVerifier) {
+    tasks.push(
+      notifyRouting.notifySaleAssignment({
+        sale,
+        type: "sale_verifier_assigned",
+        title: "Sale assigned for verification",
+        body: `${sale.fullName} — verify requested`,
+        employeeIds: [newForm.assignVerifier],
+      })
+    );
+  }
+  if (sale.agentId && sale.agentId !== prev.agentId) {
+    tasks.push(
+      notifyRouting.notifySaleAssignment({
+        sale,
+        type: "sale_agent_assigned",
+        title: "Sale assigned to you",
+        body: `${sale.fullName} — agent assignment`,
+        employeeIds: [sale.agentId],
+      })
+    );
+  }
+  if (sale.closerId && sale.closerId !== prev.closerId) {
+    tasks.push(
+      notifyRouting.notifySaleAssignment({
+        sale,
+        type: "sale_agent_assigned",
+        title: "Sale assigned as closer",
+        body: `${sale.fullName} — closer assignment`,
+        employeeIds: [sale.closerId],
+      })
+    );
+  }
+  await Promise.all(tasks);
+}
+
 async function notifyCallback(sale, employees) {
-  const users = new Set();
-  if (sale.closerId) users.add(String(sale.closerId).toLowerCase());
-  if (sale.submittedBy) users.add(String(sale.submittedBy).toLowerCase());
+  const empIds = [];
+  if (sale.closerId) empIds.push(sale.closerId);
+  if (sale.agentId && sale.callbackVisibleToAgent) empIds.push(sale.agentId);
   const agent = employees.find((e) => e.id === sale.agentId);
   if (agent?.team) {
     const tl = employees.find(
       (e) => e.team === agent.team && /^TL/i.test(String(e.id || ""))
     );
-    if (tl) users.add(String(tl.id).toLowerCase());
+    if (tl) empIds.push(tl.id);
   }
   if (agent?.unit) {
     const op = employees.find(
       (e) => e.unit === agent.unit && /^OP/i.test(String(e.id || ""))
     );
-    if (op) users.add(String(op.id).toLowerCase());
+    if (op) empIds.push(op.id);
   }
-  if (sale.callbackVisibleToAgent && sale.agentId) {
-    users.add(String(sale.agentId).toLowerCase());
-  }
+  const users = new Set(await notifyRouting.resolveUsernamesForEmployees(empIds));
+  if (sale.submittedBy) users.add(String(sale.submittedBy).toLowerCase());
   await notify.createNotificationsForUsers([...users], {
     type: "sale_callback",
     title: "Sale needs callback",
@@ -77,12 +129,14 @@ router.get("/", async (req, res) => {
       from: req.query.from,
       to: req.query.to,
       agentId: req.query.agentId,
+      closerId: req.query.closerId,
       team: req.query.team,
       unit: req.query.unit,
       status: req.query.status,
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     res.json({ sales, devices: business.SALE_DEVICES, statuses: business.SALE_STATUSES });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -104,6 +158,7 @@ router.get("/period-grid", async (req, res) => {
     let sales = await business.readSales({ from, to });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
 
     const attendanceRecords = [];
     for (const ym of periodGrid.attendanceMonthsInRange(from, to)) {
@@ -136,6 +191,7 @@ router.get("/team-dashboard", async (req, res) => {
     let sales = await business.readSales({ from, to });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
 
     let teamsMeta = [];
     try {
@@ -185,6 +241,7 @@ router.get("/dashboard", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     const dashboard = salesScope.buildSalesDashboard(sales, {
       period: req.query.period || "day",
       date: req.query.date,
@@ -268,20 +325,31 @@ router.post("/", async (req, res) => {
   const initialStatus = salesScope.initialSaleStatus(req.userRole.role, status);
   const geo = enrichSaleAgent(emp);
   try {
+    const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
+      req.body.formData || req.body,
+      req.userRole,
+      { create: true }
+    );
+    const payload = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
+    if (!payload.phoneNumber || !payload.fullName || !payload.device || !agentId) {
+      return res.status(400).json({ error: "phoneNumber, fullName, device, agentId required" });
+    }
     const sale = await business.createSale(
       {
-        phoneNumber,
-        fullName,
-        device,
-        price,
-        client,
+        phoneNumber: payload.phoneNumber,
+        fullName: payload.fullName,
+        device: payload.device,
+        price: payload.price,
+        client: payload.client,
         agentId,
         closerId: closerId || req.userRole.employeeId || "",
         status: initialStatus,
-        submissionDate: submissionDate || new Date().toISOString().slice(0, 10),
-        effectiveDate: effectiveDate || submissionDate || new Date().toISOString().slice(0, 10),
+        submissionDate: payload.submissionDate || new Date().toISOString().slice(0, 10),
+        effectiveDate: payload.effectiveDate || payload.submissionDate || new Date().toISOString().slice(0, 10),
+        feedback: payload.feedback || "",
         team: geo.team,
         unit: geo.unit,
+        formData: sanitizedForm,
       },
       req.username
     );
@@ -298,7 +366,8 @@ router.post("/", async (req, res) => {
         entityId: sale.id,
       });
     }
-    res.json({ ok: true, sale });
+    await notifySaleAssignments(sale, {});
+    res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole))[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -335,13 +404,26 @@ router.patch("/:id", async (req, res) => {
       if (!roles.canEditSale(req.userRole)) {
         return res.status(403).json({ error: "No permission to edit sales" });
       }
-      const fields = [
-        "phoneNumber", "fullName", "device", "price", "client", "agentId",
-        "closerId", "effectiveDate", "submissionDate", "status", "feedback",
-      ];
-      for (const f of fields) {
-        if (req.body[f] !== undefined) patch[f] = req.body[f];
-      }
+      const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
+        { ...(existing.formData || {}), ...(req.body.formData || {}) },
+        req.userRole,
+        { create: false }
+      );
+      const built = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
+      patch = {
+        phoneNumber: built.phoneNumber || existing.phoneNumber,
+        fullName: built.fullName || existing.fullName,
+        device: built.device || existing.device,
+        price: built.price != null ? built.price : existing.price,
+        client: built.client != null ? built.client : existing.client,
+        effectiveDate: built.effectiveDate || existing.effectiveDate,
+        submissionDate: built.submissionDate || existing.submissionDate,
+        status: built.status || existing.status,
+        feedback: built.feedback != null ? built.feedback : existing.feedback,
+        formData: sanitizedForm,
+      };
+      if (req.body.agentId) patch.agentId = req.body.agentId;
+      if (req.body.closerId !== undefined) patch.closerId = req.body.closerId;
       if (patch.agentId) {
         const emp = store.getEmployeeById(patch.agentId);
         if (!emp) return res.status(404).json({ error: "Agent not found" });
@@ -361,6 +443,8 @@ router.patch("/:id", async (req, res) => {
 
     const sale = await business.updateSale(req.params.id, patch, req.username);
 
+    await notifySaleAssignments(sale, existing);
+
     if (patch.status === "callback") {
       await notifyCallback(sale, employees);
     } else if (patch.status === "passed" || patch.status === "denied") {
@@ -369,10 +453,229 @@ router.patch("/:id", async (req, res) => {
         "sale_review",
         `Sale ${patch.status}`,
         `${sale.fullName} — ${feedback || ""}`,
-        [sale.submittedBy]
+        []
       );
     }
-    res.json({ ok: true, sale });
+    const [redacted] = await salesFieldAccess.redactSalesForRole([sale], req.userRole);
+    res.json({ ok: true, sale: redacted });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+const salesCatalog = require("../lib/sales-field-catalog");
+const dropbox = require("../lib/dropbox");
+const saleStorage = require("../lib/sale-attachment-storage");
+const saleAttachmentCache = require("../lib/sale-attachment-cache");
+const fs = require("fs");
+
+router.get("/field-catalog", async (req, res) => {
+  try {
+    const perms = await business.readSalesFieldPermissions();
+    const permMap = Object.fromEntries(perms.map((p) => [p.fieldKey, p]));
+    const role = req.userRole?.role || "agent";
+    const allFields = req.query.allFields === "1" && roles.canManageAll(req.userRole);
+    const fields = allFields
+      ? salesCatalog.FIELDS
+      : salesCatalog.listFieldsForRole(role, permMap);
+    res.json({
+      fields,
+      sections: salesCatalog.listSections(),
+      attachmentKinds: salesCatalog.ATTACHMENT_KINDS,
+      permissions: perms,
+      dropboxConfigured: dropbox.isConfigured(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/field-permissions/:fieldKey", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const perm = await business.upsertSalesFieldPermission(req.params.fieldKey, req.body);
+    salesFieldAccess.invalidatePermissionsCache();
+    res.json({ ok: true, permission: perm });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/field-permissions/seed", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const { getSupabaseAdmin } = require("../lib/supabase-client");
+    await salesCatalog.seedDefaultPermissions(getSupabaseAdmin());
+    salesFieldAccess.invalidatePermissionsCache();
+    const perms = await business.readSalesFieldPermissions();
+    res.json({ ok: true, count: perms.length });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/attachments/:attachmentId/file", async (req, res) => {
+  try {
+    const att = await business.getSaleAttachment(req.params.attachmentId);
+    if (!att) return res.status(404).json({ error: "Attachment not found" });
+    const sale = await business.getSale(att.saleId);
+    if (!sale) return res.status(404).json({ error: "Sale not found" });
+    const employees = store.getEmployees();
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    const visible = salesScope.filterSalesForUser([sale], req.userRole, employees, grants);
+    if (!visible.length) return res.status(403).json({ error: "No access" });
+
+    const file = await saleAttachmentCache.getOrFetch(att);
+    res.setHeader("Content-Type", file.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.fileName)}"`);
+    res.setHeader("X-Cache-Hit", file.fromCache ? "1" : "0");
+    fs.createReadStream(file.filePath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/:id/attachments", async (req, res) => {
+  try {
+    const attachments = await business.readSaleAttachments(req.params.id);
+    res.json({ attachments });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/:id/attachments", async (req, res) => {
+  try {
+    const { fileName, contentBase64, kind } = req.body || {};
+    if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
+    const buffer = Buffer.from(contentBase64, "base64");
+    const uploaded = await saleStorage.uploadSaleAttachmentBuffer({
+      saleId: req.params.id,
+      kind: kind || "recording",
+      fileName,
+      buffer,
+    });
+    const att = await business.createSaleAttachment(
+      {
+        saleId: req.params.id,
+        kind,
+        fileName: uploaded.fileName,
+        dropboxPath: uploaded.dropboxPath,
+        dropboxLink: uploaded.dropboxLink,
+      },
+      req.username
+    );
+    res.status(201).json({ ok: true, attachment: att });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/attachments/:attachmentId", async (req, res) => {
+  if (!roles.canEditSale(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const att = await business.deleteSaleAttachment(req.params.attachmentId);
+    if (att?.dropboxPath) {
+      try {
+        await dropbox.deleteFile(att.dropboxPath);
+      } catch {
+        /* optional */
+      }
+    }
+    try {
+      await saleAttachmentCache.evict(att?.id || req.params.attachmentId);
+    } catch {
+      /* optional */
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+async function assertAttachmentAccess(req, attachmentId) {
+  const att = await business.getSaleAttachment(attachmentId);
+  if (!att) return { error: "Attachment not found", status: 404 };
+  const sale = await business.getSale(att.saleId);
+  if (!sale) return { error: "Sale not found", status: 404 };
+  const employees = store.getEmployees();
+  const grants = await business.readSalesVisibilityGrants(req.username);
+  const visible = salesScope.filterSalesForUser([sale], req.userRole, employees, grants);
+  if (!visible.length) return { error: "No access", status: 403 };
+  return { att, sale };
+}
+
+router.get("/attachments/:attachmentId/download", async (req, res) => {
+  try {
+    const access = await assertAttachmentAccess(req, req.params.attachmentId);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const file = await saleAttachmentCache.getOrFetch(access.att);
+    res.setHeader("Content-Type", file.mimeType);
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file.fileName)}"`);
+    fs.createReadStream(file.filePath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/attachments/:attachmentId/share-link", async (req, res) => {
+  try {
+    const access = await assertAttachmentAccess(req, req.params.attachmentId);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const att = access.att;
+    if (att.dropboxLink) return res.json({ url: att.dropboxLink });
+    if (!att.dropboxPath) return res.status(400).json({ error: "No Dropbox path for this file" });
+    const url = await dropbox.createSharedLink(att.dropboxPath);
+    if (url) {
+      await business.updateSaleAttachmentDropboxLink(att.id, url);
+    }
+    res.json({ url: url || "" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/attachments/:attachmentId/replace", async (req, res) => {
+  if (!roles.canEditSale(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const access = await assertAttachmentAccess(req, req.params.attachmentId);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const { fileName, contentBase64 } = req.body || {};
+    if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
+    const buffer = Buffer.from(contentBase64, "base64");
+    const att = access.att;
+    if (att.dropboxPath) {
+      try {
+        await dropbox.deleteFile(att.dropboxPath);
+      } catch {
+        /* optional */
+      }
+    }
+    const uploaded = await saleStorage.uploadSaleAttachmentBuffer({
+      saleId: att.saleId,
+      kind: att.kind || "recording",
+      fileName,
+      buffer,
+    });
+    const updated = await business.replaceSaleAttachment(att.id, {
+      fileName: uploaded.fileName,
+      dropboxPath: uploaded.dropboxPath,
+      dropboxLink: uploaded.dropboxLink,
+    }, req.username);
+    try {
+      await saleAttachmentCache.evict(att.id);
+    } catch {
+      /* optional */
+    }
+    res.json({ ok: true, attachment: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

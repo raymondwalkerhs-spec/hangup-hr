@@ -1,12 +1,24 @@
-# Build Hangup HR - installer + portable (Windows x64)
+# Build Hangup HR - NSIS installer (Windows x64). Use "portable" arg only for legacy portable builds.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
+$supabaseBackend = $false
+if (Test-Path ".env") {
+  $envContent = Get-Content ".env" -Raw -ErrorAction SilentlyContinue
+  if ($envContent -match '(?m)^\s*DATA_BACKEND\s*=\s*supabase\s*$') {
+    $supabaseBackend = $true
+  }
+}
+
 if (-not (Test-Path "credentials\service-account.json")) {
-  if ($env:SKIP_CREDENTIALS_CHECK -eq "1" -or $env:CI -eq "true") {
+  if ($supabaseBackend -or $env:SKIP_CREDENTIALS_CHECK -eq "1" -or $env:CI -eq "true") {
     New-Item -ItemType Directory -Force -Path "credentials" | Out-Null
     '{}' | Set-Content "credentials\service-account.json"
-    Write-Host "WARNING: Using stub service-account.json (CI / SKIP_CREDENTIALS_CHECK)." -ForegroundColor Yellow
+    if ($supabaseBackend) {
+      Write-Host "WARNING: Using stub service-account.json (DATA_BACKEND=supabase)." -ForegroundColor Yellow
+    } else {
+      Write-Host "WARNING: Using stub service-account.json (CI / SKIP_CREDENTIALS_CHECK)." -ForegroundColor Yellow
+    }
   } else {
     Write-Host "ERROR: credentials\service-account.json is missing." -ForegroundColor Red
     Write-Host "Copy the Google service account key before building."
@@ -56,6 +68,18 @@ function Clear-UnpackedOutput {
       Write-Host "Renamed locked folder to $OutputDir\$bakName" -ForegroundColor Yellow
       return $OutputDir
     } catch {
+      foreach ($alt in @("dist-build2", "dist-beta7", "dist-release")) {
+        $altUnpacked = Join-Path $PWD "$alt\win-unpacked"
+        try {
+          if (Test-Path $altUnpacked) {
+            Remove-Item -LiteralPath $altUnpacked -Recurse -Force -ErrorAction Stop
+          }
+          Write-Host "Building into $alt\ (previous output locked)." -ForegroundColor Yellow
+          return $alt
+        } catch {
+          continue
+        }
+      }
       $alt = "dist-build"
       Write-Host "WARNING: $OutputDir\win-unpacked is locked (close Hangup HR, File Explorer in dist\, and retry)." -ForegroundColor Yellow
       Write-Host "         Building into $alt\ instead." -ForegroundColor Yellow
@@ -119,9 +143,8 @@ if ($env:CI -eq "true") {
   $builderArgs += "never"
 }
 switch ($target) {
-  "installer" { npx electron-builder --win nsis @builderArgs }
   "portable"  { npx electron-builder --win portable @builderArgs }
-  default     { npx electron-builder --win nsis portable @builderArgs }
+  default     { npx electron-builder --win nsis @builderArgs }
 }
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

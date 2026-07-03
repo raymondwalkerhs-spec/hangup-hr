@@ -1,7 +1,7 @@
 {
   "name": "hangup-hr",
-  "version": "1.0.9-beta.4",
-  "description": "Hangup HR desktop app — live Google Sheets",
+  "version": "1.2.0",
+  "description": "Hangup HR desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
     "start": "node scripts/ensure-electron.js && electron .",
@@ -69,12 +69,6 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "artifactName": "Hangup-HR-Beta-v2-Setup-${version}.${ext}"
@@ -88,10 +82,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Hangup HR Beta",
       "uninstallDisplayName": "Hangup HR Beta"
-    },
-    "portable": {
-      "artifactName": "Hangup-HR-Beta-v2-Portable-${version}.${ext}",
-      "requestExecutionLevel": "user"
     },
     "mac": {
       "icon": "build/icon.png",

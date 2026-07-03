@@ -18,7 +18,7 @@ require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") }
 const fs = require("fs");
 const path = require("path");
 const { google } = require("googleapis");
-const sheets = require("../lib/sheets");
+const sheets = require("./lib/sheets");
 
 const DATA_DIR = path.join(__dirname, "..", "..", "hr-system", "data");
 

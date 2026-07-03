@@ -4,7 +4,7 @@ const path = require("path");
 
 const fs = require("fs");
 
-const { loadEnvironment, ensureCacheDirectory } = require("../lib/app-bootstrap");
+const { loadEnvironment, ensureCacheDirectory, assertSupabaseConfigured } = require("../lib/app-bootstrap");
 
 const { createApp } = require("../app");
 
@@ -165,6 +165,14 @@ async function pollSession() {
 
 async function bootstrap() {
   try {
+    assertSupabaseConfigured();
+  } catch (err) {
+    showFatalError("Hangup HR — Configuration error", err.message || String(err));
+    app.quit();
+    return;
+  }
+
+  try {
     ensureCacheDirectory(path.join(app.getPath("userData"), "hr-cache"));
   } catch (err) {
     showFatalError(
@@ -225,7 +233,7 @@ async function bootstrap() {
   ipcMain.handle("apply-github-update", async () => {
     const info = await githubUpdater.checkForGitHubUpdate();
     if (!info?.updateAvailable) throw new Error("No update available");
-    if (!info.assetUrl) throw new Error("No update package found for this platform");
+    if (!info.assetUrl && !info.assetId) throw new Error("No update package found for this platform");
     await githubUpdater.applyGitHubUpdate(info);
     return { ok: true, version: info.latest, installRoot: githubUpdater.getInstallRoot() };
   });

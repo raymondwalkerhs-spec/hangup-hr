@@ -1,7 +1,9 @@
 # Hangup HR — User Guide
 
+> **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
+
 Quick guide for daily use of the **Hangup HR** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.0.9-beta.2`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.2.0`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).
 
@@ -11,7 +13,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 
 1. Open **Hangup HR Beta** (installer shortcut or portable EXE).
 2. Enter **username** and **password** (managed by Raymond in **Users**).
-3. Optional: **Remember my username** (password is always re-entered).
+3. Optional: **Remember my username** and/or **Save password on this device** (stored locally on this PC only).
 4. Click **Sign in**.
 
 **First login** needs internet. You will see **Syncing HR data…** while employees, attendance, and payroll load into the local cache.
@@ -21,7 +23,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | No access assigned | Raymond must set your **role** in **Users** |
 | Forgot password | Contact Raymond, or use **Settings → Change password** if you know the current one |
 | Version blocked | Install the latest EXE from Admin (`app_versions` policy) |
-| Update available popup | Click **Update now** to patch in place (desktop only), or ask Admin for a new EXE |
+| Update available (login or in-app) | Click **Update now** to patch via GitHub, or ask Admin for a new EXE installer |
 
 **Notifications** — bell icon in the sidebar (pending leave, document expiry, alerts).
 
@@ -41,8 +43,9 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | **Requests** | Annual, unpaid, medical, and same-day off (replaces Leave) |
 | **Equipment** | Company asset registry |
 | **Organization** | Reporting structure (read-only) |
-| **Settings** | Theme, password, holidays, tax rules, refresh |
-| **Users** | App logins *(Raymond only)* |
+| **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, **break schedules**, refresh |
+| **Sales** | MLA-Ray catalog form, approvals, field-level permissions *(admin matrix)* |
+| **Users** | App logins *(Raymond only)* — activate inactive employees |
 | **Changes** | Full audit log + CSV export *(Admin / CEO)* |
 
 **Footer:** ↻ Refresh · user chip · Logout
@@ -123,8 +126,9 @@ Edits outside an employee’s **active employment period** are rejected (after d
 5. **MoM compare** — quick month-over-month net pay delta.  
 6. **Finance handoff ZIP** *(Admin/CEO)* — payroll CSV + all payslip PDFs + change log.  
 7. Exports: Cash / Bank / Instapay CSV and PDF, payslip PDF, bulk payslips.
-
-**Payroll approval gates** — cannot mark payslip *received* / *closed* if offboarding, clearance, or equipment return is incomplete.
+8. **Payroll approval gates** — cannot mark payslip *received* / *closed* if offboarding, clearance, or equipment return is incomplete; banner links open those workflows.
+9. **No payroll** toggle — exclude an employee from a month’s payroll run when appropriate.
+10. **Per-split PDF** and **splits ZIP** — export commission splits from payslip view.
 
 **Action Plan Week** — during an active week, payroll applies stricter rules (e.g. tripled deductions, Lateness A = 75 EGP). Notes appear on the payslip.
 
@@ -192,8 +196,15 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **HR / admin / CEO** approve or deny; approved bonuses post to payroll.
 - **HR / RTM / quality / admin / office_assistant** cannot receive bonuses via requests — only via **payslip** direct add by HR+.
 
-### Sales
-- **Sales** nav: add sales, approve/deny/callback (quality/RTM/HR/admin).
+### Sales (1.0.5+; MLA-Ray form 1.0.9-beta.5+)
+
+- **Employee fields:** Use dropdowns for reviewer and verifier — never type names manually.
+- **Edit sale:** Agent and closer are fixed (shown read-only); set them when creating the sale.
+- **Month filter:** Use **All agents** / **All closers** dropdowns on the monthly sales toolbar.
+- Statuses: **passed**, **pending**, **postdated**, **denied**, **callback** — approve/deny/callback (quality/RTM/HR/admin).
+- **Admin → Sales field permissions** — per-role visibility for form fields.
+- **Attachments:** Download, delete, replace, or copy Dropbox share link from the sale form (Dropbox-only for new uploads).
+- **Break reminders:** Popup when a scheduled break starts (dismiss for this session).
 - **Dashboard** shows weekly passed/pending counts.
 - Agents see own sales only; TL sees team; OP sees unit; quality/RTM/HR see company.
 
@@ -218,8 +229,11 @@ Roles are set in **Users** (Raymond). Blank or unknown role = cannot sign in.
 
 ## 12. Session & security
 
-- Auto **logout after 10 minutes** idle  
-- Passwords are **bcrypt-hashed** in Supabase — never stored in plain text on the PC  
+- Auto **logout after 10 minutes** idle (client)  
+- Server **revokes session after 10 hours** without activity  
+- **One active session per user** — signing in on another PC revokes the previous session  
+- **Session ID** shown in **Settings** (for support with Raymond)  
+- Passwords are **bcrypt-hashed** in Supabase — optional saved password is device-local only  
 - Raymond can revoke sessions or reset passwords in **Users**  
 - Install only official EXE builds from Admin  
 
@@ -234,6 +248,7 @@ Roles are set in **Users** (Raymond). Blank or unknown role = cannot sign in.
 | Cannot edit attendance | Month may be **locked**, or date is outside employment period |
 | Payslip cannot be approved | Complete offboarding / clearance / equipment return |
 | SmartScreen on install | Unsigned build — *More info → Run anyway* |
+| `prompt()` / `confirm()` seemed broken | Fixed in 1.0.9-beta.6 — app uses in-app modals |
 | Document upload fails | Check internet; contact Admin if bucket permissions issue |
 
 ---

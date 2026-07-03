@@ -96,14 +96,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_UPDATES_REPO: ${{ github.repository }}
 
-      - name: Build portable + unpacked
+      - name: Build NSIS installer + unpacked
         shell: pwsh
         env:
           CI: "true"
           SKIP_CREDENTIALS_CHECK: "1"
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: .\scripts\build.ps1 portable
+        run: .\scripts\build.ps1 installer
 
       - name: Package Windows update zips
         run: node scripts/package-github-release.js --full
@@ -115,6 +115,7 @@ jobs:
           path: |
             dist/Hangup-HR-*-win-x64*.zip
             dist/update-manifests/win-x64-latest.json
+            dist/*Setup*.exe
           if-no-files-found: error
 
   build-macos:
@@ -179,6 +180,7 @@ jobs:
           path: |
             dist/Hangup-HR-*-mac-*.zip
             dist/update-manifests/mac-*-latest.json
+            dist/*.dmg
           if-no-files-found: warn
 
   publish:

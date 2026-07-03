@@ -24,6 +24,7 @@ function splitStatusBadge(status) {
 
 const SESSION_CHECK_MS = 5 * 60 * 1000;
 const VERSION_NOTICE_KEY = "hr_version_notice_dismissed";
+const APP_UPDATE_CHECK_MS = 30 * 60 * 1000;
 const SAVED_USER_KEY = "hr_saved_user";
 const SESSION_KEY = "hr_session_id";
 
@@ -320,7 +321,7 @@ function positionSelectHtml(name, value, id = "emp-position") {
 function teamSelectHtml(name, value, id = "emp-team") {
   const v = value || "";
   const orgTeams = (state.orgTeams || []).map((t) => t.name);
-  const opts = [...new Set([...TEAM_OPTIONS, ...orgTeams, v].filter(Boolean))];
+  const opts = [...new Set([...orgTeams, v].filter(Boolean))];
   return `<label class="field"><span>Team</span>
     <select name="${name}" id="${id}">
       <option value="">— Select team —</option>
@@ -496,6 +497,12 @@ async function refreshData() {
 async function checkSession() {
   try {
     const data = await api("/session-check");
+    if (data.action === "session_revoked") {
+      clearSessionId();
+      alert(data.message || "Session ended. Sign in again.");
+      window.location.href = "/login";
+      return false;
+    }
     if (data.action === "version_blocked") {
       showVersionBlockedScreen(data.message, data.versionCheck || data);
       return false;
@@ -510,8 +517,13 @@ async function checkSession() {
       window.location.href = "/login";
       return false;
     }
-    if (data.versionNotice) {
-      checkDesktopGitHubUpdate(data.versionNotice);
+    // Always check GitHub for app updates (all users, not role-based).
+    checkForAppUpdate(data.versionNotice || null);
+    if (data.settingsRevision && window.HRSalesConfigBreaks) {
+      window.HRSalesConfigBreaks.onSettingsRevision(api, data.settingsRevision, state);
+    }
+    if (data.activeBreak && window.HRSalesConfigBreaks) {
+      window.HRSalesConfigBreaks.handleActiveBreak(data.activeBreak);
     }
     return true;
   } catch {
@@ -800,7 +812,7 @@ function versionNoticeDismissKey(currentVersion) {
 }
 
 function showVersionUpdateNotice(notice, githubInfo = null) {
-  if (!notice?.message && !githubInfo?.updateAvailable) return;
+  if (!githubInfo?.updateAvailable && !notice?.message) return;
   const latest = githubInfo?.latest || notice?.currentVersion;
   const key = versionNoticeDismissKey(latest);
   try {
@@ -809,8 +821,11 @@ function showVersionUpdateNotice(notice, githubInfo = null) {
 
   const canAutoUpdate = Boolean(githubInfo?.updateAvailable && window.hrDesktop?.applyGitHubUpdate);
   const message =
+    (githubInfo?.updateAvailable
+      ? `Version ${githubInfo.latest} is available on GitHub (you have ${githubInfo.current || notice?.appVersion || "this version"}).`
+      : "") ||
     notice?.message ||
-    `Version ${githubInfo.latest} is available on GitHub (you have ${githubInfo.current || notice?.appVersion || "this version"}).`;
+    "A newer app version is available.";
 
   openModal(`
     <div class="modal-header">
@@ -830,7 +845,7 @@ function showVersionUpdateNotice(notice, githubInfo = null) {
                 ? ` Download size: ~${Math.max(1, Math.round(githubInfo.assetSize / 1024))} KB.`
                 : ""
             }</p>`
-          : `<p class="muted">You can keep working for now, but please ask Admin for the newest build soon.</p>`
+          : `<p class="muted">You can keep working for now. Install the latest build when convenient.</p>`
       }
       <div id="version-update-status" class="muted" style="margin-top:.5rem;display:none"></div>
     </div>
@@ -868,13 +883,27 @@ function showVersionUpdateNotice(notice, githubInfo = null) {
   });
 }
 
-async function checkDesktopGitHubUpdate(notice = null) {
-  if (!window.hrDesktop?.checkGitHubUpdate) {
-    if (notice) showVersionUpdateNotice(notice);
-    return;
+async function fetchGitHubUpdateInfo() {
+  if (window.hrDesktop?.checkGitHubUpdate) {
+    try {
+      const info = await window.hrDesktop.checkGitHubUpdate();
+      if (info?.enabled !== false) return info;
+    } catch (_) {
+      /* fall through to API */
+    }
   }
   try {
-    const githubInfo = await window.hrDesktop.checkGitHubUpdate();
+    const res = await fetch("/api/github-update");
+    if (res.ok) return await res.json();
+  } catch (_) {
+    /* non-fatal */
+  }
+  return null;
+}
+
+async function checkForAppUpdate(notice = null) {
+  try {
+    const githubInfo = await fetchGitHubUpdateInfo();
     if (githubInfo?.enabled && githubInfo.updateAvailable) {
       showVersionUpdateNotice(notice, githubInfo);
       return;
@@ -882,7 +911,11 @@ async function checkDesktopGitHubUpdate(notice = null) {
   } catch (_) {
     /* non-fatal */
   }
-  if (notice) showVersionUpdateNotice(notice);
+  if (notice?.message) showVersionUpdateNotice(notice);
+}
+
+async function checkDesktopGitHubUpdate(notice = null) {
+  return checkForAppUpdate(notice);
 }
 
 function showVersionBlockedScreen(message, details) {
@@ -931,13 +964,13 @@ function consumePendingVersionNotice() {
   try {
     const raw = sessionStorage.getItem("hr_pending_version_notice");
     if (!raw) {
-      checkDesktopGitHubUpdate();
+      checkForAppUpdate();
       return;
     }
     sessionStorage.removeItem("hr_pending_version_notice");
-    checkDesktopGitHubUpdate(JSON.parse(raw));
+    checkForAppUpdate(JSON.parse(raw));
   } catch (_) {
-    checkDesktopGitHubUpdate();
+    checkForAppUpdate();
   }
 }
 
@@ -1030,6 +1063,109 @@ function openConfirmDeleteModal({ title, message, onConfirm }) {
     }
   };
 }
+
+function openConfirmModal({ title, message, confirmLabel = "Confirm", danger = false, onConfirm }) {
+  openModal(
+    `<div class="modal-header"><h2>${escapeHtml(title || "Confirm")}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body"><p>${escapeHtml(message || "Are you sure?")}</p></div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn ${danger ? "btn-danger" : "btn-primary"}" id="confirm-action-btn">${escapeHtml(confirmLabel)}</button>
+    </div>`,
+    true
+  );
+  document.getElementById("confirm-action-btn").onclick = async () => {
+    closeModal();
+    try {
+      await onConfirm?.();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+function openPromptModal({ title, message = "", defaultValue = "", inputType = "text", placeholder = "", confirmLabel = "OK", required = false, onSubmit }) {
+  openModal(
+    `<div class="modal-header"><h2>${escapeHtml(title || "Enter value")}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      ${message ? `<p class="muted">${escapeHtml(message)}</p>` : ""}
+      <label class="field"><span>${escapeHtml(placeholder || "Value")}</span>
+        <input id="prompt-modal-input" type="${inputType}" value="${escapeHtml(defaultValue)}" ${required ? "required" : ""} />
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="prompt-modal-submit">${escapeHtml(confirmLabel)}</button>
+    </div>`,
+    true
+  );
+  const input = document.getElementById("prompt-modal-input");
+  input?.focus();
+  if (defaultValue) input?.select();
+  const submit = async () => {
+    const val = String(input?.value || "").trim();
+    if (required && !val) {
+      alert("This field is required.");
+      return;
+    }
+    closeModal();
+    try {
+      await onSubmit?.(val);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  document.getElementById("prompt-modal-submit").onclick = submit;
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    }
+  });
+}
+
+window.openConfirmModal = openConfirmModal;
+window.openPromptModal = openPromptModal;
+
+function openDeferAmountModal({ title, message, defaultMonth, defaultAmount, maxAmount, onSubmit }) {
+  openModal(
+    `<div class="modal-header"><h2>${escapeHtml(title || "Defer payment")}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body field-grid">
+      ${message ? `<p class="muted" style="grid-column:1/-1">${escapeHtml(message)}</p>` : ""}
+      <label class="field"><span>Amount to defer (EGP)</span>
+        <input id="defer-amount-input" type="number" step="0.01" min="0.01" max="${maxAmount || ""}" value="${defaultAmount || ""}" required />
+      </label>
+      <label class="field"><span>Defer to month</span>
+        <input id="defer-month-input" type="month" value="${escapeHtml(defaultMonth || "")}" required />
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="defer-amount-submit">Defer</button>
+    </div>`,
+    true
+  );
+  const amountInput = document.getElementById("defer-amount-input");
+  const monthInput = document.getElementById("defer-month-input");
+  amountInput?.focus();
+  document.getElementById("defer-amount-submit").onclick = async () => {
+    const amount = Number(amountInput?.value);
+    const deferToMonth = String(monthInput?.value || "").trim();
+    if (!(amount > 0)) return alert("Enter an amount greater than 0");
+    if (maxAmount && amount > maxAmount + 0.01) {
+      return alert(`Cannot defer more than ${fmt(maxAmount)} EGP`);
+    }
+    if (!/^\d{4}-\d{2}$/.test(deferToMonth)) return alert("Choose a valid month");
+    closeModal();
+    try {
+      await onSubmit?.({ amount, deferToMonth });
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+window.openDeferAmountModal = openDeferAmountModal;
 
 // Full audit logs are restricted to Admin + CEO roles.
 function isChangesViewer() {
@@ -1241,16 +1377,29 @@ function bindEmployeesTableActions(root, allEmployees) {
     };
   });
   root.querySelectorAll("[data-release]").forEach((b) => {
-    b.onclick = async (ev) => {
+    b.onclick = (ev) => {
       ev.stopPropagation();
-      if (!confirm(`Release app ID ${b.dataset.release}? It can be assigned to a new employee.`)) return;
-      try {
-        await api(`/employees/${b.dataset.release}/release-app-id`, { method: "POST" });
-        showSaveIndicator("App ID released", "saved");
-        render();
-      } catch (e) {
-        alert(e.message);
-      }
+      const id = b.dataset.release;
+      openConfirmDeleteModal({
+        title: "Release app ID",
+        message: `Release ${id}? The ID can be assigned to someone new; history stays in the database.`,
+        onConfirm: async () => {
+          b.disabled = true;
+          const prev = b.textContent;
+          b.textContent = "Releasing…";
+          try {
+            const res = await api(`/employees/${encodeURIComponent(id)}/release-app-id`, { method: "POST" });
+            if (res.employees) replaceEmployeesInCache(res.employees);
+            showSaveIndicator("App ID released", "saved");
+            render();
+          } catch (e) {
+            alert(e.message || "Release failed");
+          } finally {
+            b.disabled = false;
+            b.textContent = prev;
+          }
+        },
+      });
     };
   });
   root.querySelectorAll("tr[data-emp]").forEach((tr) => {
@@ -1291,6 +1440,14 @@ function patchEmployeeInCache(employee) {
   }
 }
 
+function replaceEmployeesInCache(employees) {
+  if (!Array.isArray(employees)) return;
+  const root = document.getElementById("app");
+  if (root?.__employeesData) root.__employeesData.employees = employees;
+  if (state.meta) state.meta.employees = employees;
+  if (state.page === "employees" && root) updateEmployeesTable(root);
+}
+
 async function refreshPayrollRowAfterSave(employeeId) {
   const root = document.getElementById("app");
   if (state.page !== "payroll" || !root?.__payrollData) return;
@@ -1321,7 +1478,9 @@ function attendanceEmployeeRowHtml(emp, ctx) {
     ${days.map((d) => {
       const rec = recordMap.get(`${emp.id}|${d}`);
       const st = rec?.status || "";
-      const dis = canEdit ? "" : "disabled";
+      const depart = String(emp.depart_date || "").slice(0, 10);
+      const locked = depart && d > depart;
+      const dis = canEdit && !locked ? "" : "disabled";
       const dayCls =
         window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
       const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
@@ -1329,13 +1488,15 @@ function attendanceEmployeeRowHtml(emp, ctx) {
       const holidayNote = holidayName
         ? `<div class="att-holiday-cell-note" title="${escapeHtml(dayTitle)}">${escapeHtml(holidayName)}</div>`
         : "";
-      return `<td class="att-cell ${dayCls}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
-        ${holidayNote}
-        <select class="status-select ${statusClass(st)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
+      const lockNote = locked ? `<div class="att-lock-note" title="After depart date">🔒</div>` : "";
+      const displaySt = locked ? "OUT" : st;
+      return `<td class="att-cell ${dayCls}${locked ? " att-locked" : ""}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
+        ${holidayNote}${lockNote}
+        <select class="status-select ${statusClass(displaySt)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
         <option value="">—</option>
-        ${statuses.map((x) => `<option value="${x}" ${st === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
+        ${statuses.map((x) => `<option value="${x}" ${displaySt === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
       </select>
-      ${transportOverrideHtml(emp.id, d, st, rec?.transportOverride, canEdit)}
+      ${transportOverrideHtml(emp.id, d, displaySt, rec?.transportOverride, canEdit && !locked)}
       </td>`;
     }).join("")}
   </tr>`;
@@ -1558,7 +1719,7 @@ function openAddAgentWizard() {
           <label class="field"><span>Team *</span>
             <select id="wiz-team" required>
               <option value="">Select team…</option>
-              ${TEAM_OPTIONS.map((t) => `<option value="${t}">${t}</option>`).join("")}
+              ${(state.orgTeams || []).map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("")}
             </select>
           </label>
           <label class="field ${wizard.unit === "HS-Back-End" ? "" : "hidden"}" id="wiz-pool-wrap"><span>ID pool (Back-End)</span>
@@ -1791,7 +1952,13 @@ function employeeFormFields(emp = {}) {
     ? emp.archived_app_id
     : emp.id;
   return `<form id="emp-form" class="field-grid">
-    <label class="field"><span>App ID (shown in HR screens)</span><input name="app_id_display" value="${escapeHtml(appIdDisplay || "")}" readonly /></label>
+    <label class="field"><span>App ID (shown in HR screens)</span>
+      ${canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp)
+        ? `<div class="btn-row"><input type="text" id="change-app-id-input" value="${escapeHtml(appIdDisplay || "")}" placeholder="App ID" style="max-width:10rem" />
+          <button type="button" class="btn btn-sm" id="change-app-id-btn">Save ID</button></div>`
+        : `<input name="app_id_display" value="${escapeHtml(appIdDisplay || "")}" readonly />`}
+    </label>
+    <label class="field"><span>Never pay (trial/test)</span><input name="payroll_exempt" type="checkbox" ${emp.payroll_exempt ? "checked" : ""} ${canManagePayrollEvents() ? "" : "disabled"} /></label>
     ${dbIdNote}
     ${historyNote}
     <label class="field"><span>American Name</span><input name="american_name" value="${emp.american_name || ""}" /></label>
@@ -1815,7 +1982,30 @@ function employeeFormFields(emp = {}) {
   </form>`;
 }
 
-function openEmployeeModal(emp) {
+function navigateToHrmsEmployeeSection(section, employeeId) {
+  if (!employeeId) return;
+  closeModal();
+  if (section === "equipment") {
+    state.hrmsEmployeeFilter = employeeId;
+    navigate("equipment");
+    return;
+  }
+  const emp =
+    (state.meta?.employees || []).find((e) => e.id === employeeId) ||
+    (document.getElementById("app")?.__employeesData?.employees || []).find((e) => e.id === employeeId);
+  if (emp) {
+    openEmployeeModal(emp, { focusSection: section });
+    return;
+  }
+  api(`/employees/${encodeURIComponent(employeeId)}`)
+    .then((d) => {
+      if (d.employee) openEmployeeModal(d.employee, { focusSection: section });
+      else alert("Employee not found");
+    })
+    .catch((e) => alert(e.message));
+}
+
+function openEmployeeModal(emp, options = {}) {
   const canPhoto = true;
   const canPromote =
     canManagePayrollEvents() && !emp.promoted_to_id && !emp.promoted_from_id && emp.status !== "Out" && emp.status !== "Deleted";
@@ -1832,18 +2022,11 @@ function openEmployeeModal(emp) {
             <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
           </label>
           ${emp.profile_photo_file_id ? '<button type="button" class="btn btn-sm btn-danger" id="remove-photo-btn">Remove</button>' : ""}
-          <p class="muted" style="margin:.35rem 0 0;font-size:.75rem">JPG, PNG, WebP or GIF · stored in Google Drive</p>
+          <p class="muted" style="margin:.35rem 0 0;font-size:.75rem">JPG, PNG, WebP or GIF · stored securely</p>
         </div>
       </div>` : ""}
       ${employeeFormFields(emp)}
-      ${canChangeAppId ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
-        <h4>Change app ID</h4>
-        <p class="muted" style="margin:.25rem 0 .75rem">Updates the ID shown in attendance &amp; payroll. Database ID and all historical records stay linked.</p>
-        <div class="btn-row">
-          <input type="text" id="change-app-id-input" placeholder="New app ID" style="max-width:10rem" />
-          <button type="button" class="btn btn-sm" id="change-app-id-btn">Change app ID</button>
-        </div>
-      </div>` : ""}
+      ${canChangeAppId ? `` : ""}
       ${canRevert ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
         <h4>Revert mistaken promotion</h4>
         <p class="muted" style="margin:.25rem 0 .75rem">Merges records back to <strong>${escapeHtml(emp.promoted_from_id)}</strong> and removes this promotion record.</p>
@@ -1912,17 +2095,32 @@ function openEmployeeModal(emp) {
       alert(e.message);
     }
   });
-  document.getElementById("release-app-id-btn")?.addEventListener("click", async () => {
+  document.getElementById("release-app-id-btn")?.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
     const label = isUnassignedIdStub(emp) ? emp.id : `app ID ${emp.id}`;
-    if (!confirm(`Release ${label}? The ID can be assigned to someone new; history stays in the database.`)) return;
-    try {
-      await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
-      closeModal();
-      showSaveIndicator("App ID released", "saved");
-      render();
-    } catch (e) {
-      alert(e.message);
-    }
+    const btn = document.getElementById("release-app-id-btn");
+    openConfirmDeleteModal({
+      title: "Release app ID",
+      message: `Release ${label}? The ID can be assigned to someone new; history stays in the database.`,
+      onConfirm: async () => {
+        btn.disabled = true;
+        const prev = btn.textContent;
+        btn.textContent = "Releasing…";
+        try {
+          const res = await api(`/employees/${encodeURIComponent(emp.id)}/release-app-id`, { method: "POST" });
+          if (res.employees) replaceEmployeesInCache(res.employees);
+          closeModal();
+          showSaveIndicator("App ID released", "saved");
+          await render();
+        } catch (e) {
+          alert(e.message || "Release failed");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = prev;
+        }
+      },
+    });
   });
   document.getElementById("export-emp-payrolls-btn")?.addEventListener("click", () =>
     exportEmployeePayrolls(emp).catch((e) => alert(e.message))
@@ -1939,13 +2137,16 @@ function openEmployeeModal(emp) {
     if (body.nationality === "__other__") {
       body.nationality = document.getElementById("emp-nationality-other")?.value?.trim() || "";
     }
+    body.payroll_exempt = document.querySelector("#emp-form [name=payroll_exempt]")?.checked === true;
     delete body.id;
+    delete body.app_id_display;
 
     const newStatus = body.status;
     if (newStatus === "Deleted") {
       if (!confirm(`Release app ID ${emp.id}? History stays in the database; the ID can be reused.`)) return;
       try {
-        await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+        const res = await api(`/employees/${emp.id}/release-app-id`, { method: "POST" });
+        if (res.employees) replaceEmployeesInCache(res.employees);
         closeModal();
         showSaveIndicator("App ID released", "saved");
         render();
@@ -2016,12 +2217,27 @@ function openEmployeeModal(emp) {
       btn.textContent = prevLabel;
     }
   };
-  window.HRMSFeatures?.mountEmployeeLifecyclePanel?.(emp, api, {
+  const focusLifecycle = () => {
+    if (!options.focusSection) return;
+    if (options.focusSection === "offboarding" || options.focusSection === "clearance") {
+      const details = document.getElementById("hrms-offboarding-section");
+      if (details) {
+        details.open = true;
+        details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  };
+  const lifecycleMount = window.HRMSFeatures?.mountEmployeeLifecyclePanel?.(emp, api, {
     escapeHtml,
     openModal,
     closeModal,
     canManagePayrollEvents,
   });
+  if (lifecycleMount && typeof lifecycleMount.then === "function") {
+    lifecycleMount.then(focusLifecycle);
+  } else {
+    requestAnimationFrame(focusLifecycle);
+  }
 }
 window.openEmployeeModal = openEmployeeModal;
 
@@ -2065,7 +2281,7 @@ async function openPromoteEmployeeModal(emp) {
         <label class="field"><span>New team</span>
           <select name="team" id="promote-team">
             <option value="">— keep current —</option>
-            ${TEAM_OPTIONS.map((t) => `<option value="${t}" ${emp.team === t ? "selected" : ""}>${t}</option>`).join("")}
+            ${(state.orgTeams || []).map((t) => `<option value="${escapeHtml(t.name)}" ${emp.team === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
           </select></label>
         <label class="field"><span>Effective from month</span>
           <input name="effectiveFromMonth" id="promote-effective" type="month" value="${state.month}" required /></label>
@@ -2219,6 +2435,18 @@ async function openPayslipModal(employeeId) {
     })
     .join("");
 
+  const gateNotes = data.payslipGateNotes || p.payslipGateNotes || [];
+  const gateBanner = gateNotes.length
+    ? `<div class="alert alert-warn" style="margin-bottom:1rem">
+        <strong>Offboarding / clearance pending</strong>
+        <ul style="margin:.5rem 0 0 1rem">${gateNotes.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>
+        <div class="btn-row" style="margin-top:.5rem">
+          <a class="btn btn-sm" href="#offboarding?employee=${encodeURIComponent(employeeId)}" data-hrms-nav="offboarding" data-employee-id="${escapeHtml(employeeId)}">Offboarding</a>
+          <a class="btn btn-sm" href="#clearance?employee=${encodeURIComponent(employeeId)}" data-hrms-nav="clearance" data-employee-id="${escapeHtml(employeeId)}">Clearance</a>
+          <a class="btn btn-sm" href="#equipment?employee=${encodeURIComponent(employeeId)}" data-hrms-nav="equipment" data-employee-id="${escapeHtml(employeeId)}">Equipment</a>
+        </div>
+      </div>`
+    : "";
   const adj = data.adjustment || {};
   const departDate = String(emp.depart_date || "").slice(0, 10);
   const departDay = departDate ? parseInt(departDate.slice(8, 10), 10) : 0;
@@ -2240,6 +2468,7 @@ async function openPayslipModal(employeeId) {
         <button class="btn btn-sm" data-close>✕</button>
       </div></div>
     <div class="modal-body payslip">
+      ${gateBanner}
       ${finalPayBanner}
       <div class="payslip-header">
         <div class="payslip-identity">
@@ -2325,7 +2554,10 @@ async function openPayslipModal(employeeId) {
           <label class="field"><span>2-week hold</span><input name="twoWeekHold" type="checkbox" ${adj.twoWeekHold ? "checked" : ""} /></label>
           <label class="field"><span>Transport eligible</span><input name="transportEligible" type="checkbox" ${transportCheckboxChecked(state.month, adj) ? "checked" : ""} />
             <span class="muted" style="font-size:.75rem;display:block;margin-top:.25rem">${transportAllowedForMonth(state.month) ? "Default on from July 2026" : "June default off — check to enable for this agent"}</span></label>
+          <label class="field"><span>No payroll this month</span><input name="noPayroll" type="checkbox" ${adj.noPayroll || p.noPayroll ? "checked" : ""} />
+            <span class="muted" style="font-size:.75rem;display:block;margin-top:.25rem">Zeros net pay; attendance still counts</span></label>
           <label class="field"><span>Sales count (month)</span><input name="salesCount" type="number" min="0" step="1" value="${adj.salesCount ?? p.salesCount ?? 0}" /></label>
+          ${canManagePayrollEvents() ? `<button type="button" class="btn btn-sm" id="recalc-sales-btn">Recalc from sales</button>` : ""}
           <label class="field" style="grid-column:1/-1"><span>Bank reference</span><input name="bankReference" value="${adj.bankReference || ""}" /></label>
           <label class="field" style="grid-column:1/-1"><span>Month notes</span><textarea name="monthNotes">${adj.monthNotes || p.monthNotes || ""}</textarea></label>
         </form>
@@ -2339,16 +2571,20 @@ async function openPayslipModal(employeeId) {
             <p class="muted" style="margin:.25rem 0 0">Partial payments, defer remainder to a future month, or corrections — multiple splits per month allowed.</p>
           </div>
           <button class="btn btn-sm" id="defer-remainder-btn" type="button">Defer balance → next month</button>
+          ${(data.splits || []).some((s) => s.status === "received")
+            ? `<button class="btn btn-sm" id="export-splits-zip-btn" type="button">Export all splits (ZIP)</button>`
+            : ""}
         </div>
         <div id="splits-list" class="stack">${(data.splits || []).length ? (data.splits || []).map((s) => `
           <div class="adj-row" data-split-id="${s.id}">
             <span>${splitStatusBadge(s.status)} <strong>${fmt(s.amount)}</strong> EGP
-              ${s.splitKind === "correction" ? " (correction)" : ""}
+              ${s.splitKind === "correction" ? " (correction)" : s.splitKind === "training_bonus" ? " (training bonus)" : ""}
               ${s.status === "deferred" && s.deferToMonth ? ` → ${monthLabel(s.deferToMonth)}` : ""}
               ${s.notes ? ` · ${s.notes}` : ""}</span>
             <span class="btn-row">
               ${s.status === "pending" ? `<button class="btn btn-sm btn-primary" data-split-received="${s.id}">Mark received</button>` : ""}
               ${s.status === "pending" ? `<button class="btn btn-sm" data-split-defer="${s.id}">Defer</button>` : ""}
+              ${s.status === "received" ? `<button class="btn btn-sm" data-split-pdf="${s.id}">Export PDF</button>` : ""}
               <button class="btn btn-sm btn-danger" data-split-del="${s.id}">Delete</button>
             </span>
           </div>`).join("") : '<p class="muted">No payment splits yet.</p>'}</div>
@@ -2356,6 +2592,7 @@ async function openPayslipModal(employeeId) {
           <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" step="0.01" required /></label>
           <label class="field"><span>Type</span><select name="splitKind">
             <option value="payment">Payment</option>
+            <option value="training_bonus">Training bonus</option>
             <option value="correction">Correction (+/−)</option>
           </select></label>
           <label class="field"><span>Status</span><select name="status">
@@ -2372,6 +2609,13 @@ async function openPayslipModal(employeeId) {
     </div>`,
     true
   );
+
+  document.querySelectorAll("[data-hrms-nav]").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      navigateToHrmsEmployeeSection(a.dataset.hrmsNav, a.dataset.employeeId);
+    });
+  });
 
   document.getElementById("pdf-slip-btn").onclick = async () => {
     try {
@@ -2407,6 +2651,26 @@ async function openPayslipModal(employeeId) {
       </table></div>`;
   };
 
+  const recalcBtn = document.getElementById("recalc-sales-btn");
+  if (recalcBtn) {
+    recalcBtn.onclick = async () => {
+      recalcBtn.disabled = true;
+      try {
+        const res = await api(`/payroll-adjustments/${employeeId}/recalc-sales-count`, {
+          method: "POST",
+          body: JSON.stringify({ yearMonth: state.month }),
+        });
+        const input = document.querySelector('#adj-form input[name="salesCount"]');
+        if (input) input.value = res.salesCount ?? 0;
+        showSaveIndicator(`Sales count: ${res.salesCount ?? 0}`, "saved");
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        recalcBtn.disabled = false;
+      }
+    };
+  }
+
   document.getElementById("save-adj-btn").onclick = async () => {
     const btn = document.getElementById("save-adj-btn");
     const fd = new FormData(document.getElementById("adj-form"));
@@ -2429,6 +2693,7 @@ async function openPayslipModal(employeeId) {
           salesCount: Number(fd.get("salesCount")) || 0,
           bankReference: fd.get("bankReference") || "",
           monthNotes: fd.get("monthNotes") || "",
+          noPayroll: fd.get("noPayroll") === "on",
         }),
       });
       closeModal();
@@ -2447,8 +2712,14 @@ async function openPayslipModal(employeeId) {
   const splitForm = document.getElementById("split-form");
   const splitStatusSel = splitForm?.querySelector("[name=status]");
   const deferField = splitForm?.querySelector(".split-defer-field");
+  const splitAmountInput = splitForm?.querySelector("[name=amount]");
+  const defaultBalance = p.remainingBalance ?? p.grossPayable ?? p.calculatedNet ?? p.netSalary;
   splitStatusSel?.addEventListener("change", () => {
-    deferField?.classList.toggle("hidden", splitStatusSel.value !== "deferred");
+    const isDeferred = splitStatusSel.value === "deferred";
+    deferField?.classList.toggle("hidden", !isDeferred);
+    if (isDeferred && splitAmountInput && !splitAmountInput.value) {
+      splitAmountInput.value = String(Math.max(0, defaultBalance));
+    }
   });
 
   document.getElementById("add-split-btn")?.addEventListener("click", async () => {
@@ -2473,23 +2744,50 @@ async function openPayslipModal(employeeId) {
   });
 
   document.getElementById("defer-remainder-btn")?.addEventListener("click", async () => {
-    const balance = p.remainingBalance ?? p.netSalary;
+    const balance = p.remainingBalance ?? p.grossPayable ?? p.calculatedNet ?? p.netSalary;
     if (!(balance > 0)) return alert("No balance left to defer");
-    const deferToMonth = prompt(`Defer ${fmt(balance)} EGP to which month? (YYYY-MM)`, shiftMonth(state.month, 1));
-    if (!deferToMonth || !/^\d{4}-\d{2}$/.test(deferToMonth)) return;
+    openDeferAmountModal({
+      title: "Defer remainder",
+      message: `Maximum deferrable: ${fmt(balance)} EGP`,
+      defaultMonth: shiftMonth(state.month, 1),
+      defaultAmount: balance,
+      maxAmount: balance,
+      onSubmit: async ({ amount, deferToMonth }) => {
+        await api("/payroll-splits", {
+          method: "POST",
+          body: JSON.stringify({
+            employeeId,
+            yearMonth: state.month,
+            amount,
+            status: "deferred",
+            deferToMonth,
+            notes: "Deferred remainder",
+          }),
+        });
+        openPayslipModal(employeeId);
+      },
+    });
+  });
+
+  document.querySelectorAll("[data-split-pdf]").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await downloadFile(
+          `/payslip/${encodeURIComponent(employeeId)}/pdf?month=${state.month}&splitId=${encodeURIComponent(btn.dataset.splitPdf)}`,
+          `payslip-${employeeId}-${state.month}-split-${btn.dataset.splitPdf}.pdf`
+        );
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+  });
+
+  document.getElementById("export-splits-zip-btn")?.addEventListener("click", async () => {
     try {
-      await api("/payroll-splits", {
-        method: "POST",
-        body: JSON.stringify({
-          employeeId,
-          yearMonth: state.month,
-          amount: balance,
-          status: "deferred",
-          deferToMonth,
-          notes: "Deferred remainder",
-        }),
-      });
-      openPayslipModal(employeeId);
+      await downloadFile(
+        `/payslip/${encodeURIComponent(employeeId)}/splits-zip?month=${state.month}`,
+        `payslip-splits-${employeeId}-${state.month}.zip`
+      );
     } catch (e) {
       alert(e.message);
     }
@@ -2513,34 +2811,41 @@ async function openPayslipModal(employeeId) {
   });
 
   document.querySelectorAll("[data-split-defer]").forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const split = (data.splits || []).find((s) => s.id === btn.dataset.splitDefer);
       if (!split) return;
-      const deferToMonth = prompt("Defer to month (YYYY-MM)", shiftMonth(state.month, 1));
-      if (!deferToMonth) return;
-      try {
-        await api(`/payroll-splits/${split.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ ...split, status: "deferred", deferToMonth }),
-        });
-        closeModal();
-        openPayslipModal(employeeId);
-      } catch (e) {
-        alert(e.message);
-      }
+      const maxAmount = p.remainingBalance != null ? p.remainingBalance + Number(split.amount || 0) : split.amount;
+      openDeferAmountModal({
+        title: "Defer split",
+        message: `Defer payment of ${fmt(split.amount)} EGP (max ${fmt(maxAmount)} EGP)`,
+        defaultMonth: shiftMonth(state.month, 1),
+        defaultAmount: split.amount,
+        maxAmount,
+        onSubmit: async ({ amount, deferToMonth }) => {
+          await api(`/payroll-splits/${split.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ ...split, status: "deferred", deferToMonth, amount }),
+          });
+          closeModal();
+          openPayslipModal(employeeId);
+        },
+      });
     };
   });
 
   document.querySelectorAll("[data-split-del]").forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm("Delete this payment split?")) return;
-      try {
-        await api(`/payroll-splits/${btn.dataset.splitDel}`, { method: "DELETE" });
-        closeModal();
-        openPayslipModal(employeeId);
-      } catch (e) {
-        alert(e.message);
-      }
+    btn.onclick = () => {
+      openConfirmModal({
+        title: "Delete split",
+        message: "Delete this payment split?",
+        confirmLabel: "Delete",
+        danger: true,
+        onConfirm: async () => {
+          await api(`/payroll-splits/${btn.dataset.splitDel}`, { method: "DELETE" });
+          closeModal();
+          openPayslipModal(employeeId);
+        },
+      });
     };
   });
 
@@ -2699,12 +3004,11 @@ async function renderAttendance(root) {
   root.__attendanceCtx = ctx;
 
   let employees = data.employees;
-  if (state.hideOut) {
-    employees = employees.filter((e) => !isOutEmployee(e));
-  }
   if (state.empFilter.q) {
     employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
   }
+
+  const federalHolidays = (data.holidays || []).filter((h) => h.country !== "EGY" && h.active !== false);
 
   root.innerHTML = `
     <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
@@ -2724,6 +3028,10 @@ async function renderAttendance(root) {
       `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
     ).join("")}</select>
     <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
+    ${data.canEdit && federalHolidays.length ? federalHolidays.map((h) => {
+      const d = String(h.date || h.holidayDate || "").slice(0, 10);
+      return `<button class="btn btn-sm" data-federal-off="${d}" title="Mark Day-OFF for all active agents">Federal OFF: ${escapeHtml(h.name || d)}</button>`;
+    }).join("") : ""}
     ${data.canEdit ? '<button class="btn btn-primary" id="import-fp-btn">Import FP file</button><button class="btn" id="fp-rules-btn">FP rules</button>' : ""}
     ${hideOutToggle()}
     <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
@@ -2793,6 +3101,24 @@ async function renderAttendance(root) {
     } catch (e) {
       alert(e.message);
     }
+  });
+  root.querySelectorAll("[data-federal-off]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const date = btn.dataset.federalOff;
+      openConfirmModal({
+        title: "Federal day off",
+        message: `Mark ${date} as Day-OFF for all active agents?`,
+        confirmLabel: "Apply",
+        onConfirm: async () => {
+          const res = await api("/hrms/attendance/bulk-dayoff", {
+            method: "POST",
+            body: JSON.stringify({ date, scope: "federal_active" }),
+          });
+          showSaveIndicator(`Day-OFF set for ${res.count} agents`, "saved");
+          render();
+        },
+      });
+    });
   });
   root.querySelector("#import-fp-btn")?.addEventListener("click", () => openFpImportModal());
   root.querySelector("#fp-rules-btn")?.addEventListener("click", () => openFpRulesModal());
@@ -3434,7 +3760,7 @@ async function openDeductionEditModal(deduction, employees, deductionTypes) {
 
 async function renderBonuses(root) {
   const reqs = [
-    api(`/bonuses?month=${state.month}`),
+    api(`/bonuses?${buildApiQuery({ month: state.month })}`),
     api(`/employees${employeesQuery()}`),
   ];
   if (canSubmitBonusRequest() || canApproveBonusRequest()) {
@@ -3543,10 +3869,20 @@ async function renderBonuses(root) {
     };
   });
   root.querySelectorAll("[data-deny-req]").forEach((btn) => {
-    btn.onclick = async () => {
-      const denyReason = prompt("Deny reason:") || "";
-      await api(`/bonus-requests/${btn.dataset.denyReq}`, { method: "PATCH", body: JSON.stringify({ action: "deny", denyReason }) });
-      render();
+    btn.onclick = () => {
+      openPromptModal({
+        title: "Deny bonus request",
+        message: "Optional reason for denial:",
+        placeholder: "Reason",
+        confirmLabel: "Deny",
+        onSubmit: async (denyReason) => {
+          await api(`/bonus-requests/${btn.dataset.denyReq}`, {
+            method: "PATCH",
+            body: JSON.stringify({ action: "deny", denyReason }),
+          });
+          render();
+        },
+      });
     };
   });
   root.querySelector("#add-bonus-page-btn")?.addEventListener("click", () => {
@@ -3558,7 +3894,7 @@ async function renderBonuses(root) {
 
 async function renderDeductions(root) {
   const [dedData, empData] = await Promise.all([
-    api(`/deductions?month=${state.month}`),
+    api(`/deductions?${buildApiQuery({ month: state.month })}`),
     api(`/employees${employeesQuery()}`),
   ]);
   const employees = empData.employees || [];
@@ -3654,17 +3990,27 @@ async function renderLoanApprovalsPage(root) {
     };
   });
   root.querySelectorAll("[data-loan-deny]").forEach((btn) => {
-    btn.onclick = async () => {
-      const reason = prompt("Deny reason (optional):") || "";
-      await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, { method: "POST", body: JSON.stringify({ denyReason: reason }) });
-      render();
+    btn.onclick = () => {
+      openPromptModal({
+        title: "Deny loan request",
+        message: "Optional denial reason:",
+        placeholder: "Reason",
+        confirmLabel: "Deny",
+        onSubmit: async (reason) => {
+          await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, {
+            method: "POST",
+            body: JSON.stringify({ denyReason: reason }),
+          });
+          render();
+        },
+      });
     };
   });
 }
 
 async function renderLoansPage(root) {
   const [loanData, empData] = await Promise.all([
-    api("/loans"),
+    api(`/loans?${buildApiQuery({})}`),
     api(`/employees${employeesQuery()}`),
   ]);
   const employees = empData.employees || [];
@@ -3786,7 +4132,7 @@ async function openEmployeeWarningsModal(employeeId) {
 
 async function renderSalaries(root) {
   const [ratesData, adjData, empData] = await Promise.all([
-    api("/position-rates"),
+    api(`/position-rates?month=${state.month}`),
     api(`/payroll-adjustments?month=${state.month}`),
     api(`/employees${employeesQuery()}`),
   ]);
@@ -3795,7 +4141,7 @@ async function renderSalaries(root) {
   const canDeleteRates = canManagePayrollEvents();
 
   root.innerHTML = `
-    <div class="page-header"><div><h1>Salaries</h1><p class="muted">Position rates & monthly raises for ${monthLabel(state.month)}</p></div></div>
+    <div class="page-header"><div><h1>Salaries</h1><p class="muted">Position rates for ${monthLabel(state.month)} — other months unchanged</p></div></div>
     ${monthToolbar("")}
     <div class="grid-2">
       <div class="card">
@@ -3805,9 +4151,9 @@ async function renderSalaries(root) {
           <thead><tr><th>Position</th><th class="text-right">Monthly (EGP)</th><th></th></tr></thead>
           <tbody id="rates-body">${ratesData.rates.map((r) => `<tr>
             <td>${r.position}</td>
-            <td class="text-right"><input class="inline-input" data-pos="${r.position}" type="number" value="${r.monthlySalary}" /></td>
+            <td class="text-right"><input class="inline-input" data-pos="${escapeHtml(r.position)}" type="number" value="${r.monthlySalary}" /></td>
             <td class="btn-row">
-              <button class="btn btn-sm" data-save-rate="${r.position}">Save</button>
+              <button class="btn btn-sm" data-save-rate="${escapeHtml(r.position)}">Save</button>
               ${canDeleteRates && !usedPositions.has(r.position) ? `<button class="btn btn-sm btn-danger" data-del-rate="${escapeHtml(r.position)}">Delete</button>` : ""}
             </td>
           </tr>`).join("")}</tbody>
@@ -3830,13 +4176,18 @@ async function renderSalaries(root) {
   root.querySelectorAll("[data-save-rate]").forEach((btn) => {
     btn.onclick = async () => {
       const pos = btn.dataset.saveRate;
-      const input = root.querySelector(`input[data-pos="${pos}"]`);
-      await api("/position-rates", {
-        method: "PUT",
-        body: JSON.stringify({ position: pos, monthlySalary: Number(input.value) }),
-      });
-      btn.textContent = "Saved";
-      setTimeout(() => { btn.textContent = "Save"; }, 1500);
+      const input = root.querySelector(`input[data-pos="${CSS.escape(pos)}"]`);
+      if (!input) return alert("Could not find salary field for this position.");
+      try {
+        await api("/position-rates", {
+          method: "PUT",
+          body: JSON.stringify({ position: pos, monthlySalary: Number(input.value), yearMonth: state.month }),
+        });
+        btn.textContent = "Saved";
+        setTimeout(() => { btn.textContent = "Save"; }, 1500);
+      } catch (e) {
+        alert(e.message || "Save failed");
+      }
     };
   });
   root.querySelectorAll("[data-del-rate]").forEach((btn) => {
@@ -3846,19 +4197,39 @@ async function renderSalaries(root) {
         title: "Delete position rate",
         message: `Remove position "${position}"?`,
         onConfirm: async () => {
-          await api(`/position-rates/${encodeURIComponent(position)}`, { method: "DELETE" });
+          await api(`/position-rates/${encodeURIComponent(position)}?month=${state.month}`, { method: "DELETE" });
           renderSalaries(root);
         },
       });
     };
   });
-  root.querySelector("#add-rate-btn").onclick = async () => {
-    const position = prompt("Position name:");
-    if (!position) return;
-    const salary = Number(prompt("Monthly salary (EGP):"));
-    if (!salary) return;
-    await api("/position-rates", { method: "PUT", body: JSON.stringify({ position, monthlySalary: salary }) });
-    renderSalaries(root);
+  root.querySelector("#add-rate-btn").onclick = () => {
+    openModal(`
+      <div class="modal-header"><h2>Add position</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <form id="add-position-form" class="modal-body field-grid">
+        <label class="field"><span>Position name</span><input name="position" required /></label>
+        <label class="field"><span>Monthly salary (EGP)</span><input name="monthlySalary" type="number" min="1" required /></label>
+      </form>
+      <div class="modal-footer"><button class="btn" data-close type="button">Cancel</button><button class="btn btn-primary" id="save-new-position" type="submit">Save</button></div>`);
+    const addForm = document.getElementById("add-position-form");
+    addForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(addForm);
+      const position = String(fd.get("position") || "").trim();
+      const salary = Number(fd.get("monthlySalary"));
+      if (!position || !salary) return alert("Enter position name and salary");
+      try {
+        await api("/position-rates", { method: "PUT", body: JSON.stringify({ position, monthlySalary: salary, yearMonth: state.month }) });
+        closeModal();
+        renderSalaries(root);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+    document.getElementById("save-new-position").onclick = (e) => {
+      e.preventDefault();
+      addForm.requestSubmit();
+    };
   };
 }
 
@@ -4055,6 +4426,12 @@ async function renderSettings(root) {
         <p class="muted">Version policy is managed in Supabase (<code>app_versions</code> table).</p>
       </div>
       <div class="card">
+        <h3>Session</h3>
+        <p class="muted">Session ID (for support):</p>
+        <p><code id="settings-session-id">${escapeHtml(typeof getSessionId === "function" ? getSessionId() || "—" : "—")}</code></p>
+        <p class="muted">One active session per user. Signing in elsewhere revokes this device after ~10 hours idle.</p>
+      </div>
+      <div class="card">
         <h3>Data sync</h3>
         <p class="muted">Last sync: ${status.lastSync ? timeAgo(status.lastSync) : "Never"}</p>
         <button class="btn btn-primary" id="settings-refresh">Refresh from server</button>
@@ -4084,6 +4461,11 @@ async function renderSettings(root) {
     openModal,
     closeModal,
     render,
+  }).catch(() => {});
+  window.HRSalesConfigBreaks?.enhanceSettings(root, api, state, {
+    escapeHtml,
+    openModal,
+    closeModal,
   }).catch(() => {});
 }
 
@@ -4138,6 +4520,7 @@ async function renderUsers(root) {
     <td class="muted">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : "—"}</td>
     <td class="muted">${u.updatedAt ? timeAgo(u.updatedAt) : "—"}</td>
     <td class="flex-between" style="gap:.35rem;justify-content:flex-end">
+      ${u.status === "inactive" ? `<button class="btn btn-sm btn-primary" data-activate-user="${escapeHtml(u.username)}">Activate</button>` : ""}
       <button class="btn btn-sm" data-edit-user="${escapeHtml(u.username)}">Edit</button>
       <button class="btn btn-sm btn-danger" data-delete-user="${escapeHtml(u.username)}" ${
         u.username.toLowerCase() === (state.user?.username || "").toLowerCase()
@@ -4224,6 +4607,13 @@ async function renderUsers(root) {
     renderUsers(root);
   };
   root.querySelector("#add-user-btn").onclick = () => openUserFormModal({ roles, statuses });
+  root.querySelectorAll("[data-activate-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.activateUser;
+      const user = users.find((u) => u.username === username);
+      openActivateUserModal({ roles, user });
+    });
+  });
   root.querySelectorAll("[data-edit-user]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const username = btn.dataset.editUser;
@@ -4232,18 +4622,67 @@ async function renderUsers(root) {
     });
   });
   root.querySelectorAll("[data-delete-user]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", () => {
       const username = btn.dataset.deleteUser;
-      if (!confirm(`Remove user "${username}"? They will no longer be able to sign in.`)) return;
-      try {
-        await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
-        showSaveIndicator("User removed", "saved");
-        render();
-      } catch (e) {
-        showSaveIndicator(e.message, "error");
-      }
+      openConfirmModal({
+        title: "Remove user",
+        message: `Remove user "${username}"? They will no longer be able to sign in.`,
+        confirmLabel: "Remove",
+        danger: true,
+        onConfirm: async () => {
+          await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+          showSaveIndicator("User removed", "saved");
+          render();
+        },
+      });
     });
   });
+}
+
+function openActivateUserModal({ roles, user }) {
+  if (!user) return;
+  const roleOpts = roles
+    .map((r) => `<option value="${r}" ${user.role === r ? "selected" : ""}>${r}</option>`)
+    .join("");
+  openModal(`
+    <div class="modal-header">
+      <h2>Activate ${escapeHtml(user.username)}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" data-close aria-label="Close">×</button>
+    </div>
+    <form id="activate-user-form" class="modal-body">
+      <p class="muted">Set a password and role so this employee can sign in.</p>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" required minlength="4" autocomplete="new-password" />
+      </label>
+      <label class="field">
+        <span>Role / access level</span>
+        <select name="role" required>${roleOpts}</select>
+      </label>
+    </form>
+    <div class="modal-footer">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" form="activate-user-form" class="btn btn-primary">Activate</button>
+    </div>`);
+  document.getElementById("activate-user-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api(`/admin/users/${encodeURIComponent(user.username)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: "active",
+          role: fd.get("role"),
+          password: String(fd.get("password") || ""),
+        }),
+      });
+      closeModal();
+      showSaveIndicator(`${user.username} activated`, "saved");
+      render();
+    } catch (err) {
+      showSaveIndicator(err.message, "error");
+    }
+  };
 }
 
 function openUserFormModal({ roles, statuses, user = null }) {
@@ -4419,6 +4858,7 @@ async function render() {
     equipment: "Loading equipment…",
     org: "Loading organization…",
     sales: "Loading sales…",
+    breaks: "Loading breaks…",
     costs: "Loading costs…",
     "team-dashboard": "Loading team dashboards…",
     "loan-approvals": "Loading loan approvals…",
@@ -4463,6 +4903,8 @@ async function render() {
       await window.SalesModule.renderSalesPage(root, api, state, {
         monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal,
       });
+    } else if (page === "breaks" && window.HRSalesConfigBreaks) {
+      await window.HRSalesConfigBreaks.renderBreaksPage(root, api, state, { escapeHtml });
     } else if (page === "team-dashboard" && window.TeamDashboardModule) {
       await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, { escapeHtml });
     }     else if (page === "costs" && window.ExpensesModule) {
@@ -4509,6 +4951,7 @@ document.getElementById("logout-btn").addEventListener("click", () => performLog
 document.getElementById("refresh-btn").addEventListener("click", () => refreshData());
 
 let sessionCheckTimer = null;
+let appUpdateCheckTimer = null;
 
 // Auto sign-out after 10 minutes with no activity in the app window.
 const IDLE_LOGOUT_MS = 10 * 60 * 1000;
@@ -4558,7 +5001,10 @@ function checkIdleOnResume() {
   (ev) => window.addEventListener(ev, resetIdleTimer, { passive: true })
 );
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") checkIdleOnResume();
+  if (document.visibilityState === "visible") {
+    checkIdleOnResume();
+    if (typeof checkForAppUpdate === "function") checkForAppUpdate();
+  }
 });
 window.addEventListener("focus", checkIdleOnResume);
 
@@ -4606,6 +5052,9 @@ async function boot() {
     consumePendingVersionNotice();
     if (!sessionCheckTimer) {
       sessionCheckTimer = setInterval(checkSession, SESSION_CHECK_MS);
+    }
+    if (!appUpdateCheckTimer) {
+      appUpdateCheckTimer = setInterval(() => checkForAppUpdate(), APP_UPDATE_CHECK_MS);
     }
     resetIdleTimer();
     window.HRMSFeatures?.initNotificationsBell(api, state).catch(() => {});

@@ -1,13 +1,16 @@
 # Hangup HR — App updates
 
+> **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
+
 Hangup HR uses **two separate distribution channels**. They work together but do not replace each other.
 
 | Channel | What it delivers | Who uses it | Size |
 |---------|------------------|-------------|------|
-| **Installer / portable EXE** (your PC build) | Full first-time install | New PCs, USB handoff, reinstall | ~130–180 MB |
+| **NSIS installer** (your PC build or CI) | Full first-time install | New PCs, reinstall | ~130–180 MB |
+| **macOS DMG** (Mac or CI `build-macos`) | Full first-time install on Mac | New Macs, reinstall | ~150–200 MB |
 | **GitHub patch update** (in-app) | Changed files only | PCs already running the app | Usually a few MB |
 
-**Your local build workflow is unchanged.** You still run `.\scripts\build.ps1` on your PC to produce Setup + Portable EXEs. GitHub updates are an **additional** path for users who already have the app installed.
+**Your local build workflow:** run `.\scripts\build.ps1 installer` on Windows (NSIS Setup) or `./scripts/build-macos.sh` on a Mac (DMG). GitHub in-app updates use patch/full zips — not the installers.
 
 ---
 
@@ -87,7 +90,9 @@ Patch zips contain an `update-info.json` with `removed` file paths (deleted in t
 
 1. User opens Hangup HR (desktop EXE).
 2. App checks **Supabase `app_versions`** — warn or block if policy requires a newer version.
-3. App checks **GitHub Releases** (if `GITHUB_UPDATES_REPO` is set in packaged `.env`).
+3. App checks **GitHub Releases** for **every signed-in user** (and on the login page when configured):
+   - Boot, session poll (~5 min), background interval (~30 min), tab visibility return
+   - Requires `GITHUB_UPDATES_REPO` in packaged `.env`; private repos need `GITHUB_UPDATES_TOKEN`
 4. If a newer release exists:
    - On **previous version** → download **patch zip** (small).
    - On **older skipped version** → download **full zip**.
@@ -131,8 +136,11 @@ Patch zips contain an `update-info.json` with `removed` file paths (deleted in t
 8. Ensure packaged `.env` includes:
    ```env
    GITHUB_UPDATES_REPO=your-org/hangup-hr
+   GITHUB_UPDATES_TOKEN=ghp_...   # private repo; generate via `gh auth token`
    ```
    Rebuild once so new installs know where to check. Existing installs keep their packaged `.env` unless you redistribute.
+
+**Latest published:** `v1.2.0`
 
 ---
 
@@ -202,7 +210,8 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 | `scripts/publish-github-release.ps1` | Local publish helper (`gh release create`) |
 | `electron/main.js` | IPC: `check-github-update`, `apply-github-update`, `relaunch-app` |
 | `electron/preload.js` | Exposes `hrDesktop.checkGitHubUpdate()` to UI |
-| `public/js/app.js` | Update popup with **Update now** button |
+| `public/js/app.js` | `checkForAppUpdate()` — popup + login banner; all users |
+| `public/login.html` | GitHub update banner before sign-in |
 | `.github/workflows/release.yml` | Optional CI release publishing |
 
 ---
@@ -211,7 +220,7 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 | Issue | Fix |
 |-------|-----|
-| No update popup | Set `GITHUB_UPDATES_REPO` in packaged `.env` and rebuild |
+| No update popup | Set `GITHUB_UPDATES_REPO` (+ `GITHUB_UPDATES_TOKEN` if private) in packaged `.env` and rebuild |
 | Patch not created | First release needs full zip; keep `dist\update-manifests\` between builds |
 | User on old version gets large download | Expected — full zip fallback |
 | `adm-zip` error | Run `npm install` before building |

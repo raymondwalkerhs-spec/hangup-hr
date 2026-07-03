@@ -28,6 +28,9 @@ async function probeState(db) {
     internal_id: false,
     force_update: false,
     finance_hr: false,
+    v109b5: false,
+    v110: false,
+    v112: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -37,7 +40,25 @@ async function probeState(db) {
   if (!l.error) state.finance_hr = true;
   const v = await db.from("app_versions").select("force_update_min_version").limit(1);
   state.force_update = !v.error;
+  const pe = await db.from("employees").select("payroll_exempt").limit(1);
+  const np = await db.from("payroll_adjustments").select("no_payroll").limit(1);
+  const fd = await db.from("sales").select("form_data").limit(1);
+  const sfp = await db.from("sales_field_permissions").select("field_key").limit(1);
+  state.v109b5 = !pe.error && !np.error && !fd.error && !sfp.error;
+  const prm = await db.from("position_rate_monthly").select("year_month").limit(1);
+  state.v110 = !prm.error;
+  const sc = await db.from("sales_clients").select("id").limit(1);
+  state.v112 = !sc.error;
   return state;
+}
+
+async function probeStateWithRetry(db, attempts = 4) {
+  let last = await probeState(db);
+  for (let i = 1; i < attempts && filesToApply(last).length; i += 1) {
+    await new Promise((r) => setTimeout(r, 1500));
+    last = await probeState(db);
+  }
+  return last;
 }
 
 function filesToApply(state) {
@@ -45,6 +66,9 @@ function filesToApply(state) {
   if (!state.internal_id) files.push("20260706_employee_internal_id.sql");
   if (!state.force_update) files.push("20260706_app_versions_force_update.sql");
   if (!state.finance_hr) files.push("20260708_finance_hr_attendance.sql");
+  if (!state.v109b5) files.push("20260709_v109b5_sprint.sql");
+  if (!state.v110) files.push("20260710_v110_relations.sql");
+  if (!state.v112) files.push("20260711_v112_clients_breaks.sql");
   return files;
 }
 
@@ -165,12 +189,12 @@ async function main() {
   const via = await applySql({ url, sql });
   console.log("Applied via", via);
 
-  const after = await probeState(db);
+  const after = await probeStateWithRetry(db);
   const remaining = filesToApply(after);
   if (remaining.length) {
     throw new Error(`Verification failed — still missing: ${remaining.join(", ")}`);
   }
-  console.log("Verified: internal_id, force_update_min_version, fp_number, loan_requests.");
+  console.log("Verified: internal_id, force_update_min_version, fp_number, loan_requests, v109b5 sprint, v110 relations, v112 clients/breaks.");
 }
 
 main().catch((err) => {

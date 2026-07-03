@@ -1,5 +1,7 @@
 # AI Agent — Hangup HR project context
 
+> **Data backend:** Supabase only. **Do not use Google Sheets.** Historical sheet layout: [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
+
 Internal reference for Cursor / coding agents. **Read this at the start of a session** when working on
 Hangup HR. Keep it updated when architecture, release process, or key decisions change.
 
@@ -8,23 +10,23 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 ## What this app is
 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
-- **Workspace:** `K:\download app hr`
+- **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.0.9-beta.4` (`package.json` → `version`)
+- **Current version:** `1.2.0` (`package.json` → `version`)
 
 ---
 
-## Live backend (as of beta.5)
+## Live backend (Supabase only)
 
 | Item | Value |
 |------|--------|
-| Active backend | `DATA_BACKEND=supabase` in `.env` |
+| Active backend | `DATA_BACKEND=supabase` in `.env` (**required** — `sheets` throws at startup) |
 | Supabase project | `https://ugntjwqimgosuiodsnnk.supabase.co` |
 | Auth users | `app_users` (bcrypt passwords, optional `email` column) |
 | Version policy | `app_versions` table (`lib/version-sheet.js`) |
 | Documents | Supabase Storage bucket `hr-documents` |
 | Local cache | SQLite per PC (`better-sqlite3`) — **keep this**; do not read Postgres on every UI click |
-| Legacy fallback | `DATA_BACKEND=sheets` → Google Sheets + Drive |
+| Legacy Sheets | **Removed from runtime** — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
 
 **Data flow:** Supabase (source of truth) → sync → SQLite on each machine → fast UI reads. Writes go
 to Supabase via Express, then re-sync.
@@ -57,7 +59,7 @@ to Supabase via Express, then re-sync.
 | Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js` |
 | Users CRUD | `lib/users-admin.js`, `lib/roles.js` |
 | Version check | `lib/app-version.js`, `lib/version-sheet.js` |
-| GitHub in-app updates | `lib/github-updater.js`, `UPDATES.md`, `.github/workflows/release.yml` |
+| GitHub in-app updates | `lib/github-updater.js`, `GET /api/github-update`, `UPDATES.md`, `.github/workflows/release.yml` |
 | Electron | `electron/main.js`, `electron/preload.js` |
 | Build | `scripts/build.ps1`, `package.json` → `build` section |
 | Migrations | `supabase/migrations/`, Supabase MCP `apply_migration` / `execute_sql` |
@@ -76,16 +78,11 @@ to Supabase via Express, then re-sync.
 
 ---
 
-## Google Sheets (legacy IDs — still used for migration / fallback)
+## UI conventions
 
-| Sheet | ID |
-|-------|-----|
-| HR Access (login, App_Versions fallback) | `1i4KR3e_jNtPMTSDFnbpS7kYzExqEyA0CgLlaZg5KoF8` |
-| HR Data | `17z8JrLV0_4fSXzsiZRpCZWFJk5FTit3IUkw0c3NOkvU` |
-| Change Log | `14vcc32AvyXI6PEUPbCd5IBoTfhEirAorGX1xMI75h9Y` |
-| Drive folder (legacy docs) | `1rfPMKlIqbJ_eKpwXIpHPKW_vfR7VXVUe` |
-
-Service account: `hrsystem@decoded-flag-420721.iam.gserviceaccount.com`
+- **Employee pickers:** Any field representing a person (agent, closer, reviewer, verifier, approver) must use a **dropdown** from `employees` — never free-text names in UI.
+- **Sales edit:** Agent and closer are **read-only** after creation; reviewer and verifier use employee dropdowns.
+- **Sales month view:** Filter by agent and/or closer via toolbar dropdowns.
 
 ---
 
@@ -96,9 +93,14 @@ Service account: `hrsystem@decoded-flag-420721.iam.gserviceaccount.com`
 
 ### Migration order (apply when missing)
 
+Apply all files in `supabase/migrations/` in filename order. Key recent files:
+
 1. `20260706_employee_internal_id.sql`
 2. `20260706_app_versions_force_update.sql`
 3. `20260708_finance_hr_attendance.sql`
+4. `20260709_v109b5_sprint.sql` — payroll_exempt, sales form_data, field permissions, attachments
+5. `20260710_v110_relations.sql` — unified employee relations
+6. `20260711_v112_clients_breaks.sql` — sales clients/products/prices, break schedules, settings revision
 
 ### How to apply (try in order)
 
@@ -164,7 +166,7 @@ Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('.
 4. **Update live `app_versions` in Supabase** (required — do not skip):
 
 ```powershell
-cd "K:\download app hr"
+cd "F:\download app hr"   # or your repo root
 node scripts/publish-app-version.js --notes "One-line release notes"
 ```
 
@@ -200,11 +202,10 @@ ON CONFLICT (version) DO UPDATE SET
 5. **Build** Windows EXEs on **your PC** (primary — unchanged):
 
 ```powershell
-cd "K:\download app hr"
 .\scripts\build.ps1 all
 ```
 
-Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant.
+Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant (or `dist-build\` if `dist\` is locked).
 
 6. **Optional — GitHub in-app patch updates** (does not replace step 5; uploads **win-unpacked** diff only, not EXEs):
 
@@ -214,7 +215,14 @@ Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant.
 # Broken draft release:  .\scripts\publish-github-release.ps1 -Recreate
 ```
 
-Set `GITHUB_UPDATES_REPO=owner/repo` in packaged `.env`. Full detail: [`UPDATES.md`](UPDATES.md).
+Set in packaged `.env`:
+
+```env
+GITHUB_UPDATES_REPO=owner/repo
+GITHUB_UPDATES_TOKEN=ghp_...   # required for private repos; use `gh auth token` locally
+```
+
+GitHub update check runs for **all users** (boot, login banner, session poll ~5 min, interval ~30 min). Full detail: [`UPDATES.md`](UPDATES.md).
 
 7. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).
 
@@ -271,7 +279,11 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | min_compatible_version | force_update (field) | notes |
 |---------|------------|------------------------|----------------------|-------|
-| 1.0.9-beta.1 | **true** | 1.0.8-beta.1 | 1.0.9-beta.1 | Finance workflow, FP import, loan approval, custom reports |
+| 1.2.0 | **true** | 1.0.8-beta.1 | — | Sales catalog in settings, break schedules, session ID, Dropbox attachments, GitHub updater macOS |
+| 1.1.0 | false | 1.0.8-beta.1 | — | Unified relations; sales CSV backfill; month position rates; assignment notifications |
+| 1.0.9-beta.7 | **true** | 1.0.8-beta.1 | — | Supabase-only runtime; session fix; sales dropdowns; payroll splits |
+| 1.0.9-beta.6 | false | 1.0.8-beta.1 | — | UI modals, GitHub updates all users |
+| 1.0.9-beta.1 | false | 1.0.8-beta.1 | 1.0.9-beta.1 | Finance workflow, FP import, loan approval, custom reports |
 | 1.0.8-beta.1 | false | 1.0.7-beta.1 | 1.0.8-beta.1 | Employee identity, promotions revert, nav, field force-update |
 | 1.0.5-beta.1 | false | 1.0.0 | — | Sales, bonus approval, costs/petty cash |
 | 1.0.4-beta.3 | false | 1.0.0 | Nationality, compliance, employee filters |
@@ -366,7 +378,7 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 | ADM-05 | **Backup / restore UI** | P2 | Raymond triggers Supabase-aware cache refresh; export config snapshot |
 | ADM-06 | **Localization (EN + AR)** | P3 | RTL layout, bilingual payslips if needed |
 | ADM-07 | **GitHub release channel (Windows)** | Done | Workflow + `bootstrap-github-repo.ps1` — user pushes repo + secrets |
-| ADM-08 | **GitHub release channel (macOS CI)** | Done | `macos-latest` job + `scripts/build-macos.sh` in release workflow |
+| ADM-08 | **GitHub release channel (macOS CI)** | Done | `macos-latest` job + `scripts/build-macos.sh` in root `release.yml` (no `hr-app/` mirror) |
 | ADM-09 | **macOS code signing** | P2 | Apple cert for Gatekeeper after in-app update (`identity: null` today) |
 
 ### Costs & finance

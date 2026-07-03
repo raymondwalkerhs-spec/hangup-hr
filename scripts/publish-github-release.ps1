@@ -103,7 +103,10 @@ if (Test-Path $manifestDir) {
 }
 
 if ($IncludeInstaller) {
-  Get-ChildItem $dist -Filter "*.exe" -ErrorAction SilentlyContinue |
+  Get-ChildItem $dist -Filter "*Setup*.exe" -ErrorAction SilentlyContinue |
+    Where-Object { Test-VersionAsset $_.Name } |
+    ForEach-Object { $uploads.Add($_.FullName) }
+  Get-ChildItem $dist -Filter "*.dmg" -ErrorAction SilentlyContinue |
     Where-Object { Test-VersionAsset $_.Name } |
     ForEach-Object { $uploads.Add($_.FullName) }
 }
