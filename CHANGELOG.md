@@ -4,7 +4,7 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
-## [1.3.6.1] — 2026-07-04
+## [1.3.7] — 2026-07-04
 
 ### Fixed
 - **Login stall after RBAC:** removed blocking `loadOverrides()` from every authenticated request; preload once at server start with deduplicated Supabase fetch
