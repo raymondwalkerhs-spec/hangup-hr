@@ -12,7 +12,7 @@ Hangup HR. Keep it updated when architecture, release process, or key decisions 
 - **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.2.0` (`package.json` → `version`)
+- **Current version:** `1.3.0` (`package.json` → `version`)
 
 ---
 
@@ -37,12 +37,12 @@ to Supabase via Express, then re-sync.
 
 | User | Role | Special powers |
 |------|------|----------------|
-| Mark | `ceo` | Full access + **Changes** audit tab |
-| Raymond | `admin` | Full access + **Changes** + **sole system admin** (`canManageAppUsers`) |
-| Aurora, Eva, Phoebe | `hr` | Full HR work, no Changes tab |
+| Mark | `ceo` | Full access + **Changes** audit tab; **may activate** employee logins |
+| Raymond | `admin` | Full access + **Changes** + **system admin** (`canManageAppUsers`) + **may activate** logins |
+| Aurora, Eva, Phoebe | `hr` | Full HR work, no Changes tab; Phoebe = **HS-Back-End HR manager** (`HR-Phoebe`) |
 | *(others)* | per `app_users.role` | See `lib/roles.js` |
 
-- **Users admin** (`/api/admin/users`, **Users** sidebar tab): **Raymond only** — not other admins.
+- **Users admin** (`/api/admin/users`, **Users** sidebar tab): **Mark and Raymond** — activate inactive employee logins; Raymond manages all users.
 - **Changes tab:** `admin` + `ceo` only (`canViewLogs`).
 - **Forgot password:** not implemented; Raymond resets via **Users → Edit**. `app_users.email` is for
   future email reset.
@@ -59,7 +59,8 @@ to Supabase via Express, then re-sync.
 | Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js` |
 | Users CRUD | `lib/users-admin.js`, `lib/roles.js` |
 | Version check | `lib/app-version.js`, `lib/version-sheet.js` |
-| GitHub in-app updates | `lib/github-updater.js`, `GET /api/github-update`, `UPDATES.md`, `.github/workflows/release.yml` |
+| GitHub in-app updates | `lib/github-updater.js`, `lib/zip-extract.js`, `lib/update-integrity.js`, `UPDATES.md`, `.github/workflows/release.yml` |
+| Org & registration | `lib/org-hierarchy.js`, `lib/registration.js`, `lib/training-phases.js`, `public/js/hrms-features.js` |
 | Electron | `electron/main.js`, `electron/preload.js` |
 | Build | `scripts/build.ps1`, `package.json` → `build` section |
 | Migrations | `supabase/migrations/`, Supabase MCP `apply_migration` / `execute_sql` |
@@ -101,6 +102,61 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 4. `20260709_v109b5_sprint.sql` — payroll_exempt, sales form_data, field permissions, attachments
 5. `20260710_v110_relations.sql` — unified employee relations
 6. `20260711_v112_clients_breaks.sql` — sales clients/products/prices, break schedules, settings revision
+7. `20260712_org_registration.sql` — agent self-registration, daily PIN, org unit managers
+8. `20260713_agent_training_phases.sql` — 4-week agent training program
+
+---
+
+## Organization & company structure (user-defined rules)
+
+| Rule | Implementation |
+|------|----------------|
+| **Unit → Team → Agent** | Organization page; OP per unit, TL per team |
+| **HS-1, HS-3** | Main Hangup; OP manages each unit |
+| **HS-2** | **Separate company**; sidebar toggle; one unit HS-2 for now |
+| **HS-Back-End** | No OP — reports to CEO; teams: HR, Quality, RTM, Finance, Admins |
+| **HR manager** | Phoebe (`HR-Phoebe`) — `node scripts/link-phoebe-hr-manager.js` |
+| **Team names** | `node scripts/normalize-team-names.js` — strip `"Team "`, dedupe per unit |
+
+---
+
+## Agent self-registration & training
+
+- **Register:** login screen + daily 4-digit PIN (OP/RTM/HR/Admin/Quality see PIN on Org page)
+- **Approve:** OP/Admin/HR on Organization → pending list
+- **Activate:** **Mark or Raymond only** (inactive → active on Users page)
+- **Training:** 4 Mon–Fri phases; statuses passed/rejected/passed_exception; sales count per phase; wizard checkbox on add agent
+
+---
+
+## Sales log rules
+
+- Month view: **submission date only** (`dateBasis=submission`)
+- Quality/RTM: unit toggles HS-1/2/3 (default all on)
+- **Sales catalog (Settings):** RTM + Admin only — clients, devices, price tiers, break schedules
+- **TL/OP submit:** When catalog has active clients, must select client + device + price (UI + server `validateAndResolveCatalogSale`)
+- **Quality attachments:** Dropbox `DROPBOX_ACCESS_TOKEN` needs read + sharing scopes; inline audio in quality ticket
+- Device fix from `Asset/Sales All Data.csv`: `node scripts/fix-sale-devices-from-csv.js`
+- Dropbox link repair: `node scripts/audit-dropbox-sales.js --fix-links`
+
+---
+
+## Privacy
+
+- Hide `internal_id` (database UUID) from **agent** role — `lib/employee-privacy.js`
+
+---
+
+## In-app updater — permanent rules (CRITICAL)
+
+1. **Never** PowerShell `Expand-Archive` for update zips
+2. **Never** adm-zip `extractAllTo` on Windows
+3. **Always** `lib/zip-extract.js` + `lib/update-integrity.js`
+4. Patch zips include `fileHashes`; verify before publish: `npm run verify:update -- <zip>`
+5. Deferred `.hr-pending` swap for `app.asar` on restart (Windows + macOS)
+6. Bootstrap: `node scripts/apply-github-patch-standalone.js` (app closed)
+
+Full detail: [`UPDATES.md`](UPDATES.md)
 
 ### How to apply (try in order)
 
@@ -207,24 +263,27 @@ ON CONFLICT (version) DO UPDATE SET
 
 Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant (or `dist-build\` if `dist\` is locked).
 
-6. **Optional — GitHub in-app patch updates** (does not replace step 5; uploads **win-unpacked** diff only, not EXEs):
+6. **Optional — GitHub in-app patch updates** (does not replace step 5):
 
 ```powershell
+.\scripts\build.ps1
+# Ensure previous manifest: gh release download vPREV -p win-x64-latest.json -D dist\update-manifests --clobber
+npm run package:github -- --full
+npm run verify:update -- dist\Hangup-HR-{version}-win-x64-patch-from-*.zip
+npm run verify:update -- dist\Hangup-HR-{version}-win-x64-full.zip
 .\scripts\publish-github-release.ps1
-# First time on GitHub: .\scripts\publish-github-release.ps1 -IncludeFull
-# Broken draft release:  .\scripts\publish-github-release.ps1 -Recreate
 ```
 
-Set in packaged `.env`:
+7. **macOS DMG** — push tag `v{version}` to GitHub; CI job `build-macos` produces `.dmg` + `mac-x64`/`mac-arm64` patch zips. Or on a Mac: `bash scripts/build-macos.sh` then `npm run package:github -- --full`.
 
-```env
-GITHUB_UPDATES_REPO=owner/repo
-GITHUB_UPDATES_TOKEN=ghp_...   # required for private repos; use `gh auth token` locally
+8. **Apply patch to Raymond's PC** (if in-app update broken):
+
+```powershell
+# Close Hangup HR first!
+node scripts/apply-github-patch-standalone.js --install-dir "$env:LOCALAPPDATA\Programs\Hangup HR Beta"
 ```
 
-GitHub update check runs for **all users** (boot, login banner, session poll ~5 min, interval ~30 min). Full detail: [`UPDATES.md`](UPDATES.md).
-
-7. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).
+9. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).
 
 ---
 
@@ -277,11 +336,12 @@ npm run rebuild:native             # after npm install / Electron version change
 
 ## Current `app_versions` state
 
-| version | is_current | min_compatible_version | force_update (field) | notes |
-|---------|------------|------------------------|----------------------|-------|
-| 1.2.0 | **true** | 1.0.8-beta.1 | — | Sales catalog in settings, break schedules, session ID, Dropbox attachments, GitHub updater macOS |
-| 1.1.0 | false | 1.0.8-beta.1 | — | Unified relations; sales CSV backfill; month position rates; assignment notifications |
-| 1.0.9-beta.7 | **true** | 1.0.8-beta.1 | — | Supabase-only runtime; session fix; sales dropdowns; payroll splits |
+| version | is_current | notes |
+|---------|------------|-------|
+| **1.2.4** | **true** | Permanent updater fix (safe zip + ASAR checksums); training program; org/registration |
+| 1.2.3 | false | Org hierarchy, agent registration, sales date filter, device CSV fix |
+| 1.2.2 | false | Windows updater Expand-Archive fix (partial — superseded by 1.2.4) |
+| 1.2.0 | false | Sales catalog, break schedules, session ID, Dropbox attachments |
 | 1.0.9-beta.6 | false | 1.0.8-beta.1 | — | UI modals, GitHub updates all users |
 | 1.0.9-beta.1 | false | 1.0.8-beta.1 | 1.0.9-beta.1 | Finance workflow, FP import, loan approval, custom reports |
 | 1.0.8-beta.1 | false | 1.0.7-beta.1 | 1.0.8-beta.1 | Employee identity, promotions revert, nav, field force-update |

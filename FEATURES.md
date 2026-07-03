@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Product:** Hangup HR · **Version:** 1.2.0 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.3.0 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -165,6 +165,14 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 ---
 
+## 1.3.0 highlights
+
+- **Quality ticket audio** — reliable inline playback, download, Dropbox share (MIME + error handling)
+- **Sales catalog** — RTM/Admin edit clients, devices, price tiers; TL/OP must use catalog when configured
+- **App users search** — filter by username, name, employee ID, email, team
+- **Equipment** — agent picker toolbar + deep links (`#equipment?employee=HS3-08`)
+- **UX** — sticky table headers, zebra rows, clearer toolbars
+
 ## 1.2.0 highlights
 
 - **Sales catalog in Settings** — clients, products, device types, and prices (replaces hard-coded lists)
@@ -286,7 +294,7 @@ Same layout everywhere — only colors change.
 3. Mark version in Supabase `app_versions`
 4. Copy installer or portable to HR PCs (USB, shared drive)
 5. Users sign in — first run syncs all data
-6. *(Optional)* Publish GitHub patch release so installed PCs can **Update now** without a new installer — see [`UPDATES.md`](UPDATES.md)
+6. *(Optional)* Publish GitHub patch release — **always run `npm run verify:update`** on zips first; see [`UPDATES.md`](UPDATES.md)
 
 *App updates are not pushed through Supabase Storage (installers are ~90 MB each).*
 

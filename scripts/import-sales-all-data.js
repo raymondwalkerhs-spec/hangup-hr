@@ -195,6 +195,8 @@ function buildFormData(headers, row, reviewerId, verifierId) {
     if (val) form[formKey] = val;
   }
   if (form.unit) form.unit = mapUnit(form.unit);
+  if (form.deviceType) form.deviceType = mapDevice(form.deviceType);
+  if (form.team) form.team = String(form.team).replace(/^team\s+/i, "").trim();
   if (reviewerId) form.reviewer = reviewerId;
   if (verifierId) form.assignVerifier = verifierId;
   return form;
@@ -233,7 +235,7 @@ async function main() {
           id: nextHs3Id([...employees, ...toCreate]),
           american_name: agentName,
           unit: mapUnit(col(headers, row, "Center Code")),
-          team: String(col(headers, row, "Team")).trim(),
+          team: String(col(headers, row, "Team")).trim().replace(/^team\s+/i, "").trim(),
           position: "Agent",
           status: "Active",
         };
@@ -245,7 +247,7 @@ async function main() {
       }
     }
 
-    const team = String(col(headers, row, "Team")).trim();
+    const team = String(col(headers, row, "Team")).trim().replace(/^team\s+/i, "").trim();
     if (team) {
       const votes = teamVotes.get(emp.id) || {};
       votes[team] = (votes[team] || 0) + 1;

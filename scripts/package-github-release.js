@@ -17,6 +17,15 @@ function shouldSkip(relPath) {
   return parts.some((p) => SKIP_DIRS.has(p.toLowerCase()));
 }
 
+/** Main app .exe changes every asar rebuild — never include in patch zips (only app.asar + loose files). */
+function shouldSkipPatch(relPath) {
+  if (shouldSkip(relPath)) return true;
+  const norm = String(relPath || "").replace(/\\/g, "/");
+  const base = path.basename(norm);
+  if (/^Hangup HR/i.test(base) && /\.exe$/i.test(base)) return true;
+  return false;
+}
+
 function hashFile(filePath) {
   const hash = crypto.createHash("sha256");
   hash.update(fs.readFileSync(filePath));
@@ -42,7 +51,7 @@ function walkManifest(rootDir) {
   return manifest;
 }
 
-function loadPreviousManifest(manifestDir, platform, fromVersion) {
+function loadPreviousManifest(manifestDir, platform, fromVersion, buildingVersion) {
   const candidates = [];
   if (fromVersion) {
     candidates.push(path.join(manifestDir, `${platform}-${fromVersion}.json`));
@@ -51,9 +60,19 @@ function loadPreviousManifest(manifestDir, platform, fromVersion) {
   for (const file of candidates) {
     if (!fs.existsSync(file)) continue;
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (data?.files && Object.keys(data.files).length) return data;
+    if (data?.files && Object.keys(data.files).length) {
+      if (buildingVersion && data.version === buildingVersion) continue;
+      return data;
+    }
   }
-  return null;
+  // Fall back to newest versioned manifest (not latest)
+  const versioned = fs
+    .readdirSync(manifestDir)
+    .filter((f) => f.startsWith(`${platform}-`) && f.endsWith(".json") && f !== `${platform}-latest.json`)
+    .map((f) => JSON.parse(fs.readFileSync(path.join(manifestDir, f), "utf8")))
+    .filter((m) => m?.files && m.version && m.version !== buildingVersion)
+    .sort((a, b) => String(b.version).localeCompare(String(a.version)));
+  return versioned[0] || null;
 }
 
 function diffManifests(prevFiles, nextFiles) {
@@ -150,7 +169,7 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
 
   const created = [];
   const nextFiles = walkManifest(sourceDir);
-  const prev = loadPreviousManifest(manifestDir, platform, fromVersion);
+  const prev = loadPreviousManifest(manifestDir, platform, fromVersion, version);
   const prevVersion = prev?.version || null;
   const prevFiles = prev?.files || {};
 
@@ -165,12 +184,13 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
 
   if (prevVersion && prevFiles && Object.keys(prevFiles).length) {
     const diff = diffManifests(prevFiles, nextFiles);
-    if (diff.files.length || diff.removed.length) {
+      const patchFiles = diff.files.filter((rel) => !shouldSkipPatch(rel));
+      if (patchFiles.length || diff.removed.length) {
       const staging = path.join(dist, `.patch-staging-${platform}`);
       fs.rmSync(staging, { recursive: true, force: true });
       fs.mkdirSync(staging, { recursive: true });
 
-      for (const rel of diff.files) {
+      for (const rel of patchFiles) {
         copyFileToStaging(sourceDir, rel, staging);
       }
 
@@ -179,10 +199,13 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
         fromVersion: prevVersion,
         toVersion: version,
         platform,
-        changed: diff.changed.length,
-        added: diff.added.length,
+        changed: diff.changed.filter((r) => !shouldSkipPatch(r)).length,
+        added: diff.added.filter((r) => !shouldSkipPatch(r)).length,
         removed: diff.removed,
-        files: diff.files,
+        files: patchFiles,
+        fileHashes: Object.fromEntries(
+          patchFiles.filter((rel) => nextFiles[rel]?.sha256).map((rel) => [rel, nextFiles[rel].sha256])
+        ),
       };
       fs.writeFileSync(path.join(staging, "update-info.json"), JSON.stringify(updateInfo, null, 2));
 
@@ -193,7 +216,7 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
       zipDirectory(staging, patchZip);
       const patchSize = fs.statSync(patchZip).size;
       console.log(
-        `Created patch ${path.basename(patchZip)} (${diff.files.length} files, ${formatBytes(patchSize)})`
+        `Created patch ${path.basename(patchZip)} (${patchFiles.length} files, ${formatBytes(patchSize)})`
       );
       created.push(patchZip);
       fs.rmSync(staging, { recursive: true, force: true });

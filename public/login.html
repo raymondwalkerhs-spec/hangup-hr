@@ -39,6 +39,36 @@
         <span>Save password on this device</span>
       </label>
       <p id="login-error" class="login-error hidden"></p>
+      <details id="agent-register-panel" class="agent-register-panel" style="margin:.75rem 0;text-align:left">
+        <summary class="btn btn-sm" style="display:inline-block;cursor:pointer">New agent? Register</summary>
+        <div class="card card-flat" style="margin-top:.75rem;padding:.75rem">
+          <p class="muted" style="margin:0 0 .5rem">Ask OP / HR / Quality for <strong>today's 4-digit PIN</strong>. After approval you receive your <strong>User ID</strong> as login — Mark or Raymond activates your account.</p>
+          <label class="field"><span>Today's PIN</span><input id="reg-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" /></label>
+          <label class="field"><span>Full name</span><input id="reg-full-name" placeholder="Legal / Arabic name" /></label>
+          <label class="field"><span>American name</span><input id="reg-american-name" placeholder="Name used at work" /></label>
+          <label class="field"><span>Nationality</span>
+            <select id="reg-nationality">
+              <option value="">— Select —</option>
+              <option value="Egyptian">Egyptian</option>
+              <option value="Sudanese">Sudanese</option>
+              <option value="Ethiopian">Ethiopian</option>
+              <option value="Eritrean">Eritrean</option>
+              <option value="South Sudanese">South Sudanese</option>
+              <option value="__other__">Other…</option>
+            </select>
+            <input id="reg-nationality-other" class="hidden" placeholder="Enter nationality" style="margin-top:.35rem" />
+          </label>
+          <label class="field" id="reg-national-id-wrap"><span>National ID (14 digits)</span><input id="reg-national-id" inputmode="numeric" maxlength="14" placeholder="For Egyptians" /></label>
+          <label class="field hidden" id="reg-passport-wrap"><span>Passport number</span><input id="reg-passport" placeholder="For non-Egyptians" /></label>
+          <label class="field"><span>Phone</span><input id="reg-phone" /></label>
+          <label class="field"><span>Unit</span>
+            <select id="reg-unit"><option value="HS-3">HS-3</option><option value="HS-1">HS-1</option><option value="HS-2">HS-2></select>
+          </label>
+          <label class="field"><span>Team</span><input id="reg-team" placeholder="e.g. Tris" /></label>
+          <button type="button" class="btn btn-primary btn-sm" id="reg-submit">Submit registration</button>
+          <p id="reg-msg" class="muted hidden" style="margin-top:.5rem"></p>
+        </div>
+      </details>
       <div id="version-blocked" class="version-blocked hidden">
         <strong>App update required</strong>
         <p id="version-blocked-msg" class="muted"></p>
@@ -118,6 +148,59 @@
     }
 
     loadVersionInfo();
+
+    function regNationalityValue() {
+      const sel = document.getElementById("reg-nationality");
+      if (!sel) return "";
+      if (sel.value === "__other__") return document.getElementById("reg-nationality-other")?.value?.trim() || "";
+      return sel.value?.trim() || "";
+    }
+    function regIsEgyptian(n) {
+      const x = String(n || "").trim().toLowerCase();
+      return x === "egyptian" || x === "egypt" || x === "egyptain";
+    }
+    function refreshRegIdentityFields() {
+      const nat = regNationalityValue();
+      const egyptian = regIsEgyptian(nat);
+      const other = document.getElementById("reg-nationality-other");
+      const sel = document.getElementById("reg-nationality");
+      if (other && sel) other.classList.toggle("hidden", sel.value !== "__other__");
+      document.getElementById("reg-national-id-wrap")?.classList.toggle("hidden", nat && !egyptian);
+      document.getElementById("reg-passport-wrap")?.classList.toggle("hidden", !nat || egyptian);
+    }
+    document.getElementById("reg-nationality")?.addEventListener("change", refreshRegIdentityFields);
+    document.getElementById("reg-nationality-other")?.addEventListener("input", refreshRegIdentityFields);
+    refreshRegIdentityFields();
+
+    document.getElementById("reg-submit")?.addEventListener("click", async () => {
+      const msg = document.getElementById("reg-msg");
+      msg.classList.add("hidden");
+      try {
+        const nationality = regNationalityValue();
+        const res = await fetch("/api/registration/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pin: document.getElementById("reg-pin")?.value?.trim(),
+            fullName: document.getElementById("reg-full-name")?.value?.trim(),
+            americanName: document.getElementById("reg-american-name")?.value?.trim(),
+            nationality,
+            nationalId: document.getElementById("reg-national-id")?.value?.trim(),
+            passportNumber: document.getElementById("reg-passport")?.value?.trim(),
+            phone: document.getElementById("reg-phone")?.value?.trim(),
+            unit: document.getElementById("reg-unit")?.value,
+            team: document.getElementById("reg-team")?.value?.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Registration failed");
+        msg.textContent = data.message || "Submitted. Wait for OP/Admin approval.";
+        msg.classList.remove("hidden");
+      } catch (e) {
+        msg.textContent = e.message || "Registration failed";
+        msg.classList.remove("hidden");
+      }
+    });
 
     // Prefill remembered username/password on this device.
     try {

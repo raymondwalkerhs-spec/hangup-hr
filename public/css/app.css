@@ -379,6 +379,9 @@ body {
 .remember-row input { width: auto; margin: 0; cursor: pointer; }
 
 .app-shell { display: flex; min-height: 100vh; }
+.main-column { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.main-column .impersonation-banner { margin: 1rem 2rem 0; }
+.main-column .main-content { flex: 1; }
 
 .sidebar {
   width: 240px;
@@ -825,6 +828,17 @@ tr.clickable { cursor: pointer; }
   align-items: flex-start;
   gap: .5rem;
 }
+.impersonation-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1rem;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+.impersonation-banner.hidden { display: none; }
 .payslip-identity {
   display: flex;
   align-items: flex-start;
@@ -842,6 +856,29 @@ tr.clickable { cursor: pointer; }
   background: var(--input-bg);
   color: var(--text);
 }
+.field-search .search-input { min-width: 260px; max-width: 100%; }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+.field-inline { margin: 0; min-width: 0; }
+.users-toolbar,
+.equip-toolbar { margin-bottom: 1rem; }
+.table-zebra tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: 0 1px 0 var(--border);
+}
+.sale-inline-audio { display: block; margin-top: .35rem; }
+.sale-audio-err { color: var(--danger, #c62828); font-size: .8rem; }
+.attachment-row { margin-bottom: .5rem; }
+.attachment-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .25rem; }
 
 .sync-time { font-size: .65rem; display: block; margin-top: .15rem; }
 .sync-overlay {
@@ -1554,3 +1591,45 @@ tr.clickable { cursor: pointer; }
   gap: 0.5rem 1rem;
   margin-top: 0.35rem;
 }
+
+.sales-perms-modal { padding-top: 0.25rem; }
+.sales-perms-wrap { max-height: 70vh; overflow: auto; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; }
+.sales-perms-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; }
+.sales-perms-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card-bg, #fff);
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding: 0.45rem 0.35rem;
+  text-align: center;
+}
+.sales-perms-table .perm-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--card-bg, #fff);
+  text-align: left;
+  min-width: 11rem;
+  border-right: 1px solid var(--border, #e2e8f0);
+}
+.sales-perms-table .perm-group-head { font-size: 0.8rem; font-weight: 600; }
+.sales-perms-table .perm-sub { font-size: 0.72rem; font-weight: 500; color: var(--muted, #64748b); }
+.sales-perms-table .perm-section-row td {
+  background: var(--surface-2, #f1f5f9);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.6rem;
+}
+.sales-perms-table .perm-field-name { padding: 0.4rem 0.6rem; vertical-align: middle; }
+.sales-perms-table .perm-field-name strong { display: block; }
+.sales-perms-table .perm-field-name .muted { font-size: 0.72rem; }
+.sales-perms-table .perm-cell { text-align: center; padding: 0.25rem; border-bottom: 1px solid var(--border, #f1f5f9); }
+.perm-check { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; cursor: pointer; }
+.perm-check-edit span { color: var(--accent, #4f46e5); }
+.sale-attachments-block h4 { margin-bottom: 0.35rem; }
+.sale-attachments-list { margin-top: 0.75rem; }
+.attachment-upload-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.5rem; }
+.quality-ticket-summary .field-grid { gap: 0.75rem 1rem; }

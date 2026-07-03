@@ -318,9 +318,12 @@ function positionSelectHtml(name, value, id = "emp-position") {
   </label>`;
 }
 
-function teamSelectHtml(name, value, id = "emp-team") {
+function teamSelectHtml(name, value, id = "emp-team", unitFilter = "") {
   const v = value || "";
-  const orgTeams = (state.orgTeams || []).map((t) => t.name);
+  let orgTeams = (state.orgTeams || []).map((t) => t.name);
+  if (unitFilter && state.orgTeams?.length) {
+    orgTeams = state.orgTeams.filter((t) => t.unit === unitFilter).map((t) => t.name);
+  }
   const opts = [...new Set([...orgTeams, v].filter(Boolean))];
   return `<label class="field"><span>Team</span>
     <select name="${name}" id="${id}">
@@ -328,6 +331,31 @@ function teamSelectHtml(name, value, id = "emp-team") {
       ${opts.map((t) => `<option value="${t}" ${v === t ? "selected" : ""}>${t}</option>`).join("")}
     </select>
   </label>`;
+}
+
+async function ensureOrgTeams(api) {
+  if (state.orgTeams?.length) return state.orgTeams;
+  try {
+    const res = await api("/hrms/teams");
+    state.orgTeams = res.teams || [];
+  } catch {
+    state.orgTeams = state.orgTeams || [];
+  }
+  return state.orgTeams;
+}
+
+function teamsForUnit(unit) {
+  const teams = state.orgTeams || [];
+  if (!unit) return teams;
+  return teams.filter((t) => t.unit === unit && t.dialsSales !== false);
+}
+
+function renderWizardTeamOptions(unit, selected = "") {
+  const teams = teamsForUnit(unit);
+  if (!teams.length && state.orgTeams?.length) {
+    return state.orgTeams.map((t) => `<option value="${escapeHtml(t.name)}" ${selected === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
+  }
+  return teams.map((t) => `<option value="${escapeHtml(t.name)}" ${selected === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
 }
 
 function pageSkeleton(label = "Loading…") {
@@ -619,6 +647,10 @@ function attendanceDetailHtml(records) {
 
 function canManagePayrollEvents() {
   return ["admin", "ceo", "hr"].includes(state.user?.role);
+}
+
+function canViewEmployeeInternalId() {
+  return state.user?.role !== "agent";
 }
 
 function canEditTlBonuses() {
@@ -1217,12 +1249,13 @@ function applyChangesButtonVisibility() {
 async function refreshStatus() {
   setUserInfo(state.user?.username);
   applyCompanyBranding();
-  applyChangesButtonVisibility();
   try {
     const s = await api("/status");
     state.user = s.user || null;
+    state.impersonation = s.impersonation || null;
     state.hideOut = s.hideOutEmployees !== false;
     setUserInfo(s.user?.username, s.user?.role);
+    applyImpersonationBanner();
     applyChangesButtonVisibility();
     document.getElementById("sync-badge").textContent = "Synced";
     document.getElementById("sync-badge").className = "badge badge-online";
@@ -1233,6 +1266,30 @@ async function refreshStatus() {
   } catch {
     document.getElementById("sync-badge").textContent = "Offline";
     document.getElementById("sync-badge").className = "badge badge-offline";
+  }
+}
+
+function applyImpersonationBanner() {
+  const banner = document.getElementById("impersonation-banner");
+  if (!banner) return;
+  const imp = state.impersonation;
+  if (imp?.active && imp.as) {
+    banner.classList.remove("hidden");
+    banner.innerHTML = `<strong>Viewing as ${escapeHtml(imp.as)}</strong>
+      <span class="muted">(signed in as ${escapeHtml(imp.realUsername || "raymond")}) — actions use this user's permissions</span>
+      <button type="button" class="btn btn-sm btn-ghost" id="impersonation-stop-btn">Exit view</button>`;
+    banner.querySelector("#impersonation-stop-btn")?.addEventListener("click", async () => {
+      try {
+        await api("/impersonate/stop", { method: "POST", body: "{}" });
+        await refreshStatus();
+        await render();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  } else {
+    banner.classList.add("hidden");
+    banner.innerHTML = "";
   }
 }
 
@@ -1342,9 +1399,13 @@ function employeeListRowHtml(e) {
   const stub = isUnassignedIdStub(e);
   const name = stub ? `(Unassigned ID)` : (e.american_name || e.arabic_name || e.id);
   const appId = e.archived_app_id && String(e.id || "").startsWith("DEL-") ? e.archived_app_id : e.id;
+  const dbIdHtml =
+    canViewEmployeeInternalId() && e.internal_id
+      ? `<div class="muted" style="font-size:.7rem" title="Database ID">${String(e.internal_id).slice(0, 8)}…</div>`
+      : "";
   return `<tr class="clickable${stub ? " row-stub" : ""}" data-emp="${e.id}">
     <td><div class="emp-cell">${avatarHtml(e)}<strong>${name}</strong>${stub ? '<span class="stub-badge">No user assigned</span>' : ""}</div></td>
-    <td><code>${appId}</code>${e.internal_id ? `<div class="muted" style="font-size:.7rem" title="Database ID">${String(e.internal_id).slice(0, 8)}…</div>` : ""}</td>
+    <td><code>${appId}</code>${dbIdHtml}</td>
     <td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
     <td>${e.position || "—"}</td>
     <td>${e.nationality || "—"}</td>
@@ -1704,22 +1765,32 @@ async function renderDashboard(root) {
 
 function openAddAgentWizard() {
   let step = 1;
-  let wizard = { unit: "", team: "", backendPool: "NW", suggestedId: "" };
+  let wizard = { unit: "", team: "", backendPool: "NW", suggestedId: "", inTraining: false, phase1Start: "" };
 
-  function renderWizard() {
+  function defaultPhase1Monday() {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? 1 : day === 6 ? 2 : day === 5 ? 3 : 8 - day;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  async function renderWizard() {
+    await ensureOrgTeams(api);
+
     if (step === 1) {
       openModal(`
         <div class="modal-header"><h2>Add agent — Step 1</h2><button class="btn btn-sm" data-close>✕</button></div>
         <div class="modal-body">
           <label class="field"><span>Unit *</span>
             <select id="wiz-unit"><option value="">Select unit…</option>
-              ${state.meta.units.map((u) => `<option value="${u}">${u}</option>`).join("")}
+              ${state.meta.units.map((u) => `<option value="${u}" ${wizard.unit === u ? "selected" : ""}>${u}</option>`).join("")}
             </select>
           </label>
           <label class="field"><span>Team *</span>
             <select id="wiz-team" required>
               <option value="">Select team…</option>
-              ${(state.orgTeams || []).map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("")}
+              ${renderWizardTeamOptions(wizard.unit, wizard.team)}
             </select>
           </label>
           <label class="field ${wizard.unit === "HS-Back-End" ? "" : "hidden"}" id="wiz-pool-wrap"><span>ID pool (Back-End)</span>
@@ -1734,9 +1805,12 @@ function openAddAgentWizard() {
         </div>`);
 
       const unitSel = document.getElementById("wiz-unit");
+      const teamSel = document.getElementById("wiz-team");
       unitSel.onchange = () => {
         wizard.unit = unitSel.value;
+        wizard.team = "";
         document.getElementById("wiz-pool-wrap")?.classList.toggle("hidden", wizard.unit !== "HS-Back-End");
+        teamSel.innerHTML = `<option value="">Select team…</option>${renderWizardTeamOptions(wizard.unit)}`;
       };
 
       document.getElementById("wiz-next").onclick = async () => {
@@ -1770,7 +1844,12 @@ function openAddAgentWizard() {
             ${paymentMethodFieldsHtml()}
             <label class="field"><span>Phone</span><input name="phone" /></label>
             <label class="field"><span>Email</span><input name="email" type="email" /></label>
-            <label class="field"><span>Employment date</span><input name="employment_date" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+            <label class="field"><span>Employment date</span><input name="employment_date" type="date" id="wiz-employment-date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+            <label class="toggle-label" style="grid-column:1/-1"><input type="checkbox" id="wiz-in-training" ${wizard.inTraining ? "checked" : ""} /> In training program (4 weekly phases, Mon–Fri)</label>
+            <label class="field wiz-training-field ${wizard.inTraining ? "" : "hidden"}" id="wiz-phase1-wrap"><span>Phase 1 week starts (Monday)</span>
+              <input type="date" id="wiz-phase1-start" value="${wizard.phase1Start || defaultPhase1Monday()}" />
+              <span class="muted" style="font-size:.8rem">Phases 2–4 auto-fill as following work weeks. Edit later if agent pauses.</span>
+            </label>
             ${nationalityFormFieldsHtml()}
             <input type="hidden" name="unit" value="${wizard.unit}" />
             <input type="hidden" name="team" value="${wizard.team}" />
@@ -1788,6 +1867,12 @@ function openAddAgentWizard() {
       };
       bindPaymentMethodFields();
       bindNationalityFormFields();
+      const inTrainingBox = document.getElementById("wiz-in-training");
+      const phase1Wrap = document.getElementById("wiz-phase1-wrap");
+      inTrainingBox?.addEventListener("change", () => {
+        wizard.inTraining = inTrainingBox.checked;
+        phase1Wrap?.classList.toggle("hidden", !wizard.inTraining);
+      });
       document.getElementById("wiz-create").onclick = async () => {
         const btn = document.getElementById("wiz-create");
         const form = document.getElementById("wiz-form");
@@ -1796,6 +1881,10 @@ function openAddAgentWizard() {
           body.nationality = form.querySelector("#emp-nationality-other")?.value?.trim() || "";
         }
         if (!body.employment_date) body.employment_date = new Date().toISOString().slice(0, 10);
+        if (inTrainingBox?.checked) {
+          body.inTraining = true;
+          body.phase1Start = document.getElementById("wiz-phase1-start")?.value || defaultPhase1Monday();
+        }
         btn.disabled = true;
         try {
           const res = await api("/employees", { method: "POST", body: JSON.stringify(body) });
@@ -1891,6 +1980,14 @@ function nationalityFormFieldsHtml(emp = {}) {
           <label class="field"><span>Deducted from employee (EGP)</span><input name="insurance_employee_deduction" type="number" min="0" step="0.01" value="${emp.insurance_employee_deduction ?? ""}" /></label>
         </div>
       </div>
+    </div>
+    <div id="identity-doc-fields" class="field-grid" style="grid-column:1/-1">
+      <label class="field" id="emp-national-id-wrap" style="${egyptian || !emp.nationality ? "" : "display:none"}"><span>National ID</span>
+        <input name="national_id" id="emp-national-id" inputmode="numeric" maxlength="14" value="${escapeHtml(emp.national_id || emp.identification || "")}" placeholder="14 digits" />
+      </label>
+      <label class="field" id="emp-passport-wrap" style="${nonEgyptian ? "" : "display:none"}"><span>Passport number</span>
+        <input name="passport_number" id="emp-passport" value="${escapeHtml(emp.passport_number || "")}" />
+      </label>
     </div>`;
 }
 
@@ -1899,6 +1996,8 @@ function bindNationalityFormFields(root = document) {
   const nationalityOther = root.querySelector("#emp-nationality-other");
   const workPermitBlock = root.querySelector("#work-permit-fields");
   const insuranceBlock = root.querySelector("#insurance-fields");
+  const nationalIdWrap = root.querySelector("#emp-national-id-wrap");
+  const passportWrap = root.querySelector("#emp-passport-wrap");
   const insuranceStatus = root.querySelector("#emp-insurance-status");
   const insuranceDetailFields = root.querySelector("#insurance-detail-fields");
   const insuranceDetailsToggle = root.querySelector("#emp-insurance-details-toggle");
@@ -1918,6 +2017,8 @@ function bindNationalityFormFields(root = document) {
     const hasNationality = Boolean(String(selectedNationality()).trim());
     if (workPermitBlock) workPermitBlock.style.display = hasNationality && !egyptian ? "" : "none";
     if (insuranceBlock) insuranceBlock.style.display = egyptian ? "" : "none";
+    if (nationalIdWrap) nationalIdWrap.style.display = egyptian || !hasNationality ? "" : "none";
+    if (passportWrap) passportWrap.style.display = hasNationality && !egyptian ? "" : "none";
     if (insuranceDetailFields) {
       insuranceDetailFields.style.display = egyptian && insuranceStatus?.value === "insured" ? "" : "none";
     }
@@ -1945,9 +2046,10 @@ function employeeFormFields(emp = {}) {
     : emp.promoted_from_id
       ? `<p class="muted identity-note">Promoted from <strong>${escapeHtml(emp.promoted_from_id)}</strong>${emp.effective_from_month ? ` · active from <strong>${escapeHtml(emp.effective_from_month)}</strong>` : ""}${emp.former_ids ? ` · former IDs: ${escapeHtml(emp.former_ids)}` : ""}</p>`
       : "";
-  const dbIdNote = emp.internal_id
-    ? `<label class="field"><span>Database ID (permanent)</span><input value="${escapeHtml(emp.internal_id)}" readonly title="Never changes — links attendance, payroll &amp; all history" /></label>`
-    : "";
+  const dbIdNote =
+    canViewEmployeeInternalId() && emp.internal_id
+      ? `<label class="field"><span>Database ID (permanent)</span><input value="${escapeHtml(emp.internal_id)}" readonly title="Never changes — links attendance, payroll &amp; all history" /></label>`
+      : "";
   const appIdDisplay = emp.archived_app_id && String(emp.id || "").startsWith("DEL-")
     ? emp.archived_app_id
     : emp.id;
@@ -1980,6 +2082,17 @@ function employeeFormFields(emp = {}) {
     <label class="field"><span>FP number (biometric)</span><input name="fp_number" value="${emp.fp_number || ""}" placeholder="Device enroll ID" /></label>
     ${nationalityFormFieldsHtml(emp)}
   </form>`;
+}
+
+function parseEquipmentEmployeeFromUrl() {
+  try {
+    const hash = window.location.hash || "";
+    const q = window.location.search || "";
+    const fromHash = hash.match(/equipment\?employee=([^&]+)/i)?.[1];
+    const fromQuery = new URLSearchParams(q.startsWith("?") ? q : hash.split("?")[1] || "").get("employee");
+    const id = fromHash || fromQuery;
+    if (id) state.hrmsEmployeeFilter = decodeURIComponent(id);
+  } catch (_) {}
 }
 
 function navigateToHrmsEmployeeSection(section, employeeId) {
@@ -2406,9 +2519,12 @@ async function openPayslipModal(employeeId) {
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-pos">+${fmt(v)}</span></div>`)
     .join("");
   const dedRows = Object.entries(p.deductions || {})
-    .filter(([k, v]) => v > 0 && k !== "Lateness Deduction")
+    .filter(([k, v]) => v > 0 && k !== "Lateness Deduction" && k !== TL_BONUS_TYPE)
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-neg">-${fmt(v)}</span></div>`)
     .join("");
+  const bonusTransferRow = p.bonusTransferPayroll
+    ? `<div class="payslip-row"><span>Agent bonuses (from payroll)</span><span class="amount-neg">-${fmt(p.bonusTransferPayroll)}</span></div>`
+    : "";
   const attDetail = attendanceDetailHtml(data.attendance);
 
   const bonusList = (data.bonuses || [])
@@ -2506,6 +2622,7 @@ async function openPayslipModal(employeeId) {
           <div class="payslip-row"><span>Lateness</span><span class="amount-neg">-${fmt(p.latenessDeduction)}</span></div>
           ${attDetail}
           ${dedRows}
+          ${bonusTransferRow}
           ${p.deferredIn ? `<div class="payslip-row"><span>Carried from prior month</span><span class="amount-pos">+${fmt(p.deferredIn)}</span></div>` : ""}
           <div class="payslip-row"><span>Calculated net</span><span>${fmt(p.calculatedNet ?? p.netSalary)} EGP</span></div>
           ${p.receivedTotal ? `<div class="payslip-row"><span>Paid (splits)</span><span class="amount-neg">-${fmt(p.receivedTotal)}</span></div>` : ""}
@@ -3306,7 +3423,7 @@ async function renderPayroll(root) {
     <div class="grid-4">
       <div class="card card-stat"><strong>${fmt(data.totals.totalBasic)}</strong><span class="muted">Basic (EGP)</span></div>
       <div class="card card-stat"><strong>${fmt(data.totals.totalBonuses)}</strong><span class="muted">Bonuses</span></div>
-      <div class="card card-stat"><strong>${fmt(data.totals.totalDeductions)}</strong><span class="muted">Deductions</span></div>
+      <div class="card card-stat"><strong>${fmt(data.totals.totalDeductions)}</strong><span class="muted">Deductions</span>${data.totals.totalBonusTransfers ? `<span class="muted" style="display:block;font-size:.75rem;margin-top:.2rem">Agent bonuses from payroll: ${fmt(data.totals.totalBonusTransfers)} (not in deductions)</span>` : ""}</div>
       <div class="card card-stat"><strong>${fmt(data.totals.totalNet)}</strong><span class="muted">Net payroll</span></div>
     </div>
     <div class="table-wrap"><table>
@@ -4375,10 +4492,15 @@ async function renderSettings(root) {
   const showLogs = isChangesViewer();
   const themes = window.HRTheme?.THEMES || [];
   const currentTheme = window.HRTheme?.get?.() || "light";
-  const [status, changelog] = await Promise.all([
+  const [status, changelog, profileEmp] = await Promise.all([
     api("/status"),
     showLogs ? api("/changelog?limit=50").catch(() => ({ entries: [] })) : Promise.resolve({ entries: [] }),
+    state.user?.employeeId
+      ? api(`/employees/${state.user.employeeId}${apiContextQuery()}`).catch(() => null)
+      : Promise.resolve(null),
   ]);
+  const emp = profileEmp?.employee || null;
+  const canPhoto = Boolean(emp);
 
   const changeLogCard = showLogs
     ? `
@@ -4407,9 +4529,51 @@ async function renderSettings(root) {
     )
     .join("");
 
+  const profilePhotoCard = canPhoto
+    ? `<div class="card">
+        <h3>Profile picture</h3>
+        <p class="muted">Your photo appears in the sidebar and employee lists.</p>
+        <div class="profile-photo-block">
+          ${avatarHtml(emp, "profile-photo-lg")}
+          <div class="profile-photo-actions">
+            <label class="btn btn-sm btn-primary">
+              Upload photo
+              <input type="file" id="settings-profile-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
+            </label>
+            ${emp.profile_photo_file_id ? '<button type="button" class="btn btn-sm btn-danger" id="settings-remove-photo-btn">Remove</button>' : ""}
+          </div>
+        </div>
+      </div>`
+    : "";
+
+  let impersonateCard = "";
+  if (status.user?.canImpersonate && !status.impersonation?.active) {
+    let userOptions = "";
+    try {
+      const impUsers = await api("/impersonate/users");
+      userOptions = (impUsers.users || [])
+        .map(
+          (u) =>
+            `<option value="${escapeHtml(u.username)}">${escapeHtml(u.employeeName || u.username)} — ${escapeHtml(u.username)} (${escapeHtml(u.role || "")}${u.status === "inactive" ? ", inactive" : ""})</option>`
+        )
+        .join("");
+    } catch {
+      userOptions = "";
+    }
+    impersonateCard = `<div class="card">
+      <h3>View as user (testing)</h3>
+      <p class="muted">Raymond only — see the app exactly as another user, including inactive accounts. Actions are recorded under their username.</p>
+      <label class="field"><span>User</span>
+        <select id="impersonate-user-select"><option value="">— Choose user —</option>${userOptions}</select>
+      </label>
+      <button type="button" class="btn btn-primary btn-sm" id="impersonate-start-btn">Start viewing</button>
+    </div>`;
+  }
+
   root.innerHTML = `
     <div class="page-header"><h1>Settings</h1></div>
     <div class="grid-2">
+      ${profilePhotoCard}
       <div class="card">
         <h3>Appearance</h3>
         <p class="muted">Color theme for this device. Layout and sidebar structure stay the same.</p>
@@ -4437,6 +4601,7 @@ async function renderSettings(root) {
         <button class="btn btn-primary" id="settings-refresh">Refresh from server</button>
       </div>
     </div>
+    ${impersonateCard ? `<div class="grid-2">${impersonateCard}</div>` : ""}
     ${changeLogCard}`;
 
   root.querySelectorAll('input[name="ui-theme"]').forEach((input) => {
@@ -4455,6 +4620,28 @@ async function renderSettings(root) {
     });
   };
   root.querySelector("#settings-refresh").onclick = () => refreshData();
+  if (canPhoto && emp) {
+    bindProfilePhotoUpload(emp.id, async () => {
+      await renderSettings(root);
+      await updateSidebarBrand();
+    });
+    const settingsInput = root.querySelector("#settings-profile-photo-input");
+    const settingsRemove = root.querySelector("#settings-remove-photo-btn");
+    if (settingsInput) settingsInput.id = "profile-photo-input";
+    if (settingsRemove) settingsRemove.id = "remove-photo-btn";
+  }
+  root.querySelector("#impersonate-start-btn")?.addEventListener("click", async () => {
+    const username = root.querySelector("#impersonate-user-select")?.value;
+    if (!username) return alert("Choose a user");
+    if (!confirm(`View the app as ${username}?`)) return;
+    try {
+      await api("/impersonate/start", { method: "POST", body: JSON.stringify({ username }) });
+      await refreshStatus();
+      await render();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
   window.HRMSFeatures?.enhanceSettings(root, api, state, {
     isChangesViewer,
     escapeHtml,
@@ -4475,7 +4662,7 @@ async function renderUsers(root) {
     return;
   }
 
-  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false };
+  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false, q: "" };
   const data = await api("/admin/users");
   let users = data.users || [];
   const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "office_assistant", "agent"];
@@ -4487,6 +4674,16 @@ async function renderUsers(root) {
     users = users.filter((u) => (u.status || "active").toLowerCase() === "active");
   } else if (state.usersFilter.status === "no-login") {
     users = users.filter((u) => !u.employeeId);
+  }
+
+  const searchQ = String(state.usersFilter.q || "").trim().toLowerCase();
+  if (searchQ) {
+    users = users.filter((u) => {
+      const hay = [u.username, u.employeeId, u.employeeName, u.email, u.employeeTeam, u.role]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(searchQ);
+    });
   }
 
   const sortKey = state.usersFilter.sort || "name";
@@ -4560,6 +4757,9 @@ async function renderUsers(root) {
       </div>
     </div>
     <div class="toolbar users-toolbar">
+      <label class="field field-inline field-search"><span>Search</span>
+        <input type="search" id="users-search" class="search-input" placeholder="Username, name, ID, email, team…" value="${escapeHtml(state.usersFilter.q || "")}" />
+      </label>
       <label class="field field-inline"><span>Status</span>
         <select id="users-filter-status">
           <option value="">All</option>
@@ -4581,7 +4781,7 @@ async function renderUsers(root) {
       <thead><tr>
         <th>Username</th><th>Employee ID</th><th>Name</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
       </tr></thead>
-      <tbody>${tableBody || '<tr><td colspan="10" class="muted">No users match this filter</td></tr>'}
+      <tbody>${tableBody || `<tr><td colspan="10" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`}
       </tbody>
     </table></div>`;
 
@@ -4598,6 +4798,10 @@ async function renderUsers(root) {
     state.usersFilter.status = e.target.value;
     renderUsers(root);
   };
+  root.querySelector("#users-search")?.addEventListener("input", (e) => {
+    state.usersFilter.q = e.target.value;
+    renderUsers(root);
+  });
   root.querySelector("#users-sort").onchange = (e) => {
     state.usersFilter.sort = e.target.value;
     renderUsers(root);
@@ -4892,7 +5096,10 @@ async function render() {
         });
       }
     }
-    else if (page === "equipment") await window.HRMSFeatures.renderEquipmentPage(root, api, { escapeHtml, openModal, closeModal, employeeSelectOptions });
+    else if (page === "equipment") {
+      parseEquipmentEmployeeFromUrl();
+      await window.HRMSFeatures.renderEquipmentPage(root, api, { escapeHtml, openModal, closeModal, employeeSelectOptions });
+    }
     else if (page === "org") await window.HRMSFeatures.renderOrgPage(root, api, {
       openEmployeeModal, escapeHtml, openModal, closeModal, canManagePayrollEvents,
     });
@@ -4901,7 +5108,7 @@ async function render() {
     else if (page === "users") await renderUsers(root);
     else if (page === "sales" && window.SalesModule) {
       await window.SalesModule.renderSalesPage(root, api, state, {
-        monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal,
+        monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal, downloadFile,
       });
     } else if (page === "breaks" && window.HRSalesConfigBreaks) {
       await window.HRSalesConfigBreaks.renderBreaksPage(root, api, state, { escapeHtml });

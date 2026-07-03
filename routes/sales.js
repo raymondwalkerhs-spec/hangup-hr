@@ -10,6 +10,7 @@ const companyContext = require("../lib/company-context");
 const notify = require("../lib/notify-store");
 const notifyRouting = require("../lib/notify-routing");
 const salesFieldAccess = require("../lib/sales-field-access");
+const salesClients = require("../lib/sales-clients-repo");
 
 const router = express.Router();
 
@@ -133,6 +134,7 @@ router.get("/", async (req, res) => {
       team: req.query.team,
       unit: req.query.unit,
       status: req.query.status,
+      dateBasis: req.query.dateBasis || "submission",
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
@@ -155,7 +157,11 @@ router.get("/period-grid", async (req, res) => {
     const from = fromQ || bounds.from;
     const to = toQ || bounds.to;
 
-    let sales = await business.readSales({ from, to });
+    let sales = await business.readSales({
+      from,
+      to,
+      dateBasis: req.query.dateBasis || "submission",
+    });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
@@ -238,6 +244,7 @@ router.get("/dashboard", async (req, res) => {
     let sales = await business.readSales({
       from: req.query.from,
       to: req.query.to,
+      dateBasis: req.query.dateBasis || "submission",
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
@@ -314,8 +321,8 @@ router.post("/", async (req, res) => {
     submissionDate,
     effectiveDate,
   } = req.body;
-  if (!phoneNumber || !fullName || !device || !agentId) {
-    return res.status(400).json({ error: "phoneNumber, fullName, device, agentId required" });
+  if (!agentId) {
+    return res.status(400).json({ error: "agentId required" });
   }
   const emp = store.getEmployeeById(agentId);
   if (!emp) return res.status(404).json({ error: "Agent not found" });
@@ -331,16 +338,28 @@ router.post("/", async (req, res) => {
       { create: true }
     );
     const payload = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
-    if (!payload.phoneNumber || !payload.fullName || !payload.device || !agentId) {
-      return res.status(400).json({ error: "phoneNumber, fullName, device, agentId required" });
+    const catalogResolved = await salesClients.validateAndResolveCatalogSale({
+      ...req.body,
+      ...payload,
+      formData: { ...sanitizedForm, ...(payload.formData || {}) },
+    });
+    if (!catalogResolved.phoneNumber && !payload.phoneNumber) {
+      return res.status(400).json({ error: "phoneNumber required" });
     }
+    if (!catalogResolved.fullName && !payload.fullName) {
+      return res.status(400).json({ error: "fullName required" });
+    }
+    if (!catalogResolved.device && !payload.device) {
+      return res.status(400).json({ error: "device required" });
+    }
+    if (!agentId) return res.status(400).json({ error: "agentId required" });
     const sale = await business.createSale(
       {
         phoneNumber: payload.phoneNumber,
         fullName: payload.fullName,
-        device: payload.device,
-        price: payload.price,
-        client: payload.client,
+        device: catalogResolved.device || payload.device,
+        price: catalogResolved.price != null ? catalogResolved.price : payload.price,
+        client: catalogResolved.client || payload.client,
         agentId,
         closerId: closerId || req.userRole.employeeId || "",
         status: initialStatus,
@@ -349,7 +368,7 @@ router.post("/", async (req, res) => {
         feedback: payload.feedback || "",
         team: geo.team,
         unit: geo.unit,
-        formData: sanitizedForm,
+        formData: catalogResolved.formData || sanitizedForm,
       },
       req.username
     );
@@ -469,6 +488,49 @@ const saleStorage = require("../lib/sale-attachment-storage");
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");
 
+router.get("/export", async (req, res) => {
+  if (!roles.canViewSales(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const employees = scopedEmployees(req);
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    let sales = await business.readSales({
+      from: req.query.from,
+      to: req.query.to,
+      agentId: req.query.agentId,
+      closerId: req.query.closerId,
+      team: req.query.team,
+      unit: req.query.unit,
+      status: req.query.status,
+      dateBasis: req.query.dateBasis || "submission",
+    });
+    sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
+    sales = filterSalesByCompany(sales, employees);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    if (req.query.saleId) {
+      sales = sales.filter((s) => s.id === req.query.saleId);
+    }
+    const format = String(req.query.format || "csv").toLowerCase();
+    const salesExport = require("../lib/sales-export");
+    const subtitle = [req.query.from, req.query.to].filter(Boolean).join(" → ") || "All visible sales";
+    const { buffer, contentType, ext } = await salesExport.buildExport({
+      sales,
+      employees,
+      format,
+      meta: {
+        title: req.query.saleId ? "Hangup HR — Sale export" : "Hangup HR — Sales export",
+        subtitle,
+      },
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    const name = req.query.saleId ? `sale-${req.query.saleId}` : `sales-${stamp}`;
+    res.type(contentType).attachment(`${name}.${ext}`).send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/field-catalog", async (req, res) => {
   try {
     const perms = await business.readSalesFieldPermissions();
@@ -481,8 +543,9 @@ router.get("/field-catalog", async (req, res) => {
     res.json({
       fields,
       sections: salesCatalog.listSections(),
-      attachmentKinds: salesCatalog.ATTACHMENT_KINDS,
+      attachmentKinds: salesCatalog.listAttachmentKindsForRole(role),
       permissions: perms,
+      storageConfigured: saleStorage.isConfigured(),
       dropboxConfigured: dropbox.isConfigured(),
     });
   } catch (err) {
@@ -583,7 +646,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
     const att = await business.deleteSaleAttachment(req.params.attachmentId);
     if (att?.dropboxPath) {
       try {
-        await dropbox.deleteFile(att.dropboxPath);
+        await saleStorage.deleteSaleAttachmentFile(att.dropboxPath);
       } catch {
         /* optional */
       }
@@ -629,15 +692,29 @@ router.get("/attachments/:attachmentId/share-link", async (req, res) => {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
     if (access.error) return res.status(access.status).json({ error: access.error });
     const att = access.att;
-    if (att.dropboxLink) return res.json({ url: att.dropboxLink });
-    if (!att.dropboxPath) return res.status(400).json({ error: "No Dropbox path for this file" });
-    const url = await dropbox.createSharedLink(att.dropboxPath);
-    if (url) {
+    const path = att.dropboxPath;
+    if (path && saleStorage.isSupabaseStoragePath(path)) {
+      const { url, expiresInDays } = await saleStorage.createShareUrl(path);
       await business.updateSaleAttachmentDropboxLink(att.id, url);
+      return res.json({
+        url,
+        expiresInDays,
+        storage: "supabase",
+        note: `Signed link (~${expiresInDays} days). Use Share link again anytime to refresh.`,
+      });
     }
-    res.json({ url: url || "" });
+    if (att.dropboxLink) return res.json({ url: att.dropboxLink, storage: "dropbox" });
+    if (!path) return res.status(400).json({ error: "No storage path for this file" });
+    if (!dropbox.isConfigured()) {
+      return res.status(503).json({ error: "Legacy Dropbox file but Dropbox is not configured" });
+    }
+    const url = await dropbox.ensureSharedLink(path);
+    if (!url) return res.status(503).json({ error: "Could not create Dropbox share link" });
+    await business.updateSaleAttachmentDropboxLink(att.id, url);
+    res.json({ url });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const code = dropbox.isScopeError?.(err) ? 503 : 500;
+    res.status(code).json({ error: err.message });
   }
 });
 
@@ -654,7 +731,7 @@ router.put("/attachments/:attachmentId/replace", async (req, res) => {
     const att = access.att;
     if (att.dropboxPath) {
       try {
-        await dropbox.deleteFile(att.dropboxPath);
+        await saleStorage.deleteSaleAttachmentFile(att.dropboxPath);
       } catch {
         /* optional */
       }

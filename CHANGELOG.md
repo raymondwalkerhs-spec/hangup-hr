@@ -4,6 +4,84 @@ All notable changes to the Hangup HR desktop app.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-03
+
+### Added
+- **Sale attachments (Supabase):** New recordings and confirmations upload to `hr-documents` bucket (`sales-attachments/…`); share links are signed URLs (~7 days, refresh via Share link)
+- **Sales export:** CSV, Excel, or PDF for current filters/date range or a single sale from the sales log
+- **Sales catalog (RTM/Admin):** Edit/delete devices and price tiers in Settings; import from sales
+- **Sale submission:** TL/OP must pick client, device, and price from catalog when configured (server-validated)
+- **Quality ticket audio:** Expanded MIME types (m4a, ogg, webm); visible playback errors; share link modal fallback
+- **App users:** Text search (username, name, ID, email, team)
+- **Equipment:** Agent search toolbar, deep link `equipment?employee=ID`, agents-only issue modal
+- **Raymond impersonation** (from 1.2.6 prep): view app as any user for testing
+- **Registration identity** (from prior): national ID / passport, User ID on approval
+
+### Changed
+- **Sale attachments:** Primary storage is Supabase (legacy Dropbox paths still download via cache)
+- **Sales config permissions:** RTM + Admin only (clients, devices, breaks) — HR/CEO no longer edit catalog
+- **Dropbox:** Share links persist to DB; `createSharedLink` surfaces errors; admin status shows scope health
+- **UX:** Sticky table headers, zebra rows, unified toolbars on Users/Equipment
+
+### Fixed
+- Quality call listen/download/share failing silently (MIME, Dropbox errors, clipboard fallback)
+- macOS CI: `build-macos` no longer `continue-on-error`
+
+## [1.2.5] — 2026-07-03
+
+### Fixed
+- **App crash on startup:** `ReferenceError: SYSTEM_ADMIN_USERNAME is not defined` in `lib/roles.js` (broken export after Mark/Raymond admin change)
+
+## [1.2.4] — 2026-07-03
+
+### Fixed (permanent in-app updater)
+- **Root cause:** PowerShell `Expand-Archive` corrupted large `app.asar` during patch extraction → Electron “Invalid package app.asar”
+- **Safe extraction:** `lib/zip-extract.js` — adm-zip per-entry only (never `extractAllTo`, never PowerShell unzip)
+- **Integrity:** `lib/update-integrity.js` — ASAR header validation + SHA-256 checksums in `update-info.json`
+- **Deferred swap:** `app.asar` + main `.exe` on Windows; `app.asar` on macOS — finish on restart via `.bat` / `.sh`
+- **Pre-publish:** `npm run verify:update` + CI verify step on every release zip
+- **Packaging:** Patch zips include `fileHashes`; manifest loader skips same-version false diffs
+
+### Added (from 1.2.3)
+- Agent training program (4 weekly phases), org hierarchy, agent self-registration, sales fixes — see 1.2.3
+
+## [1.2.3] — 2026-07-03
+
+### Added
+- **Agent training program:** 4 weekly phases (Mon–Fri) with statuses Passed / Rejected / Passed (Exception); sales count per phase; phase 1 start auto-fills weeks 2–4; manual date override + recalculate for pause/resume
+- **Add agent wizard:** Optional “In training program” with phase 1 start date
+- **Organization:** Daily registration PIN + pending agent approvals (OP/HR/Admin); interactive OP/TL assignment
+- **Login:** Agent self-register with today’s 4-digit PIN
+
+### Changed
+- **Sales log:** Month filter uses submission date only; RTM/Quality unit toggles (HS-1/2/3)
+- **Agents:** Database `internal_id` hidden in all agent-facing views and API responses
+- **User activation:** Only Mark or Raymond may activate inactive employee logins
+- **Back-End org:** Phoebe linked as HR manager; backend teams under HS-Back-End
+
+### Fixed
+- Team names normalized (strip “Team ” prefix); device types corrected from Sales All Data.csv
+- July sales appearing in June month view
+
+### Applied (Supabase)
+- `20260712_org_registration.sql`, `20260713_agent_training_phases.sql`
+
+## [1.2.2] — 2026-07-03
+
+### Fixed
+- **In-app update on Windows:** Safe zip extraction (no `chmod` ENOENT on `app.asar`); deferred swap for locked `app.asar`/`.exe` via restart script
+- **Patch packages:** Exclude main `Hangup HR Beta.exe` from patch zips (only `app.asar` + changed files — ~80 MB not ~190 MB)
+
+## [1.2.1] — 2026-07-03
+
+### Fixed
+- **Quality workflow:** Quality agents open sales as **tickets** (not full edit); can **listen** to recordings/confirmation without upload-only UI
+- **Assign Verifier:** Dropdown includes **TL and OP** in addition to quality staff
+- **Attachments:** Upload inputs only shown when role has edit permission; view/list for recordings and confirmation
+- **Column permissions:** Redesigned table with section groups and sticky headers
+- **Breaks:** End time auto-calculated from start + duration
+- **Sales clients:** **Import from sales** seeds clients/devices/prices from existing sales data
+
 ## [1.2.0] — 2026-07-03
 
 ### Added

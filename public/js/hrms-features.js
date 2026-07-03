@@ -247,31 +247,88 @@ window.HRMSFeatures = (function () {
     } = helpers;
     const canManage = typeof canManagePayrollEvents === "function" && canManagePayrollEvents();
     const eq = typeof employeesQuery === "function" ? employeesQuery() : "";
-    const [structure, empData, teamsRes] = await Promise.all([
+    const [structure, empData, teamsRes, mgrRes] = await Promise.all([
       api(`/hrms/org-structure${eq}`),
       api(`/employees${eq}`).catch(() => ({ employees: [] })),
-      api("/hrms/teams").catch(() => ({ teams: [], orgUnits: ["HS-1", "HS-2", "HS-3", "HS-MGMT"] })),
+      api("/hrms/teams").catch(() => ({ teams: [], orgUnits: ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"] })),
+      api("/org/managers").catch(() => ({ managers: [] })),
     ]);
     const employees = empData.employees || [];
-    const orgUnits = teamsRes.orgUnits || structure.orgUnits || ["HS-1", "HS-2", "HS-3", "HS-MGMT"];
+    const orgUnits = teamsRes.orgUnits || structure.orgUnits || ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"];
     const allTeams = teamsRes.teams || [];
+    const mgrByUnit = new Map((mgrRes.managers || []).map((m) => [m.unit, m]));
     if (typeof state !== "undefined") state.orgTeams = allTeams;
+
+    function empName(id) {
+      if (!id) return "—";
+      const e = employees.find((x) => x.id === id);
+      return e ? `${e.id} — ${e.american_name || e.id}` : id;
+    }
+
+    function opOptions(unit, selected) {
+      const ops = employees.filter(
+        (e) =>
+          e.unit === unit &&
+          (/^OP/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "op")
+      );
+      return ops
+        .map(
+          (e) =>
+            `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`
+        )
+        .join("");
+    }
+
+    function tlOptions(teamName, selected) {
+      const tls = employees.filter((e) => {
+        const t = String(e.team || "").replace(/^team\s+/i, "");
+        return t === teamName && (/^TL/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "tl");
+      });
+      return tls
+        .map(
+          (e) =>
+            `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`
+        )
+        .join("");
+    }
 
     const teamNames = [...new Set(allTeams.map((t) => t.name).concat(employees.map((e) => e.team).filter(Boolean)))].sort();
     const unitSections = (structure.units || []).map((section) => {
       const teams = section.teams || [];
-      return `<section class="card org-unit-block" style="margin-bottom:1rem">
-        <div class="flex-between" style="margin-bottom:.75rem">
-          <h2 style="margin:0">${esc(section.unit)}</h2>
-          ${canManage ? `<button class="btn btn-sm" data-add-team-unit="${esc(section.unit)}">+ Add team</button>` : ""}
+      const unit = section.unit;
+      const isBackend = unit === "HS-Back-End" || unit === "HS-MGMT";
+      const mgr = mgrByUnit.get(unit) || {};
+      const opId = mgr.opEmployeeId || "";
+      const opHeader = isBackend
+        ? `<span class="muted">Reports to CEO · HR: ${esc(empName(mgr.hrManagerId || employees.find((e) => /^HR/i.test(e.id) && /phoebe/i.test(e.american_name || ""))?.id))}</span>`
+        : canManage
+          ? `<label class="field org-op-field"><span class="muted">OP Manager</span>
+              <select class="org-op-select" data-unit="${esc(unit)}">
+                <option value="">— Select OP —</option>
+                ${opOptions(unit, opId)}
+              </select></label>`
+          : `<span class="muted">OP: ${esc(empName(opId))}</span>`;
+      return `<section class="card org-unit-block org-hierarchy-unit" style="margin-bottom:1rem" data-unit="${esc(unit)}">
+        <div class="flex-between" style="margin-bottom:.75rem;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+          <div><h2 style="margin:0">${esc(unit)}${unit === "HS-2" ? ' <span class="badge">HS2 Company</span>' : ""}</h2>${opHeader}</div>
+          ${canManage ? `<button class="btn btn-sm" data-add-team-unit="${esc(unit)}">+ Add team</button>` : ""}
         </div>
-        <div class="stack">${teams.map((t) => {
+        <div class="stack org-team-stack">${teams.map((t) => {
           const agents = t.agents || [];
+          const meta = allTeams.find((x) => x.name === t.name) || {};
+          const tlId = meta.tlEmployeeId || "";
           const dialBadge = t.dialsSales === false ? '<span class="badge muted">No dial</span>' : "";
-          return `<details class="card card-flat" open>
-            <summary class="flex-between">
-              <span><strong>${esc(t.name)}</strong> ${dialBadge} <span class="muted">(${agents.length})</span></span>
-              ${canManage ? `<button type="button" class="btn btn-sm" data-edit-team="${esc(t.id || "")}" data-team-name="${esc(t.name)}">Edit</button>` : ""}
+          const tlHeader = canManage && meta.id
+            ? `<label class="field org-tl-field"><span class="muted">TL</span>
+                <select class="org-tl-select" data-team-id="${esc(meta.id)}">
+                  <option value="">— Select TL —</option>
+                  ${tlOptions(t.name, tlId)}
+                </select></label>`
+            : `<span class="muted">TL: ${esc(empName(tlId))}</span>`;
+          return `<details class="card card-flat org-team-card" open data-team="${esc(t.name)}">
+            <summary class="flex-between" style="align-items:center;gap:.5rem;flex-wrap:wrap">
+              <span><strong>${esc(t.name)}</strong> ${dialBadge} <span class="muted">(${agents.length} agents)</span></span>
+              <span class="org-team-meta">${tlHeader} ${canManage ? `<button type="button" class="btn btn-sm" data-edit-team="${esc(meta.id || "")}" data-team-name="${esc(t.name)}">Edit</button>` : ""}</span>
             </summary>
             <div class="table-wrap" style="margin-top:.5rem"><table>
               <thead><tr><th>ID</th><th>Name</th><th>Position</th>${canManage ? "<th>Team</th>" : ""}</tr></thead>
@@ -292,10 +349,56 @@ window.HRMSFeatures = (function () {
     }).join("");
 
     const unassigned = structure.unassigned || [];
+    const role = typeof state !== "undefined" ? state.user?.role : "";
+    const canViewPin = ["op", "rtm", "hr", "admin", "ceo", "quality"].includes(role);
+    const canApproveReg = ["op", "admin", "hr", "ceo"].includes(role);
+    let regPanel = "";
+    if (canViewPin || canApproveReg) {
+      let pinBlock = "";
+      let pendingBlock = "";
+      if (canViewPin) {
+        try {
+          const pinRes = await api("/registration/daily-pin");
+          pinBlock = `<div class="card card-flat" style="padding:.75rem 1rem;margin-bottom:.75rem;background:var(--surface-2)">
+            <strong>Today's agent registration PIN:</strong>
+            <span style="font-size:1.35rem;letter-spacing:.2em;margin-left:.5rem">${esc(pinRes.pin || "—")}</span>
+            <span class="muted" style="margin-left:.5rem">(${esc(pinRes.date || "today")}) — share with new agents only</span>
+          </div>`;
+        } catch (_) {
+          pinBlock = `<p class="muted">Registration PIN unavailable (Supabase required).</p>`;
+        }
+      }
+      if (canApproveReg) {
+        try {
+          const pendRes = await api("/registration/pending");
+          const pending = pendRes.pending || [];
+          pendingBlock = pending.length
+            ? `<section class="card" style="margin-bottom:1rem"><h3>Pending agent registrations (${pending.length})</h3>
+              <div class="table-wrap"><table><thead><tr><th>Full name</th><th>American name</th><th>Nationality</th><th>ID / Passport</th><th>Unit</th><th>Team</th><th>Phone</th><th></th></tr></thead>
+              <tbody>${pending.map((p) => `<tr>
+                <td>${esc(p.fullName || p.arabicName || "—")}</td>
+                <td>${esc(p.americanName)}</td>
+                <td>${esc(p.nationality || "—")}</td>
+                <td>${esc(p.nationalId || p.passportNumber || "—")}</td>
+                <td>${esc(p.unit || "—")}</td>
+                <td>${esc(p.team || "—")}</td>
+                <td>${esc(p.phone || "—")}</td>
+                <td class="btn-row">
+                  <button type="button" class="btn btn-sm btn-primary" data-approve-reg="${esc(p.id)}">Approve</button>
+                  <button type="button" class="btn btn-sm btn-danger" data-reject-reg="${esc(p.id)}">Reject</button>
+                </td></tr>`).join("")}
+              </tbody></table></div></section>`
+            : "";
+        } catch (_) {}
+      }
+      regPanel = pinBlock + pendingBlock;
+    }
+
     root.innerHTML = `
       <div class="page-header flex-between">
-        <div><h1>Organization</h1><p class="muted">Teams by unit (HS-1, HS-2, HS-3, HS-MGMT) — click an agent to open profile</p></div>
+        <div><h1>Organization</h1><p class="muted">Unit → Team → Agent · OP manages unit · TL manages team · Back-End reports to CEO</p></div>
       </div>
+      ${regPanel}
       ${unitSections || '<p class="muted">No organization data.</p>'}
       ${unassigned.length ? `<section class="card"><h3>Unassigned (no team)</h3>
         <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th>${canManage ? "<th>Assign team</th>" : ""}</tr></thead>
@@ -308,12 +411,63 @@ window.HRMSFeatures = (function () {
         </tr>`).join("")}
         </tbody></table></div></section>` : ""}`;
 
+    root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm("Approve this registration? Creates inactive employee login.")) return;
+        try {
+          const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
+          alert(`Approved. User ID (login): ${res.username}\nEmployee ${res.employeeId} — temp password: ${res.tempPassword}\nUser must be activated by Mark or Raymond.`);
+          await renderOrgPage(root, api, helpers);
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+    });
+    root.querySelectorAll("[data-reject-reg]").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm("Reject this registration?")) return;
+        try {
+          await api(`/registration/${btn.dataset.rejectReg}/reject`, { method: "POST", body: "{}" });
+          await renderOrgPage(root, api, helpers);
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+    });
+
     root.querySelectorAll("[data-agent-id]").forEach((row) => {
       row.onclick = (e) => {
-        if (e.target.closest(".org-team-select")) return;
+        if (e.target.closest(".org-team-select, .org-tl-select, .org-op-select")) return;
         const emp = employees.find((x) => String(x.id) === String(row.dataset.agentId));
         if (emp && typeof openEmployeeModal === "function") openEmployeeModal(emp);
       };
+    });
+
+    root.querySelectorAll(".org-op-select").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await api(`/org/managers/${encodeURIComponent(sel.dataset.unit)}`, {
+            method: "PUT",
+            body: JSON.stringify({ opEmployeeId: sel.value }),
+          });
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    });
+
+    root.querySelectorAll(".org-tl-select").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        try {
+          await api(`/hrms/teams/${sel.dataset.teamId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ tlEmployeeId: sel.value }),
+          });
+          await renderOrgPage(root, api, helpers);
+        } catch (e) {
+          alert(e.message);
+        }
+      });
     });
 
     root.querySelectorAll(".org-team-select").forEach((sel) => {
@@ -413,8 +567,66 @@ window.HRMSFeatures = (function () {
               </select>
             </label>
             <label class="field"><span>Display order</span><input name="displayOrder" type="number" value="${team.displayOrder ?? 0}" /></label>
+            <div class="card card-flat" style="grid-column:1/-1">
+              <h4>Move whole team to another unit</h4>
+              <p class="muted">Updates every agent on this team to the new unit. Dialing agents get new IDs (e.g. HS3-01) — old IDs stay reserved forever.</p>
+              <label class="field"><span>New unit</span>
+                <select id="relocate-unit">${orgUnits.map((u) => `<option value="${esc(u)}">${esc(u)}</option>`).join("")}</select>
+              </label>
+              <label class="field"><input type="checkbox" id="relocate-reassign" checked /> Reassign agent IDs for new unit prefix</label>
+              <button type="button" class="btn btn-warn" id="relocate-team-btn">Move team &amp; reassign IDs</button>
+            </div>
+            <div class="card card-flat" style="grid-column:1/-1;border-color:var(--danger,#c44)">
+              <h4>Delete team</h4>
+              <p class="muted">Removes this team from Organization. Agents on it become <strong>unassigned</strong> until you assign a new team manually.</p>
+              <button type="button" class="btn btn-danger btn-sm" id="delete-team-btn">Delete team</button>
+            </div>
           </form>
           <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="save-edit-team">Save</button></div>`);
+        document.getElementById("delete-team-btn").onclick = async () => {
+          const n = employees.filter((e) => String(e.team || "").toLowerCase() === String(team.name).toLowerCase() || String(e.team || "").replace(/^team\s+/i, "").toLowerCase() === String(team.name).toLowerCase()).length;
+          if (
+            !confirm(
+              `Delete team "${team.name}"? ${n} agent(s) will have no team until reassigned.`
+            )
+          ) {
+            return;
+          }
+          if (!confirm(`Permanently remove "${team.name}" from Organization?`)) return;
+          try {
+            const res = await api(`/hrms/teams/${team.id}`, { method: "DELETE" });
+            alert(`Team deleted. ${(res.clearedEmployeeIds || []).length} employee(s) unassigned.`);
+            closeModal();
+            await renderOrgPage(root, api, helpers);
+          } catch (err) {
+            alert(err.message || "Delete failed");
+          }
+        };
+        document.getElementById("relocate-team-btn").onclick = async () => {
+          const newUnit = document.getElementById("relocate-unit")?.value;
+          const reassignIds = document.getElementById("relocate-reassign")?.checked !== false;
+          if (!newUnit) return alert("Select a unit");
+          if (newUnit === team.unit && !reassignIds) return alert("Team is already on this unit");
+          if (
+            !confirm(
+              `Move "${team.name}" to ${newUnit}${reassignIds ? " and assign new agent IDs" : ""} for all agents on this team?`
+            )
+          ) {
+            return;
+          }
+          try {
+            const res = await api(`/hrms/teams/${team.id}/relocate`, {
+              method: "POST",
+              body: JSON.stringify({ unit: newUnit, reassignIds }),
+            });
+            const n = (res.changes || []).length;
+            alert(`Team moved. ${n} agent${n === 1 ? "" : "s"} updated.`);
+            closeModal();
+            await renderOrgPage(root, api, helpers);
+          } catch (err) {
+            alert(err.message || "Relocate failed");
+          }
+        };
         document.getElementById("save-edit-team").onclick = async () => {
           const fd = new FormData(document.getElementById("edit-team-form"));
           await api(`/hrms/teams/${team.id}`, {
@@ -459,6 +671,11 @@ window.HRMSFeatures = (function () {
     const equipment = data.equipment || [];
     const assignments = data.assignments || [];
     const employees = empData.employees || [];
+    const agentEmployees = employees.filter((e) => {
+      const pos = String(e.position || "").toLowerCase();
+      return pos === "agent" || pos.includes("agent");
+    });
+    const pickerEmployees = agentEmployees.length ? agentEmployees : employees;
     const filterEmp = state.hrmsEmployeeFilter || "";
     const equipById = new Map(equipment.map((e) => [e.id, e]));
     let activeRows = assignments
@@ -475,7 +692,15 @@ window.HRMSFeatures = (function () {
         <div><h1>Equipment</h1><p class="muted">Devices issued to agents — unit comes from the employee record${filterEmp ? ` · filtered: <strong>${escapeHtml(filterEmp)}</strong> <button class="btn btn-sm" id="clear-equip-filter">Show all</button>` : ""}</p></div>
         <button class="btn btn-primary btn-sm" id="add-equipment-btn">+ Issue device</button>
       </div>
-      <div class="table-wrap"><table>
+      <div class="toolbar equip-toolbar">
+        <label class="field field-inline field-search"><span>View agent equipment</span>
+          <input type="search" id="equip-agent-search" class="search-input" list="equip-agent-list" placeholder="Type name or ID…" value="${filterEmp ? escapeHtml(empById(filterEmp)?.american_name ? `${empById(filterEmp).american_name} (${filterEmp})` : filterEmp) : ""}" />
+          <datalist id="equip-agent-list">${pickerEmployees.map((e) => `<option value="${escapeHtml(e.american_name || e.arabic_name || e.id)} (${escapeHtml(e.id)})" data-id="${escapeHtml(e.id)}"></option>`).join("")}</datalist>
+        </label>
+        <button type="button" class="btn btn-sm" id="equip-view-agent-btn">View equipment</button>
+        ${filterEmp ? '<button type="button" class="btn btn-sm" id="clear-equip-filter-top">Show all</button>' : ""}
+      </div>
+      <div class="table-wrap table-zebra"><table>
         <thead><tr><th>Agent</th><th>Device</th><th>Unit</th><th>Notes</th><th></th></tr></thead>
         <tbody>${activeRows
           .map(({ assignment: a, equipment: e }) => {
@@ -496,7 +721,40 @@ window.HRMSFeatures = (function () {
 
     root.querySelector("#clear-equip-filter")?.addEventListener("click", () => {
       state.hrmsEmployeeFilter = "";
+      window.location.hash = "equipment";
       renderEquipmentPage(root, api, helpers);
+    });
+    root.querySelector("#clear-equip-filter-top")?.addEventListener("click", () => {
+      state.hrmsEmployeeFilter = "";
+      window.location.hash = "equipment";
+      renderEquipmentPage(root, api, helpers);
+    });
+
+    function resolveEquipAgentId() {
+      const raw = root.querySelector("#equip-agent-search")?.value?.trim() || "";
+      if (!raw) return "";
+      const paren = raw.match(/\(([^)]+)\)\s*$/);
+      if (paren) return paren[1].trim();
+      const byId = pickerEmployees.find((e) => e.id.toLowerCase() === raw.toLowerCase());
+      if (byId) return byId.id;
+      const byName = pickerEmployees.find((e) =>
+        String(e.american_name || e.arabic_name || "").toLowerCase().includes(raw.toLowerCase())
+      );
+      return byName?.id || "";
+    }
+
+    root.querySelector("#equip-view-agent-btn")?.addEventListener("click", () => {
+      const id = resolveEquipAgentId();
+      if (!id) return alert("Choose an agent from the list");
+      state.hrmsEmployeeFilter = id;
+      window.location.hash = `equipment?employee=${encodeURIComponent(id)}`;
+      renderEquipmentPage(root, api, helpers);
+    });
+    root.querySelector("#equip-agent-search")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        root.querySelector("#equip-view-agent-btn")?.click();
+      }
     });
 
     root.querySelector("#add-equipment-btn").onclick = () => {
@@ -505,7 +763,7 @@ window.HRMSFeatures = (function () {
         <form id="equip-form" class="modal-body field-grid modal-body-scroll">
           <label class="field"><span>Agent</span><select name="employeeId" required>
             <option value="">— Select agent —</option>
-            ${employeeOptionsHtml(employees)}
+            ${employeeOptionsHtml(pickerEmployees, filterEmp || "")}
           </select></label>
           <label class="field"><span>Device</span><select name="itemType" required>${equipmentTypeOptions("")}</select></label>
           <label class="field" style="grid-column:1/-1"><span>Notes (optional)</span><textarea name="notes" rows="2"></textarea></label>
@@ -573,16 +831,74 @@ window.HRMSFeatures = (function () {
     bindLifecyclePanel(emp, api, helpers);
   }
 
+  function trainingStatusOptions(selected) {
+    const opts = [
+      ["pending", "Pending"],
+      ["passed", "Passed"],
+      ["rejected", "Rejected"],
+      ["passed_exception", "Passed (Exception)"],
+    ];
+    return opts
+      .map(([v, label]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${label}</option>`)
+      .join("");
+  }
+
+  function buildTrainingSectionHtml(program, escapeHtml, trainingPassed = false) {
+    if (!program) {
+      const passedNote = trainingPassed
+        ? `<p class="badge badge-ok" style="display:inline-block;margin:.5rem 0">Baseline training passed</p>`
+        : "";
+      return `<details open style="margin-top:1rem" id="hrms-training-section">
+        <summary><strong>Training program (4 weeks)</strong></summary>
+        ${passedNote}
+        <p class="muted" style="margin:.5rem 0">No active training program. HR/Admin can start a new program anytime.</p>
+        <div class="field-grid" style="max-width:24rem">
+          <label class="field"><span>Phase 1 week starts (Monday)</span><input type="date" id="train-phase1-start" /></label>
+          <button type="button" class="btn btn-sm btn-primary" id="train-start-btn">Start training program</button>
+        </div>
+      </details>`;
+    }
+    const rejectedNote = program.rejectedAtPhase
+      ? `<p class="muted">Rejected at phase ${program.rejectedAtPhase} — later phases hidden.</p>`
+      : "";
+    const rows = (program.phases || [])
+      .map(
+        (p) => `<tr data-phase-id="${escapeHtml(p.id)}">
+          <td><strong>Phase ${p.phaseNumber}</strong></td>
+          <td><input type="date" class="train-week-start" value="${escapeHtml(p.weekStart)}" style="max-width:9rem" />
+            <span class="muted"> – </span>
+            <input type="date" class="train-week-end" value="${escapeHtml(p.weekEnd)}" style="max-width:9rem" /></td>
+          <td><select class="train-status">${trainingStatusOptions(p.status)}</select></td>
+          <td><strong>${p.salesPassed}</strong> passed <span class="muted">/ ${p.salesTotal} total</span></td>
+          <td><button type="button" class="btn btn-sm train-save-phase">Save</button></td>
+        </tr>`
+      )
+      .join("");
+    return `<details open style="margin-top:1rem" id="hrms-training-section">
+      <summary><strong>Training program (4 weeks)</strong> ${program.active ? '<span class="badge badge-ok">Active</span>' : '<span class="badge">Paused</span>'}</summary>
+      ${rejectedNote}
+      <div class="table-wrap" style="margin-top:.5rem"><table>
+        <thead><tr><th>Phase</th><th>Week (Mon–Fri)</th><th>Status</th><th>Sales</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div class="btn-row" style="margin-top:.5rem">
+        <button type="button" class="btn btn-sm" id="train-recalc-btn">Recalculate phases 2–4 from phase 1</button>
+        <button type="button" class="btn btn-sm" id="train-toggle-active">${program.active ? "Pause program" : "Resume program"}</button>
+      </div>
+    </details>`;
+  }
+
   async function buildLifecyclePanelHtml(emp, api, helpers) {
     const { escapeHtml, openModal, closeModal, canManagePayrollEvents } = helpers;
     if (!canManagePayrollEvents()) return "";
     let html = "";
     try {
-      const [periods, plans, onboard, offboard] = await Promise.all([
+      const [periods, plans, onboard, offboard, trainingRes] = await Promise.all([
         api(`/hrms/employment-periods/${emp.id}`).catch(() => ({ periods: [] })),
         api(`/hrms/action-plans/${emp.id}`).catch(() => ({ plans: [] })),
         api(`/hrms/onboarding/${emp.id}`).catch(() => ({ checklist: null })),
         api(`/hrms/offboarding/${emp.id}`).catch(() => ({ offboarding: {}, clearance: [] })),
+        api(`/hrms/training/${emp.id}`).catch(() => ({ program: null })),
       ]);
 
       const periodRows = (periods.periods || [])
@@ -621,7 +937,7 @@ window.HRMSFeatures = (function () {
           <details style="margin-top:1rem">
             <summary>Onboarding checklist</summary>
             <div class="field-grid" style="margin-top:.5rem">
-              ${["adUser", "idScanned", "contract", "trainingPhase1", "trainingPhase2", "trainingPhase3", "trainingPhase4"]
+              ${["adUser", "idScanned", "contract"]
                 .map(
                   (k) =>
                     `<label class="toggle-label"><input type="checkbox" data-onboard="${k}" ${ob[k] ? "checked" : ""} /> ${k.replace(/([A-Z])/g, " $1")}</label>`
@@ -629,6 +945,7 @@ window.HRMSFeatures = (function () {
                 .join("")}
             </div>
           </details>
+          ${buildTrainingSectionHtml(trainingRes.program, escapeHtml, emp.training_passed)}
           <details id="hrms-offboarding-section" style="margin-top:.75rem">
             <summary>Offboarding & clearance</summary>
             <label class="toggle-label"><input type="checkbox" id="off-revoke" ${off.revokeAccess ? "checked" : ""} /> Revoke access</label>
@@ -660,7 +977,7 @@ window.HRMSFeatures = (function () {
   }
 
   function bindLifecyclePanel(emp, api, helpers) {
-    const { openModal, closeModal } = helpers;
+    const { openModal, closeModal, escapeHtml: esc = window.escapeHtml } = helpers;
     const panel = document.getElementById("hrms-lifecycle-panel");
     if (!panel) return;
 
@@ -671,7 +988,7 @@ window.HRMSFeatures = (function () {
 
     panel.querySelector("#hrms-rehire-btn")?.addEventListener("click", () => {
       openModal(`
-        <div class="modal-header"><h2>Re-hire ${escapeHtml(emp.american_name || emp.id)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <div class="modal-header"><h2>Re-hire ${esc(emp.american_name || emp.id)}</h2><button class="btn btn-sm" data-close>✕</button></div>
         <form id="rehire-form" class="modal-body field-grid">
           <label class="field"><span>Start date</span><input name="startDate" type="date" required /></label>
           <label class="field"><span>Status</span><select name="status"><option value="Active">Active</option><option value="Paused">Paused</option></select></label>
@@ -785,34 +1102,113 @@ window.HRMSFeatures = (function () {
         }
       };
     });
-        panel.querySelectorAll("[data-onboard]").forEach((cb) => {
-          cb.onchange = async () => {
-            const body = {};
-            panel.querySelectorAll("[data-onboard]").forEach((x) => {
-              body[x.dataset.onboard] = x.checked;
-            });
-            await api(`/hrms/onboarding/${emp.id}`, { method: "PUT", body: JSON.stringify(body) });
-          };
+    panel.querySelectorAll("[data-onboard]").forEach((cb) => {
+      cb.onchange = async () => {
+        const body = {};
+        panel.querySelectorAll("[data-onboard]").forEach((x) => {
+          body[x.dataset.onboard] = x.checked;
         });
-        const saveOff = async () => {
-          await api(`/hrms/offboarding/${emp.id}`, {
-            method: "PUT",
+        try {
+          await api(`/hrms/onboarding/${emp.id}`, { method: "PUT", body: JSON.stringify(body) });
+          toast("Onboarding updated.");
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+    });
+
+    const saveOff = async () => {
+      await api(`/hrms/offboarding/${emp.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          revokeAccess: panel.querySelector("#off-revoke")?.checked,
+          finalPay: panel.querySelector("#off-final-pay")?.checked,
+        }),
+      });
+    };
+    panel.querySelector("#off-revoke")?.addEventListener("change", saveOff);
+    panel.querySelector("#off-final-pay")?.addEventListener("change", saveOff);
+    panel.querySelectorAll("[data-clearance]").forEach((sel) => {
+      sel.onchange = async () => {
+        await api(`/hrms/clearance/${emp.id}/${sel.dataset.clearance}`, {
+          method: "PUT",
+          body: JSON.stringify({ status: sel.value }),
+        });
+      };
+    });
+
+    bindTrainingPanel(emp, api, helpers, panel);
+  }
+
+  function bindTrainingPanel(emp, api, helpers, panel) {
+    const toast = (msg) => {
+      if (typeof showSaveIndicator === "function") showSaveIndicator(msg, "saved");
+      else alert(msg);
+    };
+    const section = panel?.querySelector("#hrms-training-section") || document.getElementById("hrms-training-section");
+    if (!section) return;
+
+    section.querySelector("#train-start-btn")?.addEventListener("click", async () => {
+      const phase1Start = section.querySelector("#train-phase1-start")?.value;
+      if (!phase1Start) return alert("Pick phase 1 start date");
+      try {
+        await api(`/hrms/training/${emp.id}`, { method: "POST", body: JSON.stringify({ phase1Start }) });
+        toast("Training program started.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    section.querySelectorAll(".train-save-phase").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const row = btn.closest("tr");
+        const phaseId = row?.dataset.phaseId;
+        if (!phaseId) return;
+        try {
+          await api(`/hrms/training/phases/${phaseId}`, {
+            method: "PATCH",
             body: JSON.stringify({
-              revokeAccess: panel.querySelector("#off-revoke")?.checked,
-              finalPay: panel.querySelector("#off-final-pay")?.checked,
+              weekStart: row.querySelector(".train-week-start")?.value,
+              weekEnd: row.querySelector(".train-week-end")?.value,
+              status: row.querySelector(".train-status")?.value,
+              recalculateFollowing: false,
             }),
           });
-        };
-        panel.querySelector("#off-revoke")?.addEventListener("change", saveOff);
-        panel.querySelector("#off-final-pay")?.addEventListener("change", saveOff);
-        panel.querySelectorAll("[data-clearance]").forEach((sel) => {
-          sel.onchange = async () => {
-            await api(`/hrms/clearance/${emp.id}/${sel.dataset.clearance}`, {
-              method: "PUT",
-              body: JSON.stringify({ status: sel.value }),
-            });
-          };
+          toast("Phase saved.");
+          await refreshLifecyclePanel(emp, api, helpers);
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    });
+
+    section.querySelector("#train-recalc-btn")?.addEventListener("click", async () => {
+      try {
+        await api(`/hrms/training/${emp.id}/recalculate`, {
+          method: "POST",
+          body: JSON.stringify({ fromPhase: 1 }),
         });
+        toast("Phases 2–4 recalculated from phase 1.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    section.querySelector("#train-toggle-active")?.addEventListener("click", async () => {
+      const isPause = section.querySelector("#train-toggle-active")?.textContent?.includes("Pause");
+      try {
+        await api(`/hrms/training/${emp.id}/active`, {
+          method: "PUT",
+          body: JSON.stringify({ active: !isPause }),
+        });
+        toast(isPause ? "Training paused." : "Training resumed.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
   }
 
   async function appendEmployeeLifecyclePanel() {

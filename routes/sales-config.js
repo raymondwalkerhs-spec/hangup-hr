@@ -8,7 +8,7 @@ const router = express.Router();
 
 function canManageSalesConfig(userRole) {
   const r = userRole?.role;
-  return ["rtm", "admin", "hr", "ceo"].includes(r);
+  return ["rtm", "admin"].includes(r);
 }
 
 router.get("/revision", async (req, res) => {
@@ -30,6 +30,16 @@ router.get("/catalog", async (req, res) => {
     res.json({ clients: list, revision: await getRevision() });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/import-from-sales", async (req, res) => {
+  if (!canManageSalesConfig(req.userRole)) return res.status(403).json({ error: "RTM or Admin only" });
+  try {
+    const result = await salesClients.importFromExistingSales();
+    res.json({ ok: true, ...result, revision: await getRevision() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

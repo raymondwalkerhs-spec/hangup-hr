@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Hangup HR desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -15,6 +15,7 @@
     "dist:mac:script": "bash scripts/build-macos.sh",
     "dist:mac:dmg": "node scripts/ensure-macos.js && electron-builder --mac dmg",
     "package:github": "node scripts/package-github-release.js",
+    "verify:update": "node scripts/verify-update-package.js",
     "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
     "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
     "push:sheet": "node scripts/push-excel-to-sheet.js",
@@ -25,7 +26,7 @@
     "fix:electron": "node node_modules/electron/install.js",
     "test:supabase": "node scripts/test-supabase.js",
     "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js",
-    "apply:migrations": "node scripts/apply-pending-migrations.js",
+    "apply:github-patch": "node scripts/apply-github-patch-standalone.js",
     "seed:fp-june": "node scripts/seed-june-fp-mappings.js"
   },
   "build": {

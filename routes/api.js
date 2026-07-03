@@ -4,7 +4,7 @@ const {
   validateLogin,
   checkSession,
 } = require("../lib/auth");
-const { createSession, getSession, destroySession, validateSession } = require("../lib/session-store");
+const { createSession, getSession, destroySession, validateSession, updateSession } = require("../lib/session-store");
 const { requireOnline, isOnline, verifyBackendAccess } = require("../lib/network");
 const { getCacheDir } = require("../lib/cache");
 const store = require("../lib/data-store");
@@ -77,15 +77,39 @@ function requireAuth(req, res, next) {
       return res.status(401).json({ error: "Session expired or revoked", sessionRevoked: true });
     }
     req.appSession = valid;
-    req.username = valid.username;
+    const realUsername = valid.username;
+    let effectiveUsername = realUsername;
+    let impersonatingAs = valid.impersonatingAs || null;
+    let impersonatedUser = null;
+
+    if (impersonatingAs) {
+      if (!roles.canImpersonateUsers(realUsername)) {
+        impersonatingAs = null;
+        updateSession(valid.id, { impersonatingAs: null });
+      } else {
+        const usersAdmin = require("../lib/users-admin");
+        impersonatedUser = await usersAdmin.getAppUser(impersonatingAs).catch(() => null);
+        if (!impersonatedUser) {
+          impersonatingAs = null;
+          updateSession(valid.id, { impersonatingAs: null });
+        } else {
+          effectiveUsername = impersonatedUser.username || impersonatingAs;
+          valid.role = impersonatedUser.role || valid.role;
+        }
+      }
+    }
+
+    req.realUsername = realUsername;
+    req.impersonatingAs = impersonatingAs;
+    req.username = effectiveUsername;
+    const empLinkId =
+      impersonatedUser?.employee_id || store.getAppUserEmployeeId(effectiveUsername) || null;
     req.userRole = roles.enrichUserRole(
-      roles.resolveUserRole(valid.username, valid.role),
+      roles.resolveUserRole(effectiveUsername, valid.role),
       store.getEmployees(),
-      store.getAppUserEmployeeId(valid.username)
-        ? { employee_id: store.getAppUserEmployeeId(valid.username) }
-        : null
+      empLinkId ? { employee_id: empLinkId } : null
     );
-    req.userRole.username = valid.username;
+    req.userRole.username = effectiveUsername;
     if (!roles.hasAppAccess(req.userRole)) {
       destroySession(valid.id);
       return res.status(401).json({ error: "Access revoked. Contact Admin." });
@@ -389,6 +413,8 @@ router.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
+router.use("/registration", require("./registration"));
+
 router.get("/session-check", async (req, res) => {
   const session = sessionFromRequest(req);
   if (!session) {
@@ -474,6 +500,17 @@ router.get("/status", async (req, res) => {
     /* keep online flag from probe */
   }
   const config = store.getConfig();
+  let dropboxHealth = { configured: false };
+  try {
+    const dropbox = require("../lib/dropbox");
+    dropboxHealth.configured = dropbox.isConfigured();
+    if (dropbox.isConfigured() && roles.canManageAppUsers(req.realUsername || req.username)) {
+      const check = await dropbox.verifyAccess();
+      dropboxHealth = { configured: true, ...check };
+    }
+  } catch (err) {
+    dropboxHealth = { configured: false, error: err.message };
+  }
   res.json({
     online,
     backendOk,
@@ -482,17 +519,18 @@ router.get("/status", async (req, res) => {
     lastSync: store.getLastSync()?.toISOString() || null,
     hideOutEmployees: config.hideOutEmployees !== false,
     taxRules: config.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 },
-    canManageSessions: roles.canManageSessions(req.username),
-    canApproveLeave: roles.canApproveLeave(req.username),
+    canManageSessions: roles.canManageSessions(req.realUsername || req.username),
+    canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
     user: {
       username: req.username,
       role: req.userRole.role,
       unit: req.userRole.unit,
       team: req.userRole.team,
       employeeId: req.userRole.employeeId,
-      canManageUsers: roles.canManageAppUsers(req.username),
-      canApproveLeave: roles.canApproveLeave(req.username),
-      canManageSessions: roles.canManageSessions(req.username),
+      canManageUsers: roles.canManageAppUsers(req.realUsername || req.username),
+      canImpersonate: roles.canImpersonateUsers(req.realUsername || req.username),
+      canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
+      canManageSessions: roles.canManageSessions(req.realUsername || req.username),
       canViewPayroll: roles.canViewPayroll(req.userRole),
       canViewBonuses: roles.canViewBonusesDeductions(req.userRole),
       canEditAttendance: roles.canEditAttendance(req.userRole),
@@ -503,12 +541,73 @@ router.get("/status", async (req, res) => {
       canEditSales: roles.canEditSale(req.userRole),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
-      canApproveLoan: roles.canApproveLoanRequest(req.username),
+      canApproveLoan: roles.canApproveLoanRequest(req.realUsername || req.username),
+    },
+    impersonation: {
+      active: Boolean(req.impersonatingAs),
+      as: req.impersonatingAs || null,
+      realUsername: req.realUsername || req.username,
     },
     appVersion: getAppVersion(),
+    dropbox: dropboxHealth,
     supabaseUrl: process.env.SUPABASE_URL || null,
     cacheDir: getCacheDir(),
   });
+});
+
+router.get("/impersonate/users", async (req, res) => {
+  if (!roles.canImpersonateUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const usersAdmin = require("../lib/users-admin");
+    const employees = store.getEmployees();
+    const empById = new Map(employees.map((e) => [e.id, e]));
+    const users = (await usersAdmin.listAppUsers()).map((u) => {
+      const emp = u.employeeId ? empById.get(u.employeeId) : null;
+      return {
+        username: u.username,
+        role: u.role,
+        status: u.status,
+        employeeId: u.employeeId || null,
+        employeeName: emp?.american_name || emp?.arabic_name || null,
+      };
+    });
+    users.sort((a, b) =>
+      String(a.employeeName || a.username).localeCompare(String(b.employeeName || b.username))
+    );
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/impersonate/start", async (req, res) => {
+  if (!roles.canImpersonateUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const username = String(req.body?.username || "").trim();
+  if (!username) return res.status(400).json({ error: "username required" });
+  if (username.toLowerCase() === String(req.realUsername || "").toLowerCase()) {
+    return res.status(400).json({ error: "Already viewing as yourself" });
+  }
+  try {
+    const usersAdmin = require("../lib/users-admin");
+    const target = await usersAdmin.getAppUser(username);
+    if (!target) return res.status(404).json({ error: "User not found" });
+    updateSession(req.appSession.id, { impersonatingAs: target.username });
+    res.json({ ok: true, impersonatingAs: target.username });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/impersonate/stop", async (req, res) => {
+  if (!roles.canImpersonateUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  updateSession(req.appSession.id, { impersonatingAs: null });
+  res.json({ ok: true });
 });
 
 router.use("/admin/users", require("./admin-users"));
@@ -558,6 +657,77 @@ router.use("/hrms", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
 }, require("./hrms"));
+
+const registration = require("../lib/registration");
+const orgHierarchy = require("../lib/org-hierarchy");
+
+router.get("/registration/daily-pin", async (req, res) => {
+  if (!registration.canViewDailyPin(req.userRole?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  try {
+    const pin = await registration.getOrCreateDailyPin();
+    res.json(pin);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/registration/pending", async (req, res) => {
+  if (!registration.canApproveRegistration(req.userRole?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  try {
+    const pending = await registration.listPendingRegistrations();
+    res.json({ pending });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/registration/:id/approve", async (req, res) => {
+  if (!registration.canApproveRegistration(req.userRole?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  try {
+    const result = await registration.approveRegistration(req.params.id, req.username, req.body || {});
+    await store.refreshCache();
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/registration/:id/reject", async (req, res) => {
+  if (!registration.canApproveRegistration(req.userRole?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  try {
+    await registration.rejectRegistration(req.params.id, req.username);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/org/managers", async (_req, res) => {
+  try {
+    const managers = await orgHierarchy.readUnitManagers();
+    res.json({ managers, unitRules: orgHierarchy.UNIT_RULES });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/org/managers/:unit", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    await orgHierarchy.upsertUnitManager(req.params.unit, req.body || {}, req.username);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 router.use("/auth", require("./auth-routes"));
 
 router.post("/sync/refresh", async (req, res) => {
@@ -652,6 +822,7 @@ function nationalityOptionsFromEmployees(employees) {
 router.get("/employees", (req, res) => {
   const hideOut = parseHideOut(req);
   const companyContext = require("../lib/company-context");
+  const employeePrivacy = require("../lib/employee-privacy");
   const company = companyContext.parseCompanyContext(req.query.company);
   const scopedAll = roles.filterEmployeesForUser(
     companyContext.filterEmployeesByCompany(store.getEmployees({ hideOut: false }), company),
@@ -660,6 +831,7 @@ router.get("/employees", (req, res) => {
   let employees = store.getEmployees({ hideOut });
   employees = companyContext.filterEmployeesByCompany(employees, company);
   employees = roles.filterEmployeesForUser(employees, req.userRole);
+  employees = employeePrivacy.sanitizeEmployees(employees, req.userRole?.role);
   const units = store.getUnits();
   const positions = [
     ...new Set(employees.map((e) => e.position).filter(Boolean)),
@@ -789,7 +961,11 @@ router.get("/employees/:id", (req, res) => {
   if (!assertEmployeeInCompanyContext(emp, req)) {
     return res.status(404).json({ error: "Employee not found" });
   }
-  res.json({ employee: emp });
+  if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  const employeePrivacy = require("../lib/employee-privacy");
+  res.json({ employee: employeePrivacy.sanitizeEmployee(emp, req.userRole?.role) });
 });
 
 router.post("/employees", async (req, res) => {
@@ -798,6 +974,14 @@ router.post("/employees", async (req, res) => {
   }
   try {
     const emp = await store.createEmployee(req.body, req.username);
+    if (req.body.inTraining && req.body.phase1Start) {
+      try {
+        const trainingPhases = require("../lib/training-phases");
+        await trainingPhases.createProgram(emp.id, req.body.phase1Start, req.username);
+      } catch (err) {
+        console.warn(`training program create failed for ${emp.id}:`, err.message);
+      }
+    }
     res.json({ ok: true, employee: emp });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1380,6 +1564,7 @@ router.get("/payroll", async (req, res) => {
       totalBonuses: payroll.reduce((s, p) => s + p.totalBonuses, 0),
       totalLateness: payroll.reduce((s, p) => s + p.latenessDeduction, 0),
       totalDeductions: payroll.reduce((s, p) => s + p.totalDeductions, 0),
+      totalBonusTransfers: payroll.reduce((s, p) => s + (p.bonusTransferPayroll || 0), 0),
       totalNet: payroll.reduce((s, p) => s + p.netSalary, 0),
     },
   });

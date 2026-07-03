@@ -38,6 +38,18 @@ Hangup HR uses **two separate distribution channels**. They work together but do
 
 ---
 
+## v1.3.0 release checklist
+
+1. Bump `package.json` → `1.3.0`
+2. `node scripts/audit-dropbox-sales.js --fix-links` (if attachments missing links)
+3. Windows: `.\scripts\build.ps1 installer` then `npm run package:github -- --full`
+4. `npm run verify:update -- dist/update-manifests/win-x64-full.zip` (or patch zip)
+5. Push tag `v1.3.0` → CI builds macOS DMG (`build-macos` job — no longer optional fail)
+6. Update `app_versions` in Supabase to `1.3.0`
+7. Run [`scripts/qa-smoke-checklist.md`](scripts/qa-smoke-checklist.md)
+
+---
+
 ## What gets updated in-place
 
 The in-app updater replaces files inside the **unpacked install folder**:
@@ -194,7 +206,9 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 | `npm run dist:mac:script` | Same as `build-macos.sh` |
 | `npm run package:github` | Patch zip only (if previous manifest exists) |
 | `npm run package:github -- --full` | Patch + full zip |
+| `npm run verify:update -- <zip>` | **Required before publish** — extract + ASAR + SHA-256 check |
 | `.\scripts\publish-github-release.ps1` | Upload zips/manifests to GitHub via `gh` CLI |
+| `node scripts/apply-github-patch-standalone.js` | Manual patch when in-app updater broken (close app first) |
 | `node scripts/fetch-release-manifest.js` | Download previous manifests (CI / fresh clone) |
 
 ---
@@ -204,9 +218,13 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 | File | Role |
 |------|------|
 | `lib/github-updater.js` | Check releases, pick patch vs full, apply update |
-| `scripts/package-github-release.js` | Build patch/full zips + manifests (win + mac) |
+| `lib/zip-extract.js` | Safe zip extraction (adm-zip per-entry; **never** PowerShell `Expand-Archive`) |
+| `lib/update-integrity.js` | ASAR header + SHA-256 verification before copying files |
+| `scripts/package-github-release.js` | Build patch/full zips + manifests + `fileHashes` (win + mac) |
+| `scripts/verify-update-package.js` | Pre-publish validation — run on every patch/full zip |
 | `scripts/build-macos.sh` | macOS CI/local build script |
 | `scripts/fetch-release-manifest.js` | Pull manifests from previous GitHub release |
+| `scripts/apply-github-patch-standalone.js` | Bootstrap patch apply when updater is broken |
 | `scripts/publish-github-release.ps1` | Local publish helper (`gh release create`) |
 | `electron/main.js` | IPC: `check-github-update`, `apply-github-update`, `relaunch-app` |
 | `electron/preload.js` | Exposes `hrDesktop.checkGitHubUpdate()` to UI |
@@ -220,10 +238,12 @@ Workflow: [`.github/workflows/release.yml`](.github/workflows/release.yml)
 
 | Issue | Fix |
 |-------|-----|
+| **Invalid package app.asar** | Fixed in **1.2.4+** — was corrupted zip extract. Upgrade via standalone script or full zip. Never use PowerShell `Expand-Archive` for update zips. |
 | No update popup | Set `GITHUB_UPDATES_REPO` (+ `GITHUB_UPDATES_TOKEN` if private) in packaged `.env` and rebuild |
-| Patch not created | First release needs full zip; keep `dist\update-manifests\` between builds |
+| Patch not created | Download `win-x64-latest.json` from previous release into `dist/update-manifests/` before `package:github` |
 | User on old version gets large download | Expected — full zip fallback |
-| `adm-zip` error | Run `npm install` before building |
+| Update fails while app running | Normal for `app.asar` — updater writes `.hr-pending` and finishes on **restart** |
+| Stuck on 1.2.0–1.2.3 updater | Close app; run `node scripts/apply-github-patch-standalone.js --install-dir "…\\Hangup HR Beta"` |
 | Private repo rate limits | Set `GITHUB_UPDATES_TOKEN` in `.env` |
 | CI build fails on credentials | Uses `SKIP_CREDENTIALS_CHECK=1` stub — normal for Actions |
 | macOS update blocked by Gatekeeper | Unsigned build — allow in Privacy & Security; plan ADM-09 signing |

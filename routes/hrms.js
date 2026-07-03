@@ -61,6 +61,34 @@ router.patch("/teams/:id", async (req, res) => {
   }
 });
 
+router.post("/teams/:id/relocate", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const newUnit = String(req.body?.unit || "").trim();
+    if (!newUnit) return res.status(400).json({ error: "unit required" });
+    const reassignIds = req.body?.reassignIds !== false;
+    const result = await hrms.relocateTeamToUnit(req.params.id, newUnit, {
+      reassignIds,
+      username: req.username,
+    });
+    await store.refreshCache();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.delete("/teams/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const result = await hrms.deleteOrgTeam(req.params.id, req.username);
+    await store.refreshCache();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.get("/employment-periods/:employeeId", async (req, res) => {
   try {
     const periods = await hrms.getEmploymentPeriods(req.params.employeeId);
@@ -185,6 +213,63 @@ router.put("/onboarding/:employeeId", async (req, res) => {
   try {
     const checklist = await hrms.saveOnboarding(req.params.employeeId, req.body, req.username);
     res.json({ ok: true, checklist });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+const trainingPhases = require("../lib/training-phases");
+
+router.get("/training/:employeeId", async (req, res) => {
+  if (!roles.canManageAll(req.userRole) && req.userRole?.employeeId !== req.params.employeeId) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  try {
+    const program = await trainingPhases.getProgram(req.params.employeeId);
+    res.json({ program, statuses: trainingPhases.PHASE_STATUSES, statusLabels: trainingPhases.STATUS_LABELS });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/training/:employeeId", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const phase1Start = req.body?.phase1Start || req.body?.phase1_start;
+    if (!phase1Start) return res.status(400).json({ error: "phase1Start required" });
+    const program = await trainingPhases.createProgram(req.params.employeeId, phase1Start, req.username);
+    res.status(201).json({ ok: true, program });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.patch("/training/phases/:phaseId", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const program = await trainingPhases.updatePhase(req.params.phaseId, req.body || {}, req.username);
+    res.json({ ok: true, program });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/training/:employeeId/recalculate", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const from = Number(req.body?.fromPhase || req.body?.fromPhaseNumber || 1);
+    const program = await trainingPhases.recalculateFromPhase(req.params.employeeId, from, req.username);
+    res.json({ ok: true, program });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.put("/training/:employeeId/active", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const program = await trainingPhases.setProgramActive(req.params.employeeId, req.body?.active, req.username);
+    res.json({ ok: true, program });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

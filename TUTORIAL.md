@@ -147,7 +147,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 ## 7. Equipment & organization
 
-- **Equipment** — view asset tags, assignments, and availability.  
+- **Equipment** — search an agent by name or ID in the toolbar, or open from a payslip **Equipment** link (`#equipment?employee=…`). Issue device lists agents only.
 - **Organization** — read-only view of team reporting lines (Dialing → OP Manager, HR → HR Manager, etc.).
 
 ---
@@ -163,7 +163,9 @@ Edits outside an employee’s **active employment period** are rejected (after d
 | **Tax rules** | HR / Finance | Rates (default 0% until configured) |
 | **Active sessions** | Raymond | List and revoke logged-in devices |
 | **Commission types** | Admin / CEO | Manage commission type rates |
+| **Sales clients & breaks** | RTM / Admin | Clients, devices, price tiers; break schedules |
 | **Refresh** | Everyone | Full re-sync from Supabase |
+| **View as user** | Raymond | Test the app as any login |
 
 ---
 
@@ -196,11 +198,25 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **HR / admin / CEO** approve or deny; approved bonuses post to payroll.
 - **HR / RTM / quality / admin / office_assistant** cannot receive bonuses via requests — only via **payslip** direct add by HR+.
 
+### Updates (1.2.4+)
+
+- In-app **Update now** downloads a small patch zip from GitHub (not a full installer).
+- If update fails with **Invalid package app.asar**, you are on an old build — install **1.2.4+** via standalone script or full zip (see [`UPDATES.md`](UPDATES.md)).
+- **macOS:** Download `.dmg` from GitHub Releases; in-app updates use the same patch system as Windows.
+
+### Agent registration & training (1.2.3+)
+
+- **New agents** can register from the login screen with today's PIN (ask OP/HR/Quality).
+- **HR** adds agents with optional **4-week training program** (Mon–Fri phases, sales count per phase).
+- **Organization** page: assign OP/TL, approve registrations, view daily PIN.
+
 ### Sales (1.0.5+; MLA-Ray form 1.0.9-beta.5+)
 
-- **Employee fields:** Use dropdowns for reviewer and verifier — never type names manually.
+- **TL/OP add sale:** Pick **client**, **device**, and **price** from the catalog (required when RTM/Admin configured clients in Settings).
+- Quality ticket: listen inline, download, or copy Dropbox share link for recordings.
 - **Edit sale:** Agent and closer are fixed (shown read-only); set them when creating the sale.
-- **Month filter:** Use **All agents** / **All closers** dropdowns on the monthly sales toolbar.
+- Month view filters by **submission date** (not billing/effective date).
+- Quality/RTM can toggle which units (HS-1/2/3) appear in the log.
 - Statuses: **passed**, **pending**, **postdated**, **denied**, **callback** — approve/deny/callback (quality/RTM/HR/admin).
 - **Admin → Sales field permissions** — per-role visibility for form fields.
 - **Attachments:** Download, delete, replace, or copy Dropbox share link from the sale form (Dropbox-only for new uploads).
@@ -212,7 +228,7 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **Costs** nav (finance: Mark, Phoebe, Raymond, finance role; HR can submit).
 - Receipts, petty cash, monthly bills, archive with cash receipt number.
 
-Roles are set in **Users** (Raymond). Blank or unknown role = cannot sign in.
+- **Users** (Raymond/Mark): search box filters by username, name, employee ID, email, or team.
 
 ---
 

@@ -16,8 +16,18 @@ window.HRSalesConfigBreaks = (function () {
   const ROLE_OPTIONS = ["agent", "tl", "op", "quality", "rtm", "hr", "admin", "ceo", "finance", "office_assistant"];
   const UNIT_OPTIONS = ["HS1", "HS2", "HS3", "HS4", "HS5", "HS-Back-End", "Management"];
 
+  function calcEndTime(startTime, durationMinutes) {
+    const m = String(startTime || "10:00").match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "10:15";
+    let mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + (Number(durationMinutes) || 15);
+    mins = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
+    const h = Math.floor(mins / 60);
+    const mi = mins % 60;
+    return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  }
+
   function canManage(state) {
-    return ["rtm", "admin", "hr", "ceo"].includes(state.user?.role);
+    return ["rtm", "admin"].includes(state.user?.role);
   }
 
   async function loadCatalog(api, force) {
@@ -213,8 +223,21 @@ window.HRSalesConfigBreaks = (function () {
     });
   }
 
-  async function validateClientSubmit(clients, clientId) {
-    const client = clients.find((c) => c.id === clientId);
+  async function validateClientSubmit(clients, clientId, productId, priceId) {
+    if ((clients || []).length) {
+      if (!clientId || !productId || !priceId) {
+        alert("Select client, device, and price from the catalog list.");
+        return false;
+      }
+    }
+    const client = (clients || []).find((c) => c.id === clientId);
+    if (!client) {
+      if ((clients || []).length) {
+        alert("Invalid client selection.");
+        return false;
+      }
+      return true;
+    }
     if (!client) return true;
     if (client.status === "disabled") {
       alert("This client is disabled. Choose another client.");
@@ -246,6 +269,39 @@ window.HRSalesConfigBreaks = (function () {
     </div>`;
   }
 
+  function showShareLinkModal(url, meta = {}) {
+    const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
+    const note =
+      meta.storage === "supabase"
+        ? `Signed Supabase link (about ${meta.expiresInDays || 7} days). Use Share link again to refresh.`
+        : "Copy this link:";
+    if (typeof openModal !== "function") {
+      prompt(note, url);
+      return;
+    }
+    openModal(
+      `<div class="modal-header"><h2>Share link</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div class="modal-body">
+        <p class="muted">${esc(note)}</p>
+        <input type="text" class="search-input" id="share-link-copy" readonly value="${esc(url)}" style="width:100%" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="share-link-copy-btn">Copy to clipboard</button>
+      </div>`
+    );
+    document.getElementById("share-link-copy-btn")?.addEventListener("click", async () => {
+      const input = document.getElementById("share-link-copy");
+      try {
+        await navigator.clipboard.writeText(input?.value || url);
+        alert("Link copied");
+      } catch {
+        input?.select();
+        document.execCommand?.("copy");
+        alert("Select the link and copy manually if needed");
+      }
+    });
+  }
+
   function wireAttachmentActions(container, api, openSaleAttachment, canEditFn) {
     container.querySelectorAll("[data-open-attach]").forEach((btn) => {
       btn.onclick = () => openSaleAttachment(btn.dataset.openAttach, btn.textContent);
@@ -256,7 +312,10 @@ window.HRSalesConfigBreaks = (function () {
         const res = await fetch(`/api/sales/attachments/${btn.dataset.attDownload}/download`, {
           headers: sessionId ? { "x-session-id": sessionId } : {},
         });
-        if (!res.ok) return alert("Download failed");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return alert(err.error || `Download failed (${res.status})`);
+        }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -270,9 +329,17 @@ window.HRSalesConfigBreaks = (function () {
       btn.onclick = async () => {
         try {
           const res = await api(`/sales/attachments/${btn.dataset.attShare}/share-link`);
-          if (!res.url) return alert("No share link available");
-          await navigator.clipboard.writeText(res.url);
-          alert("Dropbox link copied to clipboard");
+          if (!res.url) return alert(res.error || "No share link available.");
+          const copiedMsg =
+            res.storage === "supabase"
+              ? `Share link copied (~${res.expiresInDays || 7} days; use Share link again to refresh)`
+              : "Share link copied to clipboard";
+          try {
+            await navigator.clipboard.writeText(res.url);
+            alert(copiedMsg);
+          } catch {
+            showShareLinkModal(res.url, res);
+          }
         } catch (e) {
           alert(e.message || "Could not get share link");
         }
@@ -318,19 +385,28 @@ window.HRSalesConfigBreaks = (function () {
   async function enhanceSaleModal(api, helpers, sale, formRoot, canEditFn, openSaleAttachment) {
     const catalog = await loadCatalog(api).catch(() => ({ clients: [] }));
     const clients = catalog.clients || [];
-    if (!clients.length) return;
     const formData = sale?.formData || {};
-    const picker = document.createElement("div");
-    picker.innerHTML = clientPickerHtml(clients, formData.salesClientId, formData.salesProductId, formData.salesPriceId, formData);
     const form = formRoot.querySelector("#sale-form") || formRoot;
-    const firstFieldset = form.querySelector("fieldset");
-    if (firstFieldset) form.insertBefore(picker.firstElementChild, firstFieldset);
-    else form.prepend(picker.firstElementChild);
-    wireClientPicker(form, clients);
-    const clientField = form.querySelector('[name="client"]');
-    if (clientField?.closest("label")) clientField.closest("label").style.display = "none";
-    const deviceField = form.querySelector('[name="device"]');
-    if (deviceField?.closest("label")) deviceField.closest("label").style.display = "none";
+    if (clients.length) {
+      const picker = document.createElement("div");
+      picker.innerHTML = clientPickerHtml(clients, formData.salesClientId, formData.salesProductId, formData.salesPriceId, formData);
+      const firstFieldset = form.querySelector("fieldset");
+      if (firstFieldset) form.insertBefore(picker.firstElementChild, firstFieldset);
+      else form.prepend(picker.firstElementChild);
+      wireClientPicker(form, clients);
+      const clientField = form.querySelector('[name="client"]');
+      if (clientField?.closest("label")) clientField.closest("label").style.display = "none";
+      const deviceField = form.querySelector('[name="device"]') || form.querySelector('[name="deviceType"]');
+      if (deviceField?.closest("label")) deviceField.closest("label").style.display = "none";
+      const priceField = form.querySelector('[name="price"]');
+      if (priceField?.closest("label")) priceField.closest("label").style.display = "none";
+    } else if (!sale?.id) {
+      const warn = document.createElement("p");
+      warn.className = "alert alert-warn";
+      warn.style.gridColumn = "1 / -1";
+      warn.textContent = "No sales clients configured. Contact RTM or Admin to set up clients and devices in Settings.";
+      form.prepend(warn);
+    }
 
     const listEl = form.querySelector("#sale-attachments-list");
     if (listEl && sale?.id) {
@@ -388,6 +464,7 @@ window.HRSalesConfigBreaks = (function () {
       <div class="card" style="grid-column:1/-1"><h3>Sales clients</h3>
         <p class="muted">Clients, devices, and price tiers for closers/TL/OP. Changes apply to all active sessions.</p>
         <button class="btn btn-primary btn-sm" id="sc-add-client">Add client</button>
+        <button class="btn btn-sm" id="sc-import-sales" title="Import distinct clients, devices, and prices from existing sales">Import from sales</button>
         <div id="sc-clients-list" class="muted" style="margin-top:.75rem">Loading…</div>
       </div>
       <div class="card" style="grid-column:1/-1"><h3>Break schedules</h3>
@@ -405,8 +482,26 @@ window.HRSalesConfigBreaks = (function () {
         .map((c) => {
           const prods = (c.products || [])
             .map((p) => {
-              const prices = (p.prices || []).map((pr) => `${pr.label}: $${pr.price}`).join(", ");
-              return `<li>${p.isFavored ? "★ " : ""}${escapeHtml(p.label)} (${p.deviceType})${prices ? ` — ${escapeHtml(prices)}` : ""}</li>`;
+              const priceRows = (p.prices || [])
+                .map(
+                  (pr) =>
+                    `<li class="adj-row" style="margin:.2rem 0;padding-left:1rem">
+                      <span>${escapeHtml(pr.label)} — $${pr.price}</span>
+                      <button type="button" class="btn btn-sm" data-edit-price="${pr.id}" data-product-id="${p.id}">Edit price</button>
+                      <button type="button" class="btn btn-sm btn-danger" data-del-price="${pr.id}">Delete</button>
+                    </li>`
+                )
+                .join("");
+              return `<li style="margin:.35rem 0">
+                <div class="adj-row">
+                  <span>${p.isFavored ? "★ " : ""}<strong>${escapeHtml(p.label)}</strong> (${escapeHtml(p.deviceType)})</span>
+                  <button type="button" class="btn btn-sm" data-toggle-favored="${p.id}" data-client="${c.id}" title="Toggle favored">${p.isFavored ? "Unstar" : "★ Favor"}</button>
+                  <button type="button" class="btn btn-sm" data-edit-product="${p.id}" data-client="${c.id}">Edit</button>
+                  <button type="button" class="btn btn-sm btn-danger" data-del-product="${p.id}">Delete</button>
+                  <button type="button" class="btn btn-sm" data-add-price="${p.id}">Add price</button>
+                </div>
+                <ul class="muted" style="margin:.25rem 0 0 1rem">${priceRows || "<li>No price tiers</li>"}</ul>
+              </li>`;
             })
             .join("");
           return `<div class="card card-flat" style="margin:.5rem 0">
@@ -421,11 +516,56 @@ window.HRSalesConfigBreaks = (function () {
           </div>`;
         })
         .join("") || "<p>No clients yet</p>";
+      const clients = data.clients || [];
       el.querySelectorAll("[data-edit-client]").forEach((btn) => {
-        btn.onclick = () => openClientModal(data.clients.find((x) => x.id === btn.dataset.editClient));
+        btn.onclick = () => openClientModal(clients.find((x) => x.id === btn.dataset.editClient));
       });
       el.querySelectorAll("[data-add-product]").forEach((btn) => {
         btn.onclick = () => openProductModal(btn.dataset.addProduct);
+      });
+      el.querySelectorAll("[data-edit-product]").forEach((btn) => {
+        const client = clients.find((x) => x.id === btn.dataset.client);
+        const product = client?.products?.find((p) => p.id === btn.dataset.editProduct);
+        btn.onclick = () => openProductModal(btn.dataset.client, product);
+      });
+      el.querySelectorAll("[data-del-product]").forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm("Delete this device and its prices?")) return;
+          await api(`/sales-config/products/${btn.dataset.delProduct}`, { method: "DELETE" });
+          refreshClients();
+        };
+      });
+      el.querySelectorAll("[data-toggle-favored]").forEach((btn) => {
+        btn.onclick = async () => {
+          const client = clients.find((x) => x.id === btn.dataset.client);
+          const product = client?.products?.find((p) => p.id === btn.dataset.toggleFavored);
+          if (!product) return;
+          await api(`/sales-config/products/${product.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ clientId: client.id, deviceType: product.deviceType, label: product.label, isFavored: !product.isFavored }),
+          });
+          refreshClients();
+        };
+      });
+      el.querySelectorAll("[data-add-price]").forEach((btn) => {
+        btn.onclick = () => openPriceModal(btn.dataset.addPrice);
+      });
+      el.querySelectorAll("[data-edit-price]").forEach((btn) => {
+        const productId = btn.dataset.productId;
+        let price = null;
+        for (const c of clients) {
+          const p = c.products?.find((x) => x.id === productId);
+          price = p?.prices?.find((pr) => pr.id === btn.dataset.editPrice);
+          if (price) break;
+        }
+        btn.onclick = () => openPriceModal(productId, price);
+      });
+      el.querySelectorAll("[data-del-price]").forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm("Delete this price tier?")) return;
+          await api(`/sales-config/prices/${btn.dataset.delPrice}`, { method: "DELETE" });
+          refreshClients();
+        };
       });
       el.querySelectorAll("[data-del-client]").forEach((btn) => {
         btn.onclick = async () => {
@@ -434,6 +574,25 @@ window.HRSalesConfigBreaks = (function () {
           refreshClients();
         };
       });
+    }
+
+    function openPriceModal(productId, price) {
+      const pr = price || { label: "Standard", price: 0 };
+      openModal(`<div class="modal-header"><h2>${price ? "Edit" : "Add"} price tier</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <form id="sc-price-form" class="form-grid modal-body">
+          <label class="field"><span>Label</span><input name="label" required value="${escapeHtml(pr.label || "")}" /></label>
+          <label class="field"><span>Price ($)</span><input name="price" type="number" min="0" step="0.01" required value="${pr.price ?? 0}" /></label>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </form>`);
+      document.getElementById("sc-price-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = { productId, label: fd.get("label"), price: Number(fd.get("price")) || 0 };
+        if (price?.id) await api(`/sales-config/prices/${price.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        else await api("/sales-config/prices", { method: "POST", body: JSON.stringify(body) });
+        closeModal();
+        refreshClients();
+      };
     }
 
     function openClientModal(client) {
@@ -521,7 +680,8 @@ window.HRSalesConfigBreaks = (function () {
     }
 
     function openBreakModal(brk) {
-      const b = brk || { active: true, durationMinutes: 15, units: [], roles: [], daysOfWeek: [1, 2, 3, 4, 5, 6, 7] };
+      const b = brk || { active: true, durationMinutes: 15, units: [], roles: [], daysOfWeek: [1, 2, 3, 4, 5, 6, 7], startTime: "10:00" };
+      const endPreview = calcEndTime(b.startTime || "10:00", b.durationMinutes || 15);
       const unitChecks = UNIT_OPTIONS.map(
         (u) => `<label><input type="checkbox" name="units" value="${u}" ${(b.units || []).includes(u) ? "checked" : ""} /> ${u}</label>`
       ).join(" ");
@@ -531,9 +691,10 @@ window.HRSalesConfigBreaks = (function () {
       openModal(`<div class="modal-header"><h2>${brk ? "Edit" : "Add"} break</h2><button class="btn btn-sm" data-close>✕</button></div>
         <form id="sc-break-form" class="form-grid modal-body">
           <label class="field"><span>Name</span><input name="name" required value="${escapeHtml(b.name || "")}" /></label>
-          <label class="field"><span>Start (HH:MM)</span><input name="startTime" required value="${escapeHtml(b.startTime || "10:00")}" /></label>
-          <label class="field"><span>End (HH:MM)</span><input name="endTime" required value="${escapeHtml(b.endTime || "10:15")}" /></label>
-          <label class="field"><span>Duration (minutes)</span><input name="durationMinutes" type="number" value="${b.durationMinutes || 15}" /></label>
+          <label class="field"><span>Start (HH:MM)</span><input name="startTime" id="sc-break-start" required value="${escapeHtml(b.startTime || "10:00")}" /></label>
+          <label class="field"><span>Duration (minutes)</span><input name="durationMinutes" id="sc-break-duration" type="number" min="1" value="${b.durationMinutes || 15}" /></label>
+          <label class="field"><span>End time (calculated)</span><input id="sc-break-end-preview" type="text" readonly value="${escapeHtml(b.endTime || endPreview)}" class="muted" /></label>
+          <input type="hidden" name="endTime" id="sc-break-end" value="${escapeHtml(b.endTime || endPreview)}" />
           <label class="field" style="grid-column:1/-1"><span>Message</span><textarea name="message">${escapeHtml(b.message || "")}</textarea></label>
           <label class="toggle-label"><input type="checkbox" name="active" ${b.active !== false ? "checked" : ""} /> Active</label>
           <div style="grid-column:1/-1"><strong>Units</strong><div class="checkbox-grid">${unitChecks}</div></div>
@@ -545,11 +706,13 @@ window.HRSalesConfigBreaks = (function () {
         const fd = new FormData(e.target);
         const units = [...fd.getAll("units")];
         const roles = [...fd.getAll("roles")];
+        const startTime = fd.get("startTime");
+        const durationMinutes = Number(fd.get("durationMinutes")) || 15;
         const body = {
           name: fd.get("name"),
-          startTime: fd.get("startTime"),
-          endTime: fd.get("endTime"),
-          durationMinutes: Number(fd.get("durationMinutes")) || 15,
+          startTime,
+          endTime: calcEndTime(startTime, durationMinutes),
+          durationMinutes,
           message: fd.get("message"),
           active: fd.get("active") === "on",
           units,
@@ -560,9 +723,26 @@ window.HRSalesConfigBreaks = (function () {
         closeModal();
         refreshBreaks();
       };
+      const syncEnd = () => {
+        const start = document.getElementById("sc-break-start")?.value || "10:00";
+        const dur = document.getElementById("sc-break-duration")?.value || 15;
+        const end = calcEndTime(start, dur);
+        const preview = document.getElementById("sc-break-end-preview");
+        const hidden = document.getElementById("sc-break-end");
+        if (preview) preview.value = end;
+        if (hidden) hidden.value = end;
+      };
+      document.getElementById("sc-break-start")?.addEventListener("input", syncEnd);
+      document.getElementById("sc-break-duration")?.addEventListener("input", syncEnd);
     }
 
     document.getElementById("sc-add-client").onclick = () => openClientModal(null);
+    document.getElementById("sc-import-sales").onclick = async () => {
+      if (!confirm("Import clients, devices, and prices from all existing sales? Duplicates are skipped.")) return;
+      const res = await api("/sales-config/import-from-sales", { method: "POST", body: "{}" });
+      alert(`Imported: ${res.clientsAdded} clients, ${res.productsAdded} devices, ${res.pricesAdded} prices (${res.salesScanned} sales scanned).`);
+      refreshClients();
+    };
     document.getElementById("sc-add-break").onclick = () => openBreakModal(null);
     refreshClients();
     refreshBreaks();

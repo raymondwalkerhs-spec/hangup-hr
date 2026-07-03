@@ -108,6 +108,13 @@ jobs:
       - name: Package Windows update zips
         run: node scripts/package-github-release.js --full
 
+      - name: Verify Windows update packages
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -Filter "Hangup-HR-*-win-x64*.zip" | ForEach-Object {
+            node scripts/verify-update-package.js $_.FullName
+          }
+
       - name: Upload Windows release artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -121,7 +128,6 @@ jobs:
   build-macos:
     needs: resolve-tag
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -172,6 +178,12 @@ jobs:
 
       - name: Package macOS update zips
         run: node scripts/package-github-release.js --full
+
+      - name: Verify macOS update packages
+        run: |
+          find dist -name 'Hangup-HR-*-mac-*.zip' -print | while read -r z; do
+            node scripts/verify-update-package.js "$z"
+          done
 
       - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v4
