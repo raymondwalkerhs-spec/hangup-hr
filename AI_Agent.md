@@ -12,7 +12,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.4.2` (`package.json` → `version`)
+- **Current version:** `1.4.3` (`package.json` → `version`)
 - **Previous:** `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
@@ -159,7 +159,7 @@ Sales field permissions remain in `sales_field_permissions` — managed on **Sal
 | **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | View |
 | **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + **Sales permissions** / **Log columns** pages (RTM/admin/hr) | Full + release to agent | Full |
 
-**Sales admin pages (1.4.1+, role-first since 1.4.2):** sidebar **Sales permissions** (pick a role, then toggle View/Edit per field — same flow as Access Control) and **Log columns** (which columns appear). Visible when `canManageSalesFieldPermissions` or role admin/ceo/rtm/hr.
+**Sales admin pages (1.4.1+, role-first since 1.4.2):** sidebar **Sales permissions** and **Log columns**. Visible when `canViewSalesAdmin` / `canManageSalesFieldPermissions` — **RTM / Admin only** (HR removed in 1.4.3).
 
 **Notes:** HR/admin read employee warnings; TL/OP/quality/RTM can add notes without reading list.
 
@@ -418,6 +418,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.4.3** | **true** | RBAC hardening (IT role, attendance transport, bonus/deduction visibility, employee privacy, org/equipment scoping), sales UI two-status model, payment backfill + dedupe scripts |
 | **1.4.2** | **true** | Sales edit prefill fix, role-first Sales permissions, UI/UX overhaul (tokens/buttons/tables/login), stepped registration |
 | 1.4.1 | false | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
 | 1.4.0 | false | Working day, advanced filter, org/dashboards, sales access surfaces |

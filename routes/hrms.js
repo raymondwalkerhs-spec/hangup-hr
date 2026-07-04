@@ -26,8 +26,8 @@ router.get("/org-structure", async (req, res) => {
     const companyCtx = require("../lib/company-context");
     const company = companyCtx.parseCompanyContext(req.query.company);
     let structure = await hrms.getLiveOrgStructure(company);
-    if (roles.canViewOrgAgentScope(req.userRole)) {
-      structure = hrms.filterOrgStructureForAgent(structure, req.userRole);
+    if (roles.canViewOrgScoped(req.userRole)) {
+      structure = hrms.filterOrgStructureForRole(structure, req.userRole);
     }
     res.json(structure);
   } catch (e) {
@@ -317,26 +317,45 @@ router.put("/clearance/:employeeId/:itemKey", async (req, res) => {
 });
 
 router.get("/equipment", async (req, res) => {
-  if (!roles.canViewEquipment(req.userRole)) {
+  if (!roles.canViewEquipmentInventory(req.userRole)) {
     return res.status(403).json({ error: "No permission" });
   }
   try {
+    const store = require("../lib/data-store");
     const [equipment, assignments] = await Promise.all([
       hrms.readAllEquipment(),
       hrms.readEquipmentAssignments(),
     ]);
-    res.json({ equipment, assignments });
+    let scopedAssignments = assignments;
+    if (roles.canViewEquipmentUnit(req.userRole) && !roles.canViewEquipmentAll(req.userRole)) {
+      const unit = req.userRole?.unit;
+      const empIds = new Set(
+        store.getEmployees({ hideOut: false }).filter((e) => e.unit === unit).map((e) => e.id)
+      );
+      scopedAssignments = assignments.filter((a) => empIds.has(a.employeeId));
+    }
+    res.json({ equipment, assignments: scopedAssignments });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 router.get("/equipment/:employeeId", async (req, res) => {
-  if (!roles.canViewEquipment(req.userRole)) {
+  const store = require("../lib/data-store");
+  const targetId = req.params.employeeId;
+  const emp = store.getEmployeeById(targetId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const allowed =
+    roles.canViewEquipmentAll(req.userRole) ||
+    (roles.canViewEquipmentUnit(req.userRole) &&
+      req.userRole?.unit &&
+      emp.unit === req.userRole.unit) ||
+    (req.userRole?.employeeId && req.userRole.employeeId === targetId);
+  if (!allowed) {
     return res.status(403).json({ error: "No permission" });
   }
   try {
-    const assignments = await hrms.readEquipmentAssignments(req.params.employeeId);
+    const assignments = await hrms.readEquipmentAssignments(targetId);
     res.json({ assignments });
   } catch (e) {
     res.status(500).json({ error: e.message });

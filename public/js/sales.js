@@ -2,7 +2,23 @@
  * Sales management UI.
  */
 window.SalesModule = (function () {
-  const PERIOD_LABELS = { day: "Day", week: "Week", month: "Month" };
+  const CLIENT_STATUS_OPTIONS = [
+    "Passed",
+    "Dropped",
+    "Chargeback",
+    "Duplicate",
+    "Retransfer",
+    "Pending bank approval",
+    "Processed",
+  ];
+  const REVIEWER_STATUS_OPTIONS = [
+    "Sale done",
+    "Postdated",
+    "Pending bank approval",
+    "On hold",
+    "Rejected",
+    "Callback",
+  ];
   const SALES_UNITS = ["HS-1", "HS-2", "HS-3"];
 
   function deviceLabel(device) {
@@ -82,7 +98,8 @@ window.SalesModule = (function () {
       { columnKey: "customer", label: "Customer" },
       { columnKey: "device", label: "Device" },
       { columnKey: "agent", label: "Agent" },
-      { columnKey: "status", label: "Status" },
+      { columnKey: "verifierFeedback", label: "Reviewer status" },
+      { columnKey: "clientFeedback", label: "Client status" },
       { columnKey: "price", label: "Price" },
     ];
   }
@@ -117,6 +134,10 @@ window.SalesModule = (function () {
         return escapeHtml(sale.unit || fd.unit || "—");
       case "status":
         return `<span class="badge">${escapeHtml(sale.status || "")}</span>`;
+      case "verifierFeedback":
+        return escapeHtml(fd.verifierFeedback || "—");
+      case "clientFeedback":
+        return escapeHtml(fd.clientFeedback || "—");
       case "price":
         return sale.price != null ? fmt(sale.price) : fd.price != null ? fmt(fd.price) : "—";
       case "assignVerifier":
@@ -164,8 +185,8 @@ window.SalesModule = (function () {
       { key: "workingDay", label: "Working day", valueType: "date" },
       { key: "assignVerifier", label: "Verifier", valueType: "employee", employeeFilter: "verifiers" },
       { key: "reviewer", label: "Reviewer", valueType: "employee", employeeFilter: "reviewers" },
-      { key: "verifierFeedback", label: "Verifier feedback", valueType: "select", options: VERIFIER_FEEDBACK_OPTIONS },
-      { key: "clientFeedback", label: "Client feedback", valueType: "select", options: CLIENT_FEEDBACK_OPTIONS },
+      { key: "verifierFeedback", label: "Reviewer status", valueType: "select", options: REVIEWER_STATUS_OPTIONS },
+      { key: "clientFeedback", label: "Client status", valueType: "select", options: CLIENT_STATUS_OPTIONS },
       { key: "paymentMethod", label: "Payment method", valueType: "select", options: ["Bank account", "Card"] },
     ];
     const seen = new Set(base.map((b) => b.key));
@@ -321,7 +342,7 @@ window.SalesModule = (function () {
   }
 
   function canManagePermissions() {
-    return state.user?.canManageSalesFieldPermissions === true || ["admin", "ceo", "rtm", "hr"].includes(state.user?.role);
+    return state.user?.canManageSalesFieldPermissions === true || state.user?.canViewSalesAdmin === true;
   }
 
   function canExportSalesList() {
@@ -555,10 +576,51 @@ window.SalesModule = (function () {
     return (dashboard.groups || []).reduce((s, g) => s + (g[key] || 0), 0);
   }
 
+  function countClientStatus(sales, value) {
+    return sales.filter((s) => (s.formData?.clientFeedback || "") === value).length;
+  }
+
+  function listHasColumn(listColumns, key) {
+    return (listColumns || []).some((c) => c.columnKey === key);
+  }
+
+  function feedbackFilterSelects(state, escapeHtml) {
+    const clientOpts = CLIENT_STATUS_OPTIONS.map(
+      (v) =>
+        `<option value="${escapeHtml(v)}" ${state.salesClientFeedbackFilter === v ? "selected" : ""}>${escapeHtml(v)}</option>`
+    ).join("");
+    const revOpts = REVIEWER_STATUS_OPTIONS.map(
+      (v) =>
+        `<option value="${escapeHtml(v)}" ${state.salesVerifierFeedbackFilter === v ? "selected" : ""}>${escapeHtml(v)}</option>`
+    ).join("");
+    return `<select id="sales-client-feedback-filter" title="Client status"><option value="">All client statuses</option>${clientOpts}</select>
+      <select id="sales-verifier-feedback-filter" title="Reviewer status"><option value="">All reviewer statuses</option>${revOpts}</select>`;
+  }
+
   function employeeSelectOptions(employees, escapeHtml, selectedId = "", filter = "all") {
     let list = employees.slice();
     if (filter === "dialing") {
-      list = list.filter((e) => !/^(TL|CL|OP|HR|MG|OF|NW)/i.test(String(e.id || "")));
+      const nonDialRoles = new Set([
+        "quality",
+        "hr",
+        "rtm",
+        "admin",
+        "ceo",
+        "finance",
+        "it",
+        "public_relations",
+        "office_assistant",
+      ]);
+      list = list.filter((e) => {
+        const id = String(e.id || "");
+        if (/^(TL|CL|OP|HR|MG|OF|NW|RTM|quality)/i.test(id)) return false;
+        const role = String(e.role || "").toLowerCase();
+        if (nonDialRoles.has(role)) return false;
+        return true;
+      });
+      if (state.user?.role === "quality" && state.user?.unit) {
+        list = list.filter((e) => e.unit === state.user.unit);
+      }
     } else if (filter === "leaders") {
       list = list.filter((e) => /^(TL|CL|OP|HR|quality|rtm)/i.test(String(e.id || "")) || ["quality", "rtm"].includes(String(e.role || "").toLowerCase()));
     } else if (filter === "quality") {
@@ -614,13 +676,10 @@ window.SalesModule = (function () {
 
   function periodToolbar(period, state, monthToolbar, monthLabel, employees, clients, escapeHtml) {
     const personFilters = salesPersonFilters(employees, clients, escapeHtml, state);
-    const extra = `${personFilters}<select id="sales-period">
+    const extra = `${personFilters}${feedbackFilterSelects(state, escapeHtml)}<select id="sales-period">
       <option value="day" ${period === "day" ? "selected" : ""}>Daily</option>
       <option value="week" ${period === "week" ? "selected" : ""}>Weekly</option>
       <option value="month" ${period === "month" ? "selected" : ""}>Monthly</option>
-    </select>
-    <select id="sales-status-filter">
-      <option value="">All statuses</option>
     </select>`;
 
     if (period === "month") {
@@ -740,8 +799,10 @@ window.SalesModule = (function () {
       dashDate = from;
     }
 
+    state.salesClientFeedbackFilter = state.salesClientFeedbackFilter || "";
+    state.salesVerifierFeedbackFilter = state.salesVerifierFeedbackFilter || "";
+
     const salesQ = new URLSearchParams({ from, to, dateBasis: "workingDay" });
-    if (state.salesStatusFilter) salesQ.set("status", state.salesStatusFilter);
     if (state.salesAgentFilter) salesQ.set("agentId", state.salesAgentFilter);
     if (state.salesCloserFilter) salesQ.set("closerId", state.salesCloserFilter);
     if (state.salesClientFilter) salesQ.set("client", state.salesClientFilter);
@@ -759,12 +820,17 @@ window.SalesModule = (function () {
       api("/sales-config/catalog").catch(() => ({ clients: [] })),
     ]);
     let sales = salesRes.sales || [];
+    let salesForStats = sales.slice();
     if (state.salesHiddenUnits?.length) {
       const hidden = new Set(state.salesHiddenUnits);
       sales = sales.filter((s) => !hidden.has(s.unit));
+      salesForStats = salesForStats.filter((s) => !hidden.has(s.unit));
     }
-    if (state.salesStatusFilter) {
-      sales = sales.filter((s) => s.status === state.salesStatusFilter);
+    if (state.salesClientFeedbackFilter) {
+      sales = sales.filter((s) => (s.formData?.clientFeedback || "") === state.salesClientFeedbackFilter);
+    }
+    if (state.salesVerifierFeedbackFilter) {
+      sales = sales.filter((s) => (s.formData?.verifierFeedback || "") === state.salesVerifierFeedbackFilter);
     }
     const listColumns = salesRes.listColumns?.length ? salesRes.listColumns : defaultListColumns();
     const dashboard = dashRes;
@@ -780,10 +846,17 @@ window.SalesModule = (function () {
         ? shortDateLabel(state.salesPickDate)
         : weekRangeLabel(state.salesWeekDate);
 
-    const statusOpts = (salesRes.statuses || ["passed", "pending", "postdated", "denied", "callback"])
-      .map((st) => `<option value="${st}" ${state.salesStatusFilter === st ? "selected" : ""}>${st}</option>`)
-      .join("");
+    const showClientStats = listHasColumn(listColumns, "clientFeedback");
+    const statGridHtml = showClientStats
+      ? `<div class="grid-2 sales-stat-grid" style="gap:1rem;margin-bottom:1rem">
+        <div class="card card-stat card-stat-click" data-client-filter="Passed"><strong>${countClientStatus(salesForStats, "Passed")}</strong><span class="muted">Passed (${periodLabel})</span></div>
+        <div class="card card-stat card-stat-click" data-client-filter="Pending bank approval"><strong>${countClientStatus(salesForStats, "Pending bank approval")}</strong><span class="muted">Pending bank</span></div>
+        <div class="card card-stat card-stat-click" data-client-filter="Processed"><strong>${countClientStatus(salesForStats, "Processed")}</strong><span class="muted">Processed</span></div>
+        <div class="card card-stat card-stat-click" data-client-filter="Dropped"><strong>${countClientStatus(salesForStats, "Dropped")}</strong><span class="muted">Dropped</span></div>
+      </div>`
+      : "";
 
+    const colCount = listColumns.length + 1;
     const unitToggleHtml = canToggleSalesUnits()
       ? `<div class="sales-unit-toggle card card-flat" style="margin-bottom:1rem;padding:.75rem 1rem">
           <span class="muted" style="margin-right:.75rem">Show units:</span>
@@ -795,7 +868,6 @@ window.SalesModule = (function () {
         </div>`
       : "";
 
-    const colCount = listColumns.length + 1;
     const thead = listColumns.map((c) => `<th>${escapeHtml(c.label || c.columnKey)}</th>`).join("") + "<th></th>";
     const tbody = sales.length
       ? sales
@@ -828,17 +900,9 @@ window.SalesModule = (function () {
         </div>
       </div>
       ${unitToggleHtml}
-      ${periodToolbar(period, state, monthToolbar, monthLabel, employees, salesClients, escapeHtml).replace(
-        '<option value="">All statuses</option>',
-        `<option value="">All statuses</option>${statusOpts}`
-      )}
+      ${periodToolbar(period, state, monthToolbar, monthLabel, employees, salesClients, escapeHtml)}
       ${advancedFilterPanelHtml(escapeHtml, filterFields, employees, salesClients, teamNames)}
-      <div class="grid-2 sales-stat-grid" style="gap:1rem;margin-bottom:1rem">
-        <div class="card card-stat card-stat-click" data-filter="passed"><strong>${statSum(dashboard, "passed")}</strong><span class="muted">Passed (${periodLabel})</span></div>
-        <div class="card card-stat card-stat-click" data-filter="pending"><strong>${statSum(dashboard, "pending")}</strong><span class="muted">Pending</span></div>
-        <div class="card card-stat card-stat-click" data-filter="callback"><strong>${statSum(dashboard, "callback")}</strong><span class="muted">Callback</span></div>
-        <div class="card card-stat card-stat-click" data-filter="denied"><strong>${statSum(dashboard, "denied")}</strong><span class="muted">Denied</span></div>
-      </div>
+      ${statGridHtml}
       <div class="table-wrap card"><table>
         <thead><tr>${thead}</tr></thead>
         <tbody>${tbody}</tbody>
@@ -852,8 +916,12 @@ window.SalesModule = (function () {
       state.salesPeriod = e.target.value;
       rerender();
     });
-    root.querySelector("#sales-status-filter")?.addEventListener("change", (e) => {
-      state.salesStatusFilter = e.target.value;
+    root.querySelector("#sales-client-feedback-filter")?.addEventListener("change", (e) => {
+      state.salesClientFeedbackFilter = e.target.value;
+      rerender();
+    });
+    root.querySelector("#sales-verifier-feedback-filter")?.addEventListener("change", (e) => {
+      state.salesVerifierFeedbackFilter = e.target.value;
       rerender();
     });
     root.querySelector("#sales-agent-filter")?.addEventListener("change", (e) => {
@@ -880,8 +948,12 @@ window.SalesModule = (function () {
     });
     root.querySelectorAll(".card-stat-click").forEach((card) => {
       card.addEventListener("click", () => {
-        state.salesStatusFilter = card.dataset.filter || "";
-        rerender();
+        const clientVal = card.dataset.clientFilter || "";
+        if (clientVal) {
+          state.salesClientFeedbackFilter = clientVal;
+          state.salesVerifierFeedbackFilter = "";
+          rerender();
+        }
       });
     });
     root.querySelector("#add-sale-btn")?.addEventListener("click", () =>

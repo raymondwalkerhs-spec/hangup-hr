@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.4.2 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.4.3 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -225,7 +225,18 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Action Plan Week** (formerly AIP) · lifecycle modals  
 - **Payroll** hide zero net · **Nationality** dropdown + aliases  
 
-## Sales (1.4.1–1.4.2)
+## RBAC & privacy (1.4.3)
+
+- **IT role** — full equipment inventory (with HR/Admin); configurable in Access Control
+- **Attendance** — agents read-only; transport allowance controls HR/Admin only
+- **Bonuses / deductions** — TL bonus source and TL/OP transfer sections restricted by role
+- **Employees** — nationality & compliance fields/filters HR/Admin only (self-view for own record)
+- **Organization** — TL/OP scoped to own unit; no unassigned bucket
+- **Equipment** — full (IT/HR/Admin), unit (OP), or self-only
+- **Sales UI** — Reviewer + Client status only; workflow status hidden; stat cards gated by column view
+- **Reports / App Users** — permission-gated nav
+
+## Sales (1.4.1–1.4.3)
 
 Full reference: [`SALES_LOG.md`](SALES_LOG.md)
 
@@ -233,11 +244,12 @@ Full reference: [`SALES_LOG.md`](SALES_LOG.md)
 - **Edit prefill (1.4.2)** — Client/Device/Price preselected on edit; catalog IDs persist through saves; legacy sales matched by name/device/price (backfill script included)
 - **Log columns** — admin enables any catalog field + Day/Time/Agent/Closer/Customer columns; intersected with role view ACL
 - **Advanced filter** — AND/OR/NOT rules; dropdown values for IDs, clients, teams, statuses; logic shown only with 2+ rules
-- **Toolbar filters** — Client, Agent, Closer, Status on day/week/month views
+- **Toolbar filters** — Client, Agent (dialing only), Closer, Client status, Reviewer status on day/week/month views
+- **Stat cards** — client status counts when user can view Client status column
 - **Working day** — sales until 1 AM Cairo → previous day; Day + Time columns; payroll `sales_count` auto-recalc
 - **Bank payment fields** — routing, bank name, account number, address, who chose bank account
-- **Verifier feedback** / **Client feedback** — dropdowns with role-based edit (verifier assignee; RTM/Admin override)
-- **Sales permissions** page (role-first, 1.4.2) — pick a role, toggle View/Edit per field; unsaved-change tracking + batch save, like Access Control
+- **Verifier feedback** / **Client feedback** — labeled **Reviewer status** / **Client status** in UI
+- **Sales permissions** page (role-first) — RTM / Admin only
 - **Log columns** page — enable/disable list columns (separate from Access Control)
 - **Field-level permissions** — main view, quality ticket, edit surfaces
 - **Supabase attachments** — recordings and confirmations; signed share links

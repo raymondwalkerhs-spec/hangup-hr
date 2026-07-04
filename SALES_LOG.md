@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 1.4.2 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 1.4.3 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended in v1.4.1 and v1.4.2).
 
@@ -8,15 +8,15 @@ This document describes the **Sales log**, **filters**, **form fields**, **permi
 
 ## Overview
 
-The Sales log tracks MLA-Ray sales from submission through quality review and client feedback. Data is stored in Supabase (`sales` table + `form_data` jsonb). The list view, filters, and form fields are configurable by Admin / RTM / HR.
+The Sales log tracks MLA-Ray sales from submission through quality review and client feedback. Data is stored in Supabase (`sales` table + `form_data` jsonb). The list view, filters, and form fields are configurable by Admin / RTM.
 
 | Area | Where in app |
 |------|----------------|
 | Sales list & filters | **Sales log** (sidebar) |
 | Add / edit sale | **+ Add sale** or row **Edit** |
 | Quality review | Row **Quality ticket** |
-| Field view/edit ACL | **Sales permissions** (sidebar) |
-| Which columns appear | **Log columns** (sidebar) |
+| Field view/edit ACL | **Sales permissions** (sidebar) — RTM / Admin only |
+| Which columns appear | **Log columns** (sidebar) — RTM / Admin only |
 | Clients / devices / prices | **Settings → Sales clients & breaks** |
 | App-wide role permissions | **Access Control** (separate from sales field matrix) |
 
@@ -66,12 +66,15 @@ On **day**, **week**, and **month** views:
 | **Client** | Sales for selected catalog client |
 | **Agent** | Sales where this agent submitted |
 | **Closer** | Sales where this employee closed |
-| **Status** | passed / pending / postdated / denied / callback |
+| **Client status** | Client feedback dropdown (Passed, Dropped, …) |
+| **Reviewer status** | Verifier feedback dropdown (Sale done, Callback, …) |
 | **Period** | Daily / Weekly / Monthly |
 
-Stat cards (Passed, Pending, Callback, Denied) click to set the status filter.
+Stat cards show **client status** counts (Passed, Pending bank, Processed, Dropped) when the user can view the Client status column. Click a card to filter by that client status.
 
-Quality / RTM / HR / Admin can toggle **HS-1 / HS-2 / HS-3** unit visibility on the log.
+Internal **workflow status** (passed/pending/denied for payroll) is kept in the database but **not shown** in the sales UI as of v1.4.3.
+
+Quality / RTM / Admin can toggle **HS-1 / HS-2 / HS-3** unit visibility on the log. The **Agent** filter lists dialing agents only (not quality or leadership IDs); quality users see agents in their unit only.
 
 ---
 
@@ -164,9 +167,9 @@ Quality / RTM open **Quality ticket** for review workflow fields (reviewer, qual
 
 ---
 
-## Verifier feedback & client feedback
+## Verifier feedback & client feedback (Reviewer / Client status)
 
-Both are **dropdown** fields with role-based edit access configured under **Sales permissions**.
+Both are **dropdown** fields with role-based edit access configured under **Sales permissions**. Labels in the UI: **Reviewer status** (verifier feedback) and **Client status** (client feedback).
 
 ### Verifier feedback
 

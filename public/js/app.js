@@ -688,11 +688,43 @@ function canExportSales() {
 }
 
 function canViewEquipmentNav() {
-  return state.user?.canViewEquipment === true;
+  return state.user?.canViewEquipmentInventory === true;
+}
+
+function canEditAttendance() {
+  return state.user?.canEditAttendance === true;
+}
+
+function canViewTransportControls() {
+  return state.user?.canViewTransportControls === true;
+}
+
+function canViewBonusTransferSource() {
+  return state.user?.canViewBonusTransferSource === true;
+}
+
+function canViewTlOpBonusTransfers() {
+  return state.user?.canViewTlOpBonusTransfers === true;
+}
+
+function canViewReports() {
+  return state.user?.canViewReports === true;
+}
+
+function canViewEmployeeNationality() {
+  return state.user?.canViewEmployeeNationality === true;
+}
+
+function canViewEmployeeCompliance() {
+  return state.user?.canViewEmployeeCompliance === true;
+}
+
+function canViewEmployeeComplianceFilters() {
+  return state.user?.canViewEmployeeComplianceFilters === true;
 }
 
 function canUseEmployeeFilters() {
-  return state.user?.canUseEmployeeFilters !== false;
+  return state.user?.canUseEmployeeFilters === true;
 }
 
 function canAddEmployee() {
@@ -1359,7 +1391,8 @@ function applyChangesButtonVisibility() {
   if (accessBtn) accessBtn.classList.toggle("hidden", state.user?.canManageAccessControl !== true);
   const salesPermsBtn = document.getElementById("nav-sales-permissions");
   const salesColsBtn = document.getElementById("nav-sales-log-columns");
-  const showSalesAdmin = state.user?.canManageSalesFieldPermissions === true || ["admin", "ceo", "rtm", "hr"].includes(state.user?.role);
+  const showSalesAdmin =
+    state.user?.canViewSalesAdmin === true || state.user?.canManageSalesFieldPermissions === true;
   if (salesPermsBtn) salesPermsBtn.classList.toggle("hidden", !showSalesAdmin);
   if (salesColsBtn) salesColsBtn.classList.toggle("hidden", !showSalesAdmin);
   const payrollPages = ["payroll", "loans", "salaries"];
@@ -1386,14 +1419,15 @@ function applyChangesButtonVisibility() {
   if (loanApprovalsBtn) {
     const showLoanApprovals =
       state.user?.canApproveLoan === true &&
-      !["agent", "office_assistant"].includes(state.user?.role);
+      !["agent", "office_assistant", "tl"].includes(state.user?.role);
     loanApprovalsBtn.classList.toggle("hidden", !showLoanApprovals);
   }
   const equipmentBtn = document.getElementById("nav-equipment");
   if (equipmentBtn) {
     equipmentBtn.classList.toggle("hidden", !canViewEquipmentNav());
   }
-  const payslipBtn = document.getElementById("nav-payslip");
+  const reportsBtn = document.querySelector('.nav-btn[data-page="reports"]');
+  if (reportsBtn) reportsBtn.classList.toggle("hidden", !canViewReports());
   if (payslipBtn) {
     payslipBtn.classList.toggle("hidden", state.user?.canViewAgentPayslipNav !== true);
   }
@@ -1602,6 +1636,8 @@ function employeeListRowHtml(e) {
   const showNotes = canViewEmployeeNotes();
   const showQualityNotes = canViewQualityNotes() || canWriteQualityNotes();
   const showDocs = canEdit || isSelf;
+  const showNat = canViewEmployeeNationality() || isSelf;
+  const showCompliance = canViewEmployeeCompliance() || isSelf;
   const actions = [
     stub ? `<button class="btn btn-sm btn-danger" data-release="${e.id}">Release ID</button>` : "",
     showDocs ? `<button class="btn btn-sm" data-docs="${e.id}">${isSelf && !canEdit ? "My docs" : "Docs"}</button>` : "",
@@ -1617,8 +1653,8 @@ function employeeListRowHtml(e) {
     <td><code>${appId}</code>${dbIdHtml}</td>
     <td>${e.unit || "—"}</td><td>${e.team || "—"}</td>
     <td>${e.position || "—"}</td>
-    <td>${e.nationality || "—"}</td>
-    <td>${employeeComplianceLabel(e)}</td>
+    ${showNat ? `<td>${e.nationality || "—"}</td>` : ""}
+    ${showCompliance ? `<td>${employeeComplianceLabel(e)}</td>` : ""}
     <td>${statusBadge(e.status)}</td>
     <td>${actions}</td>
   </tr>`;
@@ -1691,7 +1727,7 @@ function updateEmployeesTable(root) {
   if (tbody) {
     tbody.innerHTML = list.length
       ? list.map(employeeListRowHtml).join("")
-      : `<tr><td colspan="7" class="muted">No employees match your search</td></tr>`;
+      : `<tr><td colspan="${root.__empColSpan || 7}" class="muted">No employees match your search</td></tr>`;
   }
   if (countEl) countEl.textContent = `${list.length} shown`;
   bindEmployeesTableActions(root, data.employees);
@@ -1741,7 +1777,9 @@ async function refreshPayrollRowAfterSave(employeeId) {
 
 function attendanceEmployeeRowHtml(emp, ctx) {
   const { days, statuses, canEdit, recordMap, summaryMap, data } = ctx;
+  window.__attendanceStatuses = statuses;
   const s = summaryMap.get(emp.id) || {};
+  const editable = canEdit && canEditAttendance();
   return `<tr data-emp-row="${emp.id}">
     <td class="att-sticky att-sticky-id">${emp.id}</td>
     <td class="att-sticky att-sticky-name" title="${emp.position || ""}"><div class="emp-cell emp-cell-compact">${avatarHtml({ id: emp.id, american_name: emp.american_name || emp.name, profile_photo_file_id: emp.profile_photo_file_id, profile_photo_updated: emp.profile_photo_updated })}<span>${emp.name}</span></div></td>
@@ -1754,7 +1792,6 @@ function attendanceEmployeeRowHtml(emp, ctx) {
       const st = rec?.status || "";
       const depart = String(emp.depart_date || "").slice(0, 10);
       const locked = depart && d > depart;
-      const dis = canEdit && !locked ? "" : "disabled";
       const dayCls =
         window.HRMSFeatures?.attendanceDayClass(d, data) || (isWeekend(d) ? "weekend-col" : "");
       const holidayName = window.HRMSFeatures?.attendanceDayHolidayName(d, data) || "";
@@ -1766,11 +1803,7 @@ function attendanceEmployeeRowHtml(emp, ctx) {
       const displaySt = locked ? "OUT" : st;
       return `<td class="att-cell ${dayCls}${locked ? " att-locked" : ""}"${dayTitle ? ` title="${escapeHtml(dayTitle)}"` : ""}>
         ${holidayNote}${lockNote}
-        <select class="status-select ${statusClass(displaySt)}" data-emp="${emp.id}" data-date="${d}" ${dis}>
-        <option value="">—</option>
-        ${statuses.map((x) => `<option value="${x}" ${displaySt === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
-      </select>
-      ${transportOverrideHtml(emp.id, d, displaySt, rec?.transportOverride, canEdit && !locked)}
+        ${attendanceStatusCellHtml(emp.id, d, displaySt, rec, editable, locked)}
       </td>`;
     }).join("")}
   </tr>`;
@@ -1778,6 +1811,7 @@ function attendanceEmployeeRowHtml(emp, ctx) {
 
 function bindAttendanceGridEvents(root, ctx) {
   const { canEdit } = ctx;
+  if (!canEdit || !canEditAttendance()) return;
 
   function onTransportOverrideChange(e) {
     const el = e.target;
@@ -1885,6 +1919,7 @@ function updatePayrollTable(root) {
 }
 
 function transportOverrideHtml(empId, date, status, currentOverride, canEdit) {
+  if (!canViewTransportControls()) return "";
   if (!isTransportOverrideStatus(status)) return "";
   const dis = canEdit ? "" : "disabled";
   const ov = currentOverride || "";
@@ -1893,6 +1928,23 @@ function transportOverrideHtml(empId, date, status, currentOverride, canEdit) {
     <option value="full" ${ov === "full" ? "selected" : ""}>Full transport</option>
     <option value="half" ${ov === "half" ? "selected" : ""}>Half transport</option>
   </select>`;
+}
+
+function attendanceStatusCellHtml(empId, d, displaySt, rec, canEdit, locked) {
+  if (!canEdit || locked) {
+    const label = displaySt || "—";
+    const transport =
+      canViewTransportControls() && rec?.transportOverride
+        ? `<div class="muted" style="font-size:.65rem">${rec.transportOverride === "half" ? "½ transport" : rec.transportOverride === "full" ? "Full transport" : "No transport"}</div>`
+        : "";
+    return `<span class="badge ${statusClass(displaySt)}">${escapeHtml(label)}</span>${transport}`;
+  }
+  const statuses = window.__attendanceStatuses || [];
+  return `<select class="status-select ${statusClass(displaySt)}" data-emp="${empId}" data-date="${d}">
+        <option value="">—</option>
+        ${statuses.map((x) => `<option value="${x}" ${displaySt === x ? "selected" : ""}>${x === "Day-OFF" && isWeekend(d) ? "OFF★" : x}</option>`).join("")}
+      </select>
+      ${transportOverrideHtml(empId, d, displaySt, rec?.transportOverride, true)}`;
 }
 
 function queueAttendanceSave(employeeId, date, status, transportOverride) {
@@ -2809,7 +2861,7 @@ async function openPayslipModal(employeeId) {
   const bonusList = (data.bonuses || [])
     .map((b) => {
       const tlFrom = parseTlSourceFromReason(b.reason);
-      const tlLabel = tlFrom ? ` · deducted from ${tlFrom}` : "";
+      const tlLabel = canViewBonusTransferSource() && tlFrom ? ` · deducted from ${tlFrom}` : "";
       const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
       return `<div class="adj-row"><span>${b.type}: ${fmt(b.amount)} EGP — ${formatPayslipDate(b.date)}${reason ? ` — ${escapeHtml(reason)}` : ""}${tlLabel}
           </span><button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></div>`;
@@ -3326,7 +3378,11 @@ async function renderEmployees(root) {
 
   const list = filterEmployeesList(data.employees);
   const showFilters = canUseEmployeeFilters();
+  const showComplianceFilters = canViewEmployeeComplianceFilters();
+  const showNatCol = canViewEmployeeNationality();
+  const showComplianceCol = canViewEmployeeCompliance();
   const nationalities = data.nationalities || ["Egyptian", "Sudanese"];
+  const baseColSpan = 7 + (showNatCol ? 1 : 0) + (showComplianceCol ? 1 : 0);
 
   root.innerHTML = `
     <div class="page-header">
@@ -3341,7 +3397,7 @@ async function renderEmployees(root) {
       <select id="filter-unit"><option value="">All units</option>${data.units.map((u) =>
         `<option value="${u}" ${state.empFilter.unit === u ? "selected" : ""}>${u}</option>`
       ).join("")}</select>
-      <select id="filter-nationality"><option value="">All nationalities</option>${nationalities.map((n) =>
+      ${showComplianceFilters ? `<select id="filter-nationality"><option value="">All nationalities</option>${nationalities.map((n) =>
         `<option value="${escapeHtml(n)}" ${state.empFilter.nationality === n ? "selected" : ""}>${escapeHtml(n)}</option>`
       ).join("")}</select>
       <select id="filter-work-permit"><option value="">All work permits</option>
@@ -3351,13 +3407,14 @@ async function renderEmployees(root) {
       <select id="filter-insurance"><option value="">All insurance</option>
         <option value="insured" ${state.empFilter.insuranceStatus === "insured" ? "selected" : ""}>Insured</option>
         <option value="not_insured" ${state.empFilter.insuranceStatus === "not_insured" ? "selected" : ""}>Not insured</option>
-      </select>
+      </select>` : ""}
       ${hideOutToggle()}
     </div>` : `<div class="toolbar">${pageSearchInputHtml("employees", "Search name, Arabic name, or ID…")}</div>`}
     <div class="table-wrap"><table>
-      <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th>${showFilters ? "<th>Nationality</th><th>Permit / Insurance</th>" : ""}<th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th>${showNatCol ? "<th>Nationality</th>" : ""}${showComplianceCol ? "<th>Permit / Insurance</th>" : ""}<th>Status</th><th></th></tr></thead>
       <tbody id="emp-tbody">${list.map(employeeListRowHtml).join("")}</tbody>
     </table></div>`;
+  root.__empColSpan = baseColSpan;
 
   root.querySelector("#add-emp")?.addEventListener("click", () => openAddAgentWizard());
   bindTabSearch(root, "employees", () => updateEmployeesTable(root));
@@ -3371,18 +3428,20 @@ async function renderEmployees(root) {
       state.empFilter.unit = e.target.value;
       updateEmployeesTable(root);
     });
-    root.querySelector("#filter-nationality")?.addEventListener("change", (e) => {
-      state.empFilter.nationality = e.target.value;
-      updateEmployeesTable(root);
-    });
-    root.querySelector("#filter-work-permit")?.addEventListener("change", (e) => {
-      state.empFilter.workPermit = e.target.value;
-      updateEmployeesTable(root);
-    });
-    root.querySelector("#filter-insurance")?.addEventListener("change", (e) => {
-      state.empFilter.insuranceStatus = e.target.value;
-      updateEmployeesTable(root);
-    });
+    if (showComplianceFilters) {
+      root.querySelector("#filter-nationality")?.addEventListener("change", (e) => {
+        state.empFilter.nationality = e.target.value;
+        updateEmployeesTable(root);
+      });
+      root.querySelector("#filter-work-permit")?.addEventListener("change", (e) => {
+        state.empFilter.workPermit = e.target.value;
+        updateEmployeesTable(root);
+      });
+      root.querySelector("#filter-insurance")?.addEventListener("change", (e) => {
+        state.empFilter.insuranceStatus = e.target.value;
+        updateEmployeesTable(root);
+      });
+    }
   }
   bindEmployeesTableActions(root, data.employees);
 }
@@ -3410,11 +3469,12 @@ async function renderAttendance(root) {
   }
 
   const federalHolidays = (data.holidays || []).filter((h) => h.country !== "EGY" && h.active !== false);
-
-  root.innerHTML = `
-    <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
-    ${window.HRMSFeatures?.attendanceBannersHtml(data) || ""}
-    ${monthToolbar(`${pageSearchInputHtml("attendance", "Search name, Arabic name, or ID…")}
+  const attEditable = data.canEdit && canEditAttendance();
+  const transportHint = canViewTransportControls()
+    ? `<p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`
+    : "";
+  const editToolbar = attEditable
+    ? `${pageSearchInputHtml("attendance", "Search name, Arabic name, or ID…")}
     <select id="unit-filter"><option value="">All units</option>${(data.units || []).map((u) =>
       `<option value="${u}" ${state.unit === u ? "selected" : ""}>${u}</option>`
     ).join("")}</select>
@@ -3429,13 +3489,19 @@ async function renderAttendance(root) {
       `<option value="${e.id}">${escapeHtml(e.id)} — ${escapeHtml(e.name)}</option>`
     ).join("")}</select>
     <button class="btn" id="bulk-agent-month" title="Mark all weekdays Attended for selected agent">Mark month Attended</button>
-    ${data.canEdit && federalHolidays.length ? federalHolidays.map((h) => {
+    ${federalHolidays.length ? federalHolidays.map((h) => {
       const d = String(h.date || h.holidayDate || "").slice(0, 10);
       return `<button class="btn btn-sm" data-federal-off="${d}" title="Mark Day-OFF for all active agents">Federal OFF: ${escapeHtml(h.name || d)}</button>`;
     }).join("") : ""}
-    ${data.canEdit ? '<button class="btn btn-primary" id="import-fp-btn">Import FP file</button><button class="btn" id="fp-rules-btn">FP rules</button>' : ""}
+    <button class="btn btn-primary" id="import-fp-btn">Import FP file</button><button class="btn" id="fp-rules-btn">FP rules</button>
     ${hideOutToggle()}
-    <p class="muted" style="grid-column:1/-1;margin:0">Half days, lateness, and quarter days: use the transport dropdown to grant full or half transport allowance for that day only.</p>`)}
+    ${transportHint}`
+    : pageSearchInputHtml("attendance", "Search name, Arabic name, or ID…");
+
+  root.innerHTML = `
+    <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
+    ${window.HRMSFeatures?.attendanceBannersHtml(data) || ""}
+    ${monthToolbar(editToolbar)}
     <div class="table-wrap attendance-grid"><table>
       <thead><tr>
         <th class="att-sticky att-sticky-id">ID</th><th class="att-sticky att-sticky-name">Name</th><th class="att-sticky att-sticky-team">Team</th>
@@ -3457,8 +3523,9 @@ async function renderAttendance(root) {
     </table></div>`;
 
   bindMonthNav(root);
-  bindHideOut(root);
+  if (attEditable) bindHideOut(root);
   bindTabSearch(root, "attendance", () => updateAttendanceTable(root));
+  if (attEditable) {
   root.querySelector("#unit-filter").onchange = (e) => {
     state.unit = e.target.value;
     state.team = "";
@@ -4204,10 +4271,14 @@ async function renderBonuses(root) {
         const tlFrom = parseTlSourceFromReason(b.reason);
         const tlFromName = tlFrom ? (empById.get(tlFrom)?.american_name || empById.get(tlFrom)?.arabic_name || tlFrom) : "";
         const reason = String(b.reason || "").replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim();
+        const tlSourceLine =
+          canViewBonusTransferSource() && tlFromName
+            ? `<br><span class="muted">Deducted from ${escapeHtml(tlFromName)}</span>`
+            : "";
         return `<tr>
           <td>${b.date}</td><td>${b.employeeId}<br><span class="muted">${escapeHtml(name)}</span></td>
           <td>${escapeHtml(b.type)}</td><td class="text-right">${fmt(b.amount)}</td>
-          <td>${escapeHtml(reason || "—")}${tlFromName ? `<br><span class="muted">Deducted from ${escapeHtml(tlFromName)}</span>` : ""}</td>
+          <td>${escapeHtml(reason || "—")}${tlSourceLine}</td>
           ${canEdit ? `<td class="btn-row"><button class="btn btn-sm" data-edit-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Edit</button>
             <button class="btn btn-sm btn-danger" data-del-bonus='${JSON.stringify({ employeeId: b.employeeId, date: b.date, type: b.type })}'>Delete</button></td>` : ""}
         </tr>`;
@@ -4337,8 +4408,19 @@ async function renderDeductions(root) {
       }).join("")
     : `<tr><td colspan="${transferColSpan}" class="muted">No TL / OP bonus transfer deductions this month</td></tr>`;
 
+  const transferSection = canViewTlOpBonusTransfers()
+    ? `<section class="deductions-section">
+      <h2 class="deductions-section-title">TL / OP bonus transfers</h2>
+      <p class="deductions-section-desc muted">Deductions applied when a team lead or OP gave a bonus to another employee — the recipient is shown below.</p>
+      <div class="table-wrap card"><table>
+        <thead><tr><th>Date</th><th>Deducted from</th><th>Bonus given to</th><th class="text-right">Amount</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+        <tbody>${transferRows}</tbody>
+      </table></div>
+    </section>`
+    : "";
+
   root.innerHTML = `
-    <div class="page-header"><div><h1>Deductions</h1><p class="muted">${monthLabel(state.month)} · ${deductions.length} entries (${regularDeductions.length} regular · ${bonusTransferDeductions.length} bonus transfers)</p></div></div>
+    <div class="page-header"><div><h1>Deductions</h1><p class="muted">${monthLabel(state.month)} · ${deductions.length} entries (${regularDeductions.length} regular${canViewTlOpBonusTransfers() ? ` · ${bonusTransferDeductions.length} bonus transfers` : ""})</p></div></div>
     ${monthToolbar("")}
     <section class="deductions-section">
       <h2 class="deductions-section-title">Regular deductions</h2>
@@ -4348,14 +4430,7 @@ async function renderDeductions(root) {
         <tbody>${regularRows}</tbody>
       </table></div>
     </section>
-    <section class="deductions-section">
-      <h2 class="deductions-section-title">TL / OP bonus transfers</h2>
-      <p class="deductions-section-desc muted">Deductions applied when a team lead or OP gave a bonus to another employee — the recipient is shown below.</p>
-      <div class="table-wrap card"><table>
-        <thead><tr><th>Date</th><th>Deducted from</th><th>Bonus given to</th><th class="text-right">Amount</th><th>Notes</th>${canEdit ? "<th></th>" : ""}</tr></thead>
-        <tbody>${transferRows}</tbody>
-      </table></div>
-    </section>`;
+    ${transferSection}`;
 
   bindDeductionTableActions(root, deductions, employees, dedData.types || []);
   bindMonthNav(root);
@@ -4891,6 +4966,10 @@ async function openEmployeeDocsModal(employeeId) {
 }
 
 async function renderReports(root) {
+  if (!canViewReports()) {
+    root.innerHTML = '<p class="muted">You do not have permission to view reports.</p>';
+    return;
+  }
   const q = new URLSearchParams({ month: state.month });
   if (!state.hideOut) q.set("showOut", "true");
   const data = await api(`/reports/monthly?${q}`);

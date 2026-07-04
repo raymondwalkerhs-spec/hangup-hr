@@ -545,13 +545,14 @@ router.get("/status", async (req, res) => {
       unit: req.userRole.unit,
       team: req.userRole.team,
       employeeId: req.userRole.employeeId,
-      canManageUsers: roles.canManageAppUsers(req.realUsername || req.username),
+      canManageUsers: roles.canManageAppUsersPerm(req.userRole, req.realUsername || req.username),
       canImpersonate: roles.canImpersonateUsers(req.realUsername || req.username),
       canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
       canManageSessions: roles.canManageSessions(req.realUsername || req.username),
       canViewPayroll: roles.canViewPayroll(req.userRole),
       canViewBonuses: roles.canViewBonusesDeductions(req.userRole),
       canEditAttendance: roles.canEditAttendance(req.userRole),
+      canViewTransportControls: roles.canViewTransportControls(req.userRole),
       canTransferBonus: roles.canTransferBonus(req.userRole),
       canSubmitBonusRequest: roles.canSubmitBonusRequest(req.userRole),
       canApproveBonusRequest: roles.canApproveBonusRequest(req.userRole),
@@ -571,6 +572,15 @@ router.get("/status", async (req, res) => {
       canWriteQualityNotes: roles.canWriteQualityNotes(req.userRole),
       canExportSales: roles.canExportSales(req.userRole),
       canViewEquipment: roles.canViewEquipment(req.userRole),
+      canViewEquipmentAll: roles.canViewEquipmentAll(req.userRole),
+      canViewEquipmentUnit: roles.canViewEquipmentUnit(req.userRole),
+      canViewEquipmentInventory: roles.canViewEquipmentInventory(req.userRole),
+      canViewReports: roles.canViewReports(req.userRole),
+      canViewBonusTransferSource: roles.canViewBonusTransferSource(req.userRole),
+      canViewTlOpBonusTransfers: roles.canViewTlOpBonusTransfers(req.userRole),
+      canViewEmployeeNationality: roles.canViewEmployeeNationalityGlobal(req.userRole),
+      canViewEmployeeCompliance: roles.canViewEmployeeComplianceFilters(req.userRole),
+      canViewEmployeeComplianceFilters: roles.canViewEmployeeComplianceFilters(req.userRole),
       canViewDashboardPayroll: roles.canViewDashboardPayroll(req.userRole),
       canViewDashboardFull: roles.canViewDashboardFull(req.userRole),
       canUseEmployeeFilters: roles.canUseEmployeeFilters(req.userRole),
@@ -583,6 +593,7 @@ router.get("/status", async (req, res) => {
       canViewSettingsProfilePhoto: roles.canViewSettingsSection(req.userRole, "profilePhoto"),
       canGrantSalesVisibility: roles.canGrantSalesVisibility(req.userRole),
       canManageSalesFieldPermissions: roles.canManageSalesFieldPermissions(req.userRole),
+      canViewSalesAdmin: roles.canViewSalesAdmin(req.userRole),
       canManageAccessControl: roles.canManageAccessControl(req.userRole),
       canViewAgentPayslipNav: agentPayslipAvailable,
     },
@@ -952,7 +963,7 @@ router.get("/employees", (req, res) => {
   let employees = store.getEmployees({ hideOut });
   employees = companyContext.filterEmployeesByCompany(employees, company);
   employees = roles.filterEmployeesForUser(employees, req.userRole);
-  employees = employeePrivacy.sanitizeEmployees(employees, req.userRole?.role);
+  employees = employeePrivacy.sanitizeEmployees(employees, req.userRole);
   if (roles.canViewEmployeeNotes(req.userRole)) {
     employees = employees.map((e) => ({
       ...e,
@@ -1092,7 +1103,7 @@ router.get("/employees/:id", (req, res) => {
     return res.status(403).json({ error: "Not allowed" });
   }
   const employeePrivacy = require("../lib/employee-privacy");
-  res.json({ employee: employeePrivacy.sanitizeEmployee(emp, req.userRole?.role) });
+  res.json({ employee: employeePrivacy.sanitizeEmployee(emp, req.userRole) });
 });
 
 router.post("/employees", async (req, res) => {
@@ -1377,7 +1388,10 @@ router.post("/attendance", async (req, res) => {
     status: status || "Attended",
     fpLateness: fpLateness || null,
     isWeekendDefault: isWeekend(date) && status === "Day-OFF",
-    transportOverride: req.body.transportOverride || "",
+    transportOverride:
+      roles.canViewTransportControls(req.userRole) && req.body.transportOverride
+        ? req.body.transportOverride
+        : "",
   };
 
   await store.saveAttendanceRow(record, req.username);
@@ -1419,7 +1433,10 @@ router.post("/attendance/batch", async (req, res) => {
       fpNotes: r.fpNotes || "",
       leaveNote: r.leaveNote || r.fpNotes || "",
       isWeekendDefault: isWeekend(r.date) && r.status === "Day-OFF",
-      transportOverride: r.transportOverride || "",
+      transportOverride:
+        roles.canViewTransportControls(req.userRole) && r.transportOverride
+          ? r.transportOverride
+          : "",
     });
   }
 

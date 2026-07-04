@@ -909,6 +909,32 @@ window.HRMSFeatures = (function () {
 
   async function renderEquipmentPage(root, api, helpers) {
     const { escapeHtml, openModal, closeModal } = helpers;
+    const inventory = state.user?.canViewEquipmentInventory === true;
+    const selfId = state.user?.employeeId || "";
+    if (!inventory) {
+      if (!selfId) {
+        root.innerHTML = '<p class="muted">Equipment is only visible for your own assigned devices.</p>';
+        return;
+      }
+      const viewId = state.hrmsEmployeeFilter || selfId;
+      if (viewId !== selfId) {
+        root.innerHTML = '<p class="muted">You can only view your own equipment.</p>';
+        return;
+      }
+      const data = await api(`/hrms/equipment/${encodeURIComponent(selfId)}`);
+      const assignments = (data.assignments || []).filter((a) => !a.returnedAt);
+      root.innerHTML = `
+        <div class="page-header"><div><h1>My equipment</h1><p class="muted">${assignments.length} active device(s)</p></div></div>
+        <div class="table-wrap table-zebra"><table>
+          <thead><tr><th>Device</th><th>Issued</th><th>Notes</th></tr></thead>
+          <tbody>${assignments.length ? assignments.map((a) => `<tr>
+            <td>${escapeHtml(a.itemType || a.equipmentType || "—")}</td>
+            <td>${escapeHtml(String(a.assignedAt || a.issuedAt || "").slice(0, 10) || "—")}</td>
+            <td class="muted">${escapeHtml(a.notes || "")}</td>
+          </tr>`).join("") : '<tr><td colspan="3" class="muted">No equipment assigned</td></tr>'}</tbody>
+        </table></div>`;
+      return;
+    }
     const [data, empData] = await Promise.all([
       api("/hrms/equipment"),
       api(`/employees${typeof employeesQuery === "function" ? employeesQuery() : ""}`).catch(() => ({ employees: [] })),

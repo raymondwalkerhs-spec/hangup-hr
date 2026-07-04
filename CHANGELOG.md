@@ -4,6 +4,26 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-07-04
+
+### Security & access control
+- **New IT role** — manageable in Access Control; full equipment inventory with HR/Admin
+- **Attendance** — agents see read-only attendance (no status dropdowns or bulk tools); **No/Half/Full transport** controls are HR/Admin only (`viewTransportControls`)
+- **Bonuses** — “Deducted from …” TL source visible to HR/Admin only (`viewBonusTransferSource`)
+- **Deductions** — TL/OP bonus transfer section visible to TL/OP/HR/Admin/RTM only (`viewTlOpBonusTransfers`); hidden from agents
+- **Employees** — nationality, work permit, and insurance fields/filters restricted to HR/Admin (self-view for own record)
+- **Organization** — TL/OP see own unit/team only; unassigned bucket hidden
+- **Equipment** — IT/HR/Admin see full inventory; OP sees own unit; others see own devices only
+- **Sales admin** — Sales permissions & Log columns nav is RTM/Admin only (HR removed)
+- **Reports & App Users** — gated by `viewReports` and `manageAppUsers`
+- **New permission keys** in Access Control for all of the above (Admin can override per role)
+
+### Sales log
+- **Two visible statuses** — UI shows **Reviewer status** and **Client status** only; internal workflow status kept for payroll counting but hidden from forms/list
+- **Stat cards** — client-status counts (Passed, Pending bank, Processed, Dropped); hidden when user lacks client-status column view
+- **Quality agent filter** — dialing agents only (excludes quality/leadership IDs); quality role scoped to own unit
+- **Data cleanup** — `scripts/backfill-sales-payment-from-csv.js` fills missing card/bank fields from migration CSV; `scripts/dedupe-sales.js` removes duplicate sales (phone + date)
+
 ## [1.4.2] — 2026-07-04
 
 ### Fixed
