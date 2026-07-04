@@ -77,7 +77,7 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 4. `node scripts/publish-app-version.js --notes "Sales log PERIOD_LABELS hotfix"`
 5. Optional: `npm run dist:web-installer` for USB bootstrap (downloads Latest Setup from GitHub)
 
-**1.4.6 change:** Sales log hotfix only — patch update from 1.4.5 is sufficient for existing installs.
+**1.4.6 change:** Sales log hotfix — `PERIOD_LABELS` restore + advanced filter empty-rule fix (log showed zero rows). Patch update from 1.4.5 is sufficient for existing installs.
 
 ---
 

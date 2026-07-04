@@ -272,4 +272,6 @@ To free Dropbox space after dedupe, run a separate orphan-file audit (not includ
 
 Versions **1.4.3–1.4.5** could throw `PERIOD_LABELS is not defined` when opening **Sales log**. Fixed in **1.4.6** — use **Update now** or install `Hangup-Portal-Setup-1.4.6.exe`.
 
+If the log opens but shows **no sales**, use **Advanced filter → Clear**, or update to the latest **1.4.6** build (fixes blank-value filter rules that hid all rows).
+
 See [`DB_SCHEMA.md`](DB_SCHEMA.md) for migration history (`20260719_v140_sales_org_dashboards.sql` and later).

@@ -449,7 +449,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.4.6** | **true** | Sales log PERIOD_LABELS hotfix (ReferenceError since 1.4.3) |
+| **1.4.6** | **true** | Sales log PERIOD_LABELS hotfix; advanced filter empty-rule fix (empty list) |
 | 1.4.5 | false | Reposition HR/IT/RTM backend_pool fix; optional enforce ID prefix on reposition / change app ID |
 | 1.4.4 | false | Hotfix: blank screen (app.js brace), IT role assignable + Access Control picker, payslip nav fix |
 | 1.4.3 | false | RBAC hardening (IT role, attendance transport, bonus/deduction visibility, employee privacy, org/equipment scoping), sales UI two-status model, payment backfill + dedupe scripts |

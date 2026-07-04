@@ -274,6 +274,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 |---------|-----|
 | Blank screen after login | Log out, refresh, or reinstall latest EXE |
 | Sales log error / blank page | Update to **1.4.6+** (fixes `PERIOD_LABELS` error since 1.4.3) |
+| Sales log empty (no rows) | **Advanced filter → Clear**; ensure unit checkboxes are on; pick the correct month — latest 1.4.6 build also fixes blank filter rules |
 | Internet required | Check connection; Supabase must be reachable |
 | Cannot edit attendance | Month may be **locked**, or date is outside employment period |
 | Payslip cannot be approved | Complete offboarding / clearance / equipment return |

@@ -172,6 +172,22 @@ window.SalesModule = (function () {
     else localStorage.setItem("hr_sales_advanced_filter", JSON.stringify(filter));
   }
 
+  function advancedFilterRuleIsNoOp(rule) {
+    if (!rule) return true;
+    const op = String(rule.op || "IS").toUpperCase();
+    if (op === "IS EMPTY" || op === "IS NOT EMPTY") return false;
+    if (op === "ON" || op === "BEFORE" || op === "AFTER") return !String(rule.value ?? "").trim();
+    const targets = Array.isArray(rule.value) ? rule.value : [rule.value];
+    return targets.every((t) => !String(t ?? "").trim());
+  }
+
+  function normalizeAdvancedFilter(filter) {
+    if (!filter?.rules?.length) return null;
+    const rules = filter.rules.filter((r) => !advancedFilterRuleIsNoOp(r));
+    if (!rules.length) return null;
+    return { ...filter, rules };
+  }
+
   function buildAdvancedFilterFields(catalogFields) {
     const base = [
       { key: "agentId", label: "Agent ID", valueType: "employee", employeeFilter: "dialing" },
@@ -310,8 +326,9 @@ window.SalesModule = (function () {
         });
       });
       const op = rules.length > 1 ? root.querySelector("#sf-logic")?.value || "AND" : "AND";
-      state.salesAdvancedFilter = { op, rules };
-      saveAdvancedFilter(state.salesAdvancedFilter);
+      const normalized = normalizeAdvancedFilter({ op, rules });
+      state.salesAdvancedFilter = normalized;
+      saveAdvancedFilter(normalized);
       rerender();
     });
     root.querySelectorAll(".sf-remove").forEach((btn) => {
@@ -808,7 +825,12 @@ window.SalesModule = (function () {
     if (state.salesCloserFilter) salesQ.set("closerId", state.salesCloserFilter);
     if (state.salesClientFilter) salesQ.set("client", state.salesClientFilter);
     if (state.companyContext === "hs2") salesQ.set("company", "hs2");
-    const advFilter = state.salesAdvancedFilter || loadAdvancedFilter();
+    const advFilterRaw = state.salesAdvancedFilter || loadAdvancedFilter();
+    const advFilter = normalizeAdvancedFilter(advFilterRaw);
+    if (advFilterRaw && !advFilter) {
+      state.salesAdvancedFilter = null;
+      saveAdvancedFilter(null);
+    }
     if (advFilter?.rules?.length) salesQ.set("filter", JSON.stringify(advFilter));
     if (!state.salesHiddenUnits) state.salesHiddenUnits = [];
     const dashQ = new URLSearchParams({ period, date: dashDate, groupBy: "team", dateBasis: "submission" });

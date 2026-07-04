@@ -8,6 +8,7 @@ All notable changes to the Hangup Portal desktop app.
 
 ### Fixed
 - **Sales log** — restored missing `PERIOD_LABELS` constant (ReferenceError when opening Sales log since 1.4.3)
+- **Sales log empty list** — advanced filter rules with blank IS/CONTAINS values no longer hide all sales (clears stale saved filters)
 
 ## [1.4.5] — 2026-07-04
 
