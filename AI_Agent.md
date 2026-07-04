@@ -12,7 +12,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.4.3` (`package.json` → `version`)
+- **Current version:** `1.4.4` (`package.json` → `version`)
 - **Previous:** `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
@@ -422,7 +422,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.4.3** | **true** | RBAC hardening (IT role, attendance transport, bonus/deduction visibility, employee privacy, org/equipment scoping), sales UI two-status model, payment backfill + dedupe scripts |
+| **1.4.4** | **true** | Hotfix: blank screen (app.js brace), IT role assignable + Access Control picker, payslip nav fix |
+| 1.4.3 | false | RBAC hardening (IT role, attendance transport, bonus/deduction visibility, employee privacy, org/equipment scoping), sales UI two-status model, payment backfill + dedupe scripts |
 | **1.4.2** | **true** | Sales edit prefill fix, role-first Sales permissions, UI/UX overhaul (tokens/buttons/tables/login), stepped registration |
 | 1.4.1 | false | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
 | 1.4.0 | false | Working day, advanced filter, org/dashboards, sales access surfaces |

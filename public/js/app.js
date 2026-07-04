@@ -1428,6 +1428,7 @@ function applyChangesButtonVisibility() {
   }
   const reportsBtn = document.querySelector('.nav-btn[data-page="reports"]');
   if (reportsBtn) reportsBtn.classList.toggle("hidden", !canViewReports());
+  const payslipBtn = document.getElementById("nav-payslip");
   if (payslipBtn) {
     payslipBtn.classList.toggle("hidden", state.user?.canViewAgentPayslipNav !== true);
   }
@@ -3591,6 +3592,7 @@ async function renderAttendance(root) {
   root.querySelector("#import-fp-btn")?.addEventListener("click", () => openFpImportModal());
   root.querySelector("#fp-rules-btn")?.addEventListener("click", () => openFpRulesModal());
   bindAttendanceGridEvents(root, ctx);
+  }
 }
 
 async function fileToBase64Att(file) {
@@ -5320,7 +5322,7 @@ function buildUsersTableBody(allUsers, filter) {
 function bindUsersTableActions(root) {
   const data = root.__usersData;
   if (!data) return;
-  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "it", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
   const statuses = data.statuses || ["active", "inactive", "terminated"];
   const users = data.users || [];
   root.querySelectorAll("[data-activate-user]").forEach((btn) => {
@@ -5403,7 +5405,7 @@ async function renderUsers(root) {
   const data = await api("/admin/users");
   root.__usersData = data;
   let users = data.users || [];
-  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "it", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
   const statuses = data.statuses || ["active", "inactive", "terminated"];
   const unitOptions = data.units || [];
   const teamOptions = data.teams || [];

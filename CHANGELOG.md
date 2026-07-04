@@ -4,6 +4,14 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.4] — 2026-07-04
+
+### Fixed
+- **Blank screen after login** — missing `}` on `if (attEditable)` in `renderAttendance` (`public/js/app.js`); same class of bug as 1.3.8
+- **Nav crash after login** — restored `payslipBtn` lookup removed during 1.4.3 nav gating
+- **IT role not assignable** — `ASSIGNABLE_ROLES` now derived from `MANAGEABLE_ROLES` in permission catalog (Users page + Access Control dropdown)
+- **Access Control labels** — IT/HR/OP/TL/RTM/CEO show as acronyms in role picker
+
 ## [1.4.3] — 2026-07-04
 
 ### Security & access control

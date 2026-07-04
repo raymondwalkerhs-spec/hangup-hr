@@ -8,6 +8,9 @@ window.AccessControlModule = (function () {
   const pending = new Map();
 
   function roleLabel(role) {
+    const key = String(role || "").trim().toLowerCase();
+    const acronyms = { it: "IT", hr: "HR", op: "OP", tl: "TL", rtm: "RTM", ceo: "CEO" };
+    if (acronyms[key]) return acronyms[key];
     return String(role || "")
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());

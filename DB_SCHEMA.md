@@ -173,7 +173,7 @@ These tables exist in production; DDL was applied outside early migration stubs.
 
 ## Roles convention
 
-App roles (stored in `app_users.role`): `none`, `agent`, `office_assistant`, `quality`, `rtm`, `tl`, `op`, `finance`, `hr`, `admin`, `ceo`.
+App roles (stored in `app_users.role`): `none`, `agent`, `office_assistant`, `quality`, `rtm`, `public_relations`, `tl`, `op`, `finance`, `it`, `hr`, `admin`, `ceo`.
 
 Login requires rank ≥ `agent`. Username-based gates (Users tab, leave/loan approvers) are **not** in `app_role_permissions`.
 
