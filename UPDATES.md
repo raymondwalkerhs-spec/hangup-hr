@@ -25,9 +25,11 @@ npm run dist:web-installer
 
 Requires **`GITHUB_UPDATES_TOKEN`** in `.env` at build time (read once; embedded in the EXE). The token is **not** in any zip or script — only inside the compiled installer.
 
-**What it does:** normal Windows installer UI with **progress bar and percentage** → uses the embedded token to download Setup.exe from your **private** GitHub release → launches the full NSIS installer.
+**What it does:** normal Windows installer UI with **progress bar and percentage** → uses the embedded token to download **Setup.exe from the GitHub release marked Latest** → launches the full NSIS installer. Picks the Setup whose version matches that release tag (ignores stale duplicate assets on the same release page).
 
 **On a new PC:** double-click `Hangup-Portal-Web-Setup.exe` → wait for download → full installer runs. No `.env`, no GitHub login, no `gh` CLI on the target PC.
+
+**After each release:** run `gh release edit vX.Y.Z --prerelease=false --latest`, remove wrong-version assets from that release, then `npm run dist:web-installer` if you redistribute the bootstrap EXE.
 
 | Note | Detail |
 |------|--------|

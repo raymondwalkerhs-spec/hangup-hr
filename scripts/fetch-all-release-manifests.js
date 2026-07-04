@@ -13,10 +13,11 @@ function getRepo() {
   return String(process.env.GITHUB_UPDATES_REPO || process.env.GITHUB_REPOSITORY || "").trim();
 }
 
-function githubHeaders() {
+function githubHeaders(extra = {}) {
   const headers = {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hangup-HR-Manifest-Fetch",
+    ...extra,
   };
   let token = process.env.GITHUB_TOKEN || process.env.GITHUB_UPDATES_TOKEN;
   if (!token) {
@@ -31,45 +32,24 @@ function githubHeaders() {
   return headers;
 }
 
-function fetchJson(url) {
+function requestBuffer(url, headers, redirectCount = 0) {
   return new Promise((resolve, reject) => {
+    if (redirectCount > 10) return reject(new Error("Too many redirects"));
     https
-      .get(url, { headers: githubHeaders() }, (res) => {
+      .get(url, { headers }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
           const loc = res.headers.location;
           if (!loc) return reject(new Error("Redirect without location"));
-          fetchJson(loc).then(resolve).catch(reject);
-          return;
-        }
-        let body = "";
-        res.on("data", (c) => (body += c));
-        res.on("end", () => {
-          if (res.statusCode >= 400) {
-            return reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
-          }
-          try {
-            resolve(JSON.parse(body));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      })
-      .on("error", reject);
-  });
-}
-
-function downloadBuffer(url) {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: githubHeaders() }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          const loc = res.headers.location;
-          if (!loc) return reject(new Error("Redirect without location"));
-          downloadBuffer(loc).then(resolve).catch(reject);
+          const next = { ...headers };
+          delete next.Authorization;
+          requestBuffer(loc, next, redirectCount + 1).then(resolve).catch(reject);
           return;
         }
         if (res.statusCode !== 200) {
-          return reject(new Error(`Download failed HTTP ${res.statusCode}`));
+          let body = "";
+          res.on("data", (c) => (body += c));
+          res.on("end", () => reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`)));
+          return;
         }
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
@@ -79,7 +59,23 @@ function downloadBuffer(url) {
   });
 }
 
+function fetchJson(url) {
+  return requestBuffer(url, githubHeaders()).then((buf) => JSON.parse(buf.toString("utf8")));
+}
+
+function downloadReleaseAsset(repo, asset) {
+  const id = asset?.id;
+  if (!id) return Promise.reject(new Error("asset missing id"));
+  const url = `https://api.github.com/repos/${repo}/releases/assets/${id}`;
+  return requestBuffer(url, githubHeaders({ Accept: "application/octet-stream" }));
+}
+
 const MANIFEST_RE = /^(win-x64|mac-x64|mac-arm64)(-latest)?\.json$/i;
+
+function releaseSortKey(release) {
+  const published = Date.parse(release?.published_at || release?.created_at || "") || 0;
+  return published;
+}
 
 async function main() {
   const repo = getRepo();
@@ -95,39 +91,59 @@ async function main() {
   fs.mkdirSync(manifestDir, { recursive: true });
 
   const releases = await fetchJson(`https://api.github.com/repos/${repo}/releases?per_page=30`);
-  const sorted = (releases || []).filter((r) => !r.draft);
+  const sorted = (releases || [])
+    .filter((r) => !r.draft)
+    .sort((a, b) => releaseSortKey(b) - releaseSortKey(a));
 
   let saved = 0;
+  let failed = 0;
+  const latestByPlatform = new Map();
+
   for (const release of sorted) {
     const tagVersion = String(release.tag_name || "").replace(/^v/i, "").trim();
     const assets = (release.assets || []).filter((a) => MANIFEST_RE.test(a.name));
     for (const asset of assets) {
       try {
-        const buf = await downloadBuffer(asset.browser_download_url);
+        const buf = await downloadReleaseAsset(repo, asset);
         const data = JSON.parse(buf.toString("utf8"));
         const platform = data.platform || asset.name.replace(/-latest\.json$/i, "");
         const version = data.version || tagVersion;
-        if (!platform || !version || !data.files) continue;
-        const dest = path.join(manifestDir, `${platform}-${version}.json`);
-        if (!fs.existsSync(dest)) {
-          fs.writeFileSync(dest, JSON.stringify(data, null, 2));
-          console.log(`  saved ${platform}-${version}.json (from ${release.tag_name})`);
-          saved++;
+        if (!platform || !version || !data.files) {
+          console.warn(`  skip ${asset.name} (${release.tag_name}): missing platform/version/files`);
+          continue;
         }
-        const latestDest = path.join(manifestDir, `${platform}-latest.json`);
-        if (!fs.existsSync(latestDest)) {
-          fs.copyFileSync(dest, latestDest);
+        const dest = path.join(manifestDir, `${platform}-${version}.json`);
+        fs.writeFileSync(dest, JSON.stringify(data, null, 2));
+        if (!fs.existsSync(dest) || saved === 0 || !latestByPlatform.has(platform)) {
+          console.log(`  saved ${platform}-${version}.json (from ${release.tag_name})`);
+        }
+        saved++;
+        if (!latestByPlatform.has(platform)) {
+          latestByPlatform.set(platform, { version, dest });
         }
       } catch (err) {
+        failed++;
         console.warn(`  skip ${asset.name} (${release.tag_name}): ${err.message}`);
       }
     }
   }
 
-  console.log(saved ? `Fetched ${saved} manifest(s).` : "No new manifests fetched.");
+  for (const [platform, { dest }] of latestByPlatform) {
+    const latestDest = path.join(manifestDir, `${platform}-latest.json`);
+    fs.copyFileSync(dest, latestDest);
+  }
+
+  if (saved) {
+    console.log(`Fetched ${saved} manifest(s).`);
+  } else if (failed) {
+    console.warn(`Manifest fetch failed for all ${failed} asset(s). Patch builds may be skipped.`);
+    process.exit(1);
+  } else {
+    console.log("No manifests found on recent releases (first release per platform is OK).");
+  }
 }
 
 main().catch((err) => {
-  console.warn("Manifest fetch failed (non-fatal):", err.message);
-  process.exit(0);
+  console.error("Manifest fetch failed:", err.message);
+  process.exit(1);
 });

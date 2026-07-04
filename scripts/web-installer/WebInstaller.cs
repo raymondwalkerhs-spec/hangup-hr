@@ -137,27 +137,11 @@ internal sealed class WebInstallerForm : Form
         }
         else
         {
-            var api = "https://api.github.com/repos/" + Config.GitHubRepo + "/releases?per_page=30";
-            var releases = GitHubApiGetList(api);
-            if (releases.Count == 0)
-                throw new InvalidOperationException("No GitHub releases found for " + Config.GitHubRepo + ".");
-
-            chosenRelease = null;
-            Version chosenVer = null;
-            foreach (Dictionary<string, object> rel in releases)
-            {
-                if (rel == null || IsDraft(rel)) continue;
-                if (!ReleaseHasSetup(rel)) continue;
-                var tag = GetString(rel, "tag_name");
-                var ver = ParseReleaseVersion(tag);
-                if (chosenRelease == null || ver > chosenVer)
-                {
-                    chosenRelease = rel;
-                    chosenVer = ver;
-                }
-            }
-            if (chosenRelease == null)
-                throw new InvalidOperationException("No release with Setup.exe found.");
+            // Respect GitHub "Latest" release (same as /releases/latest in browser).
+            var api = "https://api.github.com/repos/" + Config.GitHubRepo + "/releases/latest";
+            chosenRelease = GitHubApiGetObject(api);
+            if (!ReleaseHasSetup(chosenRelease))
+                throw new InvalidOperationException("Latest GitHub release has no Setup.exe — publish Setup for " + GetString(chosenRelease, "tag_name") + ".");
         }
 
         if (chosenRelease == null || IsDraft(chosenRelease))
@@ -169,14 +153,15 @@ internal sealed class WebInstallerForm : Form
         if (assetList.Count == 0)
             throw new InvalidOperationException("Release has no downloadable assets.");
 
+        var releaseVer = ParseReleaseVersion(GetString(chosenRelease, "tag_name"));
         string pickedId;
-        fileName = PickBestSetupAsset(assetList, out pickedId);
+        fileName = PickBestSetupAsset(assetList, releaseVer, out pickedId);
         if (string.IsNullOrEmpty(fileName))
             throw new InvalidOperationException("Setup.exe not found on release " + GetString(chosenRelease, "tag_name") + ".");
         assetApiUrl = "https://api.github.com/repos/" + Config.GitHubRepo + "/releases/assets/" + pickedId;
     }
 
-    static string PickBestSetupAsset(ArrayList assetList, out string assetId)
+    static string PickBestSetupAsset(ArrayList assetList, Version releaseVer, out string assetId)
     {
         assetId = "";
         string bestName = null;
@@ -187,7 +172,7 @@ internal sealed class WebInstallerForm : Form
             if (!IsSetupExe(name)) continue;
             var id = GetString(asset, "id");
             if (string.IsNullOrEmpty(id)) continue;
-            var score = SetupAssetScore(name);
+            var score = SetupAssetScore(name, releaseVer);
             if (score > bestScore)
             {
                 bestScore = score;
@@ -198,13 +183,28 @@ internal sealed class WebInstallerForm : Form
         return bestName;
     }
 
-    static int SetupAssetScore(string name)
+    static Version ParseVersionFromSetupName(string name)
     {
-        if (name.IndexOf("Portal-Setup", StringComparison.OrdinalIgnoreCase) >= 0) return 100;
-        if (name.IndexOf("HR-Beta", StringComparison.OrdinalIgnoreCase) >= 0) return 90;
-        if (name.IndexOf("HR", StringComparison.OrdinalIgnoreCase) >= 0
-            && name.IndexOf("Setup", StringComparison.OrdinalIgnoreCase) >= 0) return 80;
-        return 10;
+        if (string.IsNullOrEmpty(name)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(name, @"(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)");
+        if (!match.Success) return null;
+        Version ver;
+        return Version.TryParse(match.Groups[1].Value, out ver) ? ver : null;
+    }
+
+    static int SetupAssetScore(string name, Version releaseVer)
+    {
+        var score = 10;
+        if (name.IndexOf("Portal-Setup", StringComparison.OrdinalIgnoreCase) >= 0) score = 100;
+        else if (name.IndexOf("HR-Beta", StringComparison.OrdinalIgnoreCase) >= 0) score = 90;
+        else if (name.IndexOf("HR", StringComparison.OrdinalIgnoreCase) >= 0
+            && name.IndexOf("Setup", StringComparison.OrdinalIgnoreCase) >= 0) score = 80;
+
+        var fileVer = ParseVersionFromSetupName(name);
+        if (releaseVer != null && fileVer != null && fileVer == releaseVer) score += 10000;
+        else if (fileVer != null) score += fileVer.Major * 1000 + fileVer.Minor * 100 + fileVer.Build;
+
+        return score;
     }
 
     static string GitHubApiGet(string apiPath)

@@ -108,6 +108,22 @@ jobs:
       - name: Package Windows update zips
         run: node scripts/package-github-release.js --full
 
+      - name: Require patch zip when prior manifest exists
+        shell: pwsh
+        run: |
+          $manifestDir = "dist/update-manifests"
+          $prior = @(Get-ChildItem $manifestDir -Filter "win-x64-*.json" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch '-latest\.json$' })
+          if ($prior.Count -eq 0) {
+            Write-Host "No prior win-x64 manifest — patch zip optional (first release)."
+            exit 0
+          }
+          $patches = @(Get-ChildItem dist -Filter "Hangup-Portal-*-win-x64-patch-*.zip" -ErrorAction SilentlyContinue)
+          if (-not $patches.Count) {
+            throw "Patch zip required: prior manifest exists but no Hangup-Portal-*-win-x64-patch-*.zip was built."
+          }
+          Write-Host "Patch zips OK: $($patches.Name -join ', ')"
+
       - name: Verify Windows update packages
         shell: pwsh
         run: |

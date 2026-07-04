@@ -296,12 +296,23 @@ git commit -m "vX.Y.Z: short summary"
 git push origin HEAD
 ```
 
-5. **GitHub release with installers** (required for in-app **Update now**):
+5. **GitHub release with installers** (required for in-app **Update now** and **web installer**):
+
+Every release must include **patch zips + full packages** when a prior manifest exists:
+- `Hangup-Portal-{version}-win-x64-patch-from-{prev}.zip` (and mac patch zips)
+- `Hangup-Portal-Setup-{version}.exe`, `{version}-win-x64-full.zip`, mac full zips + DMG
+- Manifests: `win-x64-latest.json`, `mac-*-latest.json`
+
+After CI: **remove stale assets** (wrong-version duplicates on the same tag). Mark release **Latest**. Rebuild web bootstrap: `npm run dist:web-installer` (uses GitHub `/releases/latest` + Setup matching that tag).
 
 ```powershell
+git push origin HEAD
+# wait for push to finish before CI
 gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=vX.Y.Z
-# After CI completes:
+gh run watch --repo raymondwalkerhs-spec/hangup-hr
 gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest
+# remove wrong-version assets if CI re-upload duplicated files
+npm run dist:web-installer
 ```
 
 6. **Update live `app_versions` in Supabase** (required — do not skip):

@@ -1,0 +1,32 @@
+---
+description: Strict release shipping — patch + full packages, docs, push, cleanup
+alwaysApply: true
+---
+
+# Release shipping (mandatory)
+
+On every shipped version in Hangup HR:
+
+1. **Bump** `package.json` version; update all relevant MD docs (`CHANGELOG.md`, `README.md`, `AI_Agent.md`, `FEATURES.md`, `TUTORIAL.md`, `UPDATES.md`, `SALES_LOG.md` when applicable).
+
+2. **Commit and push** to GitHub before triggering CI — never run Release workflow until `git push` completes.
+
+3. **GitHub release must include BOTH:**
+   - **Patch zips** — `Hangup-Portal-{version}-{platform}-patch-from-{prev}.zip` (when prior manifest exists)
+   - **Full packages** — `Hangup-Portal-Setup-{version}.exe`, `{version}-win-x64-full.zip`, mac full zips + DMG
+   - **Web installer** — `Hangup-Portal-Web-Setup.exe` (pinned to `package.json` version)
+   - **Manifests** — `win-x64-latest.json`, `mac-*-latest.json`
+
+4. **After CI:** promote release to Latest; remove stale assets from the release (wrong version duplicates); run `node scripts/publish-app-version.js`.
+
+5. **Web installer:** rebuild with `npm run dist:web-installer` (defaults to package.json pin). `PickBestSetupAsset` must match release tag version, not an older Setup.exe on the same release.
+
+6. **Do not commit** deleted CSVs, log files, or `.env`.
+
+```powershell
+git push origin HEAD
+# wait for push
+gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=vX.Y.Z
+gh run watch --repo raymondwalkerhs-spec/hangup-hr
+gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest
+```
