@@ -4,6 +4,22 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-04
+
+### Added
+- **Sales log columns** — admin-configurable list columns (client, day, time, etc.) intersected with role field view access
+- **Advanced sales filter** — AND/OR/NOT rule builder with per-user localStorage presets
+- **Working day** — sales until 1 AM Cairo count on previous shift day; separate Day + Time columns; auto payroll `sales_count` recalc on sale changes
+- **Sales access surfaces** — extended field permissions (main view, quality ticket, edit); quality ticket shows all permitted cells for RTM/admin
+- **Add sale cascade** — unit → team → agent (team-scoped); closer from any dialing team; agent/closer inside unit section
+- **Org fixes** — OP picker includes TLs with warning; team assign syncs employee unit; backend team repair script
+- **Team dashboards** — separate table per team; DAY-OFF rows; hide weekends unless attendance recorded
+- **Breaks** — Egypt time displayed in 12h AM/PM
+
+### Changed
+- Client/device only via catalog section (removed duplicate lead fields)
+- Sales log filters by **working day** by default
+
 ## [1.3.13] — 2026-07-04
 
 ### Added

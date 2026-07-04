@@ -37,30 +37,48 @@ window.TeamDashboardModule = (function () {
   function renderAgentTable(day, escapeHtml) {
     const rows = day.agentRows || [];
     const totals = day.totals || {};
-    return `<div class="table-wrap team-dash-table">
-      <table>
-        <thead><tr>
-          <th>Team</th><th>Agent name</th><th>Approved</th><th>PostDated</th><th>Dropped</th><th>Total Sent</th>
-        </tr></thead>
-        <tbody>
-          ${rows.map((r) => `<tr>
-            <td>${r.team ? `<strong>${escapeHtml(r.team)}</strong>` : ""}</td>
-            <td>${escapeHtml(r.agentName)}</td>
-            <td>${cellVal(r.approved)}</td>
-            <td>${cellVal(r.postdated)}</td>
-            <td>${cellVal(r.dropped)}</td>
-            <td>${r.totalSent ?? 0}</td>
-          </tr>`).join("")}
-          <tr class="team-dash-total-row">
-            <td colspan="2"><strong>Total</strong></td>
-            <td>${cellVal(totals.approved)}</td>
-            <td>${cellVal(totals.postdated)}</td>
-            <td>${cellVal(totals.dropped)}</td>
-            <td><strong>${totals.totalSent ?? 0}</strong></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>`;
+    const byTeam = new Map();
+    for (const r of rows) {
+      const key = r.teamKey || r.team || "—";
+      if (!byTeam.has(key)) byTeam.set(key, []);
+      byTeam.get(key).push(r);
+    }
+    const teamBlocks = [...byTeam.entries()]
+      .map(([team, teamRows]) => {
+        let tApproved = 0;
+        let tPost = 0;
+        let tDrop = 0;
+        let tTotal = 0;
+        const body = teamRows
+          .map((r) => {
+            tApproved += r.approved || 0;
+            tPost += r.postdated || 0;
+            tDrop += r.dropped || 0;
+            tTotal += r.totalSent || 0;
+            return `<tr class="${r.dayOff ? "muted" : ""}">
+              <td>${escapeHtml(r.agentName)}</td>
+              <td>${cellVal(r.approved)}</td>
+              <td>${cellVal(r.postdated)}</td>
+              <td>${cellVal(r.dropped)}</td>
+              <td>${r.totalSent ?? 0}</td>
+            </tr>`;
+          })
+          .join("");
+        return `<div class="table-wrap team-dash-table" style="margin-bottom:1rem">
+          <h4 style="margin:0 0 .5rem">${escapeHtml(team)}</h4>
+          <table>
+            <thead><tr><th>Agent name</th><th>Approved</th><th>PostDated</th><th>Dropped</th><th>Total Sent</th></tr></thead>
+            <tbody>${body}
+              <tr class="team-dash-total-row"><td><strong>Team total</strong></td>
+                <td>${cellVal(tApproved)}</td><td>${cellVal(tPost)}</td><td>${cellVal(tDrop)}</td><td><strong>${tTotal}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>`;
+      })
+      .join("");
+    return `${teamBlocks}<div class="table-wrap team-dash-table"><table><tbody>
+      <tr class="team-dash-total-row"><td colspan="5"><strong>Grand total</strong> — Approved ${cellVal(totals.approved)} · Total ${totals.totalSent ?? 0}</td></tr>
+    </tbody></table></div>`;
   }
 
   function renderTeamSummary(day, escapeHtml) {
@@ -142,7 +160,7 @@ window.TeamDashboardModule = (function () {
       <div class="page-header">
         <div>
           <h1>Team dashboards</h1>
-          <p class="muted">${headerLabel} · Active dialing agents on roster (Day-OFF excluded from table)</p>
+          <p class="muted">${headerLabel} · Separate tables per team · Day-OFF shown as (DAY-OFF)</p>
         </div>
       </div>
       ${toolbar}

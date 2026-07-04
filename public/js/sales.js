@@ -32,6 +32,140 @@ window.SalesModule = (function () {
     { key: "cvv", label: "CVV", section: "payment", type: "text", cardField: true, inputMode: "numeric", maxLength: 4 },
   ];
 
+  function formatTimeAmPm(timeStr) {
+    const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return timeStr || "";
+    let h = parseInt(m[1], 10);
+    const mi = m[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${mi} ${ampm}`;
+  }
+
+  function defaultListColumns() {
+    return [
+      { columnKey: "workingDay", label: "Day" },
+      { columnKey: "submissionTime", label: "Time" },
+      { columnKey: "client", label: "Client" },
+      { columnKey: "customer", label: "Customer" },
+      { columnKey: "device", label: "Device" },
+      { columnKey: "agent", label: "Agent" },
+      { columnKey: "status", label: "Status" },
+      { columnKey: "price", label: "Price" },
+    ];
+  }
+
+  function renderSaleListCell(colKey, sale, empById, escapeHtml, fmt) {
+    const agent = empById.get(sale.agentId);
+    const agentName = agent ? agent.american_name || sale.agentId : sale.agentId;
+    switch (colKey) {
+      case "workingDay":
+        return escapeHtml(sale.workingDay || String(sale.submissionDate || "").slice(0, 10) || sale.effectiveDate || "—");
+      case "submissionTime":
+        return escapeHtml(formatTimeAmPm(sale.submissionTime || ""));
+      case "client":
+        return escapeHtml(sale.client || sale.formData?.client || "—");
+      case "customer":
+        return `<strong>${escapeHtml(sale.fullName || "—")}</strong><br><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span>`;
+      case "device":
+        return escapeHtml(deviceLabel(sale.device || sale.formData?.deviceType));
+      case "agent":
+        return `${escapeHtml(sale.agentId || "—")}<br><span class="muted">${escapeHtml(agentName || "")}</span>`;
+      case "closer":
+        return escapeHtml(sale.closerId || "—");
+      case "team":
+        return escapeHtml(sale.team || "—");
+      case "status":
+        return `<span class="badge">${escapeHtml(sale.status || "")}</span>`;
+      case "price":
+        return sale.price != null ? fmt(sale.price) : "—";
+      default:
+        return escapeHtml(sale.formData?.[colKey] ?? sale[colKey] ?? "—");
+    }
+  }
+
+  function loadAdvancedFilter() {
+    try {
+      const raw = localStorage.getItem("hr_sales_advanced_filter");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveAdvancedFilter(filter) {
+    if (!filter) localStorage.removeItem("hr_sales_advanced_filter");
+    else localStorage.setItem("hr_sales_advanced_filter", JSON.stringify(filter));
+  }
+
+  function advancedFilterPanelHtml(escapeHtml) {
+    const f = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [{ field: "agentId", op: "IS", value: "" }] };
+    const fields = ["agentId", "closerId", "client", "device", "team", "status", "customer", "workingDay"];
+    const rulesHtml = (f.rules || [])
+      .map(
+        (r, i) => `<div class="sales-filter-rule" data-idx="${i}" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.35rem 0">
+          <select class="sf-field">${fields.map((x) => `<option value="${x}" ${r.field === x ? "selected" : ""}>${x}</option>`).join("")}</select>
+          <select class="sf-op"><option value="IS" ${r.op === "IS" ? "selected" : ""}>IS</option><option value="IS NOT" ${r.op === "IS NOT" ? "selected" : ""}>IS NOT</option><option value="CONTAINS" ${r.op === "CONTAINS" ? "selected" : ""}>CONTAINS</option><option value="IS EMPTY" ${r.op === "IS EMPTY" ? "selected" : ""}>IS EMPTY</option></select>
+          <input class="sf-val" value="${escapeHtml(r.value || "")}" placeholder="Value" style="min-width:8rem" />
+          <button type="button" class="btn btn-sm sf-remove">✕</button>
+        </div>`
+      )
+      .join("");
+    return `<details class="card card-flat sales-advanced-filter" style="margin-bottom:1rem;padding:.75rem 1rem">
+      <summary><strong>Advanced filter</strong> <span class="muted">(AND / OR / NOT)</span></summary>
+      <div style="margin-top:.75rem">
+        <label class="field"><span>Logic</span>
+          <select id="sf-logic"><option value="AND" ${f.op === "AND" ? "selected" : ""}>AND</option><option value="OR" ${f.op === "OR" ? "selected" : ""}>OR</option><option value="NOT" ${f.op === "NOT" ? "selected" : ""}>NOT</option></select>
+        </label>
+        <div id="sf-rules">${rulesHtml}</div>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn btn-sm" id="sf-add-rule">+ Rule</button>
+          <button type="button" class="btn btn-sm btn-primary" id="sf-apply">Apply filter</button>
+          <button type="button" class="btn btn-sm" id="sf-clear">Clear</button>
+        </div>
+      </div>
+    </details>`;
+  }
+
+  function bindAdvancedFilter(root, rerender) {
+    root.querySelector("#sf-add-rule")?.addEventListener("click", () => {
+      const cur = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [] };
+      cur.rules = cur.rules || [];
+      cur.rules.push({ field: "agentId", op: "IS", value: "" });
+      state.salesAdvancedFilter = cur;
+      rerender();
+    });
+    root.querySelector("#sf-clear")?.addEventListener("click", () => {
+      state.salesAdvancedFilter = null;
+      saveAdvancedFilter(null);
+      rerender();
+    });
+    root.querySelector("#sf-apply")?.addEventListener("click", () => {
+      const op = root.querySelector("#sf-logic")?.value || "AND";
+      const rules = [];
+      root.querySelectorAll(".sales-filter-rule").forEach((row) => {
+        rules.push({
+          field: row.querySelector(".sf-field")?.value,
+          op: row.querySelector(".sf-op")?.value,
+          value: row.querySelector(".sf-val")?.value,
+        });
+      });
+      state.salesAdvancedFilter = { op, rules };
+      saveAdvancedFilter(state.salesAdvancedFilter);
+      rerender();
+    });
+    root.querySelectorAll(".sf-remove").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.closest(".sales-filter-rule")?.dataset.idx);
+        const cur = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [] };
+        cur.rules.splice(idx, 1);
+        state.salesAdvancedFilter = cur;
+        rerender();
+      });
+    });
+  }
+
   function canToggleSalesUnits() {
     return ["quality", "rtm", "hr", "admin", "ceo"].includes(state.user?.role);
   }
@@ -458,11 +592,13 @@ window.SalesModule = (function () {
       dashDate = from;
     }
 
-    const salesQ = new URLSearchParams({ from, to, dateBasis: "submission" });
+    const salesQ = new URLSearchParams({ from, to, dateBasis: "workingDay" });
     if (state.salesStatusFilter) salesQ.set("status", state.salesStatusFilter);
     if (state.salesAgentFilter) salesQ.set("agentId", state.salesAgentFilter);
     if (state.salesCloserFilter) salesQ.set("closerId", state.salesCloserFilter);
     if (state.companyContext === "hs2") salesQ.set("company", "hs2");
+    const advFilter = state.salesAdvancedFilter || loadAdvancedFilter();
+    if (advFilter?.rules?.length) salesQ.set("filter", JSON.stringify(advFilter));
     if (!state.salesHiddenUnits) state.salesHiddenUnits = [];
     const dashQ = new URLSearchParams({ period, date: dashDate, groupBy: "team", dateBasis: "submission" });
     if (state.companyContext === "hs2") dashQ.set("company", "hs2");
@@ -479,6 +615,7 @@ window.SalesModule = (function () {
     if (state.salesStatusFilter) {
       sales = sales.filter((s) => s.status === state.salesStatusFilter);
     }
+    const listColumns = salesRes.listColumns?.length ? salesRes.listColumns : defaultListColumns();
     const dashboard = dashRes;
     const employees = empRes.employees || [];
     const empById = new Map(employees.map((e) => [e.id, e]));
@@ -504,15 +641,32 @@ window.SalesModule = (function () {
         </div>`
       : "";
 
-    const showPriceCol = !["agent", "office_assistant"].includes(state.user?.role);
-    const colCount = showPriceCol ? 7 : 6;
+    const colCount = listColumns.length + 1;
+    const thead = listColumns.map((c) => `<th>${escapeHtml(c.label || c.columnKey)}</th>`).join("") + "<th></th>";
+    const tbody = sales.length
+      ? sales
+          .map((s) => {
+            const cells = listColumns.map((c) => `<td>${renderSaleListCell(c.columnKey, s, empById, escapeHtml, fmt)}</td>`).join("");
+            return `<tr>${cells}<td class="btn-row">
+              ${canFullEditSale() ? `<button class="btn btn-sm" data-edit-sale="${s.id}">Edit</button>` : ""}
+              ${canWorkQualityTicket() && !canFullEditSale() ? `<button class="btn btn-sm btn-primary" data-quality-ticket="${s.id}">Open ticket</button>` : ""}
+              ${canWorkQualityTicket() && canFullEditSale() ? `<button class="btn btn-sm" data-quality-ticket="${s.id}">Quality ticket</button>` : ""}
+              ${canApprove() && s.status === "pending" ? `<button class="btn btn-sm" data-approve="${s.id}">Approve</button>
+                <button class="btn btn-sm btn-danger" data-deny="${s.id}">Deny</button>` : ""}
+              ${canApprove() ? `<button class="btn btn-sm" data-callback="${s.id}">Callback</button>` : ""}
+              ${canExportSalesList() ? `<button class="btn btn-sm" data-export-sale="${s.id}" title="Export this sale">Export</button>` : ""}
+            </td></tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="${colCount}" class="muted">No sales in this ${periodLabel.toLowerCase()} period</td></tr>`;
 
     root.innerHTML = `
       <div class="page-header">
-        <div><h1>Sales log</h1><p class="muted">${headerLabel} · ${sales.length} records · Filtered by <strong>submission date</strong></p></div>
+        <div><h1>Sales log</h1><p class="muted">${headerLabel} · ${sales.length} records · Filtered by <strong>working day</strong></p></div>
         <div class="btn-row">
           ${canSubmit() && !isQualityAgent() ? '<button class="btn btn-primary" id="add-sale-btn">+ Add sale</button>' : ""}
-          ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-perms-btn">Column permissions</button>' : ""}
+          ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-perms-btn">Sales access</button>' : ""}
+          ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-list-cols-btn">Log columns</button>' : ""}
           ${canExportSalesList() ? `<select id="sales-export-format" class="search-input" style="width:auto;min-width:6rem;flex:0 0 auto" title="Export format">
             <option value="csv">CSV</option>
             <option value="xlsx">Excel</option>
@@ -522,6 +676,7 @@ window.SalesModule = (function () {
         </div>
       </div>
       ${unitToggleHtml}
+      ${advancedFilterPanelHtml(escapeHtml)}
       ${periodToolbar(period, state, monthToolbar, monthLabel, employees, escapeHtml).replace(
         '<option value="">All statuses</option>',
         `<option value="">All statuses</option>${statusOpts}`
@@ -533,31 +688,8 @@ window.SalesModule = (function () {
         <div class="card card-stat card-stat-click" data-filter="denied"><strong>${statSum(dashboard, "denied")}</strong><span class="muted">Denied</span></div>
       </div>
       <div class="table-wrap card"><table>
-        <thead><tr><th>Date</th><th>Customer</th><th>Device</th>${showPriceCol ? "<th>Agent</th>" : ""}<th>Status</th>${showPriceCol ? "<th>Price</th>" : ""}<th></th></tr></thead>
-        <tbody>${sales.length ? sales.map((s) => {
-          const agent = empById.get(s.agentId);
-          const agentName = agent ? (agent.american_name || s.agentId) : s.agentId;
-          const postNote = s.status === "postdated" && s.submissionDate !== s.effectiveDate
-            ? `<br><span class="muted">Postdated from ${s.submissionDate}</span>` : "";
-          return `<tr>
-            <td>${s.submissionDate || s.effectiveDate}${postNote}</td>
-            <td><strong>${escapeHtml(s.fullName)}</strong>${showPriceCol ? `<br><span class="muted">${escapeHtml(s.phoneNumber)}</span>` : ""}</td>
-            <td>${escapeHtml(deviceLabel(s.device || s.formData?.deviceType))}</td>
-            ${showPriceCol ? `<td>${escapeHtml(s.agentId)}<br><span class="muted">${escapeHtml(agentName)}</span></td>` : ""}
-            <td><span class="badge">${escapeHtml(s.status)}</span></td>
-            ${showPriceCol ? `<td>${s.price != null ? fmt(s.price) : "—"}</td>` : ""}
-            <td class="btn-row">
-              ${canFullEditSale() ? `<button class="btn btn-sm" data-edit-sale="${s.id}">Edit</button>` : ""}
-              ${canWorkQualityTicket() && !canFullEditSale() ? `<button class="btn btn-sm btn-primary" data-quality-ticket="${s.id}">Open ticket</button>` : ""}
-              ${canWorkQualityTicket() && canFullEditSale() ? `<button class="btn btn-sm" data-quality-ticket="${s.id}">Quality ticket</button>` : ""}
-              ${canApprove() && s.status === "pending" ? `<button class="btn btn-sm" data-approve="${s.id}">Approve</button>
-                <button class="btn btn-sm btn-danger" data-deny="${s.id}">Deny</button>` : ""}
-              ${canApprove() ? `<button class="btn btn-sm" data-callback="${s.id}">Callback</button>` : ""}
-              ${canExportSalesList() ? `<button class="btn btn-sm" data-export-sale="${s.id}" title="Export this sale">Export</button>` : ""}
-            </td>
-          </tr>`;
-        }).join("") : `<tr><td colspan="${colCount}" class="muted">No sales in this ${periodLabel.toLowerCase()} period</td></tr>`}
-        </tbody>
+        <thead><tr>${thead}</tr></thead>
+        <tbody>${tbody}</tbody>
       </table></div>`;
 
     const rerender = () => renderSalesPage(root, api, state, helpers);
@@ -598,6 +730,10 @@ window.SalesModule = (function () {
     });
     root.querySelector("#add-sale-btn")?.addEventListener("click", () =>
       openSaleModal(api, employees, helpers, null, rerender)
+    );
+    bindAdvancedFilter(root, rerender);
+    root.querySelector("#sales-list-cols-btn")?.addEventListener("click", () =>
+      openSalesListColumnsModal(api, helpers, rerender).catch((e) => alert(e.message))
     );
     root.querySelector("#sales-perms-btn")?.addEventListener("click", () =>
       openSalesPermissionsModal(api, helpers, rerender)
@@ -711,25 +847,68 @@ window.SalesModule = (function () {
 
   async function openQualityTicketModal(api, employees, helpers, sale, onDone) {
     const { escapeHtml, closeModal, openModal } = helpers;
-    const catalog = await api("/sales/field-catalog").catch(() => ({ fields: [], attachmentKinds: [] }));
+    const catalog = await api("/sales/field-catalog?allFields=1").catch(() => ({ fields: [], attachmentKinds: [], permissions: [] }));
+    const permMap = Object.fromEntries((catalog.permissions || []).map((p) => [p.fieldKey, p]));
+    const role = String(state.user?.role || "agent").toLowerCase();
+    const roleIn = (list) => (list || []).map((r) => String(r).toLowerCase()).includes(role);
+
+    function canSeeField(key) {
+      const p = permMap[key] || {};
+      return (
+        roleIn(p.viewRoles || p.view_roles) ||
+        roleIn(p.editRoles || p.edit_roles) ||
+        roleIn(p.mainViewRoles || p.main_view_roles) ||
+        roleIn(p.qualityViewRoles || p.quality_view_roles)
+      );
+    }
+
+    function canEditField(key) {
+      const p = permMap[key] || {};
+      return roleIn(p.editRoles || p.edit_roles);
+    }
+
     const attachKinds = catalog.attachmentKinds?.length
       ? catalog.attachmentKinds
       : defaultQualityAttachKinds();
     const formData = sale?.formData || {};
-    const qualityFields = (catalog.fields || []).filter((f) => f.section === "quality" && f.canEdit !== false);
+    const allFields = catalog.fields?.length ? catalog.fields : [];
+    const ticketFields = allFields.filter(
+      (f) => canSeeField(f.key) && !["client", "deviceType", "unit", "team", "price"].includes(f.key)
+    );
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
 
     function qFieldHtml(f) {
-      const val = formData[f.key] ?? "";
+      const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key;
+      const editable = canEditField(f.key);
+      const ro = editable ? "" : " readonly";
+      const dis = editable ? "" : " disabled";
       if (f.type === "employee") {
+        if (!editable) {
+          return `<label class="field"><span>${escapeHtml(f.label)}</span><input value="${escapeHtml(val)}" readonly /></label>`;
+        }
         return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, val, f.employeeFilter || "all")}</select></label>`;
       }
       if (f.type === "textarea") {
-        return `<label class="field" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
+        return `<label class="field" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}"${ro}>${escapeHtml(val)}</textarea></label>`;
       }
-      return `<label class="field"><span>${escapeHtml(f.label)}</span><input name="${name}" type="text" value="${escapeHtml(val)}" /></label>`;
+      if (f.type === "select" && f.options) {
+        const opts = f.options
+          .map((o) => `<option value="${escapeHtml(o)}" ${String(val) === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+          .join("");
+        return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}"${dis}>${opts}</select></label>`;
+      }
+      return `<label class="field"><span>${escapeHtml(f.label)}</span><input name="${name}" type="text" value="${escapeHtml(val)}"${ro} /></label>`;
     }
+
+    const bySection = [...new Set(ticketFields.map((f) => f.section || "general"))];
+    const fieldsHtml = bySection
+      .map((sec) => {
+        const secFields = ticketFields.filter((f) => (f.section || "general") === sec);
+        if (!secFields.length) return "";
+        return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(qFieldHtml).join("")}</div></fieldset>`;
+      })
+      .join("");
 
     const attachBlock = buildAttachmentsBlock(attachKinds, true, { forceShow: true });
 
@@ -739,12 +918,13 @@ window.SalesModule = (function () {
         <div class="card card-flat quality-ticket-summary" style="grid-column:1/-1">
           <div class="field-grid">
             <div><span class="muted">Customer</span><div><strong>${escapeHtml(sale.fullName || "—")}</strong></div><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span></div>
-            <div><span class="muted">Device</span><div>${escapeHtml(sale.device || "—")}</div></div>
+            <div><span class="muted">Client</span><div>${escapeHtml(sale.client || formData.client || "—")}</div></div>
+            <div><span class="muted">Device</span><div>${escapeHtml(deviceLabel(sale.device || formData.deviceType))}</div></div>
             <div><span class="muted">Agent</span><div>${escapeHtml(sale.agentId || "—")} — ${escapeHtml(agentEmp?.american_name || "")}</div></div>
             <div><span class="muted">Status</span><div><span class="badge">${escapeHtml(sale.status || "")}</span></div></div>
           </div>
         </div>
-        <fieldset class="card card-flat" style="grid-column:1/-1"><legend>Quality work</legend><div class="field-grid">${qualityFields.map(qFieldHtml).join("")}</div></fieldset>
+        ${fieldsHtml}
         ${attachBlock}
         <div class="form-actions"><button type="submit" class="btn btn-primary">Save ticket</button></div>
       </form>`,
@@ -865,8 +1045,7 @@ window.SalesModule = (function () {
           <span class="muted">Agent</span><div><strong>${escapeHtml(sale?.agentId || "—")}</strong> — ${escapeHtml(agentEmp?.american_name || "")}</div>
           <span class="muted">Closer</span><div><strong>${escapeHtml(sale?.closerId || "—")}</strong> — ${escapeHtml(closerEmp?.american_name || "")}</div>
         </div>`
-      : `<label class="field"><span>Agent</span><select name="agentId" required>${agentOpts}</select></label>
-         <label class="field"><span>Closer</span><select name="closerId">${closerSelectOptions(employees, escapeHtml, defaultCloserId)}</select></label>`;
+      : "";
 
     const sections = [...new Set(fields.map((f) => f.section || "general"))];
     const sectionHtml = sections.map((sec) => {
@@ -1057,11 +1236,11 @@ window.SalesModule = (function () {
 
     openModal(`
       <div class="modal-header">
-        <h2>Sales column permissions</h2>
+        <h2>Sales access — Edit fields</h2>
         <button class="btn btn-sm" data-close>✕</button>
       </div>
       <div class="modal-body modal-body-scroll sales-perms-modal">
-        <p class="muted">Control which role groups can view or edit each MLA-Ray column. HR and Admin are separate — HR does not get quality fields unless enabled here.</p>
+        <p class="muted">Edit access (full sale form). Edit grants view for the same cell. Use <strong>Log columns</strong> for the sales list tab.</p>
         <div class="table-wrap sales-perms-wrap"><table class="sales-perms-table sales-perms-table-wide">
           <thead><tr><th class="perm-sticky-col">Field</th>${headerCells}</tr>
           <tr><th class="perm-sticky-col"></th>${subHeader}</tr></thead>
@@ -1100,6 +1279,8 @@ window.SalesModule = (function () {
           byField[fieldKey] = {
             viewRoles: [...(p.viewRoles || p.view_roles || [])],
             editRoles: [...(p.editRoles || p.edit_roles || [])],
+            mainViewRoles: [...(p.mainViewRoles || p.main_view_roles || p.viewRoles || p.view_roles || [])],
+            qualityViewRoles: [...(p.qualityViewRoles || p.quality_view_roles || [])],
           };
         }
         byField[fieldKey][kind === "view" ? "viewRoles" : "editRoles"] = toggleGroupRoles(
@@ -1123,5 +1304,44 @@ window.SalesModule = (function () {
     });
   }
 
-  return { renderSalesPage, openSalesPermissionsModal };
+  async function openSalesListColumnsModal(api, helpers, onDone) {
+    const { escapeHtml, closeModal, openModal } = helpers;
+    const data = await api("/sales/list-columns");
+    const cols = data.columns || defaultListColumns();
+    openModal(
+      `<div class="modal-header"><h2>Sales log columns</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div class="modal-body modal-body-scroll">
+        <p class="muted">Choose which columns appear on the Sales log tab (intersected with each role's field view access).</p>
+        <div class="field-grid">${cols
+          .map(
+            (c) => `<label class="field"><span>${escapeHtml(c.label || c.columnKey)}</span>
+              <input type="checkbox" data-list-col="${escapeHtml(c.columnKey)}" ${c.enabled !== false ? "checked" : ""} /></label>`
+          )
+          .join("")}</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" id="list-cols-seed">Reset defaults</button>
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="list-cols-save">Save</button>
+      </div>`,
+      true
+    );
+    document.getElementById("list-cols-seed")?.addEventListener("click", async () => {
+      await api("/sales/list-columns/seed", { method: "POST", body: "{}" });
+      closeModal();
+      onDone();
+    });
+    document.getElementById("list-cols-save")?.addEventListener("click", async () => {
+      for (const input of document.querySelectorAll("[data-list-col]")) {
+        await api(`/sales/list-columns/${encodeURIComponent(input.dataset.listCol)}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled: input.checked }),
+        });
+      }
+      closeModal();
+      onDone();
+    });
+  }
+
+  return { renderSalesPage, openSalesPermissionsModal, openSalesListColumnsModal };
 })();

@@ -13,6 +13,10 @@ const salesFieldAccess = require("../lib/sales-field-access");
 const salesClients = require("../lib/sales-clients-repo");
 const egyptDatetime = require("../lib/egypt-datetime");
 const salesCatalog = require("../lib/sales-field-catalog");
+const salesFilter = require("../lib/sales-filter");
+const salesListColumns = require("../lib/sales-list-columns");
+const salesActionPerms = require("../lib/sales-action-permissions");
+const workingDayLib = require("../lib/sales-working-day");
 
 const router = express.Router();
 
@@ -25,6 +29,18 @@ function scopedEmployees(req, opts = {}) {
 function filterSalesByCompany(sales, employees) {
   const ids = new Set(employees.map((e) => e.id));
   return sales.filter((s) => !s.agentId || ids.has(s.agentId));
+}
+
+async function recalcAgentSalesFromSale(sale, actor) {
+  if (!sale?.agentId) return;
+  const wd = sale.workingDay || workingDayLib.computeWorkingDay(sale.submissionDate);
+  const ym = String(wd || "").slice(0, 7);
+  if (!ym) return;
+  try {
+    await store.recalcSalesCountForEmployee(ym, sale.agentId, actor || "system");
+  } catch (_) {
+    /* non-fatal */
+  }
 }
 
 function enrichSaleAgent(emp) {
@@ -167,6 +183,7 @@ router.get("/", async (req, res) => {
   try {
     const employees = scopedEmployees(req);
     const grants = await business.readSalesVisibilityGrants(req.username);
+    const dateBasis = req.query.dateBasis || "workingDay";
     let sales = await business.readSales({
       from: req.query.from,
       to: req.query.to,
@@ -175,12 +192,16 @@ router.get("/", async (req, res) => {
       team: req.query.team,
       unit: req.query.unit,
       status: req.query.status,
-      dateBasis: req.query.dateBasis || "submission",
+      dateBasis,
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    if (req.query.filter) {
+      sales = salesFilter.applySalesFilter(sales, req.query.filter);
+    }
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
-    res.json({ sales, devices: business.SALE_DEVICES, statuses: business.SALE_STATUSES });
+    const listColumns = await salesListColumns.getVisibleColumnsForUser(req.userRole?.role);
+    res.json({ sales, devices: business.SALE_DEVICES, statuses: business.SALE_STATUSES, listColumns });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -414,9 +435,22 @@ router.post("/", async (req, res) => {
     if (!catalogResolved.device && !payload.device) {
       return res.status(400).json({ error: "device required" });
     }
+    if (!catalogResolved.client && !payload.client) {
+      const hasCatalog = await salesClients.catalogHasActiveProducts().catch(() => false);
+      if (hasCatalog) {
+        return res.status(400).json({ error: "client required — select from Client & device catalog" });
+      }
+    }
     if (!agentId) return res.status(400).json({ error: "agentId required" });
+    const agentEmp = store.getEmployeeById(agentId);
+    if (agentEmp?.team && unitTeam.team && agentEmp.team !== unitTeam.team) {
+      const { teamsMatch } = require("../lib/team-names");
+      if (!teamsMatch(agentEmp.team, unitTeam.team)) {
+        return res.status(400).json({ error: "Agent must belong to the selected team" });
+      }
+    }
     const egyptSubmission = egyptDatetime.egyptNowFormatted();
-    const egyptDate = egyptDatetime.egyptTodayDate();
+    const dates = workingDayLib.enrichSaleDates({}, egyptSubmission);
     const sale = await business.createSale(
       {
         phoneNumber: payload.phoneNumber,
@@ -427,8 +461,8 @@ router.post("/", async (req, res) => {
         agentId,
         closerId: closerId || req.userRole.employeeId || "",
         status: initialStatus,
-        submissionDate: egyptSubmission,
-        effectiveDate: payload.effectiveDate || egyptDate,
+        submissionDate: dates.submissionDate,
+        effectiveDate: payload.effectiveDate || dates.workingDay,
         feedback: payload.feedback || "",
         team: unitTeam.team,
         unit: unitTeam.unit,
@@ -461,6 +495,7 @@ router.post("/", async (req, res) => {
       });
     }
     await notifySaleAssignments(sale, {});
+    await recalcAgentSalesFromSale(sale, req.username);
     res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole))[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -556,6 +591,10 @@ router.patch("/:id", async (req, res) => {
       );
     }
     const [redacted] = await salesFieldAccess.redactSalesForRole([sale], req.userRole);
+    await recalcAgentSalesFromSale(sale, req.username);
+    if (existing.agentId && existing.agentId !== sale.agentId) {
+      await recalcAgentSalesFromSale(existing, req.username);
+    }
     res.json({ ok: true, sale: redacted });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -653,11 +692,62 @@ router.post("/field-permissions/seed", async (req, res) => {
   try {
     const { getSupabaseAdmin } = require("../lib/supabase-client");
     await salesCatalog.seedDefaultPermissions(getSupabaseAdmin());
+    await salesActionPerms.seedDefaults();
+    await salesListColumns.seedDefaultColumns();
     salesFieldAccess.invalidatePermissionsCache();
+    salesListColumns.invalidateCache();
+    salesActionPerms.invalidateCache();
     const perms = await business.readSalesFieldPermissions();
     res.json({ ok: true, count: perms.length });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/list-columns", async (req, res) => {
+  try {
+    const all = await salesListColumns.listColumns();
+    const visible = await salesListColumns.getVisibleColumnsForUser(req.userRole?.role);
+    res.json({ columns: all, visibleColumns: visible });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/list-columns/:columnKey", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const col = await salesListColumns.upsertColumn(decodeURIComponent(req.params.columnKey), req.body);
+    salesListColumns.invalidateCache();
+    res.json({ column: col });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/list-columns/seed", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const result = await salesListColumns.seedDefaultColumns();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/action-permissions", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const actions = await salesActionPerms.loadMap();
+    res.json({ actions: Object.values(actions) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

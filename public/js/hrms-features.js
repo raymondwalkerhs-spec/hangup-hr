@@ -398,17 +398,20 @@ window.HRMSFeatures = (function () {
     }
 
     function opOptions(unit, selected) {
+      const normUnit = (u) => String(u || "").replace(/\s+/g, "").toUpperCase();
+      const unitMatch = (e) => normUnit(e.unit) === normUnit(unit) || e.unit === unit;
       const ops = employees.filter(
         (e) =>
-          e.unit === unit &&
+          unitMatch(e) &&
           (/^OP/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "op")
       );
-      return ops
-        .map(
-          (e) =>
-            `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`
-        )
-        .join("");
+      const tlsOnUnit = employees.filter((e) => unitMatch(e) && isTlEmployee(e));
+      const otherTls = employees.filter((e) => isTlEmployee(e) && !unitMatch(e));
+      const opt = (e, tag) =>
+        `<option value="${esc(e.id)}" ${selected === e.id ? "selected" : ""}>${tag ? tag + " " : ""}${esc(e.id)} — ${esc(e.american_name || e.id)}</option>`;
+      return `<optgroup label="OPs in ${esc(unit)}">${ops.map((e) => opt(e)).join("") || '<option disabled>(none)</option>'}</optgroup>
+        <optgroup label="TLs in ${esc(unit)}">${tlsOnUnit.map((e) => opt(e, "★")).join("") || '<option disabled>(none)</option>'}</optgroup>
+        <optgroup label="Other TLs">${otherTls.map((e) => opt(e, "★")).join("") || '<option disabled>(none)</option>'}</optgroup>`;
     }
 
     function isTlEmployee(e) {
@@ -581,13 +584,26 @@ window.HRMSFeatures = (function () {
     });
 
     root.querySelectorAll(".org-op-select").forEach((sel) => {
+      const prev = sel.value;
       sel.addEventListener("change", async () => {
+        const emp = employees.find((x) => String(x.id) === String(sel.value));
+        if (!emp) return;
+        const isOp =
+          /^OP/i.test(String(emp.id || "")) || String(emp.role || "").toLowerCase() === "op";
+        if (!isOp) {
+          const msg = `Assign ${emp.id} as OP for ${sel.dataset.unit}? This is unusual (not an OP role).`;
+          if (!confirm(msg) || !confirm("Please confirm again — OP manager assignment.")) {
+            sel.value = prev;
+            return;
+          }
+        }
         try {
           await api(`/org/managers/${encodeURIComponent(sel.dataset.unit)}`, {
             method: "PUT",
             body: JSON.stringify({ opEmployeeId: sel.value }),
           });
         } catch (e) {
+          sel.value = prev;
           alert(e.message);
         }
       });
@@ -629,10 +645,25 @@ window.HRMSFeatures = (function () {
     root.querySelectorAll(".org-team-select").forEach((sel) => {
       sel.addEventListener("click", (e) => e.stopPropagation());
       sel.addEventListener("change", async () => {
+        const teamName = sel.value;
+        const teamMeta = allTeams.find((t) => t.name === teamName);
+        const emp = employees.find((e) => e.id === sel.dataset.empId);
+        const patch = { team: teamName };
+        if (teamMeta?.unit && emp && teamMeta.unit !== emp.unit) {
+          if (
+            !confirm(
+              `Team "${teamName}" belongs to ${teamMeta.unit}, but employee is on ${emp.unit || "?"}. Update employee unit to ${teamMeta.unit}?`
+            )
+          ) {
+            sel.value = emp?.team || "";
+            return;
+          }
+          patch.unit = teamMeta.unit;
+        }
         try {
           const res = await api(`/employees/${sel.dataset.empId}`, {
             method: "PUT",
-            body: JSON.stringify({ team: sel.value }),
+            body: JSON.stringify(patch),
           });
           if (res.employee && typeof patchEmployeeInCache === "function") patchEmployeeInCache(res.employee);
           await renderOrgPage(root, api, helpers);

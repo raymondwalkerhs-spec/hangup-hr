@@ -40,6 +40,7 @@ Apply in filename order:
 | 22 | `20260716_app_role_permissions.sql` | Admin RBAC overrides |
 | 23 | `20260717_app_user_permissions.sql` | Per-user permission overrides |
 | 24 | `20260718_notifications_quality_notes.sql` | Notification routing rules + quality notes |
+| 25 | `20260719_v140_sales_org_dashboards.sql` | Working day, list columns, sales access surfaces |
 
 ## RLS pattern
 

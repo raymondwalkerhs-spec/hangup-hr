@@ -39,7 +39,7 @@ async function probeState(db) {
     app_role_permissions: false,
     app_user_permissions: false,
     notification_routing: false,
-    quality_notes: false,
+    v140_sales: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -76,6 +76,8 @@ async function probeState(db) {
   state.notification_routing = !nr.error;
   const qn = await db.from("employee_quality_notes").select("id").limit(1);
   state.quality_notes = !qn.error;
+  const wd = await db.from("sales").select("working_day").limit(1);
+  state.v140_sales = !wd.error;
   return state;
 }
 
@@ -106,6 +108,7 @@ function filesToApply(state) {
   if (!state.notification_routing || !state.quality_notes) {
     files.push("20260718_notifications_quality_notes.sql");
   }
+  if (!state.v140_sales) files.push("20260719_v140_sales_org_dashboards.sql");
   return files;
 }
 
@@ -234,7 +237,7 @@ async function main() {
   console.log(
     "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
       "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions, " +
-      "app_user_permissions, notification_routing, quality_notes."
+      "app_user_permissions, notification_routing, quality_notes, v140_sales."
   );
 }
 

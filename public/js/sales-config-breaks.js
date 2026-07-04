@@ -93,7 +93,7 @@ window.HRSalesConfigBreaks = (function () {
           <h2>Break time</h2>
           <p class="break-overlay-name">${escapeHtml(brk.name || "Scheduled break")}</p>
           <p class="break-overlay-timer" id="break-countdown">${formatCountdown(left)}</p>
-          <p class="muted">Ends around ${escapeHtml(brk.endTime || "")} · ${brk.durationMinutes || 15} min</p>
+          <p class="muted">Ends around ${escapeHtml(formatTimeAmPm(brk.endTime || ""))} (Egypt) · ${brk.durationMinutes || 15} min</p>
           ${brk.message ? `<p>${escapeHtml(brk.message)}</p>` : ""}
           <p class="muted">You can close this and reopen from <strong>Breaks</strong> in the sidebar.</p>
         </div>`;
@@ -120,6 +120,17 @@ window.HRSalesConfigBreaks = (function () {
     const dismissed = sessionStorage.getItem(`hr_break_dismissed_${brk.id}`);
     if (!dismissed) showBreakOverlay(brk);
     window.__hrActiveBreak = brk;
+  }
+
+  function formatTimeAmPm(timeStr) {
+    const m = String(timeStr || "").match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return timeStr || "";
+    let h = parseInt(m[1], 10);
+    const mi = m[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${mi} ${ampm}`;
   }
 
   function clientPickerHtml(clients, selectedClientId, selectedProductId, selectedPriceId, formData) {
@@ -151,7 +162,7 @@ window.HRSalesConfigBreaks = (function () {
       .join("");
 
     return `
-      <fieldset class="card card-flat" style="grid-column:1/-1">
+      <fieldset class="card card-flat sale-client-device" style="grid-column:1/-1">
         <legend>Client &amp; device</legend>
         <div class="field-grid">
           <label class="field"><span>Client</span>
@@ -388,7 +399,45 @@ window.HRSalesConfigBreaks = (function () {
     return teams.filter((t) => t.unit === unit && t.dialsSales !== false);
   }
 
-  function unitTeamPickerHtml(orgTeams, employees, sale, escapeHtml) {
+  function isDialingEmployee(e) {
+    const id = String(e?.id || "");
+    if (/^(TL|CL|OP|HR|MG|OF|NW|DEL)/i.test(id)) return false;
+    return String(e?.status || "").toLowerCase() !== "deleted";
+  }
+
+  function closerOptionsHtml(employees, escapeHtml, selectedId) {
+    const leaders = (employees || [])
+      .filter((e) => /^(TL|CL|OP)/i.test(String(e.id || "")) || ["tl", "op"].includes(String(e.role || "").toLowerCase()))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const agents = (employees || [])
+      .filter((e) => isDialingEmployee(e))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    let html = '<option value="">— Select closer —</option>';
+    for (const e of leaders) {
+      html += `<option value="${escapeHtml(e.id)}" ${selectedId === e.id ? "selected" : ""}>★ ${escapeHtml(e.id)} — ${escapeHtml(e.american_name || e.id)}</option>`;
+    }
+    if (leaders.length && agents.length) html += '<option disabled>— Dialing agents —</option>';
+    for (const e of agents) {
+      html += `<option value="${escapeHtml(e.id)}" ${selectedId === e.id ? "selected" : ""}>${escapeHtml(e.id)} — ${escapeHtml(e.american_name || e.id)}</option>`;
+    }
+    return html;
+  }
+
+  function agentOptionsForTeam(employees, teamName, escapeHtml, selectedId) {
+    const norm = (t) => String(t || "").replace(/^team\s+/i, "").trim().toLowerCase();
+    const want = norm(teamName);
+    const list = (employees || [])
+      .filter((e) => isDialingEmployee(e) && norm(e.team) === want)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    return list
+      .map(
+        (e) =>
+          `<option value="${escapeHtml(e.id)}" ${selectedId === e.id ? "selected" : ""}>${escapeHtml(e.id)} — ${escapeHtml(e.american_name || e.id)}</option>`
+      )
+      .join("");
+  }
+
+  function unitTeamPickerHtml(orgTeams, employees, sale, escapeHtml, defaultCloserId) {
     const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
     const units = [...new Set(dialingTeams.map((t) => t.unit).filter(Boolean))].sort();
     const agentId = sale?.agentId || "";
@@ -402,9 +451,10 @@ window.HRSalesConfigBreaks = (function () {
       .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
       .map((t) => `<option value="${escapeHtml(t.name)}" ${defaultTeam === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`)
       .join("");
+    const agentOpts = agentOptionsForTeam(employees, defaultTeam, escapeHtml, agentId);
     return `
       <fieldset class="card card-flat sale-unit-team" style="grid-column:1/-1">
-        <legend>Unit &amp; team</legend>
+        <legend>Unit, team &amp; assignment</legend>
         <div class="field-grid">
           <label class="field"><span>Unit</span>
             <select name="unit" id="sale-unit-select" required>
@@ -416,6 +466,14 @@ window.HRSalesConfigBreaks = (function () {
               <option value="">— Select team —</option>${teamOpts}
             </select>
           </label>
+          <label class="field"><span>Agent</span>
+            <select name="agentId" id="sale-agent-select" required>
+              <option value="">— Select agent —</option>${agentOpts}
+            </select>
+          </label>
+          <label class="field"><span>Closer</span>
+            <select name="closerId" id="sale-closer-select">${closerOptionsHtml(employees, escapeHtml, defaultCloserId || "")}</select>
+          </label>
         </div>
       </fieldset>`;
   }
@@ -423,37 +481,40 @@ window.HRSalesConfigBreaks = (function () {
   function wireUnitTeamPicker(form, orgTeams, employees, isEdit) {
     const unitSel = form.querySelector("#sale-unit-select");
     const teamSel = form.querySelector("#sale-team-select");
-    const agentSel = form.querySelector('[name="agentId"]');
+    const agentSel = form.querySelector("#sale-agent-select") || form.querySelector('[name="agentId"]');
     const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
+    const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
+
+    function refreshAgentOptions(team, selectedId) {
+      if (!agentSel) return;
+      const opts = agentOptionsForTeam(employees, team, esc, selectedId || agentSel.value);
+      agentSel.innerHTML = `<option value="">— Select agent —</option>${opts}`;
+      if (selectedId) agentSel.value = selectedId;
+    }
 
     function refreshTeamOptions(unit, selectedTeam) {
       if (!teamSel) return;
-      const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
       const opts = teamsForUnit(dialingTeams, unit)
         .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
         .map((t) => `<option value="${esc(t.name)}" ${selectedTeam === t.name ? "selected" : ""}>${esc(t.name)}</option>`)
         .join("");
       teamSel.innerHTML = `<option value="">— Select team —</option>${opts}`;
-    }
-
-    function applyAgentDefaults() {
-      if (!agentSel || isEdit) return;
-      const agent = employees.find((e) => e.id === agentSel.value);
-      if (!agent) return;
-      if (unitSel && agent.unit) {
-        unitSel.value = agent.unit;
-        refreshTeamOptions(agent.unit, agent.team || "");
-      } else if (agent.team) {
-        refreshTeamOptions(unitSel?.value || "", agent.team);
-        teamSel.value = agent.team;
-      }
+      refreshAgentOptions(selectedTeam || teamSel.value, agentSel?.value);
     }
 
     unitSel?.addEventListener("change", () => {
       refreshTeamOptions(unitSel.value, "");
     });
-    agentSel?.addEventListener("change", applyAgentDefaults);
-    if (!isEdit) applyAgentDefaults();
+    teamSel?.addEventListener("change", () => {
+      refreshAgentOptions(teamSel.value, "");
+    });
+    if (!isEdit && agentSel && unitSel && teamSel) {
+      const agent = employees.find((e) => e.id === agentSel.value);
+      if (agent?.unit) {
+        unitSel.value = agent.unit;
+        refreshTeamOptions(agent.unit, agent.team || "");
+      }
+    }
   }
 
   async function enhanceSaleModal(api, helpers, sale, employees, formRoot, canEditFn, openSaleAttachment) {
@@ -466,15 +527,16 @@ window.HRSalesConfigBreaks = (function () {
     const teamsRes = await api("/hrms/teams").catch(() => ({ teams: [] }));
     const orgTeams = teamsRes.teams || [];
     if (!sale?.id) {
-      const agentSel = form.querySelector('[name="agentId"]');
-      const currentAgentId = sale?.agentId || agentSel?.value || "";
-      const draftSale = { unit: sale?.unit, team: sale?.team, agentId: currentAgentId };
+      const defaultCloserId =
+        sale?.closerId || (["tl", "op"].includes(state.user?.role) ? state.user?.employeeId : "") || "";
+      const draftSale = { unit: sale?.unit, team: sale?.team, agentId: sale?.agentId || "" };
       const unitTeamWrap = document.createElement("div");
-      unitTeamWrap.innerHTML = unitTeamPickerHtml(orgTeams, employees || [], draftSale, escapeHtml);
+      unitTeamWrap.innerHTML = unitTeamPickerHtml(orgTeams, employees || [], draftSale, escapeHtml, defaultCloserId);
       const agentField = form.querySelector('[name="agentId"]')?.closest("label");
-      const insertAfter = agentField || form.querySelector(".field");
-      if (insertAfter?.nextSibling) insertAfter.parentNode.insertBefore(unitTeamWrap.firstElementChild, insertAfter.nextSibling);
-      else form.prepend(unitTeamWrap.firstElementChild);
+      if (agentField) agentField.remove();
+      const closerField = form.querySelector('[name="closerId"]')?.closest("label");
+      if (closerField) closerField.remove();
+      form.prepend(unitTeamWrap.firstElementChild);
       wireUnitTeamPicker(form, orgTeams, employees || [], false);
     }
 
@@ -499,11 +561,13 @@ window.HRSalesConfigBreaks = (function () {
       form.prepend(warn);
     }
 
-    for (const name of ["unit", "team"]) {
-      const legacy = form.querySelector(`[name="${name}"]`);
-      if (legacy?.closest("label") && legacy.closest("label").closest(".sale-unit-team") == null) {
-        legacy.closest("label").style.display = "none";
-      }
+    for (const name of ["unit", "team", "client", "device", "deviceType", "price"]) {
+      form.querySelectorAll(`[name="${name}"]`).forEach((el) => {
+        const label = el.closest("label");
+        if (label && !label.closest(".sale-unit-team") && !label.closest(".sale-client-device")) {
+          label.remove();
+        }
+      });
     }
 
     const listEl = form.querySelector("#sale-attachments-list");
@@ -541,7 +605,7 @@ window.HRSalesConfigBreaks = (function () {
           .filter((b) => b.active)
           .map(
             (b) =>
-              `<li><strong>${escapeHtml(b.name)}</strong> ${escapeHtml(b.startTime)} – ${escapeHtml(b.endTime)} (${b.durationMinutes} min)</li>`
+              `<li><strong>${escapeHtml(b.name)}</strong> ${escapeHtml(formatTimeAmPm(b.startTime))} – ${escapeHtml(formatTimeAmPm(b.endTime))} (${b.durationMinutes} min) · Egypt time</li>`
           )
           .join("") || "<li class='muted'>None configured</li>"}</ul>
       </div>`;
@@ -765,7 +829,7 @@ window.HRSalesConfigBreaks = (function () {
       el.innerHTML = (data.breaks || [])
         .map(
           (b) => `<div class="card card-flat adj-row" style="margin:.35rem 0">
-            <div><strong>${escapeHtml(b.name)}</strong> ${escapeHtml(b.startTime)}–${escapeHtml(b.endTime)} · ${b.durationMinutes}m
+            <div><strong>${escapeHtml(b.name)}</strong> ${escapeHtml(formatTimeAmPm(b.startTime))}–${escapeHtml(formatTimeAmPm(b.endTime))} · ${b.durationMinutes}m · Egypt
             ${b.active ? "" : " <span class='badge'>inactive</span>"}</div>
             <button class="btn btn-sm" data-edit-break="${b.id}">Edit</button>
             <button class="btn btn-sm btn-danger" data-del-break="${b.id}">Delete</button>
