@@ -54,8 +54,14 @@ if (-not $token) {
 }
 
 $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-if (-not $Version) { $Version = $pkg.version }
-$pinVersion = $Version
+# Default: no pin — EXE always resolves the newest full Setup from GitHub at run time.
+# Pass -Version 1.3.10 only when you need to test a specific release.
+$pinVersion = ""
+if ($PSBoundParameters.ContainsKey("Version") -and $Version) {
+  $pinVersion = $Version
+} elseif (-not $PSBoundParameters.ContainsKey("Version")) {
+  Write-Host "Pin: none (downloads latest Setup from GitHub at run time)" -ForegroundColor DarkGray
+}
 
 $srcDir = Join-Path $PSScriptRoot "web-installer"
 $srcFile = Join-Path $srcDir "WebInstaller.cs"
@@ -78,7 +84,8 @@ if (-not $csc) {
 
 $outExe = Join-Path $OutputDir "Hangup-Portal-Web-Setup.exe"
 
-Write-Host "Compiling web installer (repo: $repo, version: $pinVersion)..." -ForegroundColor Cyan
+$pinLabel = if ($pinVersion) { $pinVersion } else { "latest" }
+Write-Host "Compiling web installer (repo: $repo, pin: $pinLabel)..." -ForegroundColor Cyan
 & $csc /nologo /target:winexe /optimize+ `
   "/out:$outExe" `
   /reference:System.dll `

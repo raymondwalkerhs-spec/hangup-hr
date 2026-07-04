@@ -149,8 +149,7 @@ internal sealed class WebInstallerForm : Form
                 if (rel == null || IsDraft(rel)) continue;
                 if (!ReleaseHasSetup(rel)) continue;
                 var tag = GetString(rel, "tag_name");
-                Version ver;
-                if (!Version.TryParse(tag.Trim().TrimStart('v', 'V'), out ver)) ver = new Version(0, 0);
+                var ver = ParseReleaseVersion(tag);
                 if (chosenRelease == null || ver > chosenVer)
                 {
                     chosenRelease = rel;
@@ -170,18 +169,42 @@ internal sealed class WebInstallerForm : Form
         if (assetList.Count == 0)
             throw new InvalidOperationException("Release has no downloadable assets.");
 
+        string pickedId;
+        fileName = PickBestSetupAsset(assetList, out pickedId);
+        if (string.IsNullOrEmpty(fileName))
+            throw new InvalidOperationException("Setup.exe not found on release " + GetString(chosenRelease, "tag_name") + ".");
+        assetApiUrl = "https://api.github.com/repos/" + Config.GitHubRepo + "/releases/assets/" + pickedId;
+    }
+
+    static string PickBestSetupAsset(ArrayList assetList, out string assetId)
+    {
+        assetId = "";
+        string bestName = null;
+        int bestScore = -1;
         foreach (Dictionary<string, object> asset in assetList)
         {
             var name = GetString(asset, "name");
             if (!IsSetupExe(name)) continue;
             var id = GetString(asset, "id");
             if (string.IsNullOrEmpty(id)) continue;
-            fileName = name;
-            assetApiUrl = "https://api.github.com/repos/" + Config.GitHubRepo + "/releases/assets/" + id;
-            return;
+            var score = SetupAssetScore(name);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestName = name;
+                assetId = id;
+            }
         }
+        return bestName;
+    }
 
-        throw new InvalidOperationException("Setup.exe not found on release " + GetString(chosenRelease, "tag_name") + ".");
+    static int SetupAssetScore(string name)
+    {
+        if (name.IndexOf("Portal-Setup", StringComparison.OrdinalIgnoreCase) >= 0) return 100;
+        if (name.IndexOf("HR-Beta", StringComparison.OrdinalIgnoreCase) >= 0) return 90;
+        if (name.IndexOf("HR", StringComparison.OrdinalIgnoreCase) >= 0
+            && name.IndexOf("Setup", StringComparison.OrdinalIgnoreCase) >= 0) return 80;
+        return 10;
     }
 
     static string GitHubApiGet(string apiPath)
@@ -262,6 +285,16 @@ internal sealed class WebInstallerForm : Form
         return Convert.ToString(obj[key]);
     }
 
+    static Version ParseReleaseVersion(string tag)
+    {
+        var core = (tag ?? "").Trim().TrimStart('v', 'V');
+        var dash = core.IndexOf('-');
+        if (dash > 0) core = core.Substring(0, dash);
+        Version ver;
+        if (Version.TryParse(core, out ver)) return ver;
+        return new Version(0, 0);
+    }
+
     static bool IsDraft(Dictionary<string, object> rel)
     {
         return rel.ContainsKey("draft") && rel["draft"] is bool && (bool)rel["draft"];
@@ -279,6 +312,8 @@ internal sealed class WebInstallerForm : Form
     static bool IsSetupExe(string name)
     {
         if (string.IsNullOrEmpty(name)) return false;
+        if (name.IndexOf("Web-Setup", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+        if (name.IndexOf("Portable", StringComparison.OrdinalIgnoreCase) >= 0) return false;
         return name.IndexOf("Setup", StringComparison.OrdinalIgnoreCase) >= 0
                && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                && name.IndexOf("uninstall", StringComparison.OrdinalIgnoreCase) < 0;
@@ -307,8 +342,8 @@ internal sealed class WebInstallerForm : Form
 
         try
         {
-            if (!File.Exists(_destPath) || new FileInfo(_destPath).Length < 1024)
-                throw new InvalidOperationException("Downloaded file is missing or too small.");
+            if (!File.Exists(_destPath) || new FileInfo(_destPath).Length < 5 * 1024 * 1024)
+                throw new InvalidOperationException("Downloaded installer is missing or too small — expected full Setup.exe, not the web bootstrap.");
 
             _status.Text = "Launching installer...";
             _percent.Text = "100%";

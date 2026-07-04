@@ -170,11 +170,15 @@ if ($isMac) {
   }
 } else {
   $asset = $assets | Where-Object {
-    $_.name -match 'Setup.*\.exe$' -and $_.name -notmatch 'uninstall' -and $_.name -match [regex]::Escape($ver)
+    $_.name -match 'Setup.*\.exe$' -and $_.name -notmatch 'uninstall|Web-Setup|Portable' -and $_.name -match [regex]::Escape($ver)
+  } | Sort-Object {
+    if ($_.name -match 'Portal-Setup') { 0 } elseif ($_.name -match 'HR-Beta') { 1 } else { 2 }
   } | Select-Object -First 1
   if (-not $asset) {
     $asset = $assets | Where-Object {
-      $_.name -match 'Setup.*\.exe$' -and $_.name -notmatch 'uninstall'
+      $_.name -match 'Setup.*\.exe$' -and $_.name -notmatch 'uninstall|Web-Setup|Portable'
+    } | Sort-Object {
+      if ($_.name -match 'Portal-Setup') { 0 } elseif ($_.name -match 'HR-Beta') { 1 } else { 2 }
     } | Select-Object -First 1
   }
   if (-not $asset) {
