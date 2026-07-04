@@ -4,6 +4,27 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-07-04
+
+### Added
+- **Sales log — all columns** — Log columns page lists every form field; enable any column for the sales table
+- **Advanced filter UX** — logic selector (AND/OR/NOT) only after a second rule; value **dropdowns** for agents, closers, clients, teams, status, and catalog select fields
+- **Simple client filter** — Client dropdown beside Agent and Closer on day/week/month toolbar
+- **Bank account fields** — routing number, bank name, account number, bank address, **Who chose bank account** (employee picker)
+- **Verifier feedback** — dropdown (Sale done, Postdated, Pending bank approval, On hold, Rejected, Callback); assigned verifier + RTM/Admin override
+- **Client feedback** — dropdown (Passed, Dropped, Chargeback, Duplicate, Retransfer, Pending bank approval, Processed); RTM/Admin edit
+- **Sales permissions** page — full-page field view/edit matrix (sidebar)
+- **Log columns** page — full-page column enable/disable (sidebar)
+- **Documentation** — [`SALES_LOG.md`](SALES_LOG.md) reference guide
+
+### Fixed
+- **Organization → Add team** — team name input not accepting typing (modal focus/z-index)
+- **Search boxes** — toolbar/search inputs blocked during page load (`page-loading` no longer disables pointer events on filters)
+- **Users search** — table-only refresh preserves focus while typing
+
+### Changed
+- Sales field permissions removed from Access Control button — use **Sales permissions** and **Log columns** sidebar pages instead
+
 ## [1.4.0] — 2026-07-04
 
 ### Added

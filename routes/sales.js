@@ -74,6 +74,11 @@ function validatePaymentForm(formData) {
     if (!String(fd.cardExpDate || "").trim()) return { ok: false, error: "Card expiration is required when payment method is Card" };
     if (!String(fd.cvv || "").trim()) return { ok: false, error: "CVV is required when payment method is Card" };
   }
+  if (method === "Bank account") {
+    if (!String(fd.routingNumber || "").trim()) return { ok: false, error: "Routing number is required for bank account payment" };
+    if (!String(fd.bankName || "").trim()) return { ok: false, error: "Bank name is required for bank account payment" };
+    if (!String(fd.bankAccountNumber || "").trim()) return { ok: false, error: "Bank account number is required for bank account payment" };
+  }
   return { ok: true, method };
 }
 
@@ -82,6 +87,9 @@ function scrubPaymentForm(formData, method) {
   fd.paymentMethod = method;
   if (method === "Bank account") {
     for (const key of salesCatalog.PAYMENT_CARD_KEYS) delete fd[key];
+  }
+  if (method === "Card") {
+    for (const key of salesCatalog.PAYMENT_BANK_KEYS) delete fd[key];
   }
   return fd;
 }
@@ -189,6 +197,7 @@ router.get("/", async (req, res) => {
       to: req.query.to,
       agentId: req.query.agentId,
       closerId: req.query.closerId,
+      client: req.query.client,
       team: req.query.team,
       unit: req.query.unit,
       status: req.query.status,
@@ -541,7 +550,7 @@ router.patch("/:id", async (req, res) => {
       const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
         { ...(existing.formData || {}), ...(req.body.formData || {}) },
         req.userRole,
-        { create: false }
+        { create: false, sale: existing }
       );
       const built = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
       patch = {

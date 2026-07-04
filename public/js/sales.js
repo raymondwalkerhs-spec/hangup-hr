@@ -26,10 +26,41 @@ window.SalesModule = (function () {
 
   const PAYMENT_SUBMIT_FIELDS = [
     { key: "paymentMethod", label: "Payment method", section: "payment", type: "select", options: ["Bank account", "Card"], selectPlaceholder: true },
+    { key: "routingNumber", label: "Routing number", section: "payment", type: "text", bankField: true },
+    { key: "bankName", label: "Bank name", section: "payment", type: "text", bankField: true },
+    { key: "bankAccountNumber", label: "Bank account number", section: "payment", type: "text", bankField: true },
+    { key: "bankAddress", label: "Bank address", section: "payment", type: "text", bankField: true },
+    {
+      key: "bankAccountChosenBy",
+      label: "Who chose bank account",
+      section: "payment",
+      type: "employee",
+      employeeFilter: "all",
+      bankField: true,
+    },
     { key: "cardType", label: "Card Type", section: "payment", type: "text", cardField: true },
     { key: "cardNumber", label: "Card Number", section: "payment", type: "text", cardField: true },
     { key: "cardExpDate", label: "Card Exp Date", section: "payment", type: "text", cardField: true, placeholder: "MM/YY" },
     { key: "cvv", label: "CVV", section: "payment", type: "text", cardField: true, inputMode: "numeric", maxLength: 4 },
+  ];
+
+  const VERIFIER_FEEDBACK_OPTIONS = [
+    "Sale done",
+    "Postdated",
+    "Pending bank approval",
+    "On hold",
+    "Rejected",
+    "Callback",
+  ];
+
+  const CLIENT_FEEDBACK_OPTIONS = [
+    "Passed",
+    "Dropped",
+    "Chargeback",
+    "Duplicate",
+    "Retransfer",
+    "Pending bank approval",
+    "Processed",
   ];
 
   function formatTimeAmPm(timeStr) {
@@ -59,29 +90,49 @@ window.SalesModule = (function () {
   function renderSaleListCell(colKey, sale, empById, escapeHtml, fmt) {
     const agent = empById.get(sale.agentId);
     const agentName = agent ? agent.american_name || sale.agentId : sale.agentId;
+    const fd = sale.formData || {};
     switch (colKey) {
       case "workingDay":
         return escapeHtml(sale.workingDay || String(sale.submissionDate || "").slice(0, 10) || sale.effectiveDate || "—");
       case "submissionTime":
         return escapeHtml(formatTimeAmPm(sale.submissionTime || ""));
       case "client":
-        return escapeHtml(sale.client || sale.formData?.client || "—");
+        return escapeHtml(sale.client || fd.client || "—");
       case "customer":
         return `<strong>${escapeHtml(sale.fullName || "—")}</strong><br><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span>`;
       case "device":
-        return escapeHtml(deviceLabel(sale.device || sale.formData?.deviceType));
+      case "deviceType":
+        return escapeHtml(deviceLabel(sale.device || fd.deviceType));
       case "agent":
+      case "agentName":
         return `${escapeHtml(sale.agentId || "—")}<br><span class="muted">${escapeHtml(agentName || "")}</span>`;
       case "closer":
-        return escapeHtml(sale.closerId || "—");
+      case "closerName": {
+        const closer = empById.get(sale.closerId);
+        return `${escapeHtml(sale.closerId || "—")}<br><span class="muted">${escapeHtml(closer?.american_name || "")}</span>`;
+      }
       case "team":
-        return escapeHtml(sale.team || "—");
+        return escapeHtml(sale.team || fd.team || "—");
+      case "unit":
+        return escapeHtml(sale.unit || fd.unit || "—");
       case "status":
         return `<span class="badge">${escapeHtml(sale.status || "")}</span>`;
       case "price":
-        return sale.price != null ? fmt(sale.price) : "—";
+        return sale.price != null ? fmt(sale.price) : fd.price != null ? fmt(fd.price) : "—";
+      case "assignVerifier":
+      case "reviewer":
+      case "bankAccountChosenBy": {
+        const id = fd[colKey] || sale[colKey] || "";
+        const emp = empById.get(id);
+        return id ? `${escapeHtml(id)}<br><span class="muted">${escapeHtml(emp?.american_name || "")}</span>` : "—";
+      }
+      case "firstName":
+      case "lastName":
+        return escapeHtml(fd[colKey] || sale[colKey] || "—");
+      case "phoneNumber":
+        return escapeHtml(sale.phoneNumber || fd.phoneNumber || "—");
       default:
-        return escapeHtml(sale.formData?.[colKey] ?? sale[colKey] ?? "—");
+        return escapeHtml(fd[colKey] ?? sale[colKey] ?? "—");
     }
   }
 
@@ -99,26 +150,101 @@ window.SalesModule = (function () {
     else localStorage.setItem("hr_sales_advanced_filter", JSON.stringify(filter));
   }
 
-  function advancedFilterPanelHtml(escapeHtml) {
+  function buildAdvancedFilterFields(catalogFields) {
+    const base = [
+      { key: "agentId", label: "Agent ID", valueType: "employee", employeeFilter: "dialing" },
+      { key: "closerId", label: "Closer ID", valueType: "employee", employeeFilter: "all" },
+      { key: "client", label: "Client", valueType: "client" },
+      { key: "device", label: "Device", valueType: "select", options: ["bracelet", "necklace", "smartwatch"] },
+      { key: "team", label: "Team", valueType: "team" },
+      { key: "unit", label: "Unit", valueType: "select", options: ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"] },
+      { key: "status", label: "Status", valueType: "select", options: ["passed", "pending", "postdated", "denied", "callback"] },
+      { key: "customer", label: "Customer name", valueType: "text" },
+      { key: "phoneNumber", label: "Phone", valueType: "text" },
+      { key: "workingDay", label: "Working day", valueType: "date" },
+      { key: "assignVerifier", label: "Verifier", valueType: "employee", employeeFilter: "verifiers" },
+      { key: "reviewer", label: "Reviewer", valueType: "employee", employeeFilter: "reviewers" },
+      { key: "verifierFeedback", label: "Verifier feedback", valueType: "select", options: VERIFIER_FEEDBACK_OPTIONS },
+      { key: "clientFeedback", label: "Client feedback", valueType: "select", options: CLIENT_FEEDBACK_OPTIONS },
+      { key: "paymentMethod", label: "Payment method", valueType: "select", options: ["Bank account", "Card"] },
+    ];
+    const seen = new Set(base.map((b) => b.key));
+    for (const f of catalogFields || []) {
+      if (seen.has(f.key)) continue;
+      if (f.type === "select" && f.options?.length) {
+        base.push({ key: f.key, label: f.label || f.key, valueType: "select", options: f.options });
+      } else if (f.type === "employee") {
+        base.push({ key: f.key, label: f.label || f.key, valueType: "employee", employeeFilter: f.employeeFilter || "all" });
+      } else if (f.type !== "textarea" && f.type !== "datetime") {
+        base.push({ key: f.key, label: f.label || f.key, valueType: "text" });
+      }
+      seen.add(f.key);
+    }
+    return base;
+  }
+
+  function filterValueControlHtml(fieldDef, value, employees, clients, teams, escapeHtml) {
+    const val = value || "";
+    const hideForEmpty = (op) => op === "IS EMPTY" || op === "IS NOT EMPTY";
+    if (fieldDef.valueType === "employee") {
+      const opts = employeeSelectOptions(employees, escapeHtml, val, fieldDef.employeeFilter || "all");
+      return `<select class="sf-val">${opts}</select>`;
+    }
+    if (fieldDef.valueType === "client") {
+      const opts =
+        '<option value="">— Any —</option>' +
+        (clients || [])
+          .map((c) => `<option value="${escapeHtml(c.name)}" ${val === c.name ? "selected" : ""}>${escapeHtml(c.name)}</option>`)
+          .join("");
+      return `<select class="sf-val">${opts}</select>`;
+    }
+    if (fieldDef.valueType === "team") {
+      const opts =
+        '<option value="">— Any —</option>' +
+        (teams || [])
+          .map((t) => `<option value="${escapeHtml(t)}" ${val === t ? "selected" : ""}>${escapeHtml(t)}</option>`)
+          .join("");
+      return `<select class="sf-val">${opts}</select>`;
+    }
+    if (fieldDef.valueType === "select") {
+      const opts =
+        '<option value="">— Any —</option>' +
+        (fieldDef.options || [])
+          .map((o) => `<option value="${escapeHtml(o)}" ${val === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+          .join("");
+      return `<select class="sf-val">${opts}</select>`;
+    }
+    if (fieldDef.valueType === "date") {
+      return `<input class="sf-val" type="date" value="${escapeHtml(val)}" />`;
+    }
+    return `<input class="sf-val" type="text" value="${escapeHtml(val)}" placeholder="Value" style="min-width:8rem" />`;
+  }
+
+  function advancedFilterPanelHtml(escapeHtml, filterFields, employees, clients, teams) {
     const f = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [{ field: "agentId", op: "IS", value: "" }] };
-    const fields = ["agentId", "closerId", "client", "device", "team", "status", "customer", "workingDay"];
-    const rulesHtml = (f.rules || [])
-      .map(
-        (r, i) => `<div class="sales-filter-rule" data-idx="${i}" style="display:flex;gap:.35rem;flex-wrap:wrap;margin:.35rem 0">
-          <select class="sf-field">${fields.map((x) => `<option value="${x}" ${r.field === x ? "selected" : ""}>${x}</option>`).join("")}</select>
-          <select class="sf-op"><option value="IS" ${r.op === "IS" ? "selected" : ""}>IS</option><option value="IS NOT" ${r.op === "IS NOT" ? "selected" : ""}>IS NOT</option><option value="CONTAINS" ${r.op === "CONTAINS" ? "selected" : ""}>CONTAINS</option><option value="IS EMPTY" ${r.op === "IS EMPTY" ? "selected" : ""}>IS EMPTY</option></select>
-          <input class="sf-val" value="${escapeHtml(r.value || "")}" placeholder="Value" style="min-width:8rem" />
+    const rules = f.rules?.length ? f.rules : [{ field: "agentId", op: "IS", value: "" }];
+    const showLogic = rules.length > 1;
+    const fieldMap = Object.fromEntries(filterFields.map((x) => [x.key, x]));
+    const rulesHtml = rules
+      .map((r, i) => {
+        const fieldDef = fieldMap[r.field] || filterFields[0];
+        return `<div class="sales-filter-rule" data-idx="${i}" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin:.35rem 0">
+          <select class="sf-field">${filterFields.map((x) => `<option value="${x.key}" ${r.field === x.key ? "selected" : ""}>${escapeHtml(x.label)}</option>`).join("")}</select>
+          <select class="sf-op"><option value="IS" ${r.op === "IS" ? "selected" : ""}>IS</option><option value="IS NOT" ${r.op === "IS NOT" ? "selected" : ""}>IS NOT</option><option value="CONTAINS" ${r.op === "CONTAINS" ? "selected" : ""}>CONTAINS</option><option value="IS EMPTY" ${r.op === "IS EMPTY" ? "selected" : ""}>IS EMPTY</option><option value="IS NOT EMPTY" ${r.op === "IS NOT EMPTY" ? "selected" : ""}>IS NOT EMPTY</option></select>
+          ${filterValueControlHtml(fieldDef, r.value, employees, clients, teams, escapeHtml)}
           <button type="button" class="btn btn-sm sf-remove">✕</button>
-        </div>`
-      )
+        </div>`;
+      })
       .join("");
     return `<details class="card card-flat sales-advanced-filter" style="margin-bottom:1rem;padding:.75rem 1rem">
       <summary><strong>Advanced filter</strong> <span class="muted">(AND / OR / NOT)</span></summary>
       <div style="margin-top:.75rem">
-        <label class="field"><span>Logic</span>
-          <select id="sf-logic"><option value="AND" ${f.op === "AND" ? "selected" : ""}>AND</option><option value="OR" ${f.op === "OR" ? "selected" : ""}>OR</option><option value="NOT" ${f.op === "NOT" ? "selected" : ""}>NOT</option></select>
-        </label>
         <div id="sf-rules">${rulesHtml}</div>
+        <div id="sf-logic-wrap" class="${showLogic ? "" : "hidden"}" style="margin-top:.5rem">
+          <label class="field field-inline"><span>Combine rules with</span>
+            <select id="sf-logic"><option value="AND" ${f.op === "AND" ? "selected" : ""}>AND (all match)</option><option value="OR" ${f.op === "OR" ? "selected" : ""}>OR (any match)</option><option value="NOT" ${f.op === "NOT" ? "selected" : ""}>NOT (exclude matches)</option></select>
+          </label>
+        </div>
         <div class="btn-row" style="margin-top:.5rem">
           <button type="button" class="btn btn-sm" id="sf-add-rule">+ Rule</button>
           <button type="button" class="btn btn-sm btn-primary" id="sf-apply">Apply filter</button>
@@ -128,7 +254,18 @@ window.SalesModule = (function () {
     </details>`;
   }
 
-  function bindAdvancedFilter(root, rerender) {
+  function bindAdvancedFilter(root, rerender, filterFields, employees, clients, teams, escapeHtml) {
+    root.querySelectorAll(".sf-field").forEach((sel) => {
+      sel.addEventListener("change", () => {
+        const row = sel.closest(".sales-filter-rule");
+        const fieldDef = filterFields.find((x) => x.key === sel.value) || filterFields[0];
+        const valWrap = row.querySelector(".sf-val")?.parentElement;
+        const oldVal = row.querySelector(".sf-val")?.value || "";
+        const tmp = document.createElement("div");
+        tmp.innerHTML = filterValueControlHtml(fieldDef, oldVal, employees, clients, teams, escapeHtml);
+        row.querySelector(".sf-val")?.replaceWith(tmp.firstElementChild);
+      });
+    });
     root.querySelector("#sf-add-rule")?.addEventListener("click", () => {
       const cur = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [] };
       cur.rules = cur.rules || [];
@@ -142,7 +279,6 @@ window.SalesModule = (function () {
       rerender();
     });
     root.querySelector("#sf-apply")?.addEventListener("click", () => {
-      const op = root.querySelector("#sf-logic")?.value || "AND";
       const rules = [];
       root.querySelectorAll(".sales-filter-rule").forEach((row) => {
         rules.push({
@@ -151,6 +287,7 @@ window.SalesModule = (function () {
           value: row.querySelector(".sf-val")?.value,
         });
       });
+      const op = rules.length > 1 ? root.querySelector("#sf-logic")?.value || "AND" : "AND";
       state.salesAdvancedFilter = { op, rules };
       saveAdvancedFilter(state.salesAdvancedFilter);
       rerender();
@@ -160,6 +297,7 @@ window.SalesModule = (function () {
         const idx = Number(btn.closest(".sales-filter-rule")?.dataset.idx);
         const cur = state.salesAdvancedFilter || loadAdvancedFilter() || { op: "AND", rules: [] };
         cur.rules.splice(idx, 1);
+        if (!cur.rules.length) cur.rules.push({ field: "agentId", op: "IS", value: "" });
         state.salesAdvancedFilter = cur;
         rerender();
       });
@@ -458,15 +596,24 @@ window.SalesModule = (function () {
     return html;
   }
 
-  function salesPersonFilters(employees, escapeHtml, state) {
+  function salesPersonFilters(employees, clients, escapeHtml, state) {
     const agentOpts = employeeSelectOptions(employees, escapeHtml, state.salesAgentFilter || "", "dialing");
     const closerOpts = employeeSelectOptions(employees, escapeHtml, state.salesCloserFilter || "", "all");
-    return `<select id="sales-agent-filter" title="Filter by agent"><option value="">All agents</option>${agentOpts.replace('<option value="">— Select —</option>', "")}</select>
+    const clientOpts =
+      '<option value="">All clients</option>' +
+      (clients || [])
+        .map(
+          (c) =>
+            `<option value="${escapeHtml(c.name)}" ${state.salesClientFilter === c.name ? "selected" : ""}>${escapeHtml(c.name)}</option>`
+        )
+        .join("");
+    return `<select id="sales-client-filter" title="Filter by client">${clientOpts}</select>
+      <select id="sales-agent-filter" title="Filter by agent"><option value="">All agents</option>${agentOpts.replace('<option value="">— Select —</option>', "")}</select>
       <select id="sales-closer-filter" title="Filter by closer"><option value="">All closers</option>${closerOpts.replace('<option value="">— Select —</option>', "")}</select>`;
   }
 
-  function periodToolbar(period, state, monthToolbar, monthLabel, employees, escapeHtml) {
-    const personFilters = period === "month" ? salesPersonFilters(employees, escapeHtml, state) : "";
+  function periodToolbar(period, state, monthToolbar, monthLabel, employees, clients, escapeHtml) {
+    const personFilters = salesPersonFilters(employees, clients, escapeHtml, state);
     const extra = `${personFilters}<select id="sales-period">
       <option value="day" ${period === "day" ? "selected" : ""}>Daily</option>
       <option value="week" ${period === "week" ? "selected" : ""}>Weekly</option>
@@ -576,6 +723,7 @@ window.SalesModule = (function () {
     state.salesStatusFilter = state.salesStatusFilter || "";
     state.salesAgentFilter = state.salesAgentFilter || "";
     state.salesCloserFilter = state.salesCloserFilter || "";
+    state.salesClientFilter = state.salesClientFilter || "";
 
     let from;
     let to;
@@ -596,16 +744,19 @@ window.SalesModule = (function () {
     if (state.salesStatusFilter) salesQ.set("status", state.salesStatusFilter);
     if (state.salesAgentFilter) salesQ.set("agentId", state.salesAgentFilter);
     if (state.salesCloserFilter) salesQ.set("closerId", state.salesCloserFilter);
+    if (state.salesClientFilter) salesQ.set("client", state.salesClientFilter);
     if (state.companyContext === "hs2") salesQ.set("company", "hs2");
     const advFilter = state.salesAdvancedFilter || loadAdvancedFilter();
     if (advFilter?.rules?.length) salesQ.set("filter", JSON.stringify(advFilter));
     if (!state.salesHiddenUnits) state.salesHiddenUnits = [];
     const dashQ = new URLSearchParams({ period, date: dashDate, groupBy: "team", dateBasis: "submission" });
     if (state.companyContext === "hs2") dashQ.set("company", "hs2");
-    const [salesRes, dashRes, empRes] = await Promise.all([
+    const [salesRes, dashRes, empRes, catalogRes, clientsRes] = await Promise.all([
       api(`/sales?${salesQ}`),
       api(`/sales/dashboard?${dashQ}`),
       api(`/employees${employeesQuery()}`),
+      api("/sales/field-catalog?allFields=1").catch(() => ({ fields: [] })),
+      api("/sales-config/catalog").catch(() => ({ clients: [] })),
     ]);
     let sales = salesRes.sales || [];
     if (state.salesHiddenUnits?.length) {
@@ -619,6 +770,9 @@ window.SalesModule = (function () {
     const dashboard = dashRes;
     const employees = empRes.employees || [];
     const empById = new Map(employees.map((e) => [e.id, e]));
+    const salesClients = clientsRes.clients || [];
+    const teamNames = [...new Set(employees.map((e) => e.team).filter(Boolean))].sort();
+    const filterFields = buildAdvancedFilterFields(catalogRes.fields || []);
     const periodLabel = PERIOD_LABELS[period] || "Month";
     const headerLabel = period === "month"
       ? monthLabel(month)
@@ -665,8 +819,6 @@ window.SalesModule = (function () {
         <div><h1>Sales log</h1><p class="muted">${headerLabel} · ${sales.length} records · Filtered by <strong>working day</strong></p></div>
         <div class="btn-row">
           ${canSubmit() && !isQualityAgent() ? '<button class="btn btn-primary" id="add-sale-btn">+ Add sale</button>' : ""}
-          ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-perms-btn">Sales access</button>' : ""}
-          ${canManagePermissions() ? '<button class="btn btn-sm" id="sales-list-cols-btn">Log columns</button>' : ""}
           ${canExportSalesList() ? `<select id="sales-export-format" class="search-input" style="width:auto;min-width:6rem;flex:0 0 auto" title="Export format">
             <option value="csv">CSV</option>
             <option value="xlsx">Excel</option>
@@ -676,11 +828,11 @@ window.SalesModule = (function () {
         </div>
       </div>
       ${unitToggleHtml}
-      ${advancedFilterPanelHtml(escapeHtml)}
-      ${periodToolbar(period, state, monthToolbar, monthLabel, employees, escapeHtml).replace(
+      ${periodToolbar(period, state, monthToolbar, monthLabel, employees, salesClients, escapeHtml).replace(
         '<option value="">All statuses</option>',
         `<option value="">All statuses</option>${statusOpts}`
       )}
+      ${advancedFilterPanelHtml(escapeHtml, filterFields, employees, salesClients, teamNames)}
       <div class="grid-2 sales-stat-grid" style="gap:1rem;margin-bottom:1rem">
         <div class="card card-stat card-stat-click" data-filter="passed"><strong>${statSum(dashboard, "passed")}</strong><span class="muted">Passed (${periodLabel})</span></div>
         <div class="card card-stat card-stat-click" data-filter="pending"><strong>${statSum(dashboard, "pending")}</strong><span class="muted">Pending</span></div>
@@ -712,6 +864,10 @@ window.SalesModule = (function () {
       state.salesCloserFilter = e.target.value;
       rerender();
     });
+    root.querySelector("#sales-client-filter")?.addEventListener("change", (e) => {
+      state.salesClientFilter = e.target.value;
+      rerender();
+    });
     root.querySelectorAll("[data-sales-unit]").forEach((cb) => {
       cb.addEventListener("change", () => {
         const hidden = SALES_UNITS.filter((u) => {
@@ -731,13 +887,7 @@ window.SalesModule = (function () {
     root.querySelector("#add-sale-btn")?.addEventListener("click", () =>
       openSaleModal(api, employees, helpers, null, rerender)
     );
-    bindAdvancedFilter(root, rerender);
-    root.querySelector("#sales-list-cols-btn")?.addEventListener("click", () =>
-      openSalesListColumnsModal(api, helpers, rerender).catch((e) => alert(e.message))
-    );
-    root.querySelector("#sales-perms-btn")?.addEventListener("click", () =>
-      openSalesPermissionsModal(api, helpers, rerender)
-    );
+    bindAdvancedFilter(root, rerender, filterFields, employees, salesClients, teamNames, escapeHtml);
     function salesExportExt(format) {
       return format === "xlsx" ? "xlsx" : format;
     }
@@ -880,7 +1030,18 @@ window.SalesModule = (function () {
     function qFieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key;
-      const editable = canEditField(f.key);
+      let editable = canEditField(f.key);
+      if (f.key === "verifierFeedback") {
+        const assignVerifier = formData.assignVerifier || sale?.formData?.assignVerifier;
+        const role = String(state.user?.role || "").toLowerCase();
+        editable =
+          ["admin", "ceo", "rtm"].includes(role) ||
+          (role === "quality" && assignVerifier && state.user?.employeeId === assignVerifier) ||
+          (assignVerifier && state.user?.employeeId === assignVerifier);
+      }
+      if (f.key === "clientFeedback") {
+        editable = ["admin", "ceo", "rtm"].includes(String(state.user?.role || "").toLowerCase());
+      }
       const ro = editable ? "" : " readonly";
       const dis = editable ? "" : " disabled";
       if (f.type === "employee") {
@@ -996,8 +1157,22 @@ window.SalesModule = (function () {
     function fieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key === "deviceType" ? "device" : f.key;
-      const cardClass = f.cardField ? " sale-card-fields hidden" : "";
+      const cardClass = f.cardField ? " sale-card-fields hidden" : f.bankField ? " sale-bank-fields hidden" : "";
       const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
+      let editable = f.canEdit !== false;
+      if (isEdit && f.key === "verifierFeedback") {
+        const assignVerifier = formData.assignVerifier;
+        const role = String(state.user?.role || "").toLowerCase();
+        editable =
+          ["admin", "ceo", "rtm"].includes(role) ||
+          (assignVerifier && state.user?.employeeId === assignVerifier) ||
+          role === "quality";
+      }
+      if (isEdit && f.key === "clientFeedback") {
+        editable = ["admin", "ceo", "rtm"].includes(String(state.user?.role || "").toLowerCase());
+      }
+      const ro = editable ? "" : " readonly";
+      const dis = editable ? "" : " disabled";
       if (f.type === "datetime") {
         if (!isEdit) {
           const display = formatEgyptDateTime();
@@ -1007,34 +1182,38 @@ window.SalesModule = (function () {
       }
       if (f.type === "employee") {
         const selected = val || "";
-        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, selected, f.employeeFilter || "all")}</select></label>`;
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}"${dis}>${employeeSelectOptions(employees, escapeHtml, selected, f.employeeFilter || "all")}</select></label>`;
       }
       if (f.type === "select" && f.options) {
         const placeholder = f.selectPlaceholder ? '<option value="">— Select —</option>' : "";
         const opts = f.options
           .map((o) => `<option value="${escapeHtml(o)}" ${String(val) === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
           .join("");
-        const req = f.required ? " required" : "";
-        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}"${idAttr}${req}>${placeholder}${opts}</select></label>`;
+        const req = f.required && editable ? " required" : "";
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}"${idAttr}${req}${dis}>${placeholder}${opts}</select></label>`;
       }
       if (f.type === "textarea") {
-        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
+        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}"${ro}>${escapeHtml(val)}</textarea></label>`;
       }
       const inputType = f.type === "tel" ? "tel" : f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
-      const req = f.required ? " required" : "";
+      const req = f.required && editable ? " required" : "";
       const inputMode = f.inputMode ? ` inputmode="${f.inputMode}"` : "";
       const maxLength = f.maxLength ? ` maxlength="${f.maxLength}"` : "";
       const autoComplete = f.cardField || f.key === "cvv" || f.key === "cardNumber" ? ' autocomplete="off"' : "";
       const placeholder = f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : "";
-      return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}"${req}${inputMode}${maxLength}${autoComplete}${placeholder} /></label>`;
+      return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}"${req}${inputMode}${maxLength}${autoComplete}${placeholder}${ro} /></label>`;
     }
 
     function wirePaymentToggle(form) {
       const sel = form.querySelector("#sale-payment-method");
       const cardFields = form.querySelectorAll(".sale-card-fields");
+      const bankFields = form.querySelectorAll(".sale-bank-fields");
       function sync() {
-        const show = sel?.value === "Card";
-        cardFields.forEach((el) => el.classList.toggle("hidden", !show));
+        const method = sel?.value;
+        const isCard = method === "Card";
+        const isBank = method === "Bank account";
+        cardFields.forEach((el) => el.classList.toggle("hidden", !isCard));
+        bankFields.forEach((el) => el.classList.toggle("hidden", !isBank));
       }
       sel?.addEventListener("change", sync);
       sync();
@@ -1113,6 +1292,16 @@ window.SalesModule = (function () {
       if (paymentMethod === "Card") {
         if (!String(fd.get("cardNumber") || "").trim() || !String(fd.get("cardExpDate") || "").trim() || !String(fd.get("cvv") || "").trim()) {
           alert("Enter card number, expiration, and CVV when payment method is Card.");
+          return;
+        }
+      }
+      if (paymentMethod === "Bank account") {
+        if (
+          !String(fd.get("routingNumber") || "").trim() ||
+          !String(fd.get("bankName") || "").trim() ||
+          !String(fd.get("bankAccountNumber") || "").trim()
+        ) {
+          alert("Enter routing number, bank name, and account number when payment method is Bank account.");
           return;
         }
       }

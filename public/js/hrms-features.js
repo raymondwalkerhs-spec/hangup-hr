@@ -683,25 +683,29 @@ window.HRMSFeatures = (function () {
           : allTeams.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
         openModal(`
           <div class="modal-header"><h2>Add team — ${esc(unit)}</h2><button class="btn btn-sm" data-close>✕</button></div>
-          <div class="modal-body field-grid">
-            <label class="field"><span>Assign existing team</span>
-              <select id="assign-existing-team"><option value="">— Create new below —</option>${teamPickOpts}</select>
-            </label>
-            <button type="button" class="btn btn-sm btn-primary" id="assign-team-btn">Assign selected team to ${esc(unit)}</button>
-            <hr style="grid-column:1/-1" />
-            <p class="muted" style="grid-column:1/-1">Or create a new team:</p>
+          <div class="modal-body">
+            <div class="field-grid">
+              <label class="field"><span>Assign existing team</span>
+                <select id="assign-existing-team"><option value="">— Create new below —</option>${teamPickOpts}</select>
+              </label>
+              <div class="field" style="display:flex;align-items:flex-end">
+                <button type="button" class="btn btn-sm btn-primary" id="assign-team-btn">Assign selected team to ${esc(unit)}</button>
+              </div>
+            </div>
+            <hr />
+            <p class="muted">Or create a new team:</p>
+            <form id="new-team-form" class="field-grid">
+              <label class="field"><span>Team name</span><input id="new-team-name" name="name" type="text" autocomplete="off" spellcheck="false" data-autofocus placeholder="e.g. Kate" /></label>
+              <label class="field"><span>Unit</span>
+                <select name="unit">${orgUnits.map((u) => `<option value="${esc(u)}" ${u === unit ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>
+              </label>
+              <label class="field"><span>Dials sales</span>
+                <select name="dialsSales"><option value="true">Yes — dialing team</option><option value="false">No — support / mgmt</option></select>
+              </label>
+              <label class="field"><span>Display order</span><input name="displayOrder" type="number" value="0" /></label>
+            </form>
           </div>
-          <form id="new-team-form" class="modal-body field-grid">
-            <label class="field"><span>Team name</span><input name="name" placeholder="e.g. Kate" /></label>
-            <label class="field"><span>Unit</span>
-              <select name="unit">${orgUnits.map((u) => `<option value="${esc(u)}" ${u === unit ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>
-            </label>
-            <label class="field"><span>Dials sales</span>
-              <select name="dialsSales"><option value="true">Yes — dialing team</option><option value="false">No — support / mgmt</option></select>
-            </label>
-            <label class="field"><span>Display order</span><input name="displayOrder" type="number" value="0" /></label>
-          </form>
-          <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="save-new-team">Create new team</button></div>`);
+          <div class="modal-footer"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn-primary" id="save-new-team">Create new team</button></div>`);
         document.getElementById("assign-team-btn").onclick = async () => {
           const teamId = document.getElementById("assign-existing-team")?.value;
           if (!teamId) return alert("Select a team to assign, or create a new one below.");
@@ -752,7 +756,7 @@ window.HRMSFeatures = (function () {
         openModal(`
           <div class="modal-header"><h2>Edit team — ${esc(team.name)}</h2><button class="btn btn-sm" data-close>✕</button></div>
           <form id="edit-team-form" class="modal-body field-grid">
-            <label class="field"><span>Team name</span><input name="name" value="${esc(team.name)}" required /></label>
+            <label class="field"><span>Team name</span><input name="name" type="text" autocomplete="off" data-autofocus value="${esc(team.name)}" required /></label>
             <label class="field"><span>Unit</span>
               <select name="unit">${orgUnits.map((u) => `<option value="${esc(u)}" ${u === team.unit ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>
             </label>

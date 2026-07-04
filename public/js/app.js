@@ -1077,14 +1077,29 @@ function consumePendingVersionNotice() {
 }
 
 function openModal(html, wide = false) {
+  closeSidebarNav();
   const root = document.getElementById("modal-root");
   root.innerHTML = `<div class="modal-backdrop" id="modal-backdrop">
-    <div class="modal ${wide ? "modal-wide" : ""}" role="dialog">${html}</div>
+    <div class="modal ${wide ? "modal-wide" : ""}" role="dialog" aria-modal="true">${html}</div>
   </div>`;
-  root.querySelector("#modal-backdrop").addEventListener("click", (e) => {
+  const backdrop = root.querySelector("#modal-backdrop");
+  const modal = root.querySelector(".modal");
+  backdrop.addEventListener("click", (e) => {
     if (e.target.id === "modal-backdrop") closeModal();
   });
+  modal?.addEventListener("click", (e) => e.stopPropagation());
+  modal?.addEventListener("mousedown", (e) => e.stopPropagation());
   root.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeModal));
+  root.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", (e) => e.preventDefault());
+  });
+  requestAnimationFrame(() => {
+    const auto = modal?.querySelector("[autofocus], [data-autofocus]");
+    const focusable = auto || modal?.querySelector(
+      'input:not([type="hidden"]):not([disabled]):not([readonly]), textarea:not([disabled]), select:not([disabled])'
+    );
+    focusable?.focus();
+  });
 }
 
 function setUserInfo(username, role) {
@@ -1285,6 +1300,11 @@ function applyChangesButtonVisibility() {
   if (usersBtn) usersBtn.classList.toggle("hidden", !isUserManager());
   const accessBtn = document.getElementById("nav-access-control");
   if (accessBtn) accessBtn.classList.toggle("hidden", state.user?.canManageAccessControl !== true);
+  const salesPermsBtn = document.getElementById("nav-sales-permissions");
+  const salesColsBtn = document.getElementById("nav-sales-log-columns");
+  const showSalesAdmin = state.user?.canManageSalesFieldPermissions === true || ["admin", "ceo", "rtm", "hr"].includes(state.user?.role);
+  if (salesPermsBtn) salesPermsBtn.classList.toggle("hidden", !showSalesAdmin);
+  if (salesColsBtn) salesColsBtn.classList.toggle("hidden", !showSalesAdmin);
   const payrollPages = ["payroll", "loans", "salaries"];
   const showPayroll = state.user?.canViewPayroll === true || ["admin", "ceo", "hr", "finance"].includes(state.user?.role);
   payrollPages.forEach((page) => {
@@ -5067,68 +5087,14 @@ async function renderSettings(root) {
   }).catch(() => {});
 }
 
-async function renderUsers(root) {
-  if (!isUserManager()) {
-    root.innerHTML = `<div class="alert alert-warn">This view is restricted to the system administrator.</div>`;
-    return;
-  }
+function usersStatusBadge(status) {
+  const s = (status || "active").toLowerCase();
+  const cls = s === "active" ? "badge-ok" : s === "terminated" ? "badge-out" : "badge-warn";
+  return `<span class="badge ${cls}">${status}</span>`;
+}
 
-  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false, q: "", unit: "", team: "", role: "" };
-  const data = await api("/admin/users");
-  let users = data.users || [];
-  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
-  const statuses = data.statuses || ["active", "inactive", "terminated"];
-  const unitOptions = data.units || [];
-  const teamOptions = data.teams || [];
-
-  if (state.usersFilter.status === "inactive") {
-    users = users.filter((u) => (u.status || "").toLowerCase() === "inactive");
-  } else if (state.usersFilter.status === "active") {
-    users = users.filter((u) => (u.status || "active").toLowerCase() === "active");
-  } else if (state.usersFilter.status === "no-login") {
-    users = users.filter((u) => !u.employeeId);
-  }
-  if (state.usersFilter.unit) {
-    users = users.filter((u) => String(u.employeeUnit || "") === state.usersFilter.unit);
-  }
-  if (state.usersFilter.team) {
-    users = users.filter((u) => String(u.employeeTeam || "") === state.usersFilter.team);
-  }
-  if (state.usersFilter.role) {
-    users = users.filter((u) => String(u.role || "").toLowerCase() === state.usersFilter.role);
-  }
-
-  const searchQ = String(state.usersFilter.q || "").trim().toLowerCase();
-  if (searchQ) {
-    users = users.filter((u) => {
-      const hay = [u.username, u.employeeId, u.employeeName, u.email, u.employeeTeam, u.employeeUnit, u.role]
-        .map((x) => String(x || "").toLowerCase())
-        .join(" ");
-      return hay.includes(searchQ);
-    });
-  }
-
-  const sortKey = state.usersFilter.sort || "name";
-  users.sort((a, b) => {
-    if (sortKey === "lastLogin") {
-      return String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""));
-    }
-    if (sortKey === "lastEdit") {
-      return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
-    }
-    const an = (a.employeeName || a.username || "").toLowerCase();
-    const bn = (b.employeeName || b.username || "").toLowerCase();
-    return an.localeCompare(bn);
-  });
-
-  const statusBadge = (status) => {
-    const s = (status || "active").toLowerCase();
-    const cls =
-      s === "active" ? "badge-ok" : s === "terminated" ? "badge-out" : "badge-warn";
-    return `<span class="badge ${cls}">${status}</span>`;
-  };
-
-  const renderRow = (u) => `<tr>
+function usersTableRowHtml(u) {
+  return `<tr>
     <td><strong>${escapeHtml(u.username)}</strong>
       ${u.hasExceptionAccess ? '<br><span class="badge badge-warn" style="font-size:.65rem">Exception access</span>' : ""}
       ${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
@@ -5138,7 +5104,7 @@ async function renderUsers(root) {
     <td class="muted">${u.employeeTeam ? escapeHtml(u.employeeTeam) : "—"}</td>
     <td class="muted">${u.email ? escapeHtml(u.email) : "—"}</td>
     <td><span class="badge badge-status">${escapeHtml(u.role || "—")}</span></td>
-    <td>${statusBadge(u.status)}</td>
+    <td>${usersStatusBadge(u.status)}</td>
     <td class="muted">${u.lastLoginAt ? timeAgo(u.lastLoginAt) : "—"}</td>
     <td class="muted">${u.updatedAt ? timeAgo(u.updatedAt) : "—"}</td>
     <td class="flex-between" style="gap:.35rem;justify-content:flex-end">
@@ -5160,9 +5126,42 @@ async function renderUsers(root) {
       }
     </td>
   </tr>`;
+}
+
+function buildUsersTableBody(allUsers, filter) {
+  let users = [...(allUsers || [])];
+  if (filter.status === "inactive") {
+    users = users.filter((u) => (u.status || "").toLowerCase() === "inactive");
+  } else if (filter.status === "active") {
+    users = users.filter((u) => (u.status || "active").toLowerCase() === "active");
+  } else if (filter.status === "no-login") {
+    users = users.filter((u) => !u.employeeId);
+  }
+  if (filter.unit) users = users.filter((u) => String(u.employeeUnit || "") === filter.unit);
+  if (filter.team) users = users.filter((u) => String(u.employeeTeam || "") === filter.team);
+  if (filter.role) users = users.filter((u) => String(u.role || "").toLowerCase() === filter.role);
+
+  const searchQ = String(filter.q || "").trim().toLowerCase();
+  if (searchQ) {
+    users = users.filter((u) => {
+      const hay = [u.username, u.employeeId, u.employeeName, u.email, u.employeeTeam, u.employeeUnit, u.role]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" ");
+      return hay.includes(searchQ);
+    });
+  }
+
+  const sortKey = filter.sort || "name";
+  users.sort((a, b) => {
+    if (sortKey === "lastLogin") return String(b.lastLoginAt || "").localeCompare(String(a.lastLoginAt || ""));
+    if (sortKey === "lastEdit") return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+    const an = (a.employeeName || a.username || "").toLowerCase();
+    const bn = (b.employeeName || b.username || "").toLowerCase();
+    return an.localeCompare(bn);
+  });
 
   let tableBody;
-  if (state.usersFilter.groupTeam) {
+  if (filter.groupTeam) {
     const groups = new Map();
     for (const u of users) {
       const team = u.employeeTeam || "(No team)";
@@ -5172,12 +5171,108 @@ async function renderUsers(root) {
     tableBody = [...groups.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(
-        ([team, list]) => `<tr class="users-group-row"><td colspan="11"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(renderRow).join("")}`
+        ([team, list]) =>
+          `<tr class="users-group-row"><td colspan="11"><strong>${escapeHtml(team)}</strong> <span class="muted">(${list.length})</span></td></tr>${list.map(usersTableRowHtml).join("")}`
       )
       .join("");
   } else {
-    tableBody = users.map(renderRow).join("");
+    tableBody = users.map(usersTableRowHtml).join("");
   }
+  return { tableBody, searchQ, sortKey };
+}
+
+function bindUsersTableActions(root) {
+  const data = root.__usersData;
+  if (!data) return;
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
+  const statuses = data.statuses || ["active", "inactive", "terminated"];
+  const users = data.users || [];
+  root.querySelectorAll("[data-activate-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const user = users.find((u) => u.username === btn.dataset.activateUser);
+      openActivateUserModal({ roles, user });
+    });
+  });
+  root.querySelectorAll("[data-edit-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const user = users.find((u) => u.username === btn.dataset.editUser);
+      openUserFormModal({ roles, statuses, user });
+    });
+  });
+  root.querySelectorAll("[data-delete-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.deleteUser;
+      openConfirmModal({
+        title: "Remove user",
+        message: `Remove user "${username}"? They will no longer be able to sign in.`,
+        confirmLabel: "Remove",
+        danger: true,
+        onConfirm: async () => {
+          await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+          showSaveIndicator("User removed", "saved");
+          render();
+        },
+      });
+    });
+  });
+  root.querySelectorAll("[data-purge-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.purgeUser;
+      openConfirmModal({
+        title: "Remove user and release ID",
+        message: `Permanently remove login for "${username}" and release their employee ID for reuse? Payroll and sales history will be kept under a DEL-… placeholder record.`,
+        confirmLabel: "Remove & release ID",
+        danger: true,
+        onConfirm: () => {
+          openConfirmModal({
+            title: "Confirm purge",
+            message: "This cannot be undone. The app ID will be freed immediately.",
+            confirmLabel: "Yes, purge",
+            danger: true,
+            onConfirm: async () => {
+              const res = await api(`/admin/users/${encodeURIComponent(username)}/purge`, { method: "POST", body: "{}" });
+              showSaveIndicator(
+                res.releasedAppId ? `Purged — ID ${res.releasedAppId} released` : "User purged",
+                "saved"
+              );
+              render();
+            },
+          });
+        },
+      });
+    });
+  });
+}
+
+function updateUsersTable(root) {
+  const data = root.__usersData;
+  if (!data) return;
+  const { tableBody, searchQ } = buildUsersTableBody(data.users || [], state.usersFilter);
+  const tbody = root.querySelector("#users-tbody");
+  if (tbody) {
+    tbody.innerHTML =
+      tableBody ||
+      `<tr><td colspan="11" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`;
+  }
+  bindUsersTableActions(root);
+}
+
+async function renderUsers(root) {
+  if (!isUserManager()) {
+    root.innerHTML = `<div class="alert alert-warn">This view is restricted to the system administrator.</div>`;
+    return;
+  }
+
+  state.usersFilter = state.usersFilter || { status: "", sort: "name", groupTeam: false, q: "", unit: "", team: "", role: "" };
+  const data = await api("/admin/users");
+  root.__usersData = data;
+  let users = data.users || [];
+  const roles = data.roles || ["ceo", "admin", "hr", "finance", "op", "tl", "quality", "rtm", "public_relations", "office_assistant", "agent"];
+  const statuses = data.statuses || ["active", "inactive", "terminated"];
+  const unitOptions = data.units || [];
+  const teamOptions = data.teams || [];
+
+  const { tableBody, searchQ, sortKey } = buildUsersTableBody(users, state.usersFilter);
 
   let pendingRegHtml = "";
   if (state.user?.canApproveRegistration) {
@@ -5264,7 +5359,7 @@ async function renderUsers(root) {
       <thead><tr>
         <th>Username</th><th>Employee ID</th><th>Name</th><th>Unit</th><th>Team</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th>Last edit</th><th></th>
       </tr></thead>
-      <tbody>${tableBody || `<tr><td colspan="11" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`}
+      <tbody id="users-tbody">${tableBody || `<tr><td colspan="11" class="muted">${searchQ ? "No users match your search" : "No users match this filter"}</td></tr>`}
       </tbody>
     </table></div>`;
 
@@ -5279,32 +5374,38 @@ async function renderUsers(root) {
   };
   root.querySelector("#users-filter-status").onchange = (e) => {
     state.usersFilter.status = e.target.value;
-    renderUsers(root);
+    updateUsersTable(root);
   };
-  const usersSearchRun = debounce(() => renderUsers(root));
   root.querySelector("#users-search")?.addEventListener("input", (e) => {
     state.usersFilter.q = e.target.value;
-    usersSearchRun();
+    updateUsersTable(root);
+  });
+  root.querySelector("#users-search")?.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.target.value = "";
+      state.usersFilter.q = "";
+      updateUsersTable(root);
+    }
   });
   root.querySelector("#users-sort").onchange = (e) => {
     state.usersFilter.sort = e.target.value;
-    renderUsers(root);
+    updateUsersTable(root);
   };
   root.querySelector("#users-group-team").onchange = (e) => {
     state.usersFilter.groupTeam = e.target.checked;
-    renderUsers(root);
+    updateUsersTable(root);
   };
   root.querySelector("#users-filter-unit")?.addEventListener("change", (e) => {
     state.usersFilter.unit = e.target.value;
-    renderUsers(root);
+    updateUsersTable(root);
   });
   root.querySelector("#users-filter-team")?.addEventListener("change", (e) => {
     state.usersFilter.team = e.target.value;
-    renderUsers(root);
+    updateUsersTable(root);
   });
   root.querySelector("#users-filter-role")?.addEventListener("change", (e) => {
     state.usersFilter.role = e.target.value;
-    renderUsers(root);
+    updateUsersTable(root);
   });
   root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -5330,63 +5431,7 @@ async function renderUsers(root) {
     });
   });
   root.querySelector("#add-user-btn").onclick = () => openUserFormModal({ roles, statuses });
-  root.querySelectorAll("[data-activate-user]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const username = btn.dataset.activateUser;
-      const user = users.find((u) => u.username === username);
-      openActivateUserModal({ roles, user });
-    });
-  });
-  root.querySelectorAll("[data-edit-user]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const username = btn.dataset.editUser;
-      const user = users.find((u) => u.username === username);
-      openUserFormModal({ roles, statuses, user });
-    });
-  });
-  root.querySelectorAll("[data-delete-user]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const username = btn.dataset.deleteUser;
-      openConfirmModal({
-        title: "Remove user",
-        message: `Remove user "${username}"? They will no longer be able to sign in.`,
-        confirmLabel: "Remove",
-        danger: true,
-        onConfirm: async () => {
-          await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
-          showSaveIndicator("User removed", "saved");
-          render();
-        },
-      });
-    });
-  });
-  root.querySelectorAll("[data-purge-user]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const username = btn.dataset.purgeUser;
-      openConfirmModal({
-        title: "Remove user and release ID",
-        message: `Permanently remove login for "${username}" and release their employee ID for reuse? Payroll and sales history will be kept under a DEL-… placeholder record.`,
-        confirmLabel: "Remove & release ID",
-        danger: true,
-        onConfirm: () => {
-          openConfirmModal({
-            title: "Confirm purge",
-            message: "This cannot be undone. The app ID will be freed immediately.",
-            confirmLabel: "Yes, purge",
-            danger: true,
-            onConfirm: async () => {
-              const res = await api(`/admin/users/${encodeURIComponent(username)}/purge`, { method: "POST", body: "{}" });
-              showSaveIndicator(
-                res.releasedAppId ? `Purged — ID ${res.releasedAppId} released` : "User purged",
-                "saved"
-              );
-              render();
-            },
-          });
-        },
-      });
-    });
-  });
+  bindUsersTableActions(root);
 }
 
 function openActivateUserModal({ roles, user }) {
@@ -5677,6 +5722,8 @@ async function render() {
     costs: "Loading costs…",
     "team-dashboard": "Loading team dashboards…",
     "loan-approvals": "Loading loan approvals…",
+    "sales-permissions": "Loading sales permissions…",
+    "sales-log-columns": "Loading log columns…",
   };
   if (!appReady) {
     root.innerHTML = pageSkeleton(labels[page] || "Loading…");
@@ -5723,6 +5770,16 @@ async function render() {
         escapeHtml, openModal, closeModal, refreshStatus, showSaveIndicator,
       });
     }
+    else if (page === "sales-permissions" && window.SalesPermissionsPages) {
+      await window.SalesPermissionsPages.renderSalesFieldPermissionsPage(root, api, {
+        escapeHtml, openModal, closeModal, showSaveIndicator,
+      });
+    }
+    else if (page === "sales-log-columns" && window.SalesPermissionsPages) {
+      await window.SalesPermissionsPages.renderSalesLogColumnsPage(root, api, {
+        escapeHtml, showSaveIndicator,
+      });
+    }
     else if (page === "sales" && window.SalesModule) {
       await window.SalesModule.renderSalesPage(root, api, state, {
         monthLabel, escapeHtml, fmt, bindMonthNav, monthToolbar, openModal, closeModal, downloadFile,
@@ -5745,13 +5802,15 @@ async function render() {
     }
     if (stale()) return;
     appReady = true;
-    root.classList.remove("page-loading");
     root.classList.add("page-ready");
   } catch (e) {
     if (stale()) return;
-    root.classList.remove("page-loading");
     root.classList.remove("page-ready");
     renderErrorCard(root, e?.message || "Something went wrong loading this page.", () => render());
+  } finally {
+    if (gen === renderGeneration && state.page === page) {
+      root.classList.remove("page-loading");
+    }
   }
 }
 

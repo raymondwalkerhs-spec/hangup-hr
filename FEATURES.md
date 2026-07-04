@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.3.13 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.4.1 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -225,16 +225,27 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Action Plan Week** (formerly AIP) · lifecycle modals  
 - **Payroll** hide zero net · **Nationality** dropdown + aliases  
 
-## Sales (1.0.5+; MLA-Ray 1.0.9-beta.5+)
+## Sales (1.4.1)
 
-- Per-sale records with **dynamic MLA-Ray form** (device types, customer fields)
-- **Field-level permissions** — admin matrix controls which roles see/edit each field
-- **Supabase attachments** (1.3.1+) — recordings and confirmations in Storage; signed share links (~7 days, refresh via Share link)
-- **Export** (1.3.0+) — CSV, Excel, or PDF for current filters or one sale
+Full reference: [`SALES_LOG.md`](SALES_LOG.md)
+
+- Per-sale records with **dynamic MLA-Ray form** (all fields in `form_data`)
+- **Log columns** — admin enables any catalog field + Day/Time/Agent/Closer/Customer columns; intersected with role view ACL
+- **Advanced filter** — AND/OR/NOT rules; dropdown values for IDs, clients, teams, statuses; logic shown only with 2+ rules
+- **Toolbar filters** — Client, Agent, Closer, Status on day/week/month views
+- **Working day** — sales until 1 AM Cairo → previous day; Day + Time columns; payroll `sales_count` auto-recalc
+- **Bank payment fields** — routing, bank name, account number, address, who chose bank account
+- **Verifier feedback** / **Client feedback** — dropdowns with role-based edit (verifier assignee; RTM/Admin override)
+- **Sales permissions** page — field view/edit matrix per role group
+- **Log columns** page — enable/disable list columns (separate from Access Control)
+- **Field-level permissions** — main view, quality ticket, edit surfaces
+- **Supabase attachments** — recordings and confirmations; signed share links
+- **Export** — CSV, Excel, or PDF for filtered list or single sale
 - Statuses: **passed**, **pending**, **postdated**, **denied**, **callback**
-- TL/OP submissions require RTM/HR/quality/admin approval
-- Weekly dashboard on **Sales** page and dashboard widget
-- Role-scoped visibility + optional cross-team grants from OP/RTM
+- TL/OP submissions; quality/RTM/HR/admin approval workflow
+- Role-scoped visibility + optional cross-team grants
+
+## Sales (legacy 1.0.5–1.4.0 notes)
 
 ## Bonus approval (1.0.5)
 

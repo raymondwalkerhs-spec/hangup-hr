@@ -527,8 +527,10 @@ body {
 .main-content { flex: 1; padding: 1.5rem 2rem; overflow: auto; max-width: 1600px; }
 .main-content.page-loading {
   opacity: 0.82;
-  pointer-events: none;
   transition: opacity 0.12s ease;
+}
+.main-content.page-loading .table-wrap {
+  pointer-events: none;
 }
 .main-content .page-header .btn,
 .main-content .toolbar .btn {
@@ -699,11 +701,12 @@ tr.clickable { cursor: pointer; }
 .alert-danger { background: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4; }
 [data-theme="dark"] .alert-danger { background: #3b1212; color: #fca5a5; border: 1px solid #7f1d1d; }
 
+#modal-root { position: relative; z-index: 5000; }
 .modal-backdrop {
   position: fixed; inset: 0;
   background: var(--modal-backdrop);
   display: grid; place-items: center;
-  z-index: 100;
+  z-index: 5000;
   padding: 1rem;
 }
 .modal {

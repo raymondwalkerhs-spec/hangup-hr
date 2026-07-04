@@ -142,10 +142,9 @@ window.AccessControlModule = (function () {
       <div class="page-header flex-between">
         <div>
           <h1>Access Control</h1>
-          <p class="muted">Choose a role, then set what that role may do. Per-user exceptions are on the Users page.</p>
+          <p class="muted">Choose a role, then set what that role may do. Per-user exceptions are on the Users page. Sales field and log column settings are under <strong>Sales permissions</strong> and <strong>Log columns</strong> in the sidebar.</p>
         </div>
         <div class="btn-row">
-          <button class="btn btn-sm" id="rbac-sales-perms" type="button">Sales column permissions</button>
           <button class="btn btn-sm" id="rbac-reset-role" type="button">Reset role to defaults</button>
           <button class="btn btn-primary" id="rbac-save" type="button" disabled>Save changes</button>
         </div>
@@ -211,14 +210,6 @@ window.AccessControlModule = (function () {
         helpers.showSaveIndicator?.("Role reset to defaults");
       } catch (e) {
         alert(e.message);
-      }
-    });
-
-    root.querySelector("#rbac-sales-perms")?.addEventListener("click", () => {
-      if (window.SalesModule?.openSalesPermissionsModal) {
-        window.SalesModule.openSalesPermissionsModal(api, helpers, () => {});
-      } else {
-        alert("Sales module not loaded.");
       }
     });
   }

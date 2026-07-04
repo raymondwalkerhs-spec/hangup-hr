@@ -4,12 +4,13 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.4.0`
+**Current version:** `1.4.1`
 
 | Document | Purpose |
 |----------|---------|
 | [`TUTORIAL.md`](TUTORIAL.md) | Day-to-day user guide |
 | [`FEATURES.md`](FEATURES.md) | Feature overview (presentation-style) |
+| [`SALES_LOG.md`](SALES_LOG.md) | **Sales log, filters, bank fields, permissions** |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 | [`UPDATES.md`](UPDATES.md) | **Installer vs GitHub in-app updates** |
 | [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Redirect → [`DB_SCHEMA.md`](DB_SCHEMA.md) |

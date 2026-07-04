@@ -3,9 +3,10 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.3.13`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.4.1`
 
-For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).
+For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
+For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
 
 ---
 
@@ -42,9 +43,12 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | **Costs** | Expenses, petty cash, monthly bills *(finance + HR submit)* |
 | **Requests** | Annual, unpaid, medical, and same-day off (replaces Leave) |
 | **Equipment** | Company asset registry |
-| **Organization** | Reporting structure (read-only) |
+| **Organization** | Unit → team → agent; OP/TL assignment; registrations |
 | **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, **break schedules**, refresh |
-| **Sales** | MLA-Ray catalog form, approvals, field-level permissions *(admin matrix)* |
+| **Sales** | Sales log, add/edit sale, quality tickets, exports |
+| **Sales permissions** | Field view/edit matrix *(Admin / RTM / HR)* |
+| **Log columns** | Which columns show on Sales log *(Admin / RTM / HR)* |
+| **Access Control** | App-wide role permissions *(Admin)* |
 | **Users** | App logins *(Raymond only)* — activate inactive employees |
 | **Changes** | Full audit log + CSV export *(Admin / CEO)* |
 
@@ -210,22 +214,23 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 
 - **New agents** can register from the login screen with today's PIN (ask OP/HR/Quality).
 - **HR** adds agents with optional **4-week training program** (Mon–Fri phases, sales count per phase).
-- **Organization** page: assign OP/TL, approve registrations, view daily PIN.
+- **Organization** page: assign OP/TL, add/edit teams, approve registrations, view daily PIN.
 
-### Sales (1.0.5+; MLA-Ray form 1.0.9-beta.5+)
+### Sales (1.4.1)
 
-- **TL/OP add sale:** Pick **client**, **device**, and **price** from the catalog (required when RTM/Admin configured clients in Settings).
-- Quality ticket: listen inline, download, or **Share link** (signed Supabase URL, ~7 days — click Share again to refresh).
-- **Export:** Use the format dropdown + **Export list** for current filters, or **Export** on a row for one sale (CSV / Excel / PDF).
-- **Edit sale:** Agent and closer are fixed (shown read-only); set them when creating the sale.
-- Month view filters by **submission date** (not billing/effective date).
-- Quality/RTM can toggle which units (HS-1/2/3) appear in the log.
-- Statuses: **passed**, **pending**, **postdated**, **denied**, **callback** — approve/deny/callback (quality/RTM/HR/admin).
-- **Admin → Sales field permissions** — per-role visibility for form fields.
-- **Attachments:** Download, delete, replace, or **Share link** from the sale form. Files live in **Supabase Storage** (`sales-attachments/…`). Legacy Dropbox files must be migrated once: `npm run migrate:sale-attachments` (valid `DROPBOX_ACCESS_TOKEN` in `.env`).
-- **Break reminders:** Popup when a scheduled break starts (dismiss for this session).
-- **Dashboard** shows weekly passed/pending counts.
-- Agents see own sales only; TL sees team; OP sees unit; quality/RTM/HR see company.
+See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
+
+- **Toolbar:** filter by **Client**, **Agent**, **Closer**, and **Status** (day/week/month).
+- **Advanced filter:** add rules; pick AND/OR/NOT when you have two or more rules; employee/client dropdowns for ID fields.
+- **Add sale:** catalog client/device/price; unit → team → agent; bank or card payment fields.
+- **Bank account:** routing number, bank name, account number, address, who chose bank account.
+- **Edit / Quality ticket:** **Verifier feedback** and **Client feedback** are dropdowns (see SALES_LOG for who may edit).
+- **Export:** format dropdown + **Export list**, or row **Export** (CSV / Excel / PDF).
+- **Admin:** **Sales permissions** (field ACL) and **Log columns** (which columns appear) — run **Reset defaults** once after upgrade, then Save.
+- Attachments in Supabase Storage; **Share link** for signed URLs (~7 days).
+- Agents see own sales; TL team; OP unit; quality/RTM/HR see company (plus unit toggles for quality roles).
+
+### Sales (legacy notes)
 
 ### Costs
 - **Costs** nav (finance: Mark, Phoebe, Raymond, finance role; HR can submit).
@@ -281,3 +286,4 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **All features:** [`FEATURES.md`](FEATURES.md)  
 - **Database layout:** [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md)  
 - **Release notes:** [`CHANGELOG.md`](CHANGELOG.md)
+- **Sales log reference:** [`SALES_LOG.md`](SALES_LOG.md)
