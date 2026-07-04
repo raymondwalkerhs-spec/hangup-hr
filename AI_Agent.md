@@ -12,7 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.3.13` (`package.json` → `version`)
+- **Current version:** `1.4.1` (`package.json` → `version`)
+- **Previous:** `1.4.0` (sales log overhaul), `1.3.13` (notifications)
 
 ---
 
@@ -55,6 +56,9 @@ to Supabase via Express, then re-sync.
 | Area | Paths |
 |------|--------|
 | UI | `public/index.html`, `public/login.html`, `public/js/app.js`, `public/js/theme.js`, `public/css/app.css` |
+| Sales UI | `public/js/sales.js`, `public/js/sales-permissions-pages.js`, `public/js/sales-config-breaks.js` |
+| Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js` |
+| Access Control UI | `public/js/access-control.js`, `lib/permission-catalog.js`, `lib/role-permissions.js` |
 | API | `routes/api.js`, `routes/admin-users.js`, `app.js` (Express entry) |
 | Data layer | `lib/data-store.js`, `lib/backend.js`, `lib/supabase-repo.js`, `lib/cache.js` |
 | Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js` |
@@ -65,6 +69,7 @@ to Supabase via Express, then re-sync.
 | Electron | `electron/main.js`, `electron/preload.js` |
 | Build | `scripts/build.ps1`, `package.json` → `build` section |
 | Migrations | `supabase/migrations/`, Supabase MCP `apply_migration` / `execute_sql` |
+| Docs (user + agent) | `TUTORIAL.md`, `FEATURES.md`, `SALES_LOG.md`, `CHANGELOG.md`, `UPDATES.md`, `AI_Agent.md` |
 | Env template | `.env.example` (never commit real `.env` or secret keys) |
 
 **Naming trap:** `lib/supabase-client.js` is the client module — not `lib/supabase.js` (folder conflict).
@@ -82,9 +87,12 @@ to Supabase via Express, then re-sync.
 
 ## UI conventions
 
-- **Employee pickers:** Any field representing a person (agent, closer, reviewer, verifier, approver) must use a **dropdown** from `employees` — never free-text names in UI.
-- **Sales edit:** Agent and closer are **read-only** after creation; reviewer and verifier use employee dropdowns.
-- **Sales month view:** Filter by agent and/or closer via toolbar dropdowns.
+- **Employee pickers:** Any field representing a person (agent, closer, reviewer, verifier, bank-account chooser) must use a **dropdown** from `employees` — never free-text IDs in UI.
+- **Sales edit:** Agent and closer are **read-only** after creation; reviewer, verifier, and bank-account chooser use employee dropdowns.
+- **Sales toolbar filters (1.4.1+):** Client, Agent, Closer, Status on day/week/month views.
+- **Advanced filter:** Value dropdowns for employee/client/team/status fields; AND/OR/NOT logic only when 2+ rules.
+- **Modals:** `openModal()` auto-focuses first input; closes mobile sidebar; z-index 5000.
+- **Page load:** Search/toolbar inputs stay clickable during `page-loading` (only tables are temporarily non-interactive).
 
 ---
 
@@ -102,12 +110,15 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 3. `20260708_finance_hr_attendance.sql`
 4. `20260709_v109b5_sprint.sql` — payroll_exempt, sales form_data, field permissions, attachments
 5. `20260710_v110_relations.sql` — unified employee relations
-6. `20260711_v112_clients_breaks.sql` — sales clients/products/prices, break schedules, settings revision
+6. `20260711_v112_clients_breaks.sql` — sales clients/products/prices, break schedules
 7. `20260712_org_registration.sql` — agent self-registration, daily PIN, org unit managers
 8. `20260713_agent_training_phases.sql` — 4-week agent training program
 9. `20260714_registration_identity_training.sql` — national ID, passport, training_passed
 10. `20260715_rbac_payslip_grants.sql` — payslip_visible_to_agent, sales grant expires_at
 11. `20260716_app_role_permissions.sql` — admin Access Control overrides
+12. `20260717_app_user_permissions.sql` — per-user exception permissions
+13. `20260718_notifications_quality_notes.sql` — notifications, quality notes split
+14. `20260719_v140_sales_org_dashboards.sql` — working day, list columns, sales action permissions, team dashboards
 
 See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 
@@ -132,7 +143,7 @@ Central helpers in `lib/roles.js`; flags on `GET /status` → `applyChangesButto
 
 API: `GET /rbac/catalog`, `GET /rbac/overrides`, `PUT /rbac/overrides`, `POST /rbac/reset` (admin/ceo only).
 
-Sales column permissions remain in `sales_field_permissions` (linked from Access Control page).
+Sales field permissions remain in `sales_field_permissions` — managed on **Sales permissions** sidebar page (not Access Control). Log column enable/disable on **Log columns** page. Full reference: [`SALES_LOG.md`](SALES_LOG.md).
 
 | Role | Employees | Org edit | Sales | Payslip | Equipment |
 |------|-----------|----------|-------|---------|-----------|
@@ -140,7 +151,9 @@ Sales column permissions remain in `sales_field_permissions` (linked from Access
 | **TL** | Team roster read-only; no edit others | View | Team scope; OP can grant 24h wider view | — | View |
 | **OP** | Unit roster | View | Unit scope; grant temp visibility | — | View |
 | **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | View |
-| **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + column permissions (RTM/admin) | Full + release to agent | Full |
+| **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + **Sales permissions** / **Log columns** pages (RTM/admin/hr) | Full + release to agent | Full |
+
+**Sales admin pages (1.4.1+):** sidebar **Sales permissions** (field view/edit matrix) and **Log columns** (which columns appear). Visible when `canManageSalesFieldPermissions` or role admin/ceo/rtm/hr.
 
 **Notes:** HR/admin read employee warnings; TL/OP/quality/RTM can add notes without reading list.
 
@@ -155,23 +168,32 @@ Sales column permissions remain in `sales_field_permissions` (linked from Access
 
 ---
 
-## Sales log rules
+## Sales log rules (v1.4.0+ / v1.4.1)
 
-- Month view: **submission date only** (`dateBasis=submission`)
-- Quality/RTM: unit toggles HS-1/2/3 (default all on)
-- **Sales catalog (Settings):** RTM + Admin only — clients, devices, price tiers, break schedules
-- **TL/OP submit:** When catalog has active clients, must select client + device + price (UI + server `validateAndResolveCatalogSale`)
-- **Sale attachments (1.3.1+):** Upload/play/download via **Supabase Storage** only — no Dropbox in the app. **Share link** = signed URL (regenerate anytime; ~7 days validity).
-- **Legacy Dropbox files:** One-time migration before wide rollout:
+Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
+
+| Topic | Rule |
+|-------|------|
+| **Working day** | Until **1 AM Cairo** counts on previous day; list uses `dateBasis=workingDay` |
+| **List columns** | All catalog fields + Day/Time/Agent/Closer/Customer — admin enables on **Log columns** page; visibility ∩ field view ACL |
+| **Toolbar filters** | Client, Agent, Closer, Status (all periods) |
+| **Advanced filter** | AND/OR/NOT when 2+ rules; employee/client dropdowns for ID fields; persisted in `localStorage` |
+| **Add sale** | Unit → team → agent cascade; closer company-wide; catalog client/device/price when configured |
+| **Bank payment** | routing number, bank name, account number, address, who chose bank account (required fields when Bank account) |
+| **Verifier feedback** | Dropdown; assigned verifier + RTM/Admin override |
+| **Client feedback** | Dropdown; RTM/Admin edit only |
+| **Quality/RTM** | Unit toggles HS-1/2/3 on log |
+| **Attachments** | Supabase Storage `sales-attachments/{saleId}/…`; signed share URLs ~7 days |
+| **Export** | CSV / Excel / PDF |
+| **Payroll link** | Sale create/update recalcs agent `sales_count` for working-day month |
+
+Legacy scripts:
 
 ```powershell
-# Needs fresh DROPBOX_ACCESS_TOKEN (files.content.read) in .env — token expires quickly
-npm run migrate:sale-attachments
+npm run migrate:sale-attachments   # Dropbox → Supabase (one-time)
+node scripts/repair-backend-teams.js
+node scripts/backfill-sales-working-day.js
 ```
-
-Script: `scripts/migrate-sale-attachments-to-supabase.js` — downloads from Dropbox paths in DB, uploads to `sales-attachments/…`, updates `sales_attachments` rows.
-- **Sales export (1.3.0+):** CSV / Excel / PDF from Sales log (filtered list or single sale).
-- Device fix from `Asset/Sales All Data.csv`: `node scripts/fix-sale-devices-from-csv.js`
 
 ---
 
@@ -253,6 +275,7 @@ Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('.
    - `CHANGELOG.md` — move `[Unreleased]` → new version section with date
    - `TUTORIAL.md` — user-facing changes
    - `FEATURES.md` — presentation-style feature overview (update when major features ship)
+   - `SALES_LOG.md` — when sales log / filters / permissions change
    - `README.md` — architecture / deploy / version notes
    - `AI_Agent.md` — if workflows, versions, or architecture changed
 4. **Update live `app_versions` in Supabase** (required — do not skip):
@@ -261,6 +284,18 @@ Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('.
 cd "F:\download app hr"   # or your repo root
 node scripts/publish-app-version.js --notes "One-line release notes"
 ```
+
+**1.4.0 → 1.4.1 example (minor — optional in-app update, no force block):**
+
+```powershell
+node scripts/publish-app-version.js --version 1.4.1 --notes "Sales log columns, filters, bank fields, permissions pages, org/search fixes"
+.\scripts\build.ps1 all
+npm run package:github -- --full
+npm run verify:update -- dist\Hangup-Portal-1.4.1-win-x64-full.zip
+.\scripts\publish-github-release.ps1 -IncludeFull
+```
+
+Users on **1.4.0** see **Update now** via GitHub Releases check (~5 min + on login). No `--field-breaking` needed unless old EXEs break on new API shapes.
 
 | Release kind | When to use | Command |
 |--------------|-------------|---------|
@@ -375,24 +410,15 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.3.1** | **true** | Supabase-only sale attachments; migrate script; multi-version GitHub patches |
-| 1.3.0 | false | Sales export; catalog validation; quality audio; registration identity |
-| 1.2.5 | false | Updater integrity |
-| 1.2.4 | false | Permanent updater fix (safe zip + ASAR checksums); training program; org/registration |
-| 1.2.3 | false | Org hierarchy, agent registration, sales date filter, device CSV fix |
-| 1.2.2 | false | Windows updater Expand-Archive fix (partial — superseded by 1.2.4) |
-| 1.2.0 | false | Sales catalog, break schedules, session ID, Dropbox attachments |
-| 1.0.9-beta.6 | false | 1.0.8-beta.1 | — | UI modals, GitHub updates all users |
-| 1.0.9-beta.1 | false | 1.0.8-beta.1 | 1.0.9-beta.1 | Finance workflow, FP import, loan approval, custom reports |
-| 1.0.8-beta.1 | false | 1.0.7-beta.1 | 1.0.8-beta.1 | Employee identity, promotions revert, nav, field force-update |
-| 1.0.5-beta.1 | false | 1.0.0 | — | Sales, bonus approval, costs/petty cash |
-| 1.0.4-beta.3 | false | 1.0.0 | Nationality, compliance, employee filters |
-| 1.0.4-beta.2 | false | 1.0.0 | HRMS advanced features |
-| 1.0.2-beta.5 | false | 1.0.0 | UI themes |
-| 1.0.2-beta.4 | false | — | prior beta |
-| 1.0.0 | false | — | initial |
+| **1.4.1** | **true** | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
+| 1.4.0 | false | Working day, advanced filter, org/dashboards, sales access surfaces |
+| 1.3.13 | false | Notifications, routing, quality notes, user purge |
+| 1.3.12 | false | Per-tab search, focus fix |
+| 1.3.1 | false | Supabase-only sale attachments |
+| 1.3.0 | false | Sales export; catalog validation |
+| *(older)* | false | See `CHANGELOG.md` |
 
-_Update this table when shipping a new version._
+_Update this table when shipping a new version. Confirm live row: `SELECT * FROM app_versions WHERE is_current = true`._
 
 ---
 
@@ -513,4 +539,4 @@ _When user approves an item: note approval date + version target in this table a
 ## Agent doc maintenance
 
 When you change release process, backend, roles, or build output paths, update **this file** in the
-same PR/session as `CHANGELOG.md`, `README.md`, and `FEATURES.md` when features change.
+same PR/session as `CHANGELOG.md`, `README.md`, `SALES_LOG.md`, and `FEATURES.md` when features change.

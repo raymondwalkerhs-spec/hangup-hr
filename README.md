@@ -239,7 +239,7 @@ ON CONFLICT (version) DO UPDATE SET
   notes = EXCLUDED.notes;
 ```
 
-**Live current version:** `1.3.1` — confirm in Supabase `app_versions` after each release.
+**Live current version:** `1.4.1` — confirm in Supabase `app_versions` after each release.
 
 ---
 
