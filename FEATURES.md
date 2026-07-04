@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.4.5 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.4.6 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
