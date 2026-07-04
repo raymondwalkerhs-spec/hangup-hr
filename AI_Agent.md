@@ -13,7 +13,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
 - **Current version:** `1.4.6` (`package.json` → `version`)
-- **Previous:** `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
+- **Previous:** `1.4.5` (reposition / web installer / release CI), `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
 

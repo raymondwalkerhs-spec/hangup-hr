@@ -69,6 +69,18 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 
 ---
 
+## v1.4.6 release checklist
+
+1. Bump `package.json` → `1.4.6`
+2. `git push` then trigger CI: `gh workflow run "Release (update packages)" --ref desktop/1.0.8-beta.1-updates -f tag=v1.4.6`
+3. After CI: `gh release edit v1.4.6 --prerelease=false --latest` — verify **Setup-1.4.6.exe**, full zips, and **patch-from-1.4.5** zips
+4. `node scripts/publish-app-version.js --notes "Sales log PERIOD_LABELS hotfix"`
+5. Optional: `npm run dist:web-installer` for USB bootstrap (downloads Latest Setup from GitHub)
+
+**1.4.6 change:** Sales log hotfix only — patch update from 1.4.5 is sufficient for existing installs.
+
+---
+
 ## v1.3.9 release checklist
 
 1. Bump `package.json` → `1.3.9`

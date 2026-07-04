@@ -229,6 +229,7 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 - **IT role** — full equipment inventory (with HR/Admin); assign on **Users** page and tune in **Access Control** (1.4.4 syncs assignable roles with catalog)
 - **Reposition / app ID (1.4.5)** — HR/IT/RTM moves set correct backend ID pool; optional **Enforce unit / role ID prefix** on Reposition and Change app ID
+- **Sales log (1.4.6)** — fixed blank/error opening Sales log (`PERIOD_LABELS` ReferenceError since 1.4.3)
 - **Attendance** — agents read-only; transport allowance controls HR/Admin only
 - **Bonuses / deductions** — TL bonus source and TL/OP transfer sections restricted by role
 - **Employees** — nationality & compliance fields/filters HR/Admin only (self-view for own record)
