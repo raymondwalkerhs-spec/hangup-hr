@@ -122,6 +122,16 @@ router.delete("/:username/permissions", async (req, res) => {
   }
 });
 
+router.post("/:username/purge", async (req, res) => {
+  try {
+    const username = decodeURIComponent(req.params.username);
+    const result = await usersAdmin.purgeAppUserAndReleaseId(username, req.username);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.delete("/:username", async (req, res) => {
   try {
     const username = decodeURIComponent(req.params.username);

@@ -382,11 +382,102 @@ window.HRSalesConfigBreaks = (function () {
     });
   }
 
-  async function enhanceSaleModal(api, helpers, sale, formRoot, canEditFn, openSaleAttachment) {
+  function teamsForUnit(orgTeams, unit) {
+    const teams = orgTeams || [];
+    if (!unit) return teams.filter((t) => t.dialsSales !== false);
+    return teams.filter((t) => t.unit === unit && t.dialsSales !== false);
+  }
+
+  function unitTeamPickerHtml(orgTeams, employees, sale, escapeHtml) {
+    const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
+    const units = [...new Set(dialingTeams.map((t) => t.unit).filter(Boolean))].sort();
+    const agentId = sale?.agentId || "";
+    const agent = employees.find((e) => e.id === agentId) || {};
+    const defaultUnit = sale?.unit || agent.unit || units[0] || "";
+    const defaultTeam = sale?.team || agent.team || "";
+    const unitOpts = units
+      .map((u) => `<option value="${escapeHtml(u)}" ${defaultUnit === u ? "selected" : ""}>${escapeHtml(u)}</option>`)
+      .join("");
+    const teamOpts = teamsForUnit(dialingTeams, defaultUnit)
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
+      .map((t) => `<option value="${escapeHtml(t.name)}" ${defaultTeam === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`)
+      .join("");
+    return `
+      <fieldset class="card card-flat sale-unit-team" style="grid-column:1/-1">
+        <legend>Unit &amp; team</legend>
+        <div class="field-grid">
+          <label class="field"><span>Unit</span>
+            <select name="unit" id="sale-unit-select" required>
+              <option value="">— Select unit —</option>${unitOpts}
+            </select>
+          </label>
+          <label class="field"><span>Team</span>
+            <select name="team" id="sale-team-select" required>
+              <option value="">— Select team —</option>${teamOpts}
+            </select>
+          </label>
+        </div>
+      </fieldset>`;
+  }
+
+  function wireUnitTeamPicker(form, orgTeams, employees, isEdit) {
+    const unitSel = form.querySelector("#sale-unit-select");
+    const teamSel = form.querySelector("#sale-team-select");
+    const agentSel = form.querySelector('[name="agentId"]');
+    const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
+
+    function refreshTeamOptions(unit, selectedTeam) {
+      if (!teamSel) return;
+      const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
+      const opts = teamsForUnit(dialingTeams, unit)
+        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
+        .map((t) => `<option value="${esc(t.name)}" ${selectedTeam === t.name ? "selected" : ""}>${esc(t.name)}</option>`)
+        .join("");
+      teamSel.innerHTML = `<option value="">— Select team —</option>${opts}`;
+    }
+
+    function applyAgentDefaults() {
+      if (!agentSel || isEdit) return;
+      const agent = employees.find((e) => e.id === agentSel.value);
+      if (!agent) return;
+      if (unitSel && agent.unit) {
+        unitSel.value = agent.unit;
+        refreshTeamOptions(agent.unit, agent.team || "");
+      } else if (agent.team) {
+        refreshTeamOptions(unitSel?.value || "", agent.team);
+        teamSel.value = agent.team;
+      }
+    }
+
+    unitSel?.addEventListener("change", () => {
+      refreshTeamOptions(unitSel.value, "");
+    });
+    agentSel?.addEventListener("change", applyAgentDefaults);
+    if (!isEdit) applyAgentDefaults();
+  }
+
+  async function enhanceSaleModal(api, helpers, sale, employees, formRoot, canEditFn, openSaleAttachment) {
+    const { escapeHtml } = helpers;
     const catalog = await loadCatalog(api).catch(() => ({ clients: [] }));
     const clients = catalog.clients || [];
     const formData = sale?.formData || {};
     const form = formRoot.querySelector("#sale-form") || formRoot;
+
+    const teamsRes = await api("/hrms/teams").catch(() => ({ teams: [] }));
+    const orgTeams = teamsRes.teams || [];
+    if (!sale?.id) {
+      const agentSel = form.querySelector('[name="agentId"]');
+      const currentAgentId = sale?.agentId || agentSel?.value || "";
+      const draftSale = { unit: sale?.unit, team: sale?.team, agentId: currentAgentId };
+      const unitTeamWrap = document.createElement("div");
+      unitTeamWrap.innerHTML = unitTeamPickerHtml(orgTeams, employees || [], draftSale, escapeHtml);
+      const agentField = form.querySelector('[name="agentId"]')?.closest("label");
+      const insertAfter = agentField || form.querySelector(".field");
+      if (insertAfter?.nextSibling) insertAfter.parentNode.insertBefore(unitTeamWrap.firstElementChild, insertAfter.nextSibling);
+      else form.prepend(unitTeamWrap.firstElementChild);
+      wireUnitTeamPicker(form, orgTeams, employees || [], false);
+    }
+
     if (clients.length) {
       const picker = document.createElement("div");
       picker.innerHTML = clientPickerHtml(clients, formData.salesClientId, formData.salesProductId, formData.salesPriceId, formData);
@@ -406,6 +497,13 @@ window.HRSalesConfigBreaks = (function () {
       warn.style.gridColumn = "1 / -1";
       warn.textContent = "No sales clients configured. Contact RTM or Admin to set up clients and devices in Settings.";
       form.prepend(warn);
+    }
+
+    for (const name of ["unit", "team"]) {
+      const legacy = form.querySelector(`[name="${name}"]`);
+      if (legacy?.closest("label") && legacy.closest("label").closest(".sale-unit-team") == null) {
+        legacy.closest("label").style.display = "none";
+      }
     }
 
     const listEl = form.querySelector("#sale-attachments-list");

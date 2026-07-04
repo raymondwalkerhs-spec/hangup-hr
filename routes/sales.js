@@ -11,6 +11,8 @@ const notify = require("../lib/notify-store");
 const notifyRouting = require("../lib/notify-routing");
 const salesFieldAccess = require("../lib/sales-field-access");
 const salesClients = require("../lib/sales-clients-repo");
+const egyptDatetime = require("../lib/egypt-datetime");
+const salesCatalog = require("../lib/sales-field-catalog");
 
 const router = express.Router();
 
@@ -27,6 +29,45 @@ function filterSalesByCompany(sales, employees) {
 
 function enrichSaleAgent(emp) {
   return { team: emp?.team || "", unit: emp?.unit || "" };
+}
+
+async function validateSaleUnitTeam(unit, team) {
+  const u = String(unit || "").trim();
+  const t = String(team || "").trim();
+  if (!u || !t) return { ok: false, error: "Unit and team are required" };
+  const orgTeams = await hrmsRepo.readOrgTeams();
+  const match = (orgTeams || []).find((row) => row.name === t && row.unit === u);
+  if (!match) return { ok: false, error: "Invalid unit/team combination" };
+  if (match.dialsSales === false) return { ok: false, error: "Only dialing teams can be selected" };
+  return { ok: true, unit: u, team: t };
+}
+
+function normalizePaymentMethod(method) {
+  const m = String(method || "").trim().toLowerCase();
+  if (m === "card") return "Card";
+  if (m === "bank account" || m === "bank") return "Bank account";
+  return String(method || "").trim();
+}
+
+function validatePaymentForm(formData) {
+  const fd = formData || {};
+  const method = normalizePaymentMethod(fd.paymentMethod);
+  if (!method) return { ok: false, error: "Payment method is required" };
+  if (method === "Card") {
+    if (!String(fd.cardNumber || "").trim()) return { ok: false, error: "Card number is required when payment method is Card" };
+    if (!String(fd.cardExpDate || "").trim()) return { ok: false, error: "Card expiration is required when payment method is Card" };
+    if (!String(fd.cvv || "").trim()) return { ok: false, error: "CVV is required when payment method is Card" };
+  }
+  return { ok: true, method };
+}
+
+function scrubPaymentForm(formData, method) {
+  const fd = { ...(formData || {}) };
+  fd.paymentMethod = method;
+  if (method === "Bank account") {
+    for (const key of salesCatalog.PAYMENT_CARD_KEYS) delete fd[key];
+  }
+  return fd;
 }
 
 async function notifySaleEvent(sale, type, title, body, extraEmployeeIds = []) {
@@ -338,8 +379,10 @@ router.post("/", async (req, res) => {
   if (!roles.canAccessEmployee(req.userRole, emp) && !salesScope.canApproveSale(req.userRole)) {
     return res.status(403).json({ error: "No access to this agent" });
   }
-  const initialStatus = salesScope.initialSaleStatus(req.userRole.role, status);
-  const geo = enrichSaleAgent(emp);
+  const initialStatus = salesScope.initialSaleStatus(
+    req.userRole.role,
+    salesScope.canApproveSale(req.userRole) ? status : undefined
+  );
   try {
     const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
       req.body.formData || req.body,
@@ -347,10 +390,20 @@ router.post("/", async (req, res) => {
       { create: true }
     );
     const payload = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
+    const paymentCheck = validatePaymentForm(payload.formData || sanitizedForm);
+    if (!paymentCheck.ok) return res.status(400).json({ error: paymentCheck.error });
+
+    const unitTeam = await validateSaleUnitTeam(req.body.unit || payload.formData?.unit, req.body.team || payload.formData?.team);
+    if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
+
+    const mergedForm = scrubPaymentForm(
+      { ...sanitizedForm, ...(payload.formData || {}), unit: unitTeam.unit, team: unitTeam.team },
+      paymentCheck.method
+    );
     const catalogResolved = await salesClients.validateAndResolveCatalogSale({
       ...req.body,
       ...payload,
-      formData: { ...sanitizedForm, ...(payload.formData || {}) },
+      formData: mergedForm,
     });
     if (!catalogResolved.phoneNumber && !payload.phoneNumber) {
       return res.status(400).json({ error: "phoneNumber required" });
@@ -362,6 +415,8 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "device required" });
     }
     if (!agentId) return res.status(400).json({ error: "agentId required" });
+    const egyptSubmission = egyptDatetime.egyptNowFormatted();
+    const egyptDate = egyptDatetime.egyptTodayDate();
     const sale = await business.createSale(
       {
         phoneNumber: payload.phoneNumber,
@@ -372,26 +427,37 @@ router.post("/", async (req, res) => {
         agentId,
         closerId: closerId || req.userRole.employeeId || "",
         status: initialStatus,
-        submissionDate: payload.submissionDate || new Date().toISOString().slice(0, 10),
-        effectiveDate: payload.effectiveDate || payload.submissionDate || new Date().toISOString().slice(0, 10),
+        submissionDate: egyptSubmission,
+        effectiveDate: payload.effectiveDate || egyptDate,
         feedback: payload.feedback || "",
-        team: geo.team,
-        unit: geo.unit,
-        formData: catalogResolved.formData || sanitizedForm,
+        team: unitTeam.team,
+        unit: unitTeam.unit,
+        formData: catalogResolved.formData || mergedForm,
       },
       req.username
     );
     if (sale.status === "pending") {
-      const authUsers = await fetchAuthUsers();
-      const approvers = authUsers
-        .filter((u) => salesScope.canApproveSale({ role: roles.normalizeRole(u.role) }))
-        .map((u) => u.user);
-      await notify.createNotificationsForUsers(approvers, {
+      const dispatch = require("../lib/notify-dispatch");
+      const submitterRole = roles.normalizeRole(req.userRole?.role);
+      if (submitterRole === "agent") {
+        await dispatch.dispatchNotification({
+          actionKey: "sale_agent_submitted",
+          type: "sale_agent_submitted",
+          title: "New sale submitted",
+          body: `${sale.fullName} — agent ${agentId}`,
+          entityType: "sale",
+          entityId: sale.id,
+          actor: req.username,
+        });
+      }
+      await dispatch.dispatchNotification({
+        actionKey: "sale_pending",
         type: "sale_pending",
         title: "Sale pending approval",
         body: `${sale.fullName} — agent ${agentId}`,
         entityType: "sale",
         entityId: sale.id,
+        actor: req.username,
       });
     }
     await notifySaleAssignments(sale, {});
@@ -496,7 +562,6 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-const salesCatalog = require("../lib/sales-field-catalog");
 const saleStorage = require("../lib/sale-attachment-storage");
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");

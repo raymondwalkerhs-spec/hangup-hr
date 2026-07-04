@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.3.10 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.3.13 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -262,9 +262,23 @@ Discipline week (Mon–Fri) with payroll consequences:
 | Change log | Full audit + CSV export |
 | Notifications | Bell — leave pending, doc expiry, system |
 
+### Notification center (1.3.13)
+
+- **Top-bar bell** — always visible; unread badge count; optional sound on new unread items  
+- **Full modal** — scrollable history (nothing deleted); mark read / mark all read  
+- **Click to navigate** — sale → Sales; leave → Requests; bonus → Bonuses; HR/quality notes → employee modals  
+- **Configurable routing** — Admin/RTM set recipient roles per action in Settings → Notification routing  
+- **Default routes:** leave → HR/Admin; agent sale → RTM/Quality; sale pending → HR/Admin/Quality/RTM; bonus request → HR/Admin/OP; notes → HR  
+
+### HR notes vs quality notes (1.3.13)
+
+- **HR notes** (`employee_warnings`) — HR/Admin add/edit/delete; TL/OP/Quality use quality notes instead  
+- **Quality notes** (`employee_quality_notes`) — Quality/TL/OP add; Quality edits own; HR/Admin full control; HR notified on create  
+
 ### User administration
 
 - **Raymond** — Users tab: create users, roles, passwords, email, status  
+- **Purge user & release ID** *(Raymond/Mark)* — remove login and free employee ID (`DEL-…` placeholder keeps history)  
 - **Sessions** — view and revoke active logins  
 - **Change password** — any logged-in user in Settings  
 

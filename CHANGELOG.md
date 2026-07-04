@@ -4,6 +4,19 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.3.13] — 2026-07-04
+
+### Added
+- **Notification center** — top-bar bell with unread badge, sound on new items, full scrollable modal, mark read / mark all read, click-to-navigate; history is never deleted
+- **Notification routing** — admin-configurable recipient roles per action (`notification_routing_rules`); Settings → Notification routing with reset defaults
+- **Event notifications** — leave submitted, agent sale submitted, sale pending approval, bonus request submitted, HR note created, quality note created
+- **Quality notes** — separate from HR notes (`employee_quality_notes`); Quality/TL/OP can add; Quality edits own; HR/Admin full control; HR notified on create
+- **HR notes CRUD** — HR/Admin can edit/delete employee warnings; HR notified when notes are added
+- **Superadmin user purge** — Raymond/Mark can **Remove & release ID** on Users page or employee profile: removes login, frees app ID for reuse, keeps payroll/sales history under `DEL-…` placeholder
+
+### Changed
+- **Add Sale defaults** — dialing agents default Agent to self; TL/OP default Closer to self on new sale
+
 ## [1.3.12] — 2026-07-04
 
 ### Fixed

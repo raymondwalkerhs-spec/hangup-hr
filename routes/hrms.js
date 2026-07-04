@@ -432,6 +432,16 @@ router.post("/leave", async (req, res) => {
       requestedByRole: req.userRole?.role || "",
     };
     const request = await hrms.createLeaveRequest(payload, req.username);
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "leave_submitted",
+      type: "leave",
+      title: "Leave request submitted",
+      body: `${req.body.employeeId}: ${req.body.startDate} – ${req.body.endDate || req.body.startDate}`,
+      entityType: "leave",
+      entityId: String(request.id),
+      actor: req.username,
+    });
     if (validated.lateSubmission) {
       await auditNotify.hrWarning({
         actor: req.username,
@@ -650,10 +660,61 @@ router.get("/payroll-gates/:employeeId", async (req, res) => {
 
 router.get("/notifications", async (req, res) => {
   try {
+    const notifyStore = require("../lib/notify-store");
     const items = await require("../lib/notifications").collectNotifications(req.username, req.userRole?.role);
-    res.json({ notifications: items });
+    const unread = await notifyStore.readNotifications(req.username, { unreadOnly: true, limit: 200 });
+    res.json({
+      notifications: items,
+      unreadCount: unread.length,
+      totalCount: items.length,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/notification-routing", async (req, res) => {
+  if (!["admin", "ceo", "rtm", "hr"].includes(req.userRole?.role)) {
+    return res.status(403).json({ error: "Admin or RTM only" });
+  }
+  try {
+    const routingConfig = require("../lib/notification-routing-config");
+    const rules = await routingConfig.listRules();
+    res.json({ rules });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put("/notification-routing/:actionKey", async (req, res) => {
+  if (!["admin", "ceo", "rtm"].includes(req.userRole?.role)) {
+    return res.status(403).json({ error: "Admin or RTM only" });
+  }
+  try {
+    const routingConfig = require("../lib/notification-routing-config");
+    const rule = await routingConfig.upsertRule(decodeURIComponent(req.params.actionKey), {
+      recipientRoles: req.body.recipientRoles,
+      recipientUsernames: req.body.recipientUsernames,
+      enabled: req.body.enabled,
+      label: req.body.label,
+      description: req.body.description,
+    });
+    res.json({ ok: true, rule });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/notification-routing/seed", async (req, res) => {
+  if (!["admin", "ceo", "rtm"].includes(req.userRole?.role)) {
+    return res.status(403).json({ error: "Admin or RTM only" });
+  }
+  try {
+    const routingConfig = require("../lib/notification-routing-config");
+    const result = await routingConfig.seedDefaultRules();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

@@ -38,6 +38,8 @@ Apply in filename order:
 | 20 | `20260714_registration_identity_training.sql` | National ID, training flag |
 | 21 | `20260715_rbac_payslip_grants.sql` | Payslip visibility, grant expiry |
 | 22 | `20260716_app_role_permissions.sql` | Admin RBAC overrides |
+| 23 | `20260717_app_user_permissions.sql` | Per-user permission overrides |
+| 24 | `20260718_notifications_quality_notes.sql` | Notification routing rules + quality notes |
 
 ## RLS pattern
 
@@ -120,6 +122,8 @@ These tables exist in production; DDL was applied outside early migration stubs.
 | `petty_cash_funds`, `petty_cash_ledger` | uuid | Petty cash |
 | `monthly_bills` | `id` uuid | Recurring bills |
 | `app_notifications` | `id` uuid | In-app notifications |
+| `notification_routing_rules` | `action_key` | Configurable notification recipients per action |
+| `employee_quality_notes` | `id` uuid | Quality-team notes (separate from HR warnings) |
 
 ## Org, registration & training
 

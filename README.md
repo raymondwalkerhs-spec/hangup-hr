@@ -4,7 +4,7 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.3.12`
+**Current version:** `1.3.13`
 
 | Document | Purpose |
 |----------|---------|
@@ -65,7 +65,7 @@ Schema changes live in `supabase/migrations/`.
 
 **Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260716_app_role_permissions.sql`).
+**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260718_notifications_quality_notes.sql`).
 
 ### Access Control (v1.3.6+)
 
@@ -82,7 +82,7 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Core HR** | Employees, attendance grid, payroll, payslips, bonuses, deductions, loans, salaries |
 | **Compliance** | Nationality, work permit (non-Egyptian), social insurance (Egyptian) |
 | **Lifecycle** | Employment periods, depart / re-hire, onboarding & offboarding checklists, clearance |
-| **Discipline** | Warnings with escalation levels, Action Improvement Plans (AIP) |
+| **Discipline** | Warnings with escalation levels, Action Improvement Plans (AIP); HR notes + quality notes (1.3.13) |
 | **Time off** | Leave requests; approvers: Mark, Raymond, Phoebe |
 | **Payroll control** | Month lock, MoM comparison, tax stub (0% default), finance handoff ZIP |
 | **Assets** | Equipment registry and assignments |
@@ -91,9 +91,10 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Sales** | MLA-Ray form, catalog, Supabase attachments, export CSV/Excel/PDF, approval workflow |
 | **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners |
 | **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
-| **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab |
+| **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab; superadmin purge + release ID |
+| **Notifications** | Top-bar bell, unread badge, sound, routing settings (1.3.13) |
 | **Updates** | GitHub update check for all users; silent NSIS installer or full app replace |
-| **Admin** | Notifications bell, change log export, session registry (Raymond), user management |
+| **Admin** | Change log export, session registry (Raymond), user management |
 
 Full detail: [`FEATURES.md`](FEATURES.md)
 

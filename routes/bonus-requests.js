@@ -72,15 +72,15 @@ router.post("/", async (req, res) => {
       },
       req.username
     );
-    const approvers = (authUsers || [])
-      .filter((u) => roles.canApproveBonusRequest({ role: roles.normalizeRole(u.role) }))
-      .map((u) => u.user);
-    await notify.createNotificationsForUsers(approvers, {
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "bonus_request_submitted",
       type: "bonus_request",
       title: "Bonus request pending approval",
       body: `${employeeId}: ${amount} EGP on ${date}`,
       entityType: "bonus_request",
       entityId: created.id,
+      actor: req.username,
     });
     res.json({ ok: true, request: created });
   } catch (err) {

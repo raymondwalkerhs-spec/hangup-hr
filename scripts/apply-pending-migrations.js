@@ -38,6 +38,8 @@ async function probeState(db) {
     rbac_payslip: false,
     app_role_permissions: false,
     app_user_permissions: false,
+    notification_routing: false,
+    quality_notes: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -70,6 +72,10 @@ async function probeState(db) {
   state.app_role_permissions = !arp.error;
   const aup = await db.from("app_user_permissions").select("username").limit(1);
   state.app_user_permissions = !aup.error;
+  const nr = await db.from("notification_routing_rules").select("action_key").limit(1);
+  state.notification_routing = !nr.error;
+  const qn = await db.from("employee_quality_notes").select("id").limit(1);
+  state.quality_notes = !qn.error;
   return state;
 }
 
@@ -97,6 +103,9 @@ function filesToApply(state) {
   if (!state.rbac_payslip) files.push("20260715_rbac_payslip_grants.sql");
   if (!state.app_role_permissions) files.push("20260716_app_role_permissions.sql");
   if (!state.app_user_permissions) files.push("20260717_app_user_permissions.sql");
+  if (!state.notification_routing || !state.quality_notes) {
+    files.push("20260718_notifications_quality_notes.sql");
+  }
   return files;
 }
 
@@ -224,7 +233,8 @@ async function main() {
   }
   console.log(
     "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
-      "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions."
+      "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions, " +
+      "app_user_permissions, notification_routing, quality_notes."
   );
 }
 

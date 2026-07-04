@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.2.0`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.3.13`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).
 
@@ -25,7 +25,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | Version blocked | Install the latest EXE from Admin (`app_versions` policy) |
 | Update available (login or in-app) | Click **Update now** — silent installer (Windows) or full app replace (macOS) |
 
-**Notifications** — bell icon in the sidebar (pending leave, document expiry, alerts).
+**Notifications** — bell icon in the **top bar** (and sidebar). Unread badge shows new items; click for full history. Click a notification to jump to Sales, Requests, Bonuses, or employee notes. Admin/RTM can configure who receives each alert under **Settings → Notification routing** (use **Reset defaults** after first upgrade to 1.3.13).
 
 ---
 
@@ -165,6 +165,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 | **Commission types** | Admin / CEO | Manage commission type rates |
 | **Sales clients & breaks** | RTM / Admin | Clients, devices, price tiers; break schedules |
 | **Refresh** | Everyone | Full re-sync from Supabase |
+| **Notification routing** | Admin / RTM | Who gets alerts for leave, sales, bonuses, notes; **Reset defaults** after upgrade |
 | **View as user** | Raymond | Test the app as any login |
 
 ---
@@ -231,6 +232,8 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - Receipts, petty cash, monthly bills, archive with cash receipt number.
 
 - **Users** (Raymond/Mark): search box filters by username, name, employee ID, email, or team.
+- **Remove & release ID** *(Raymond/Mark only, linked employees)* — removes the login and frees the employee ID (e.g. `HS1-05`) for a new hire. Payroll and sales history stay under a `DEL-…` placeholder record. Use for cleaning up test users; confirm twice.
+- **HR notes** vs **Quality notes** on employee profiles — separate buttons. HR notes are HR/Admin only (edit/delete). Quality notes can be added by Quality, TL, and OP; Quality edits their own; HR/Admin can manage all.
 
 ---
 

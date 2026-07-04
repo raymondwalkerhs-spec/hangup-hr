@@ -1391,6 +1391,50 @@ tr.clickable { cursor: pointer; }
   overflow-y: auto;
 }
 
+#modal-root .modal.sale-form-modal {
+  max-width: min(96vw, 1200px);
+  width: 96vw;
+}
+#modal-root .modal.sale-form-modal #sale-form.modal-body-scroll {
+  max-height: min(85vh, 52rem);
+}
+.top-app-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0.35rem 1rem 0;
+  min-height: 2.25rem;
+}
+.top-notif-wrap .notif-bell { margin-left: auto; }
+.notif-modal-list {
+  max-height: min(70vh, 36rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.notif-modal-item {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  text-align: left;
+  background: var(--card);
+}
+.notif-modal-item.unread {
+  border-color: var(--primary-ring, var(--primary));
+  background: var(--primary-light, rgba(59, 130, 246, 0.08));
+}
+.notif-modal-item:hover { filter: brightness(0.98); }
+.notif-modal-meta { font-size: 0.75rem; margin-top: 0.35rem; }
+.field-readonly {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--input-bg, var(--card));
+  font-weight: 500;
+}
+
 .card-stat-click {
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;

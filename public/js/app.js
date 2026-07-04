@@ -675,6 +675,14 @@ function canWriteEmployeeNotes() {
   return state.user?.canWriteEmployeeNotes === true;
 }
 
+function canViewQualityNotes() {
+  return state.user?.canViewQualityNotes === true;
+}
+
+function canWriteQualityNotes() {
+  return state.user?.canWriteQualityNotes === true;
+}
+
 function canExportSales() {
   return state.user?.canExportSales === true;
 }
@@ -1515,13 +1523,13 @@ function employeeListRowHtml(e) {
   const isSelf = state.user?.employeeId === e.id;
   const canEdit = canManagePayrollEvents();
   const showNotes = canViewEmployeeNotes();
-  const showAddNote = canWriteEmployeeNotes() && !canViewEmployeeNotes();
+  const showQualityNotes = canViewQualityNotes() || canWriteQualityNotes();
   const showDocs = canEdit || isSelf;
   const actions = [
     stub ? `<button class="btn btn-sm btn-danger" data-release="${e.id}">Release ID</button>` : "",
     showDocs ? `<button class="btn btn-sm" data-docs="${e.id}">${isSelf && !canEdit ? "My docs" : "Docs"}</button>` : "",
-    showNotes ? `<button class="btn btn-sm" data-warn="${e.id}">Notes${e.hasWarnings ? " •" : ""}</button>` : "",
-    showAddNote ? `<button class="btn btn-sm" data-warn="${e.id}">Add note</button>` : "",
+    showNotes ? `<button class="btn btn-sm" data-warn="${e.id}">HR notes${e.hasWarnings ? " •" : ""}</button>` : "",
+    showQualityNotes ? `<button class="btn btn-sm" data-quality-notes="${e.id}">Quality notes</button>` : "",
     canEdit ? `<button class="btn btn-sm" data-edit="${e.id}">Edit</button>` : "",
   ]
     .filter(Boolean)
@@ -1550,6 +1558,12 @@ function bindEmployeesTableActions(root, allEmployees) {
     b.onclick = (ev) => {
       ev.stopPropagation();
       openEmployeeWarningsModal(b.dataset.warn);
+    };
+  });
+  root.querySelectorAll("[data-quality-notes]").forEach((b) => {
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      openEmployeeQualityNotesModal(b.dataset.qualityNotes);
     };
   });
   root.querySelectorAll("[data-docs]").forEach((b) => {
@@ -2234,15 +2248,23 @@ function navigateToHrmsEmployeeSection(section, employeeId) {
     (state.meta?.employees || []).find((e) => e.id === employeeId) ||
     (document.getElementById("app")?.__employeesData?.employees || []).find((e) => e.id === employeeId);
   if (emp) {
-    openEmployeeModal(emp, { focusSection: section });
+    if (section === "quality-notes") openEmployeeQualityNotesModal(employeeId);
+    else if (section === "notes") openEmployeeWarningsModal(employeeId);
+    else openEmployeeModal(emp, { focusSection: section });
     return;
   }
   api(`/employees/${encodeURIComponent(employeeId)}`)
     .then((d) => {
-      if (d.employee) openEmployeeModal(d.employee, { focusSection: section });
-      else alert("Employee not found");
+      if (!d.employee) return alert("Employee not found");
+      if (section === "quality-notes") openEmployeeQualityNotesModal(employeeId);
+      else if (section === "notes") openEmployeeWarningsModal(employeeId);
+      else openEmployeeModal(d.employee, { focusSection: section });
     })
     .catch((e) => alert(e.message));
+}
+
+function openEmployeeById(employeeId, section) {
+  navigateToHrmsEmployeeSection(section, employeeId);
 }
 
 function openEmployeeModal(emp, options = {}) {
@@ -2252,6 +2274,7 @@ function openEmployeeModal(emp, options = {}) {
   const canRevert = canManagePayrollEvents() && emp.promoted_from_id && !emp.promoted_to_id;
   const canChangeAppId = canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
   const canRelease = canManagePayrollEvents() && (isUnassignedIdStub(emp) || emp.status !== "Deleted");
+  const canPurgeUser = canManageUsers() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
   openModal(`
     <div class="modal-header"><h2>Edit employee</h2><button class="btn btn-sm" data-close>✕</button></div>
     <div class="modal-body" id="emp-modal-body">
@@ -2281,6 +2304,11 @@ function openEmployeeModal(emp, options = {}) {
         <h4>Release / delete app ID</h4>
         <p class="muted" style="margin:.25rem 0 .75rem">Sets status to <strong>Deleted</strong>, frees the app ID (e.g. C01) for reuse. Permanent database record and all history are kept.</p>
         <button type="button" class="btn btn-sm btn-danger" id="release-app-id-btn">Release app ID</button>
+      </div>` : ""}
+      ${canPurgeUser ? `<div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
+        <h4>Purge user &amp; release ID</h4>
+        <p class="muted" style="margin:.25rem 0 .75rem">Removes the app login and releases <strong>${escapeHtml(emp.id)}</strong> in one step. History stays under a DEL-… record.</p>
+        <button type="button" class="btn btn-sm btn-danger" id="purge-user-emp-btn">Purge user &amp; release ID</button>
       </div>` : ""}
       <div class="card card-flat" style="margin-top:1rem;grid-column:1/-1">
         <h4>Export employee data</h4>
@@ -2359,6 +2387,38 @@ function openEmployeeModal(emp, options = {}) {
           btn.disabled = false;
           btn.textContent = prev;
         }
+      },
+    });
+  });
+  document.getElementById("purge-user-emp-btn")?.addEventListener("click", () => {
+    openConfirmModal({
+      title: "Purge user & release ID",
+      message: `Remove login and release ${emp.id}? History stays under a DEL-… record.`,
+      confirmLabel: "Continue",
+      danger: true,
+      onConfirm: () => {
+        openConfirmModal({
+          title: "Confirm purge",
+          message: "This cannot be undone.",
+          confirmLabel: "Yes, purge",
+          danger: true,
+          onConfirm: async () => {
+            try {
+              const res = await api(`/admin/users/${encodeURIComponent(emp.id)}/purge`, {
+                method: "POST",
+                body: "{}",
+              });
+              closeModal();
+              showSaveIndicator(
+                res.releasedAppId ? `Purged — ID ${res.releasedAppId} released` : "User purged",
+                "saved"
+              );
+              render();
+            } catch (e) {
+              alert(e.message);
+            }
+          },
+        });
       },
     });
   });
@@ -2480,6 +2540,7 @@ function openEmployeeModal(emp, options = {}) {
   }
 }
 window.openEmployeeModal = openEmployeeModal;
+window.openEmployeeById = openEmployeeById;
 
 async function openPromoteEmployeeModal(emp) {
   let leadRole = "TL";
@@ -4340,23 +4401,34 @@ async function renderLoansPage(root) {
 }
 
 async function openEmployeeWarningsModal(employeeId) {
+  if (!canViewEmployeeNotes() && !canWriteEmployeeNotes()) {
+    return alert("No permission to view HR notes.");
+  }
   const data = await api(`/warnings/${employeeId}`);
-  const writeOnly = data.writeOnly && !(data.warnings || []).length;
   const canRead = canViewEmployeeNotes();
+  const canManage = canManagePayrollEvents();
   const list = canRead
     ? (data.warnings || [])
         .map(
           (w) =>
-            `<div class="card card-flat"><div class="flex-between"><strong>${w.type}: ${w.title || "—"}</strong><span class="muted">${w.date}</span></div>
-          <p style="margin:.5rem 0 0">${w.content}</p>
-          <div class="muted" style="font-size:.75rem">${w.createdBy || ""} · ${w.severity || "normal"}${w.warningLevel ? ` · Level: ${w.warningLevel}` : ""}</div></div>`
+            `<div class="card card-flat" data-warn-id="${escapeHtml(w.id)}"><div class="flex-between"><strong>${escapeHtml(w.type)}: ${escapeHtml(w.title || "—")}</strong><span class="muted">${escapeHtml(w.date)}</span></div>
+          <p style="margin:.5rem 0 0">${escapeHtml(w.content)}</p>
+          <div class="muted" style="font-size:.75rem">${escapeHtml(w.createdBy || "")} · ${escapeHtml(w.severity || "normal")}${w.warningLevel ? ` · Level: ${escapeHtml(w.warningLevel)}` : ""}</div>
+          ${
+            canManage
+              ? `<div class="btn-row" style="margin-top:.5rem">
+                  <button type="button" class="btn btn-sm" data-edit-warn="${escapeHtml(w.id)}">Edit</button>
+                  <button type="button" class="btn btn-sm btn-danger" data-del-warn="${escapeHtml(w.id)}">Delete</button>
+                </div>`
+              : ""
+          }</div>`
         )
         .join("")
     : "";
 
   const addForm = canWriteEmployeeNotes()
     ? `<div class="card" style="margin-top:1rem">
-        <h4>${canRead ? "Add warning / note" : "Add note (HR will review)"}</h4>
+        <h4>Add HR note / warning</h4>
         <form id="warn-form" class="field-grid">
           <label class="field"><span>Type</span><select name="type"><option>Warning</option><option>Note</option><option>Verbal warning</option><option>Written warning</option></select></label>
           <label class="field"><span>Date</span><input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
@@ -4370,9 +4442,9 @@ async function openEmployeeWarningsModal(employeeId) {
     : "";
 
   openModal(
-    `<div class="modal-header"><h2>${canRead ? "Warnings & notes" : "Add note"} — ${employeeId}</h2><button class="btn btn-sm" data-close>✕</button></div>
-    <div class="modal-body">
-      <div class="stack">${list || (canRead ? '<p class="muted">No warnings or notes yet.</p>' : writeOnly ? '<p class="muted">Submit a note for HR. You cannot view existing notes.</p>' : "")}</div>
+    `<div class="modal-header"><h2>HR notes — ${escapeHtml(employeeId)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body modal-body-scroll">
+      <div class="stack">${list || (canRead ? '<p class="muted">No HR notes yet.</p>' : '<p class="muted">HR notes are restricted to HR/Admin.</p>')}</div>
       ${addForm}
     </div>`,
     true
@@ -4398,6 +4470,134 @@ async function openEmployeeWarningsModal(employeeId) {
     } catch (e) {
       alert(e.message);
     }
+  });
+
+  document.querySelectorAll("[data-del-warn]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this note?")) return;
+      await api(`/warnings/${encodeURIComponent(btn.dataset.delWarn)}`, { method: "DELETE" });
+      closeModal();
+      openEmployeeWarningsModal(employeeId);
+    });
+  });
+
+  document.querySelectorAll("[data-edit-warn]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const w = (data.warnings || []).find((x) => x.id === btn.dataset.editWarn);
+      if (!w) return;
+      openModal(
+        `<div class="modal-header"><h2>Edit note</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <form id="edit-warn-form" class="modal-body field-grid">
+          <label class="field"><span>Type</span><input name="type" value="${escapeHtml(w.type)}" /></label>
+          <label class="field"><span>Date</span><input name="date" type="date" value="${escapeHtml(w.date)}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Title</span><input name="title" value="${escapeHtml(w.title || "")}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Content</span><textarea name="content">${escapeHtml(w.content)}</textarea></label>
+        </form>
+        <div class="modal-footer"><button class="btn btn-primary" id="save-edit-warn">Save</button></div>`
+      );
+      document.getElementById("save-edit-warn")?.addEventListener("click", async () => {
+        const fd = new FormData(document.getElementById("edit-warn-form"));
+        await api(`/warnings/${encodeURIComponent(w.id)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            type: fd.get("type"),
+            date: fd.get("date"),
+            title: fd.get("title"),
+            content: fd.get("content"),
+          }),
+        });
+        closeModal();
+        openEmployeeWarningsModal(employeeId);
+      });
+    });
+  });
+}
+
+async function openEmployeeQualityNotesModal(employeeId) {
+  if (!canViewQualityNotes() && !canWriteQualityNotes()) {
+    return alert("No permission for quality notes.");
+  }
+  const data = await api(`/quality-notes/${encodeURIComponent(employeeId)}`).catch(() => ({ notes: [] }));
+  const notes = data.notes || [];
+  const canWrite = canWriteQualityNotes();
+  const isHrAdmin = canManagePayrollEvents();
+  const list = notes
+    .map((n) => {
+      const canEdit =
+        isHrAdmin ||
+        (state.user?.role === "quality" &&
+          String(n.authorUsername || "").toLowerCase() === String(state.user?.username || "").toLowerCase());
+      return `<div class="card card-flat"><div class="flex-between"><strong>${escapeHtml(n.noteDate || "")}</strong><span class="muted">${escapeHtml(n.authorUsername || "")}</span></div>
+        <p style="margin:.5rem 0 0">${escapeHtml(n.body)}</p>
+        ${
+          canEdit
+            ? `<div class="btn-row" style="margin-top:.5rem">
+                <button type="button" class="btn btn-sm" data-edit-qnote="${escapeHtml(n.id)}">Edit</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del-qnote="${escapeHtml(n.id)}">Delete</button>
+              </div>`
+            : ""
+        }</div>`;
+    })
+    .join("");
+
+  const addForm = canWrite
+    ? `<div class="card" style="margin-top:1rem"><h4>Add quality note</h4>
+        <form id="qnote-form" class="field-grid">
+          <label class="field"><span>Date</span><input name="noteDate" type="date" value="${new Date().toISOString().slice(0, 10)}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Note</span><textarea name="body" required></textarea></label>
+        </form>
+        <button class="btn btn-primary btn-sm" id="add-qnote-btn">Save</button></div>`
+    : "";
+
+  openModal(
+    `<div class="modal-header"><h2>Quality notes — ${escapeHtml(employeeId)}</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body modal-body-scroll">
+      <div class="stack">${list || '<p class="muted">No quality notes yet.</p>'}${addForm}</div>
+    </div>`,
+    true
+  );
+
+  document.getElementById("add-qnote-btn")?.addEventListener("click", async () => {
+    const fd = new FormData(document.getElementById("qnote-form"));
+    await api("/quality-notes", {
+      method: "POST",
+      body: JSON.stringify({ employeeId, body: fd.get("body"), noteDate: fd.get("noteDate") }),
+    });
+    closeModal();
+    openEmployeeQualityNotesModal(employeeId);
+  });
+
+  document.querySelectorAll("[data-del-qnote]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this quality note?")) return;
+      await api(`/quality-notes/${encodeURIComponent(btn.dataset.delQnote)}`, { method: "DELETE" });
+      closeModal();
+      openEmployeeQualityNotesModal(employeeId);
+    });
+  });
+
+  document.querySelectorAll("[data-edit-qnote]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const n = notes.find((x) => x.id === btn.dataset.editQnote);
+      if (!n) return;
+      openModal(
+        `<div class="modal-header"><h2>Edit quality note</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <form id="edit-qnote-form" class="modal-body field-grid">
+          <label class="field"><span>Date</span><input name="noteDate" type="date" value="${escapeHtml(n.noteDate || "")}" /></label>
+          <label class="field" style="grid-column:1/-1"><span>Note</span><textarea name="body">${escapeHtml(n.body)}</textarea></label>
+        </form>
+        <div class="modal-footer"><button class="btn btn-primary" id="save-edit-qnote">Save</button></div>`
+      );
+      document.getElementById("save-edit-qnote")?.addEventListener("click", async () => {
+        const fd = new FormData(document.getElementById("edit-qnote-form"));
+        await api(`/quality-notes/${encodeURIComponent(n.id)}`, {
+          method: "PUT",
+          body: JSON.stringify({ body: fd.get("body"), noteDate: fd.get("noteDate") }),
+        });
+        closeModal();
+        openEmployeeQualityNotesModal(employeeId);
+      });
+    });
   });
 }
 
@@ -4949,6 +5149,15 @@ async function renderUsers(root) {
           ? "disabled title=\"Cannot delete your own account\""
           : ""
       }>Remove</button>
+      ${
+        u.employeeId && u.status !== "terminated"
+          ? `<button class="btn btn-sm btn-danger" data-purge-user="${escapeHtml(u.username)}" ${
+              u.username.toLowerCase() === (state.user?.username || "").toLowerCase()
+                ? "disabled"
+                : ""
+            } title="Remove login and release employee ID">Remove &amp; release ID</button>`
+          : ""
+      }
     </td>
   </tr>`;
 
@@ -5147,6 +5356,33 @@ async function renderUsers(root) {
           await api(`/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
           showSaveIndicator("User removed", "saved");
           render();
+        },
+      });
+    });
+  });
+  root.querySelectorAll("[data-purge-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.purgeUser;
+      openConfirmModal({
+        title: "Remove user and release ID",
+        message: `Permanently remove login for "${username}" and release their employee ID for reuse? Payroll and sales history will be kept under a DEL-… placeholder record.`,
+        confirmLabel: "Remove & release ID",
+        danger: true,
+        onConfirm: () => {
+          openConfirmModal({
+            title: "Confirm purge",
+            message: "This cannot be undone. The app ID will be freed immediately.",
+            confirmLabel: "Yes, purge",
+            danger: true,
+            onConfirm: async () => {
+              const res = await api(`/admin/users/${encodeURIComponent(username)}/purge`, { method: "POST", body: "{}" });
+              showSaveIndicator(
+                res.releasedAppId ? `Purged — ID ${res.releasedAppId} released` : "User purged",
+                "saved"
+              );
+              render();
+            },
+          });
         },
       });
     });

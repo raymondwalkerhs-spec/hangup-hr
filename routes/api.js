@@ -567,6 +567,8 @@ router.get("/status", async (req, res) => {
       canManageEmployees: roles.canManageEmployees(req.userRole),
       canViewEmployeeNotes: roles.canViewEmployeeNotes(req.userRole),
       canWriteEmployeeNotes: roles.canWriteEmployeeNotes(req.userRole),
+      canViewQualityNotes: roles.canViewQualityNotes(req.userRole),
+      canWriteQualityNotes: roles.canWriteQualityNotes(req.userRole),
       canExportSales: roles.canExportSales(req.userRole),
       canViewEquipment: roles.canViewEquipment(req.userRole),
       canViewDashboardPayroll: roles.canViewDashboardPayroll(req.userRole),
@@ -2411,7 +2413,149 @@ router.post("/warnings", async (req, res) => {
     { employeeId, date, type, title, content, severity, warningLevel },
     req.username
   );
+  const dispatch = require("../lib/notify-dispatch");
+  await dispatch.dispatchNotification({
+    actionKey: "employee_note_created",
+    type: "employee_note",
+    title: "Employee note added",
+    body: `${employeeId}: ${title || type || "Note"}`,
+    entityType: "employee_note",
+    entityId: String(saved.id || employeeId),
+    actor: req.username,
+    context: { extraUsernames: [] },
+  });
   res.json({ ok: true, warning: saved });
+});
+
+router.put("/warnings/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  try {
+    const saved = await store.updateEmployeeWarning(
+      req.params.id,
+      {
+        date: req.body.date,
+        type: req.body.type,
+        title: req.body.title,
+        content: req.body.content,
+        severity: req.body.severity,
+        warningLevel: req.body.warningLevel,
+      },
+      req.username
+    );
+    res.json({ ok: true, warning: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/warnings/:id", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  try {
+    await store.deleteEmployeeWarning(req.params.id, req.username);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/quality-notes/:employeeId", async (req, res) => {
+  const emp = store.getEmployeeById(req.params.employeeId);
+  if (!emp) return res.status(404).json({ error: "Employee not found" });
+  if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access" });
+  }
+  if (!roles.canViewQualityNotes(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const qualityNotes = require("../lib/quality-notes-repo");
+    const notes = await qualityNotes.listForEmployee(req.params.employeeId);
+    res.json({ notes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/quality-notes", async (req, res) => {
+  if (!roles.canWriteQualityNotes(req.userRole)) {
+    return res.status(403).json({ error: "No permission to add quality notes" });
+  }
+  const { employeeId, body, noteDate } = req.body;
+  if (!employeeId || !body) {
+    return res.status(400).json({ error: "employeeId and body required" });
+  }
+  const emp = store.getEmployeeById(employeeId);
+  if (!emp || !roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "No access to this employee" });
+  }
+  try {
+    const qualityNotes = require("../lib/quality-notes-repo");
+    const note = await qualityNotes.createNote(
+      {
+        employeeId,
+        authorUsername: req.username,
+        authorRole: req.userRole?.role || "",
+        body,
+        noteDate,
+      },
+      req.username
+    );
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "quality_note_created",
+      type: "quality_note",
+      title: "Quality note on agent",
+      body: `${employeeId}: ${String(body).slice(0, 80)}`,
+      entityType: "quality_note",
+      entityId: note.id,
+      actor: req.username,
+    });
+    res.json({ ok: true, note });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put("/quality-notes/:id", async (req, res) => {
+  try {
+    const qualityNotes = require("../lib/quality-notes-repo");
+    const existing = await qualityNotes.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Note not found" });
+    const emp = store.getEmployeeById(existing.employeeId);
+    if (!emp || !roles.canAccessEmployee(req.userRole, emp)) {
+      return res.status(403).json({ error: "No access" });
+    }
+    if (!roles.canManageQualityNote(req.userRole, existing, req.username)) {
+      return res.status(403).json({ error: "No permission to edit this note" });
+    }
+    const note = await qualityNotes.updateNote(req.params.id, req.body, req.username);
+    res.json({ ok: true, note });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/quality-notes/:id", async (req, res) => {
+  try {
+    const qualityNotes = require("../lib/quality-notes-repo");
+    const existing = await qualityNotes.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Note not found" });
+    const emp = store.getEmployeeById(existing.employeeId);
+    if (!emp || !roles.canAccessEmployee(req.userRole, emp)) {
+      return res.status(403).json({ error: "No access" });
+    }
+    if (!roles.canManageQualityNote(req.userRole, existing, req.username)) {
+      return res.status(403).json({ error: "No permission to delete this note" });
+    }
+    await qualityNotes.deleteNote(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.put("/position-rates", async (req, res) => {

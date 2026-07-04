@@ -67,12 +67,111 @@ window.HRMSFeatures = (function () {
     return parts.join("");
   }
 
-  async function initNotificationsBell(api, state) {
-    const mount = document.getElementById("sidebar-notif-wrap");
-    if (!mount || document.getElementById("hr-notif-bell")) return;
+  function navigateFromNotification(n) {
+    if (!n) return;
+    const entityType = n.entityType || n.type || "";
+    const entityId = n.entityId || "";
+    if (typeof closeModal === "function") closeModal();
+    if (entityType === "sale" && entityId) {
+      location.hash = "sales";
+      if (typeof render === "function") render();
+      return;
+    }
+    if (entityType === "leave" || n.type === "leave") {
+      location.hash = "requests";
+      if (typeof render === "function") render();
+      return;
+    }
+    if (entityType === "bonus_request") {
+      location.hash = "bonuses";
+      if (typeof render === "function") render();
+      return;
+    }
+    if (entityType === "employee_note" || entityType === "quality_note") {
+      const empId = String(entityId).split(":")[0] || entityId;
+      if (empId && typeof openEmployeeById === "function") {
+        location.hash = "employees";
+        openEmployeeById(empId, entityType === "quality_note" ? "quality-notes" : "notes");
+      } else {
+        location.hash = "employees";
+        if (typeof render === "function") render();
+      }
+    }
+  }
 
-    let lastCount = 0;
-    let lastTopId = "";
+  async function openNotificationsModal(api, items, unreadCount) {
+    const esc = escapeHtml;
+    const list =
+      items.length === 0
+        ? '<p class="muted">No notifications yet.</p>'
+        : `<div class="notif-modal-list">${items
+            .map((n) => {
+              const unread = n.persisted && !n.readAt;
+              const when = n.createdAt ? new Date(n.createdAt).toLocaleString() : "";
+              return `<button type="button" class="notif-modal-item${unread ? " unread" : ""}" data-notif-id="${esc(
+                n.id || ""
+              )}" data-persisted="${n.persisted ? "1" : "0"}" data-entity-type="${esc(n.entityType || "")}" data-entity-id="${esc(
+                n.entityId || ""
+              )}">
+                <strong>${esc(n.title || "Notification")}</strong>
+                <p class="muted" style="margin:.35rem 0 0">${esc(n.body || "")}</p>
+                <div class="notif-modal-meta muted">${esc(when)}${unread ? " · Unread" : ""}</div>
+              </button>`;
+            })
+            .join("")}</div>`;
+    if (typeof openModal !== "function") return;
+    openModal(
+      `<div class="modal-header flex-between">
+        <h2>Notifications</h2>
+        <div class="btn-row">
+          <button type="button" class="btn btn-sm" id="notif-mark-all">Mark all read</button>
+          <button class="btn btn-sm" data-close>✕</button>
+        </div>
+      </div>
+      <div class="modal-body modal-body-scroll">
+        <p class="muted">${unreadCount} unread · ${items.length} total</p>
+        ${list}
+      </div>`,
+      true
+    );
+    document.querySelector("#modal-root .modal")?.classList.add("sale-form-modal");
+    document.getElementById("notif-mark-all")?.addEventListener("click", async () => {
+      await api("/hrms/notifications/read-all", { method: "POST", body: "{}" });
+      if (typeof closeModal === "function") closeModal();
+      if (window.__hrRefreshNotifications) window.__hrRefreshNotifications(false);
+    });
+    document.querySelectorAll(".notif-modal-item").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.notifId;
+        const n = items.find((x) => String(x.id) === String(id)) || {
+          id,
+          entityType: btn.dataset.entityType,
+          entityId: btn.dataset.entityId,
+          persisted: btn.dataset.persisted === "1",
+        };
+        if (n.persisted && id && !String(id).startsWith("leave-")) {
+          try {
+            await api(`/hrms/notifications/${encodeURIComponent(id)}/read`, { method: "POST", body: "{}" });
+          } catch {
+            /* ignore */
+          }
+        }
+        if (typeof closeModal === "function") closeModal();
+        navigateFromNotification(n);
+        if (window.__hrRefreshNotifications) window.__hrRefreshNotifications(false);
+      });
+    });
+  }
+
+  async function initNotificationsBell(api, state) {
+    const mounts = [
+      document.getElementById("sidebar-notif-wrap"),
+      document.getElementById("top-notif-wrap"),
+    ].filter(Boolean);
+    if (!mounts.length || document.getElementById("hr-notif-bell")) return;
+
+    let lastUnread = 0;
+    let cachedItems = [];
 
     function playNotifSound() {
       try {
@@ -97,81 +196,111 @@ window.HRMSFeatures = (function () {
       }
     }
 
+    function attachBell(mount) {
+      const btn = document.createElement("button");
+      btn.className = "btn btn-sm btn-ghost notif-bell";
+      btn.type = "button";
+      btn.title = "Notifications";
+      btn.setAttribute("aria-label", "Notifications");
+      btn.innerHTML = '🔔 <span class="notif-count hidden hr-notif-count">0</span>';
+      mount.appendChild(btn);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openNotificationsModal(api, cachedItems, lastUnread);
+      });
+      return btn;
+    }
+
     const btn = document.createElement("button");
     btn.id = "hr-notif-bell";
-    btn.className = "btn btn-sm btn-ghost notif-bell";
-    btn.type = "button";
-    btn.title = "Notifications";
-    btn.setAttribute("aria-label", "Notifications");
-    btn.innerHTML = '🔔 <span id="hr-notif-count" class="notif-count hidden">0</span>';
-    mount.appendChild(btn);
-
-    const panel = document.createElement("div");
-    panel.id = "hr-notif-panel";
-    panel.className = "notif-panel hidden";
-    panel.setAttribute("role", "menu");
-    document.body.appendChild(panel);
-
-    function positionPanel() {
-      const rect = btn.getBoundingClientRect();
-      panel.style.top = `${Math.round(rect.bottom + 8)}px`;
-      panel.style.left = `${Math.round(Math.min(rect.left, window.innerWidth - 340))}px`;
-    }
+    btn.style.display = "none";
+    document.body.appendChild(btn);
+    mounts.forEach((m) => attachBell(m));
 
     async function refresh(playSound = false) {
       try {
-        const { notifications } = await api("/hrms/notifications");
-        const items = notifications || [];
-        const countEl = document.getElementById("hr-notif-count");
-        const topId = items[0]?.id || items[0]?.title || "";
-        if (playSound && items.length > 0 && (items.length > lastCount || topId !== lastTopId)) {
-          playNotifSound();
-        }
-        lastCount = items.length;
-        lastTopId = topId;
-        if (countEl) {
-          countEl.textContent = String(items.length);
-          countEl.classList.toggle("hidden", items.length === 0);
-        }
-        btn.classList.toggle("notif-bell-has-items", items.length > 0);
-        panel.innerHTML =
-          items.length === 0
-            ? '<p class="muted notif-empty">No notifications</p>'
-            : `<div class="notif-panel-header"><strong>Notifications</strong><span class="muted">${items.length}</span></div>` +
-              items
-                .map(
-                  (n) =>
-                    `<div class="notif-item" role="menuitem"><strong>${escapeHtml(n.title)}</strong><p class="muted">${escapeHtml(n.body || "")}</p></div>`
-                )
-                .join("");
+        const res = await api("/hrms/notifications");
+        const items = res.notifications || [];
+        const unread = res.unreadCount != null ? res.unreadCount : items.filter((n) => n.persisted && !n.readAt).length;
+        cachedItems = items;
+        if (playSound && unread > 0 && unread > lastUnread) playNotifSound();
+        lastUnread = unread;
+        document.querySelectorAll(".hr-notif-count").forEach((countEl) => {
+          countEl.textContent = String(unread);
+          countEl.classList.toggle("hidden", unread === 0);
+        });
+        document.querySelectorAll(".notif-bell").forEach((b) => {
+          b.classList.toggle("notif-bell-has-items", unread > 0);
+        });
       } catch (err) {
-        const countEl = document.getElementById("hr-notif-count");
-        if (countEl) {
+        document.querySelectorAll(".hr-notif-count").forEach((countEl) => {
           countEl.textContent = "!";
           countEl.classList.remove("hidden");
           countEl.title = err?.message || "Could not load notifications";
-        }
+        });
       }
     }
 
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const open = !panel.classList.contains("hidden");
-      if (open) {
-        panel.classList.add("hidden");
-      } else {
-        positionPanel();
-        panel.classList.remove("hidden");
-        refresh(false);
-      }
-    };
-    document.addEventListener("click", () => panel.classList.add("hidden"));
-    window.addEventListener("resize", () => {
-      if (!panel.classList.contains("hidden")) positionPanel();
-    });
-    panel.addEventListener("click", (e) => e.stopPropagation());
+    window.__hrRefreshNotifications = refresh;
     await refresh(false);
-    setInterval(() => refresh(true), 120000);
+    setInterval(() => refresh(true), 30000);
+  }
+
+  async function openNotificationRoutingModal(api, helpers) {
+    const { escapeHtml: esc, openModal, closeModal } = helpers;
+    const data = await api("/hrms/notification-routing");
+    const rules = data.rules || [];
+    const roleOpts = ["agent", "tl", "op", "quality", "rtm", "hr", "admin", "finance", "ceo"];
+    const rows = rules
+      .map((r) => {
+        const checks = roleOpts
+          .map(
+            (role) =>
+              `<label class="perm-check"><input type="checkbox" data-action="${esc(r.actionKey)}" data-role="${role}" ${
+                (r.recipientRoles || []).includes(role) ? "checked" : ""
+              } /><span>${role}</span></label>`
+          )
+          .join("");
+        return `<tr><td><strong>${esc(r.label)}</strong><br><span class="muted">${esc(r.actionKey)}</span><br><small class="muted">${esc(
+          r.description || ""
+        )}</small></td><td class="notif-routing-roles">${checks}</td></tr>`;
+      })
+      .join("");
+    openModal(
+      `<div class="modal-header"><h2>Notification routing</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div class="modal-body modal-body-scroll">
+        <p class="muted">Choose which roles receive each notification type. Admin and RTM can adjust these defaults.</p>
+        <div class="table-wrap"><table><thead><tr><th>Action</th><th>Notify roles</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" id="notif-routing-seed">Reset defaults</button>
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="notif-routing-save">Save</button>
+      </div>`,
+      true
+    );
+    document.getElementById("notif-routing-seed")?.addEventListener("click", async () => {
+      if (!confirm("Reset all notification routing to defaults?")) return;
+      await api("/hrms/notification-routing/seed", { method: "POST", body: "{}" });
+      closeModal();
+      openNotificationRoutingModal(api, helpers);
+    });
+    document.getElementById("notif-routing-save")?.addEventListener("click", async () => {
+      const byAction = {};
+      document.querySelectorAll("[data-action][data-role]").forEach((input) => {
+        const key = input.dataset.action;
+        if (!byAction[key]) byAction[key] = [];
+        if (input.checked) byAction[key].push(input.dataset.role);
+      });
+      for (const [actionKey, recipientRoles] of Object.entries(byAction)) {
+        await api(`/hrms/notification-routing/${encodeURIComponent(actionKey)}`, {
+          method: "PUT",
+          body: JSON.stringify({ recipientRoles, enabled: true }),
+        });
+      }
+      closeModal();
+      alert("Notification routing saved.");
+    });
   }
 
   async function renderLeavePage(root, api, state, helpers) {
@@ -1422,6 +1551,21 @@ window.HRMSFeatures = (function () {
     );
 
     const role = String(status.user?.role || "").toLowerCase();
+    const canNotifRouting = ["admin", "ceo", "rtm"].includes(role);
+    if (canNotifRouting) {
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<div class="card" id="settings-notif-routing-card">
+          <h3>Notification routing</h3>
+          <p class="muted">Configure which roles receive each system notification (leave, sales, bonuses, notes).</p>
+          <button type="button" class="btn btn-sm btn-primary" id="open-notif-routing-btn">Manage notification routing</button>
+        </div>`
+      );
+      root.querySelector("#open-notif-routing-btn")?.addEventListener("click", () =>
+        openNotificationRoutingModal(api, helpers)
+      );
+    }
+
     const isHolidayAdmin = ["admin", "ceo"].includes(role) && canHolidays;
     if (isHolidayAdmin) {
       grid.insertAdjacentHTML(
@@ -1748,6 +1892,7 @@ window.HRMSFeatures = (function () {
     attendanceHolidaysBannerHtml,
     attendanceBannersHtml,
     initNotificationsBell,
+    openNotificationRoutingModal,
     renderLeavePage,
     renderOrgPage,
     renderEquipmentPage,

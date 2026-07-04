@@ -11,6 +11,27 @@ window.SalesModule = (function () {
     return map[key] || (device ? String(device) : "—");
   }
 
+  function formatEgyptDateTime(date = new Date()) {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Cairo",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  const PAYMENT_SUBMIT_FIELDS = [
+    { key: "paymentMethod", label: "Payment method", section: "payment", type: "select", options: ["Bank account", "Card"], selectPlaceholder: true },
+    { key: "cardType", label: "Card Type", section: "payment", type: "text", cardField: true },
+    { key: "cardNumber", label: "Card Number", section: "payment", type: "text", cardField: true },
+    { key: "cardExpDate", label: "Card Exp Date", section: "payment", type: "text", cardField: true, placeholder: "MM/YY" },
+    { key: "cvv", label: "CVV", section: "payment", type: "text", cardField: true, inputMode: "numeric", maxLength: 4 },
+  ];
+
   function canToggleSalesUnits() {
     return ["quality", "rtm", "hr", "admin", "ceo"].includes(state.user?.role);
   }
@@ -767,32 +788,76 @@ window.SalesModule = (function () {
     const { escapeHtml, closeModal, openModal } = helpers;
     const isEdit = !!sale;
     const catalog = await api("/sales/field-catalog").catch(() => ({ fields: [], attachmentKinds: [] }));
-    const fields = (catalog.fields || []).filter((f) => {
+    let fields = (catalog.fields || []).filter((f) => {
       if (isEdit && f.hideOnEdit) return false;
       if (!isEdit && f.hideOnCreate) return false;
+      if (!isEdit && !canApprove() && f.key === "status") return false;
       return true;
     });
+    if (!isEdit) {
+      for (const pf of PAYMENT_SUBMIT_FIELDS) {
+        if (!fields.some((f) => f.key === pf.key)) fields.push({ ...pf, canEdit: true });
+      }
+    }
     const formData = sale?.formData || {};
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
     const closerEmp = employees.find((e) => e.id === sale?.closerId);
-    const agentOpts = employeeSelectOptions(employees, escapeHtml, sale?.agentId || "", "dialing");
+    function isDialingAgentUser(user, emps) {
+      const id = user?.employeeId;
+      if (!id || /^(TL|CL|OP|HR|MG|OF|NW)/i.test(String(id))) return false;
+      return emps.some((e) => e.id === id);
+    }
+    const defaultAgentId =
+      sale?.agentId || (isDialingAgentUser(state.user, employees) ? state.user?.employeeId : "") || "";
+    const defaultCloserId =
+      sale?.closerId || (["tl", "op"].includes(state.user?.role) ? state.user?.employeeId : "") || "";
+    const agentOpts = employeeSelectOptions(employees, escapeHtml, defaultAgentId, "dialing");
 
     function fieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key === "deviceType" ? "device" : f.key;
+      const cardClass = f.cardField ? " sale-card-fields hidden" : "";
+      const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
+      if (f.type === "datetime") {
+        if (!isEdit) {
+          const display = formatEgyptDateTime();
+          return `<div class="field"><span>${escapeHtml(f.label)}</span><div class="field-readonly">${escapeHtml(display)}</div><small class="muted">Egypt local time — set automatically on submit</small></div>`;
+        }
+        return `<div class="field"><span>${escapeHtml(f.label)}</span><div class="field-readonly">${escapeHtml(val || "—")}</div></div>`;
+      }
       if (f.type === "employee") {
         const selected = val || "";
-        return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, selected, f.employeeFilter || "all")}</select></label>`;
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, selected, f.employeeFilter || "all")}</select></label>`;
       }
       if (f.type === "select" && f.options) {
-        return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}">${f.options.map((o) => `<option value="${o}" ${String(val) === o ? "selected" : ""}>${o}</option>`).join("")}</select></label>`;
+        const placeholder = f.selectPlaceholder ? '<option value="">— Select —</option>' : "";
+        const opts = f.options
+          .map((o) => `<option value="${escapeHtml(o)}" ${String(val) === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
+          .join("");
+        const req = f.required ? " required" : "";
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}"${idAttr}${req}>${placeholder}${opts}</select></label>`;
       }
       if (f.type === "textarea") {
-        return `<label class="field" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
+        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
       }
       const inputType = f.type === "tel" ? "tel" : f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
       const req = f.required ? " required" : "";
-      return `<label class="field"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}"${req} /></label>`;
+      const inputMode = f.inputMode ? ` inputmode="${f.inputMode}"` : "";
+      const maxLength = f.maxLength ? ` maxlength="${f.maxLength}"` : "";
+      const autoComplete = f.cardField || f.key === "cvv" || f.key === "cardNumber" ? ' autocomplete="off"' : "";
+      const placeholder = f.placeholder ? ` placeholder="${escapeHtml(f.placeholder)}"` : "";
+      return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}"${req}${inputMode}${maxLength}${autoComplete}${placeholder} /></label>`;
+    }
+
+    function wirePaymentToggle(form) {
+      const sel = form.querySelector("#sale-payment-method");
+      const cardFields = form.querySelectorAll(".sale-card-fields");
+      function sync() {
+        const show = sel?.value === "Card";
+        cardFields.forEach((el) => el.classList.toggle("hidden", !show));
+      }
+      sel?.addEventListener("change", sync);
+      sync();
     }
 
     const agentCloserHtml = isEdit
@@ -801,7 +866,7 @@ window.SalesModule = (function () {
           <span class="muted">Closer</span><div><strong>${escapeHtml(sale?.closerId || "—")}</strong> — ${escapeHtml(closerEmp?.american_name || "")}</div>
         </div>`
       : `<label class="field"><span>Agent</span><select name="agentId" required>${agentOpts}</select></label>
-         <label class="field"><span>Closer</span><select name="closerId">${closerSelectOptions(employees, escapeHtml, sale?.closerId || "")}</select></label>`;
+         <label class="field"><span>Closer</span><select name="closerId">${closerSelectOptions(employees, escapeHtml, defaultCloserId)}</select></label>`;
 
     const sections = [...new Set(fields.map((f) => f.section || "general"))];
     const sectionHtml = sections.map((sec) => {
@@ -822,6 +887,10 @@ window.SalesModule = (function () {
         <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
       </form>
     `, true);
+    document.querySelector("#modal-root .modal")?.classList.add("sale-form-modal");
+
+    const saleForm = document.getElementById("sale-form");
+    wirePaymentToggle(saleForm);
 
     let salesClientsMeta = null;
     if (window.HRSalesConfigBreaks) {
@@ -829,6 +898,7 @@ window.SalesModule = (function () {
         api,
         { escapeHtml, closeModal, openModal },
         sale,
+        employees,
         document.getElementById("modal-root") || document,
         () => canFullEditSale(),
         openSaleAttachment
@@ -856,9 +926,20 @@ window.SalesModule = (function () {
         return;
       }
       const fd = new FormData(e.target);
+      const paymentMethod = String(fd.get("paymentMethod") || "").trim();
+      if (!isEdit && !paymentMethod) {
+        alert("Select a payment method (Bank account or Card).");
+        return;
+      }
+      if (paymentMethod === "Card") {
+        if (!String(fd.get("cardNumber") || "").trim() || !String(fd.get("cardExpDate") || "").trim() || !String(fd.get("cvv") || "").trim()) {
+          alert("Enter card number, expiration, and CVV when payment method is Card.");
+          return;
+        }
+      }
       const body = { formData: {} };
       for (const [k, v] of fd.entries()) {
-        if (k === "agentId" || k === "closerId") body[k] = v;
+        if (k === "agentId" || k === "closerId" || k === "unit" || k === "team") body[k] = v;
         else if (k === "device") {
           body.device = v;
           body.formData.deviceType = v;
@@ -877,6 +958,11 @@ window.SalesModule = (function () {
           if (k === "status") body.status = v;
           if (k === "feedback") body.feedback = v;
         }
+      }
+      if (!body.fullName) {
+        const fn = body.formData.firstName || fd.get("firstName") || "";
+        const ln = body.formData.lastName || fd.get("lastName") || "";
+        body.fullName = [fn, ln].filter(Boolean).join(" ").trim();
       }
       try {
         let saleId = sale?.id;
