@@ -28,6 +28,8 @@
     "fix:electron": "node node_modules/electron/install.js",
     "test:supabase": "node scripts/test-supabase.js",
     "test:training-payroll": "node scripts/test-training-payroll.js",
+    "qa:training-payroll": "node scripts/qa-training-payroll-check.js",
+    "cleanup:artifacts": "node scripts/cleanup-github-artifacts.js",
     "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js",
     "migrate:sale-attachments": "node scripts/migrate-sale-attachments-to-supabase.js",
     "apply:github-patch": "node scripts/apply-github-patch-standalone.js",

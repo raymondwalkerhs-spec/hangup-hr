@@ -306,9 +306,12 @@ Every release must include **patch zips + full packages** when a prior manifest 
 
 After CI: **remove stale assets** (wrong-version duplicates on the same tag). Mark release **Latest**. Rebuild web bootstrap: `npm run dist:web-installer` (uses GitHub `/releases/latest` + Setup matching that tag).
 
+If CI fails with **Artifact storage quota has been hit**, run `npm run cleanup:artifacts` (deletes stale Actions artifacts), then re-run the workflow.
+
 ```powershell
 git push origin HEAD
 # wait for push to finish before CI
+npm run cleanup:artifacts   # only if quota blocked prior CI upload
 gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=vX.Y.Z
 gh run watch --repo raymondwalkerhs-spec/hangup-hr
 gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest

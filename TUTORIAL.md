@@ -116,7 +116,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 ### Training payroll (HR)
 
-1. Set **Trainee** monthly rate on **Salaries** before hiring trainees.  
+1. Set **Trainee** monthly rate on **Salaries** before hiring trainees (live: **7,000 EGP** for July 2026 — adjust per month as needed).  
 2. New employee with **In training** → position **Trainee** + 4-week program from Phase 1 Monday.  
 3. Employee card → **Training program**: phase status, sales counts (4/phase, 12 total), outcome, promotion date.  
 4. **Promote to Agent** when 12+ passed sales — sets dual payslip if promotion is mid-month.  

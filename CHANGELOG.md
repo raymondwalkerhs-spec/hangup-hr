@@ -20,6 +20,10 @@ All notable changes to the Hangup Portal desktop app.
 - Training panel: outcome dropdown, promotion date, pay preview, Promote to Agent
 - Payroll: **Training + Agent** badge; payslip modal dual tabs and split kind `training_payroll`
 
+### Ops
+- **Trainee rate** seeded live at **7,000 EGP/mo** (Salaries); HR can adjust per month
+- **`npm run cleanup:artifacts`** — deletes stale GitHub Actions CI artifacts when storage quota blocks release upload
+
 ## [1.4.6] — 2026-07-04
 
 ### Fixed

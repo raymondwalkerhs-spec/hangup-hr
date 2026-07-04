@@ -11,6 +11,8 @@ On every shipped version in Hangup HR:
 
 2. **Commit and push** to GitHub before triggering CI — never run Release workflow until `git push` completes.
 
+2b. **If CI upload fails** (`Artifact storage quota has been hit`): run `npm run cleanup:artifacts` to delete stale Actions artifacts, then re-run the Release workflow.
+
 3. **GitHub release must include BOTH:**
    - **Patch zips** — `Hangup-Portal-{version}-{platform}-patch-from-{prev}.zip` (when prior manifest exists)
    - **Full packages** — `Hangup-Portal-Setup-{version}.exe`, `{version}-win-x64-full.zip`, mac full zips + DMG
@@ -26,6 +28,7 @@ On every shipped version in Hangup HR:
 ```powershell
 git push origin HEAD
 # wait for push
+npm run cleanup:artifacts   # if prior CI failed on artifact quota
 gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=vX.Y.Z
 gh run watch --repo raymondwalkerhs-spec/hangup-hr
 gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest

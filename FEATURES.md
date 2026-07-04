@@ -138,7 +138,7 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 ### Training payroll (1.5.0)
 
-- **Trainee** position rate (Salaries page) — separate from Agent basic pay  
+- **Trainee** position rate (Salaries page) — separate from Agent basic pay; live default **7,000 EGP/mo** (July 2026)
 - **4-week program** — Phase 1 unpaid; Phase 2–4 trainee rate when phase passed  
 - **12 passed sales** (4 per evaluation phase) + HR **Promote to Agent**  
 - **Dual payslip** same month when promotion mid-month: Training PDF + Agent PDF  
