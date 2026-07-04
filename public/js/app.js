@@ -1873,18 +1873,34 @@ function updateAttendanceTable(root) {
   bindAttendanceGridEvents(root, ctx);
 }
 
+function payrollRowNet(r) {
+  if (r?.payrollKind === "dual") return r.combinedNet ?? r.netSalary ?? 0;
+  return r.netSalary ?? 0;
+}
+
+function payrollRowBasic(r) {
+  if (r?.payrollKind === "dual") return r.combinedBasic ?? r.basicSalary ?? 0;
+  return r.basicSalary ?? 0;
+}
+
 function payrollRowHtml(r) {
+  const dualBadge =
+    r.payrollKind === "dual"
+      ? `<span class="badge badge-ok" style="font-size:.65rem;margin-left:.25rem">Training + Agent</span>`
+      : r.payrollKind === "training"
+        ? `<span class="badge" style="font-size:.65rem;margin-left:.25rem">Training</span>`
+        : "";
   return `<tr class="clickable" data-pay="${r.employeeId}">
-    <td><div class="emp-cell">${avatarHtml({ id: r.employeeId, american_name: r.name, profile_photo_file_id: r.profile_photo_file_id, profile_photo_updated: r.profile_photo_updated })}<div><strong>${r.name}</strong><div class="muted">${r.employeeId} · ${r.unit || "—"}</div></div></div></td>
+    <td><div class="emp-cell">${avatarHtml({ id: r.employeeId, american_name: r.name, profile_photo_file_id: r.profile_photo_file_id, profile_photo_updated: r.profile_photo_updated })}<div><strong>${r.name}</strong>${dualBadge}<div class="muted">${r.employeeId} · ${r.unit || "—"}</div></div></div></td>
     <td>${payrollStatusBadge(r.payrollStatus)}</td>
-    <td class="text-center">${r.salesCount || "—"}</td>
-    <td class="text-right">${r.commissionAmount ? fmt(r.commissionAmount) : "—"}</td>
+    <td class="text-center">${r.salesCount || (r.agent?.salesCount) || "—"}</td>
+    <td class="text-right">${r.commissionAmount || r.agent?.commissionAmount ? fmt(r.commissionAmount || r.agent?.commissionAmount) : "—"}</td>
     <td><span class="badge badge-status">${r.paymentMethod || "—"}</span></td>
-    <td class="text-center">${r.totalWorkingDays}</td>
-    <td class="text-right">${fmt(r.basicSalary)}</td>
-    <td class="text-right amount-pos">${fmt(r.transportAllowance)}</td>
+    <td class="text-center">${r.totalWorkingDays || (r.training?.totalWorkingDays || 0) + (r.agent?.totalWorkingDays || 0)}</td>
+    <td class="text-right">${fmt(payrollRowBasic(r))}</td>
+    <td class="text-right amount-pos">${fmt((r.transportAllowance || 0) + (r.agent?.transportAllowance || 0))}</td>
     <td class="text-right amount-neg">${r.loanDeductionTotal ? `-${fmt(r.loanDeductionTotal)}` : "—"}</td>
-    <td class="text-right"><strong>${fmt(r.netSalary)}</strong>${r.hasSplits ? `<div class="muted" style="font-size:.7rem">calc ${fmt(r.calculatedNet)}</div>` : ""}${r.receivedTotal ? `<div class="muted" style="font-size:.7rem">paid ${fmt(r.receivedTotal)}</div>` : ""}</td>
+    <td class="text-right"><strong>${fmt(payrollRowNet(r))}</strong>${r.hasSplits ? `<div class="muted" style="font-size:.7rem">calc ${fmt(r.calculatedNet)}</div>` : ""}${r.receivedTotal ? `<div class="muted" style="font-size:.7rem">paid ${fmt(r.receivedTotal)}</div>` : ""}</td>
     <td><button class="btn btn-sm" data-slip="${r.employeeId}">Payslip</button></td>
   </tr>`;
 }
@@ -2861,16 +2877,33 @@ async function openPayslipModal(employeeId) {
   );
   const empById = new Map((empListRes.employees || []).map((e) => [e.id, e]));
   const p = data.payslip;
+  const isDual = p.payrollKind === "dual";
+  const activeSlip = isDual ? p.training || p : p;
+  const dualBanner = isDual
+    ? `<div class="alert alert-info" style="margin-bottom:1rem">
+        <strong>Dual payslip month</strong> — Training: ${fmt(p.training?.netSalary || 0)} EGP · Agent: ${fmt(p.agent?.netSalary || 0)} EGP · Combined: <strong>${fmt(p.combinedNet || 0)} EGP</strong>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn btn-sm" id="pdf-training-btn">Training PDF</button>
+          <button type="button" class="btn btn-sm" id="pdf-agent-btn">Agent PDF</button>
+        </div>
+        <div class="btn-row payslip-tabs" style="margin-top:.5rem">
+          <button type="button" class="btn btn-sm btn-primary" data-payslip-tab="training">Training</button>
+          <button type="button" class="btn btn-sm" data-payslip-tab="agent">Agent</button>
+          <button type="button" class="btn btn-sm" data-payslip-tab="combined">Combined</button>
+        </div>
+      </div>`
+    : "";
   const emp = data.employee || { id: employeeId, american_name: p.name, profile_photo_file_id: p.profile_photo_file_id };
-  const bonusRows = Object.entries(p.bonuses || {})
+  const slipForRender = activeSlip;
+  const bonusRows = Object.entries(slipForRender.bonuses || {})
     .filter(([, v]) => v > 0)
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-pos">+${fmt(v)}</span></div>`)
     .join("");
-  const dedRows = Object.entries(p.deductions || {})
+  const dedRows = Object.entries(slipForRender.deductions || {})
     .filter(([k, v]) => v > 0 && k !== "Lateness Deduction" && k !== TL_BONUS_TYPE)
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-neg">-${fmt(v)}</span></div>`)
     .join("");
-  const bonusTransferRow = p.bonusTransferPayroll
+  const bonusTransferRow = slipForRender.bonusTransferPayroll
     ? `<div class="payslip-row"><span>Agent bonuses (from payroll)</span><span class="amount-neg">-${fmt(p.bonusTransferPayroll)}</span></div>`
     : "";
   const attDetail = attendanceDetailHtml(data.attendance);
@@ -2924,58 +2957,59 @@ async function openPayslipModal(employeeId) {
     .join("");
 
   openModal(
-    `<div class="modal-header"><h2>Payslip — ${p.name}</h2>
+    `<div class="modal-header"><h2>Payslip — ${p.name}${isDual ? " (Training + Agent)" : ""}</h2>
       <div class="btn-row">
         <button class="btn btn-sm" id="hist-slip-btn">History</button>
         <button class="btn btn-sm" id="pdf-slip-btn">PDF</button>
         <button class="btn btn-sm" onclick="window.print()">Print</button>
         <button class="btn btn-sm" data-close>✕</button>
       </div></div>
-    <div class="modal-body payslip">
+    <div class="modal-body payslip" id="payslip-modal-body">
+      ${dualBanner}
       ${gateBanner}
       ${finalPayBanner}
       <div class="payslip-header">
         <div class="payslip-identity">
           ${avatarHtml(emp, "profile-photo-lg")}
           <div>
-          <strong style="font-size:1.2rem">${p.name}</strong>
-          <div class="muted">${p.employeeId} · ${p.unit || "—"} · ${p.position || "—"}</div>
-          <div class="muted">${monthLabel(state.month)} · ${p.paymentMethod || "—"}</div>
-          <div style="margin-top:.35rem">${payrollStatusBadge(p.payrollStatus)}</div>
+          <strong style="font-size:1.2rem">${slipForRender.name || p.name}</strong>
+          <div class="muted">${slipForRender.employeeId || p.employeeId} · ${slipForRender.unit || p.unit || "—"} · ${slipForRender.position || p.position || "—"}</div>
+          <div class="muted">${monthLabel(state.month)} · ${slipForRender.paymentMethod || p.paymentMethod || "—"}</div>
+          <div style="margin-top:.35rem">${payrollStatusBadge(slipForRender.payrollStatus || p.payrollStatus)}</div>
           <label class="btn btn-sm" style="margin-top:.5rem" id="payslip-photo-btn">Change photo
             <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden />
           </label>
           </div>
         </div>
-        <div class="text-right"><div class="muted">Monthly salary</div><strong>${fmt(p.monthlySalary)} EGP</strong>
-          ${p.salaryRaise ? `<div class="muted">incl. raise +${fmt(p.salaryRaise)}</div>` : ""}</div>
+        <div class="text-right"><div class="muted">Monthly salary</div><strong>${fmt(slipForRender.monthlySalary ?? p.monthlySalary)} EGP</strong>
+          ${slipForRender.salaryRaise || p.salaryRaise ? `<div class="muted">incl. raise +${fmt(slipForRender.salaryRaise || p.salaryRaise)}</div>` : ""}</div>
       </div>
-      <div class="grid-2">
+      <div class="grid-2" id="payslip-detail-grid">
         <div class="payslip-section">
           <h4>Attendance</h4>
-          <div class="payslip-row"><span>Working days</span><span>${p.totalWorkingDays}</span></div>
-          ${p.extraDays ? `<div class="payslip-row"><span>Extra days</span><span>${p.extraDays}</span></div>` : ""}
-          ${p.nsnc ? `<div class="payslip-row"><span>NSNC</span><span>${p.nsnc}</span></div>` : ""}
-          ${p.nsncHalf ? `<div class="payslip-row"><span>NSNC Half Day</span><span>${p.nsncHalf}</span></div>` : ""}
-          <div class="payslip-row"><span>Daily rate (${p.workingDaysInMonth}d)</span><span>${p.dailyRate} EGP</span></div>
-          <div class="payslip-row"><span>Basic salary</span><strong>${fmt(p.basicSalary)} EGP</strong></div>
-          ${p.transportAllowance ? `<div class="payslip-row"><span>Transport (${p.transportDays % 1 === 0 ? p.transportDays : p.transportDays} day-units)</span><span class="amount-pos">+${fmt(p.transportAllowance)}</span></div>` : ""}
-          ${p.salesCount ? `<div class="payslip-row"><span>Sales this month</span><span>${p.salesCount}</span></div>` : ""}
-          ${(p.commissionBreakdown || []).length ? `<div class="payslip-row"><span>Commission tiers</span><span class="amount-pos">${p.commissionBreakdown.map((b) => `${b.label}: ${fmt(b.amount)}`).join(" + ")}</span></div>` : ""}
-          ${p.twoWeekHold ? `<div class="payslip-row"><span>2-week hold</span><span class="amount-neg">-${fmt(p.holdAmount)}</span></div>` : ""}
+          <div class="payslip-row"><span>Working days</span><span>${slipForRender.totalWorkingDays ?? p.totalWorkingDays}</span></div>
+          ${slipForRender.extraDays || p.extraDays ? `<div class="payslip-row"><span>Extra days</span><span>${slipForRender.extraDays || p.extraDays}</span></div>` : ""}
+          ${slipForRender.nsnc || p.nsnc ? `<div class="payslip-row"><span>NSNC</span><span>${slipForRender.nsnc || p.nsnc}</span></div>` : ""}
+          ${slipForRender.nsncHalf || p.nsncHalf ? `<div class="payslip-row"><span>NSNC Half Day</span><span>${slipForRender.nsncHalf || p.nsncHalf}</span></div>` : ""}
+          <div class="payslip-row"><span>Daily rate (${slipForRender.workingDaysInMonth ?? p.workingDaysInMonth}d)</span><span>${slipForRender.dailyRate ?? p.dailyRate} EGP</span></div>
+          <div class="payslip-row"><span>Basic salary</span><strong>${fmt(slipForRender.basicSalary ?? p.basicSalary)} EGP</strong></div>
+          ${slipForRender.transportAllowance || p.transportAllowance ? `<div class="payslip-row"><span>Transport (${(slipForRender.transportDays ?? p.transportDays) % 1 === 0 ? (slipForRender.transportDays ?? p.transportDays) : (slipForRender.transportDays ?? p.transportDays)} day-units)</span><span class="amount-pos">+${fmt(slipForRender.transportAllowance || p.transportAllowance)}</span></div>` : ""}
+          ${slipForRender.salesCount || p.salesCount ? `<div class="payslip-row"><span>Sales this month</span><span>${slipForRender.salesCount || p.salesCount}</span></div>` : ""}
+          ${((slipForRender.commissionBreakdown || p.commissionBreakdown) || []).length ? `<div class="payslip-row"><span>Commission tiers</span><span class="amount-pos">${(slipForRender.commissionBreakdown || p.commissionBreakdown).map((b) => `${b.label}: ${fmt(b.amount)}`).join(" + ")}</span></div>` : ""}
+          ${slipForRender.twoWeekHold || p.twoWeekHold ? `<div class="payslip-row"><span>2-week hold</span><span class="amount-neg">-${fmt(slipForRender.holdAmount || p.holdAmount)}</span></div>` : ""}
         </div>
         <div class="payslip-section">
           <h4>Net pay</h4>
           ${bonusRows || '<div class="muted">No bonuses</div>'}
-          <div class="payslip-row"><span>Lateness</span><span class="amount-neg">-${fmt(p.latenessDeduction)}</span></div>
+          <div class="payslip-row"><span>Lateness</span><span class="amount-neg">-${fmt(slipForRender.latenessDeduction ?? p.latenessDeduction)}</span></div>
           ${attDetail}
           ${dedRows}
           ${bonusTransferRow}
-          ${p.deferredIn ? `<div class="payslip-row"><span>Carried from prior month</span><span class="amount-pos">+${fmt(p.deferredIn)}</span></div>` : ""}
-          <div class="payslip-row"><span>Calculated net</span><span>${fmt(p.calculatedNet ?? p.netSalary)} EGP</span></div>
-          ${p.receivedTotal ? `<div class="payslip-row"><span>Paid (splits)</span><span class="amount-neg">-${fmt(p.receivedTotal)}</span></div>` : ""}
-          ${p.deferredOut ? `<div class="payslip-row"><span>Deferred to later month</span><span class="amount-neg">-${fmt(p.deferredOut)}</span></div>` : ""}
-          <div class="payslip-row payslip-total"><span>Balance due</span><span>${fmt(p.remainingBalance ?? p.netSalary)} EGP</span></div>
+          ${slipForRender.deferredIn || p.deferredIn ? `<div class="payslip-row"><span>Carried from prior month</span><span class="amount-pos">+${fmt(slipForRender.deferredIn || p.deferredIn)}</span></div>` : ""}
+          <div class="payslip-row"><span>Calculated net</span><span>${fmt(slipForRender.calculatedNet ?? slipForRender.netSalary ?? p.calculatedNet ?? p.netSalary)} EGP</span></div>
+          ${slipForRender.receivedTotal || p.receivedTotal ? `<div class="payslip-row"><span>Paid (splits)</span><span class="amount-neg">-${fmt(slipForRender.receivedTotal || p.receivedTotal)}</span></div>` : ""}
+          ${slipForRender.deferredOut || p.deferredOut ? `<div class="payslip-row"><span>Deferred to later month</span><span class="amount-neg">-${fmt(slipForRender.deferredOut || p.deferredOut)}</span></div>` : ""}
+          <div class="payslip-row payslip-total"><span>Balance due</span><span>${fmt(isDual ? (p.combinedNet ?? payrollRowNet(p)) : (slipForRender.remainingBalance ?? slipForRender.netSalary ?? p.remainingBalance ?? p.netSalary))} EGP</span></div>
         </div>
       </div>
       <div class="grid-2" style="margin-top:1rem">
@@ -3060,6 +3094,7 @@ async function openPayslipModal(employeeId) {
           <label class="field"><span>Type</span><select name="splitKind">
             <option value="payment">Payment</option>
             <option value="training_bonus">Training bonus</option>
+            <option value="training_payroll">Training payroll</option>
             <option value="correction">Correction (+/−)</option>
           </select></label>
           <label class="field"><span>Status</span><select name="status">
@@ -3091,6 +3126,26 @@ async function openPayslipModal(employeeId) {
       alert(e.message);
     }
   };
+  document.getElementById("pdf-training-btn")?.addEventListener("click", async () => {
+    try {
+      await downloadFile(
+        `/payslip/${employeeId}/pdf?month=${state.month}&kind=training`,
+        `payslip-${employeeId}-${state.month}-training.pdf`
+      );
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+  document.getElementById("pdf-agent-btn")?.addEventListener("click", async () => {
+    try {
+      await downloadFile(
+        `/payslip/${employeeId}/pdf?month=${state.month}&kind=agent`,
+        `payslip-${employeeId}-${state.month}-agent.pdf`
+      );
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 
   bindProfilePhotoUpload(employeeId, () => {
     openPayslipModal(employeeId);

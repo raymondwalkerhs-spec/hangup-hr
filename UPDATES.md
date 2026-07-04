@@ -69,6 +69,18 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 
 ---
 
+## v1.5.0 release checklist
+
+1. Bump `package.json` → `1.5.0`
+2. `npm run apply:migrations` (adds `20260720_training_payroll.sql`)
+3. `npm run test:training-payroll`
+4. `git push` then trigger CI: `gh workflow run "Release (update packages)" --ref desktop/1.0.8-beta.1-updates -f tag=v1.5.0`
+5. After CI: `gh release edit v1.5.0 --prerelease=false --latest` — verify Setup, full zips, patch-from-1.4.6
+6. `node scripts/publish-app-version.js --notes "Training payroll, dual payslips, Trainee position"`
+7. `npm run dist:web-installer` for USB bootstrap
+
+**1.5.0 change:** Training payroll with Trainee rate, dual payslips on mid-month promotion, resignation notice rules.
+
 ## v1.4.6 release checklist
 
 1. Bump `package.json` → `1.4.6`

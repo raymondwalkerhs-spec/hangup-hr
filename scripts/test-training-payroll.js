@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+/** Unit tests for training pay rules and resignation notice scale. */
+const assert = require("assert");
+const rules = require("../lib/training-pay-rules");
+const resignation = require("../lib/resignation-payroll");
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log(`  ok ${name}`);
+  } catch (err) {
+    console.error(`  FAIL ${name}:`, err.message);
+    process.exitCode = 1;
+  }
+}
+
+console.log("training-pay-rules");
+test("phase 1 days excluded from pay", () => {
+  const program = {
+    outcome: "active",
+    allPhases: [
+      { phaseNumber: 1, weekStart: "2026-07-06", weekEnd: "2026-07-10", status: "passed" },
+      { phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" },
+    ],
+  };
+  const att = [{ date: "2026-07-07", status: "Attended" }, { date: "2026-07-14", status: "Attended" }];
+  const days = rules.computeEligibleTrainingPayDates(program, att, "2026-07");
+  assert(!days.has("2026-07-07"), "phase 1 day should be unpaid");
+  assert(days.has("2026-07-14"), "phase 2 day should be paid");
+});
+
+test("voluntary leave pays zero", () => {
+  const program = {
+    outcome: "voluntary_leave",
+    allPhases: [{ phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" }],
+  };
+  const days = rules.computeEligibleTrainingPayDates(program, [{ date: "2026-07-14", status: "Attended" }], "2026-07");
+  assert.equal(days.size, 0);
+});
+
+test("dual payroll when promotion mid-month", () => {
+  const program = {
+    outcome: "passed",
+    promotionEffectiveDate: "2026-07-15",
+    allPhases: [
+      { phaseNumber: 2, weekStart: "2026-07-06", weekEnd: "2026-07-10", status: "passed" },
+      { phaseNumber: 3, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" },
+    ],
+  };
+  assert(rules.hasDualPayrollInMonth(program, "2026-07"));
+  const agentDays = rules.computeAgentPayDates(program, "2026-07");
+  assert(agentDays.has("2026-07-15"));
+  assert(!agentDays.has("2026-07-14"));
+});
+
+test("12 sale minimum evaluation", () => {
+  const phases = [
+    { phaseNumber: 2, salesPassed: 4 },
+    { phaseNumber: 3, salesPassed: 4 },
+    { phaseNumber: 4, salesPassed: 4 },
+  ];
+  const ev = rules.evaluateProgramSales(phases);
+  assert(ev.meetsMinimum12);
+  assert(ev.readyToPass);
+});
+
+console.log("resignation-payroll");
+test("notice pay scale 5-10 sales", () => {
+  assert.equal(resignation.noticePayPercent(4), 0);
+  assert.equal(resignation.noticePayPercent(5), 50);
+  assert.equal(resignation.noticePayPercent(10), 100);
+});
+
+test("scaled basic at 7 sales", () => {
+  const r = resignation.calcNoticePeriodBasicScale({ basicSalary: 10000, passedSalesInNotice: 7 });
+  assert.equal(r.payPercent, 70);
+  assert.equal(r.scaledBasic, 7000);
+});
+
+if (process.exitCode) {
+  console.error("\nSome tests failed.");
+  process.exit(1);
+}
+console.log("\nAll training payroll tests passed.");

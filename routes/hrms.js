@@ -224,19 +224,29 @@ router.put("/onboarding/:employeeId", async (req, res) => {
 const trainingPhases = require("../lib/training-phases");
 
 router.get("/training/:employeeId", async (req, res) => {
-  if (!roles.canManageAll(req.userRole) && req.userRole?.employeeId !== req.params.employeeId) {
+  if (
+    !roles.canManageTrainingProgram(req.userRole) &&
+    !roles.canViewTrainingPayPreview(req.userRole) &&
+    req.userRole?.employeeId !== req.params.employeeId
+  ) {
     return res.status(403).json({ error: "Not allowed" });
   }
   try {
     const program = await trainingPhases.getProgram(req.params.employeeId);
-    res.json({ program, statuses: trainingPhases.PHASE_STATUSES, statusLabels: trainingPhases.STATUS_LABELS });
+    res.json({
+      program,
+      statuses: trainingPhases.PHASE_STATUSES,
+      statusLabels: trainingPhases.STATUS_LABELS,
+      outcomes: trainingPhases.PROGRAM_OUTCOMES,
+      outcomeLabels: trainingPhases.OUTCOME_LABELS,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 router.post("/training/:employeeId", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
   try {
     const phase1Start = req.body?.phase1Start || req.body?.phase1_start;
     if (!phase1Start) return res.status(400).json({ error: "phase1Start required" });
@@ -248,7 +258,7 @@ router.post("/training/:employeeId", async (req, res) => {
 });
 
 router.patch("/training/phases/:phaseId", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
   try {
     const program = await trainingPhases.updatePhase(req.params.phaseId, req.body || {}, req.username);
     res.json({ ok: true, program });
@@ -258,7 +268,7 @@ router.patch("/training/phases/:phaseId", async (req, res) => {
 });
 
 router.post("/training/:employeeId/recalculate", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
   try {
     const from = Number(req.body?.fromPhase || req.body?.fromPhaseNumber || 1);
     const program = await trainingPhases.recalculateFromPhase(req.params.employeeId, from, req.username);
@@ -269,10 +279,92 @@ router.post("/training/:employeeId/recalculate", async (req, res) => {
 });
 
 router.put("/training/:employeeId/active", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
   try {
     const program = await trainingPhases.setProgramActive(req.params.employeeId, req.body?.active, req.username);
     res.json({ ok: true, program });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.patch("/training/:employeeId/outcome", async (req, res) => {
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const program = await trainingPhases.updateProgramOutcome(req.params.employeeId, req.body || {}, req.username);
+    res.json({ ok: true, program });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/training/:employeeId/promote", async (req, res) => {
+  if (!roles.canManageTrainingProgram(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const program = await trainingPhases.promoteToAgent(
+      req.params.employeeId,
+      {
+        promotionDate: req.body?.promotionEffectiveDate || req.body?.promotionDate,
+        passedOnDate: req.body?.passedOnDate,
+      },
+      req.username
+    );
+    const emp = store.getEmployeeById(req.params.employeeId);
+    res.json({ ok: true, program, employee: emp });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get("/training/:employeeId/pay-preview", async (req, res) => {
+  if (!roles.canViewTrainingPayPreview(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const ym = req.query.month || roles.localYearMonth();
+    const emp = store.getEmployeeById(req.params.employeeId);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    const records = store.getAttendanceEvents(ym).filter((r) => r.employeeId === emp.id);
+    const rates = store.getPositionRates(ym);
+    const config = store.getConfig();
+    const { lookupSalary } = require("../lib/month-profile");
+    const workingDays =
+      config.workingDaysByMonth?.[ym] ?? (await store.getWorkingDaysForMonth(ym));
+    const monthly = lookupSalary("Trainee", rates);
+    const dailyRate = workingDays > 0 ? monthly / workingDays : 0;
+    const preview = await trainingPhases.getTrainingPayPreview(req.params.employeeId, ym, {
+      attendance: records,
+      traineeDailyRate: dailyRate,
+    });
+    res.json({ month: ym, preview, traineeMonthlyRate: monthly, traineeDailyRate: Math.round(dailyRate * 100) / 100 });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/resignation/:employeeId/no-notice-deduction", async (req, res) => {
+  if (!roles.canManageResignationPayRules(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const emp = store.getEmployeeById(req.params.employeeId);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    const { applyNoNoticeDeduction } = require("../lib/resignation-payroll");
+    const created = await applyNoNoticeDeduction(emp, req.body?.departDate, store, req.username);
+    res.json({ ok: true, deductions: created });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/resignation/:employeeId/notice-pay-scale", async (req, res) => {
+  if (!roles.canManageResignationPayRules(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const emp = store.getEmployeeById(req.params.employeeId);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    const { applyNoticePeriodPayAdjustment } = require("../lib/resignation-payroll");
+    const scale = await applyNoticePeriodPayAdjustment(emp, req.body?.month || roles.localYearMonth(), {
+      passedSalesInNotice: req.body?.passedSalesInNotice,
+      store,
+      username: req.username,
+    });
+    res.json({ ok: true, scale });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

@@ -112,6 +112,16 @@ Edits outside an employee’s **active employment period** are rejected (after d
 4. Default check-in: before 2:50 PM = OK; 2:50–3:00 Lateness A; 3:00–3:30 Lateness B; 3:30–5:00 Quarter day; after 5:00 Half day.  
 5. Check-out: grace until 1 PM; 7–10 PM = Half day; 10–11:55 PM = Quarter day (unless HR overrides).
 
+**Policy vs FP import (1.5.0):** live attendance policy may differ from FP import defaults — checkout grace in FP import uses **13:00**; manual attendance edits skip FP re-import for that day. HR should align FP rules monthly rather than changing import thresholds without sign-off.
+
+### Training payroll (HR)
+
+1. Set **Trainee** monthly rate on **Salaries** before hiring trainees.  
+2. New employee with **In training** → position **Trainee** + 4-week program from Phase 1 Monday.  
+3. Employee card → **Training program**: phase status, sales counts (4/phase, 12 total), outcome, promotion date.  
+4. **Promote to Agent** when 12+ passed sales — sets dual payslip if promotion is mid-month.  
+5. Payroll payslip modal: **Training** / **Agent** tabs; export PDFs with `Training PDF` / `Agent PDF`.
+
 ---
 
 ## 5c. Loan approvals

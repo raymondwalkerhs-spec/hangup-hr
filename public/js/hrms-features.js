@@ -1114,6 +1114,19 @@ window.HRMSFeatures = (function () {
       .join("");
   }
 
+  function trainingOutcomeOptions(selected) {
+    const opts = [
+      ["active", "Active"],
+      ["passed", "Passed"],
+      ["failed", "Failed"],
+      ["voluntary_leave", "Agent left"],
+      ["company_terminated", "Company terminated"],
+    ];
+    return opts
+      .map(([v, label]) => `<option value="${v}" ${selected === v ? "selected" : ""}>${label}</option>`)
+      .join("");
+  }
+
   function buildTrainingSectionHtml(program, escapeHtml, trainingPassed = false) {
     if (!program) {
       const passedNote = trainingPassed
@@ -1145,9 +1158,34 @@ window.HRMSFeatures = (function () {
         </tr>`
       )
       .join("");
+    const salesEval = program.salesEvaluation || {};
+    const salesWarn =
+      salesEval.totalPassed != null && salesEval.totalPassed < 12
+        ? `<p class="badge badge-warn" style="display:inline-block;margin:.35rem 0">Program total: ${salesEval.totalPassed}/12 passed sales</p>`
+        : salesEval.meetsMinimum12
+          ? `<p class="badge badge-ok" style="display:inline-block;margin:.35rem 0">12+ passed sales — ready to promote</p>`
+          : "";
+    const outcomeBlock = `<div class="field-grid" style="max-width:36rem;margin:.75rem 0">
+      <label class="field"><span>Program outcome</span>
+        <select id="train-outcome">${trainingOutcomeOptions(program.outcome || "active")}</select></label>
+      <label class="field"><span>Promotion effective date</span>
+        <input type="date" id="train-promo-date" value="${escapeHtml(program.promotionEffectiveDate || program.passedOnDate || "")}" /></label>
+      <label class="field"><span>Passed on date</span>
+        <input type="date" id="train-passed-date" value="${escapeHtml(program.passedOnDate || "")}" /></label>
+      <label class="field" style="grid-column:1/-1"><span>Exit notes</span>
+        <input type="text" id="train-exit-notes" value="${escapeHtml(program.exitNotes || "")}" /></label>
+    </div>
+    <div class="btn-row" style="margin-bottom:.5rem">
+      <button type="button" class="btn btn-sm" id="train-save-outcome">Save outcome</button>
+      <button type="button" class="btn btn-sm btn-primary" id="train-promote-btn">Promote to Agent</button>
+      <button type="button" class="btn btn-sm" id="train-pay-preview-btn">Refresh pay preview</button>
+    </div>
+    <div id="train-pay-preview" class="muted" style="font-size:.85rem;margin-bottom:.5rem"></div>
+    ${salesWarn}`;
     return `<details open style="margin-top:1rem" id="hrms-training-section">
-      <summary><strong>Training program (4 weeks)</strong> ${program.active ? '<span class="badge badge-ok">Active</span>' : '<span class="badge">Paused</span>'}</summary>
+      <summary><strong>Training program (4 weeks)</strong> ${program.active ? '<span class="badge badge-ok">Active</span>' : '<span class="badge">Paused</span>'}${program.outcome && program.outcome !== "active" ? ` <span class="badge">${escapeHtml(program.outcomeLabel || program.outcome)}</span>` : ""}</summary>
       ${rejectedNote}
+      ${outcomeBlock}
       <div class="table-wrap" style="margin-top:.5rem"><table>
         <thead><tr><th>Phase</th><th>Week (Mon–Fri)</th><th>Status</th><th>Sales</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1480,6 +1518,61 @@ window.HRMSFeatures = (function () {
         alert(e.message);
       }
     });
+
+    section.querySelector("#train-save-outcome")?.addEventListener("click", async () => {
+      try {
+        await api(`/hrms/training/${emp.id}/outcome`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            outcome: section.querySelector("#train-outcome")?.value,
+            promotionEffectiveDate: section.querySelector("#train-promo-date")?.value || null,
+            passedOnDate: section.querySelector("#train-passed-date")?.value || null,
+            exitNotes: section.querySelector("#train-exit-notes")?.value || "",
+          }),
+        });
+        toast("Training outcome saved.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    section.querySelector("#train-promote-btn")?.addEventListener("click", async () => {
+      if (!confirm("Promote to Agent and close training program?")) return;
+      try {
+        await api(`/hrms/training/${emp.id}/promote`, {
+          method: "POST",
+          body: JSON.stringify({
+            promotionEffectiveDate: section.querySelector("#train-promo-date")?.value,
+            passedOnDate: section.querySelector("#train-passed-date")?.value,
+          }),
+        });
+        toast("Promoted to Agent.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    async function loadPayPreview() {
+      const el = section.querySelector("#train-pay-preview");
+      if (!el) return;
+      try {
+        const month = typeof state !== "undefined" && state.month ? state.month : new Date().toISOString().slice(0, 7);
+        const res = await api(`/hrms/training/${emp.id}/pay-preview?month=${month}`);
+        const p = res.preview;
+        if (!p) {
+          el.textContent = "No pay preview.";
+          return;
+        }
+        el.innerHTML = `Pay preview (${res.month}): <strong>${p.trainingDayCount}</strong> training days, <strong>${p.agentDayCount}</strong> agent days · est. training basic <strong>${p.estimatedTrainingBasic}</strong> EGP${p.dualPayroll ? " · <span class=\"badge badge-ok\">Dual payslip</span>" : ""}`;
+      } catch (e) {
+        el.textContent = e.message || "Preview unavailable";
+      }
+    }
+
+    section.querySelector("#train-pay-preview-btn")?.addEventListener("click", loadPayPreview);
+    loadPayPreview();
   }
 
   async function appendEmployeeLifecyclePanel() {

@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.4.6 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.5.0 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -135,6 +135,16 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **MoM compare** — net pay vs previous month + anomaly flags  
 - **Finance handoff ZIP** — payroll CSV + all payslip PDFs + change log  
 - Payment exports: **Cash**, **Bank**, **Instapay** (CSV + PDF)  
+
+### Training payroll (1.5.0)
+
+- **Trainee** position rate (Salaries page) — separate from Agent basic pay  
+- **4-week program** — Phase 1 unpaid; Phase 2–4 trainee rate when phase passed  
+- **12 passed sales** (4 per evaluation phase) + HR **Promote to Agent**  
+- **Dual payslip** same month when promotion mid-month: Training PDF + Agent PDF  
+- Outcomes: failed (partial phase 2 pay), agent left (zero), company terminated (phase rules)  
+- Split kind **training_payroll**; defer agent portion to next month  
+- Resignation: notice-period pay scale (5–10 sales); no-notice 10-day deduction  
 
 ---
 

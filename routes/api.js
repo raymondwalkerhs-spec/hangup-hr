@@ -168,7 +168,7 @@ async function loadEmployeePayslipBundle(emp, month) {
   const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
   const allPayrollSplits = store.getAllPayrollSplits();
   const splitMaps = buildSplitMaps(allPayrollSplits, month);
-  const payslip = applyPayrollSplits(
+  let payslip = applyPayrollSplits(
     calcPayrollRow(
       emp,
       summary,
@@ -188,6 +188,35 @@ async function loadEmployeePayslipBundle(emp, month) {
     splitMaps.byEmployeeMonth.get(emp.id) || [],
     splitMaps.deferredIn.get(emp.id) || []
   );
+
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { useSupabase } = require("../lib/backend");
+  if (useSupabase()) {
+    try {
+      const trainingPhases = require("../lib/training-phases");
+      const program = await trainingPhases.getProgram(emp.id);
+      if (program) {
+        payslip = enrichPayrollRow(emp, payslip, {
+          ym: month,
+          config,
+          rates,
+          bonusEvents,
+          deductionEvents,
+          adjustment,
+          attendanceRecords: records,
+          commissionTiers,
+          loans,
+          loanPayments,
+          actionPlans,
+          payslipGateNotes: gate.payslipNotes || [],
+          allPayrollSplits,
+        }, program);
+      }
+    } catch (err) {
+      console.warn(`training payroll enrich failed for ${emp.id}:`, err.message);
+    }
+  }
+
   return {
     payslip,
     bonusEvents,
@@ -197,6 +226,40 @@ async function loadEmployeePayslipBundle(emp, month) {
     employees: store.getEmployees(),
     payslipGateNotes: gate.payslipNotes || [],
   };
+}
+
+function payrollRowNet(p) {
+  if (p?.payrollKind === "dual") return p.combinedNet ?? p.netSalary ?? 0;
+  return p?.netSalary ?? 0;
+}
+
+function payrollRowBasic(p) {
+  if (p?.payrollKind === "dual") return p.combinedBasic ?? p.basicSalary ?? 0;
+  return p?.basicSalary ?? 0;
+}
+
+async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
+  const { useSupabase } = require("../lib/backend");
+  if (!useSupabase()) return payroll;
+  try {
+    const trainingPhases = require("../lib/training-phases");
+    const { enrichPayrollRows } = require("../lib/training-payroll");
+    const programs = await trainingPhases.loadProgramsForEmployees(employees.map((e) => e.id));
+    return enrichPayrollRows(
+      payroll,
+      employees,
+      {
+        ym: month,
+        ...ctx,
+        attendanceByEmployee: ctx.attendanceMap,
+        adjustments: ctx.adjustments || [],
+      },
+      programs
+    );
+  } catch (err) {
+    console.warn("training payroll batch enrich failed:", err.message);
+    return payroll;
+  }
 }
 
 async function upsertTlBonusPair(req, { employeeId, date, amount, reason, unit, deductFromEmployeeId }) {
@@ -1111,7 +1174,9 @@ router.post("/employees", async (req, res) => {
     return res.status(403).json({ error: "HR/admin only" });
   }
   try {
-    const emp = await store.createEmployee(req.body, req.username);
+    const body = { ...req.body };
+    if (body.inTraining && !body.position) body.position = "Trainee";
+    const emp = await store.createEmployee(body, req.username);
     if (req.body.inTraining && req.body.phase1Start) {
       try {
         const trainingPhases = require("../lib/training-phases");
@@ -1676,7 +1741,7 @@ router.get("/payroll", async (req, res) => {
     )
   );
 
-  const payroll = buildPayroll(
+  let payroll = buildPayroll(
     employees,
     summaries,
     month,
@@ -1692,6 +1757,18 @@ router.get("/payroll", async (req, res) => {
     allPayrollSplits,
     actionPlans
   );
+  payroll = await enrichPayrollWithTraining(payroll, employees, month, {
+    config,
+    rates,
+    bonusEvents,
+    deductionEvents,
+    adjustments,
+    attendanceMap,
+    commissionTiers,
+    loans,
+    loanPayments,
+    allPayrollSplits,
+  });
   const monthLock = useSupabase() ? await hrms.getPayrollMonthLock(month) : null;
   res.json({
     month,
@@ -1705,12 +1782,12 @@ router.get("/payroll", async (req, res) => {
     payrollStatuses: PROFILE_STATUSES,
     totals: {
       employees: payroll.length,
-      totalBasic: payroll.reduce((s, p) => s + p.basicSalary, 0),
+      totalBasic: payroll.reduce((s, p) => s + payrollRowBasic(p), 0),
       totalBonuses: payroll.reduce((s, p) => s + p.totalBonuses, 0),
       totalLateness: payroll.reduce((s, p) => s + p.latenessDeduction, 0),
       totalDeductions: payroll.reduce((s, p) => s + p.totalDeductions, 0),
       totalBonusTransfers: payroll.reduce((s, p) => s + (p.bonusTransferPayroll || 0), 0),
-      totalNet: payroll.reduce((s, p) => s + p.netSalary, 0),
+      totalNet: payroll.reduce((s, p) => s + payrollRowNet(p), 0),
     },
   });
 });
@@ -1801,10 +1878,14 @@ router.get("/payroll/:employeeId", async (req, res) => {
   }
 
   const bundle = await loadEmployeePayslipBundle(emp, month);
+  const payslip = bundle.payslip;
   res.json({
     month,
-    payslip: bundle.payslip,
-    splits: bundle.payslip.splits || [],
+    payslip,
+    payrollKind: payslip.payrollKind || "standard",
+    trainingPayslip: payslip.training || null,
+    agentPayslip: payslip.agent || null,
+    splits: payslip.splits || [],
     splitKinds: SPLIT_KINDS,
     splitStatuses: SPLIT_STATUSES.filter((s) => s !== "cancelled"),
     employee: emp,
@@ -3008,7 +3089,10 @@ router.get("/payslip/:employeeId/pdf", async (req, res) => {
 
   const bundle = await loadEmployeePayslipBundle(emp, month);
   const { buildPayslipPdf } = require("../lib/payslip-pdf");
-  let payslip = bundle.payslip;
+  const { resolvePayslipFromBundle } = require("../lib/training-payroll");
+  const kind = req.query.kind || "";
+  let payslip = resolvePayslipFromBundle(bundle, kind);
+  if (!payslip) return res.status(404).json({ error: "Payslip kind not found" });
   const splitId = req.query.splitId;
   if (splitId) {
     const split = (payslip.splits || []).find((s) => s.id === splitId && s.status === "received");
@@ -3030,8 +3114,8 @@ router.get("/payslip/:employeeId/pdf", async (req, res) => {
     payslipGateNotes: bundle.payslipGateNotes || [],
     splitLabel: splitId ? `Split payment` : null,
   });
-  const safeName = (bundle.payslip.name || emp.id).replace(/[^\w\s-]+/g, "").trim().replace(/\s+/g, "-");
-  const suffix = splitId ? `-split` : "";
+  const safeName = (payslip.name || emp.id).replace(/[^\w\s-]+/g, "").trim().replace(/\s+/g, "-");
+  const suffix = splitId ? `-split` : kind ? `-${kind}` : "";
   res
     .type("application/pdf")
     .attachment(`payslip-${emp.id}-${safeName}-${month}${suffix}.pdf`)

@@ -4,6 +4,22 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-05
+
+### Added
+- **Training payroll** — **Trainee** position rate in Salaries; new hires with `inTraining` default to Trainee
+- **Phase pay rules** — Phase 1 unpaid; Phase 2+ trainee rate; outcomes (passed, failed, agent left, company terminated)
+- **Dual payslips** — same month splits **Training** (trainee days) + **Agent** (from promotion date) with separate PDFs (`?kind=training|agent`)
+- **12 passed sales** — program pass threshold (4 per phase 2–4); HR promote sets Agent position + dates
+- **Resignation pay** — 2-week notice scale (5–10 passed sales → 50–100% basic); no-notice 10 working-day deduction
+- **Deduction types** — No-Notice Departure Penalty, Training Cancellation, Notice Period Shortfall
+- **RBAC** — `manageTrainingProgram`, `viewTrainingPayPreview`, `approveTrainingPayslip`, `manageResignationPayRules`
+- **Migration** — `20260720_training_payroll.sql` (program outcomes, phase exit reasons, Trainee seed)
+
+### HR UI
+- Training panel: outcome dropdown, promotion date, pay preview, Promote to Agent
+- Payroll: **Training + Agent** badge; payslip modal dual tabs and split kind `training_payroll`
+
 ## [1.4.6] — 2026-07-04
 
 ### Fixed

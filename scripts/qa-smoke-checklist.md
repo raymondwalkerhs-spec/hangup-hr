@@ -38,3 +38,10 @@ Run after each release candidate. Mark pass/fail and fix root cause before shipp
 
 ## macOS (CI)
 - [ ] `build-macos` job produces DMG + zips on tag push
+
+## Training payroll (1.5.0)
+- [ ] Trainee rate on Salaries; new in-training hire gets Trainee position
+- [ ] Training panel: outcome, promotion date, pay preview, promote
+- [ ] Mid-month promote → dual payslip badge + Training/Agent PDFs
+- [ ] `npm run test:training-payroll` passes
+- [ ] Resignation no-notice deduction creates 10-day penalty rows
