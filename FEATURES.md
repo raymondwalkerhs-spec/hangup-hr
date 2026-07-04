@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.4.4 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.4.5 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -225,9 +225,10 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Action Plan Week** (formerly AIP) · lifecycle modals  
 - **Payroll** hide zero net · **Nationality** dropdown + aliases  
 
-## RBAC & privacy (1.4.3)
+## RBAC & privacy (1.4.3+)
 
 - **IT role** — full equipment inventory (with HR/Admin); assign on **Users** page and tune in **Access Control** (1.4.4 syncs assignable roles with catalog)
+- **Reposition / app ID (1.4.5)** — HR/IT/RTM moves set correct backend ID pool; optional **Enforce unit / role ID prefix** on Reposition and Change app ID
 - **Attendance** — agents read-only; transport allowance controls HR/Admin only
 - **Bonuses / deductions** — TL bonus source and TL/OP transfer sections restricted by role
 - **Employees** — nationality & compliance fields/filters HR/Admin only (self-view for own record)

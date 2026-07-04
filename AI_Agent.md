@@ -12,7 +12,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.4.4` (`package.json` → `version`)
+- **Current version:** `1.4.5` (`package.json` → `version`)
 - **Previous:** `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
@@ -281,14 +281,30 @@ Probe: `node -e "require('dotenv').config(); const {getSupabaseAdmin}=require('.
 
 1. **Implement** feature/fix; keep scope minimal.
 2. **Bump** `package.json` → `version`.
-3. **Update docs:**
+3. **Update docs** (required on every change — do not skip):
    - `CHANGELOG.md` — move `[Unreleased]` → new version section with date
    - `TUTORIAL.md` — user-facing changes
    - `FEATURES.md` — presentation-style feature overview (update when major features ship)
    - `SALES_LOG.md` — when sales log / filters / permissions change
    - `README.md` — architecture / deploy / version notes
-   - `AI_Agent.md` — if workflows, versions, or architecture changed
-4. **Update live `app_versions` in Supabase** (required — do not skip):
+   - `AI_Agent.md` — workflows, versions, `app_versions` table
+4. **Commit and push to GitHub** (required — do not leave fixes local only):
+
+```powershell
+git add <changed files>
+git commit -m "vX.Y.Z: short summary"
+git push origin HEAD
+```
+
+5. **GitHub release with installers** (required for in-app **Update now**):
+
+```powershell
+gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=vX.Y.Z
+# After CI completes:
+gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest
+```
+
+6. **Update live `app_versions` in Supabase** (required — do not skip):
 
 ```powershell
 cd "F:\download app hr"   # or your repo root
@@ -422,9 +438,10 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.4.4** | **true** | Hotfix: blank screen (app.js brace), IT role assignable + Access Control picker, payslip nav fix |
+| **1.4.5** | **true** | Reposition HR/IT/RTM backend_pool fix; optional enforce ID prefix on reposition / change app ID |
+| 1.4.4 | false | Hotfix: blank screen (app.js brace), IT role assignable + Access Control picker, payslip nav fix |
 | 1.4.3 | false | RBAC hardening (IT role, attendance transport, bonus/deduction visibility, employee privacy, org/equipment scoping), sales UI two-status model, payment backfill + dedupe scripts |
-| **1.4.2** | **true** | Sales edit prefill fix, role-first Sales permissions, UI/UX overhaul (tokens/buttons/tables/login), stepped registration |
+| 1.4.2 | false | Sales edit prefill fix, role-first Sales permissions, UI/UX overhaul (tokens/buttons/tables/login), stepped registration |
 | 1.4.1 | false | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
 | 1.4.0 | false | Working day, advanced filter, org/dashboards, sales access surfaces |
 | 1.3.13 | false | Notifications, routing, quality notes, user purge |

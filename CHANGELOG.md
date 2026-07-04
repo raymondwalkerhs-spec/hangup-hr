@@ -4,6 +4,13 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.5] — 2026-07-04
+
+### Fixed
+- **Reposition to HR/IT/RTM** — sets `backend_pool` on new back-office record so HR-/IT-/RTM- IDs validate (was wrongly checking NW- prefix)
+- **Reposition TL/CL/OP** — ID prefix validated against lead role (TL, CL, OP), not dialing unit prefix
+- **Optional ID prefix enforcement** — **Enforce unit / role ID prefix** checkbox on Reposition and Change app ID (unchecked = any unused ID allowed)
+
 ## [1.4.4] — 2026-07-04
 
 ### Fixed

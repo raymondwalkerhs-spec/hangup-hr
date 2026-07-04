@@ -78,6 +78,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 - **Documents** — upload ID, contract, medical notes, etc. (Supabase Storage)  
 - **Warnings & notes** — with escalation levels (1st / 2nd / final)  
 - **Lifecycle** *(HR)* — employment periods, re-hire, depart, onboarding, offboarding, clearance, Action Improvement Plans  
+- **Reposition** *(HR)* — move agent to another unit/team/role; for **HR / IT / RTM** roles the app assigns the correct backend ID pool. Uncheck **Enforce unit / role ID prefix** if you need a custom ID that does not match the usual prefix (e.g. `HR-0001` without forcing `HR-`). Same option on **Change app ID**.  
 
 ---
 

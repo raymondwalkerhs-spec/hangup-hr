@@ -1161,12 +1161,12 @@ router.post("/employees/:id/promote", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) {
     return res.status(403).json({ error: "HR/admin only" });
   }
-  const { newId, leadRole, effectiveFromMonth, position, team } = req.body;
+  const { newId, leadRole, effectiveFromMonth, position, team, enforcePrefix } = req.body;
   if (!newId) return res.status(400).json({ error: "newId required (e.g. TL04, CL02, OP01)" });
   try {
     const result = await store.promoteEmployee(
       req.params.id,
-      { newId, leadRole, effectiveFromMonth, position, team },
+      { newId, leadRole, effectiveFromMonth, position, team, enforcePrefix },
       req.username
     );
     res.json({ ok: true, ...result });
@@ -1194,8 +1194,9 @@ router.post("/employees/:id/change-app-id", async (req, res) => {
   }
   const newId = String(req.body?.newId || "").trim();
   if (!newId) return res.status(400).json({ error: "newId required" });
+  const enforcePrefix = req.body?.enforcePrefix !== false;
   try {
-    const result = await store.changeEmployeeAppId(req.params.id, newId, req.username);
+    const result = await store.changeEmployeeAppId(req.params.id, newId, req.username, { enforcePrefix });
     await store.refreshCache();
     res.json({ ok: true, ...result });
   } catch (err) {

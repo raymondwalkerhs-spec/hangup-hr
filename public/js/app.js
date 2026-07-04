@@ -2328,7 +2328,8 @@ function employeeFormFields(emp = {}) {
     <label class="field"><span>App ID (shown in HR screens)</span>
       ${canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp)
         ? `<div class="btn-row"><input type="text" id="change-app-id-input" value="${escapeHtml(appIdDisplay || "")}" placeholder="App ID" style="max-width:10rem" />
-          <button type="button" class="btn btn-sm" id="change-app-id-btn">Save ID</button></div>`
+          <button type="button" class="btn btn-sm" id="change-app-id-btn">Save ID</button></div>
+          <label class="toggle-label" style="margin-top:.35rem;display:block"><input type="checkbox" id="change-app-id-enforce-prefix" checked /> Enforce unit ID prefix</label>`
         : `<input name="app_id_display" value="${escapeHtml(appIdDisplay || "")}" readonly />`}
     </label>
     <label class="field"><span>Never pay (trial/test)</span><input name="payroll_exempt" type="checkbox" ${emp.payroll_exempt ? "checked" : ""} ${canManagePayrollEvents() ? "" : "disabled"} /></label>
@@ -2471,7 +2472,10 @@ function openEmployeeModal(emp, options = {}) {
     try {
       const res = await api(`/employees/${emp.id}/change-app-id`, {
         method: "POST",
-        body: JSON.stringify({ newId }),
+        body: JSON.stringify({
+          newId,
+          enforcePrefix: document.getElementById("change-app-id-enforce-prefix")?.checked !== false,
+        }),
       });
       closeModal();
       if (res.employee) patchEmployeeInCache(res.employee);
@@ -2689,14 +2693,22 @@ async function openPromoteEmployeeModal(emp) {
     suggestedId = data.suggestedId || "";
     const input = document.getElementById("promote-new-id");
     if (input && !input.dataset.userEdited) input.value = suggestedId;
-    if (leadRole === "Agent" && emp.unit) {
-      try {
+    const dl = document.getElementById("promote-id-list");
+    if (!dl) return;
+    try {
+      if (leadRole === "Agent" && emp.unit) {
         const avail = await api(`/employees/available-ids?unit=${encodeURIComponent(emp.unit)}&limit=15`);
-        const dl = document.getElementById("promote-id-list");
-        if (dl) dl.innerHTML = (avail.ids || []).map((id) => `<option value="${escapeHtml(id)}">`).join("");
-      } catch {
-        /* optional */
+        dl.innerHTML = (avail.ids || []).map((id) => `<option value="${escapeHtml(id)}">`).join("");
+      } else if (["HR", "RTM", "IT"].includes(leadRole)) {
+        const avail = await api(
+          `/employees/available-ids?unit=${encodeURIComponent("HS-Back-End")}&backendPool=${encodeURIComponent(leadRole)}&limit=15`
+        );
+        dl.innerHTML = (avail.ids || []).map((id) => `<option value="${escapeHtml(id)}">`).join("");
+      } else {
+        dl.innerHTML = "";
       }
+    } catch {
+      dl.innerHTML = "";
     }
   };
 
@@ -2730,6 +2742,9 @@ async function openPromoteEmployeeModal(emp) {
           </select></label>
         <label class="field"><span>Effective from month</span>
           <input name="effectiveFromMonth" id="promote-effective" type="month" value="${state.month}" required /></label>
+        <label class="field" style="grid-column:1/-1">
+          <label class="toggle-label"><input type="checkbox" id="promote-enforce-prefix" checked /> Enforce unit / role ID prefix (e.g. HR-, HS3-, TL01)</label>
+        </label>
       </form>
     </div>
     <div class="modal-footer">
@@ -2793,6 +2808,7 @@ async function openPromoteEmployeeModal(emp) {
           effectiveFromMonth,
           position: fd.get("position") || undefined,
           team: fd.get("team") || undefined,
+          enforcePrefix: document.getElementById("promote-enforce-prefix")?.checked !== false,
         }),
       });
       closeModal();
