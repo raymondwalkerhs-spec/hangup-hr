@@ -134,16 +134,21 @@ jobs:
             node scripts/verify-update-package.js $_.FullName
           }
 
-      - name: Upload Windows release artifacts
-        uses: actions/upload-artifact@v4
+      - name: Publish Windows assets to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-windows
-          path: |
+          tag_name: ${{ needs.resolve-tag.outputs.tag }}
+          name: Hangup Portal ${{ needs.resolve-tag.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: true
+          files: |
             dist/Hangup-Portal-*-win-x64*.zip
             dist/Hangup-HR-*-win-x64*.zip
             dist/update-manifests/win-x64-latest.json
             dist/*Setup*.exe
-          if-no-files-found: error
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos:
     needs: resolve-tag
@@ -205,47 +210,27 @@ jobs:
             node scripts/verify-update-package.js "$z"
           done
 
-      - name: Upload macOS release artifacts
-        uses: actions/upload-artifact@v4
+      - name: Publish macOS assets to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-macos
-          path: |
+          tag_name: ${{ needs.resolve-tag.outputs.tag }}
+          draft: false
+          prerelease: true
+          files: |
             dist/Hangup-Portal-*-mac-*.zip
             dist/Hangup-HR-*-mac-*.zip
             dist/update-manifests/mac-*-latest.json
             dist/*.dmg
-          if-no-files-found: warn
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish:
+  promote:
     needs: [resolve-tag, build-windows, build-macos]
+    if: always() && needs.build-windows.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: release-windows
-          path: release-assets
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: release-macos
-          path: release-assets
-          continue-on-error: true
-
-      - name: List release assets
-        run: find release-assets -type f | sort
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.resolve-tag.outputs.tag }}
-          name: Hangup Portal ${{ needs.resolve-tag.outputs.version }}
-          generate_release_notes: true
-          draft: false
-          prerelease: true
-          files: release-assets/**
+      - name: Promote release to Latest
+        run: gh release edit "${{ needs.resolve-tag.outputs.tag }}" --repo "${{ github.repository }}" --prerelease=false --latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

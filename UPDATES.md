@@ -79,7 +79,7 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 6. `node scripts/publish-app-version.js --notes "Training payroll, dual payslips, Trainee position"`
 7. `npm run dist:web-installer` for USB bootstrap
 
-**Storage quota:** if CI fails with `Artifact storage quota has been hit`, run `npm run cleanup:artifacts` (deletes old Actions artifacts ~GB). Then re-run the Release workflow.
+**Storage quota:** GitHub recalculates Actions artifact usage every **6–12 hours** after `npm run cleanup:artifacts`. Release CI **v1.5.0+** uploads directly to GitHub Releases (no Actions artifacts), avoiding quota blocks.
 
 **1.5.0 change:** Training payroll with Trainee rate, dual payslips on mid-month promotion, resignation notice rules.
 
