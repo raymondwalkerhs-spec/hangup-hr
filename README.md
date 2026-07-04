@@ -83,12 +83,6 @@ Or push to GitHub and run the **Build macOS** workflow (see `hr-app/README.md`).
 | `scripts/import_data.py` | **Archived** — one-time Excel → JSON (source `.xlsx` removed after migration) |
 | `decoded-flag-420721-54927f85f245.json` | **Delete after confirming app works** — duplicate of service account key |
 
-## Test login (from HR Access sheet)
 
-| User | Password | status |
-|------|----------|--------|
-| Aurora | HR123@HS | Active |
-| Eva | EVA@123 | Inactive |
-| Raymond | Turtle@123 | Terminated |
 
 See [`LOG.md`](LOG.md) for everything we built, decisions made, and what to do next.
