@@ -268,6 +268,8 @@ Users with export permission can download the current filtered list or a single 
 
 To free Dropbox space after dedupe, run a separate orphan-file audit (not included in v1.4.3).
 
-See [`dedupe-sales-log.txt`](dedupe-sales-log.txt) and [`backfill-sales-payment-log.txt`](backfill-sales-payment-log.txt) for local run output (not committed).
+### Sales log UI (v1.4.6)
+
+Versions **1.4.3–1.4.5** could throw `PERIOD_LABELS is not defined` when opening **Sales log**. Fixed in **1.4.6** — use **Update now** or install `Hangup-Portal-Setup-1.4.6.exe`.
 
 See [`DB_SCHEMA.md`](DB_SCHEMA.md) for migration history (`20260719_v140_sales_org_dashboards.sql` and later).
