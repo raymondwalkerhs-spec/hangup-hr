@@ -22,7 +22,11 @@ All notable changes to the Hangup Portal desktop app.
 - **Two visible statuses** — UI shows **Reviewer status** and **Client status** only; internal workflow status kept for payroll counting but hidden from forms/list
 - **Stat cards** — client-status counts (Passed, Pending bank, Processed, Dropped); hidden when user lacks client-status column view
 - **Quality agent filter** — dialing agents only (excludes quality/leadership IDs); quality role scoped to own unit
-- **Data cleanup** — `scripts/backfill-sales-payment-from-csv.js` fills missing card/bank fields from migration CSV; `scripts/dedupe-sales.js` removes duplicate sales (phone + date)
+- **Data cleanup** — `scripts/backfill-sales-payment-from-csv.js` fills missing card/bank fields from migration CSV; `scripts/dedupe-sales.js` removes duplicate **sales rows** (phone + date) and merges `form_data` / attachment **metadata** onto the survivor
+
+### Notes (data cleanup)
+- **Dedupe does not delete Dropbox files.** It removes duplicate `sales` rows and `sales_attachments` DB rows; unique loser attachments are **reassigned** to the kept sale. Recordings/confirmations still stored on Dropbox are **not** removed automatically — orphaned files may remain until a separate storage cleanup is run.
+- Production run (2026-07-04): **75** duplicate groups merged; **7** sales got payment fields from CSV backfill.
 
 ## [1.4.2] — 2026-07-04
 

@@ -254,5 +254,20 @@ Users with export permission can download the current filtered list or a single 
 | Advanced filter engine | `lib/sales-filter.js` |
 | Working day logic | `lib/sales-working-day.js` |
 | Repair backend teams | `node scripts/repair-backend-teams.js` |
+| Payment field backfill (CSV) | `node scripts/backfill-sales-payment-from-csv.js` (`--dry-run` first) — matches phone + submission date; fills empty card/bank fields only |
+| Dedupe duplicate sales | `node scripts/dedupe-sales.js` (`--dry-run` first) — keeps best row per phone + date; merges form_data; reassigns unique attachments to survivor |
+
+### Dedupe vs file storage (important)
+
+`dedupe-sales.js` cleans the **database** only:
+
+- Deletes duplicate `sales` rows and orphan `sales_attachments` rows on dropped sales.
+- **Reassigns** attachments that exist only on the duplicate sale to the kept sale (no file copy).
+- Does **not** call Dropbox delete — legacy recordings/confirmations on Dropbox are unchanged.
+- Does **not** reliably remove Supabase Storage blobs (paths in DB are Dropbox paths, not bucket keys).
+
+To free Dropbox space after dedupe, run a separate orphan-file audit (not included in v1.4.3).
+
+See [`dedupe-sales-log.txt`](dedupe-sales-log.txt) and [`backfill-sales-payment-log.txt`](backfill-sales-payment-log.txt) for local run output (not committed).
 
 See [`DB_SCHEMA.md`](DB_SCHEMA.md) for migration history (`20260719_v140_sales_org_dashboards.sql` and later).

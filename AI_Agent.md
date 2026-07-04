@@ -199,7 +199,11 @@ Legacy scripts:
 npm run migrate:sale-attachments   # Dropbox → Supabase (one-time)
 node scripts/repair-backend-teams.js
 node scripts/backfill-sales-working-day.js
+node scripts/backfill-sales-payment-from-csv.js --dry-run   # fill empty card/bank from migration CSV
+node scripts/dedupe-sales.js --dry-run                      # merge duplicate sales (DB only; see below)
 ```
+
+**Dedupe (`dedupe-sales.js`):** removes duplicate sales by phone + submission date. Keeps the row with the most attachments / fullest `form_data`. **Does not delete Dropbox recordings or confirmations** — only DB rows; unique attachments are reassigned to the survivor. Log: `dedupe-sales-log.txt`.
 
 ---
 

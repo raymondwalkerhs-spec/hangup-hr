@@ -2,7 +2,14 @@
 /**
  * Remove duplicate sales (same phone_number + submission_date).
  * Keeps the row with the most attachments, then most form_data keys, then newest updated_at.
- * Merges missing form_data from duplicates into survivor; deletes duplicate rows + attachments.
+ * Merges missing form_data from duplicates into survivor; deletes duplicate sale rows + attachment DB rows.
+ *
+ * IMPORTANT — storage cleanup:
+ * - Does NOT delete files from Dropbox (recordings, confirmations, receipts).
+ * - Unique attachments on dropped sales are REASSIGNED to the survivor (same file, new sale_id).
+ * - Only deletes sales_attachments rows when kind+file_name duplicates the survivor's set.
+ * - Supabase Storage remove() is attempted on dropbox_path but paths are usually Dropbox, not bucket keys.
+ * - To free Dropbox space, run a separate orphan-file cleanup after dedupe.
  *
  * Usage:
  *   node scripts/dedupe-sales.js --dry-run
