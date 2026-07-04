@@ -1,4 +1,4 @@
-# Build Hangup HR - NSIS installer (Windows x64). Use "portable" arg only for legacy portable builds.
+# Build Hangup Portal - NSIS installer (Windows x64). Use "portable" arg only for legacy portable builds.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot\..
 
@@ -37,7 +37,7 @@ if (-not (Test-Path ".env")) {
 }
 
 function Stop-HangupAppProcesses {
-  $names = @("Hangup HR", "Hangup HR Beta", "electron")
+  $names = @("Hangup Portal", "Hangup HR", "Hangup HR Beta", "electron")
   $stopped = $false
   foreach ($name in $names) {
     $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
@@ -81,7 +81,7 @@ function Clear-UnpackedOutput {
         }
       }
       $alt = "dist-build"
-      Write-Host "WARNING: $OutputDir\win-unpacked is locked (close Hangup HR, File Explorer in dist\, and retry)." -ForegroundColor Yellow
+      Write-Host "WARNING: $OutputDir\win-unpacked is locked (close Hangup Portal, File Explorer in dist\, and retry)." -ForegroundColor Yellow
       Write-Host "         Building into $alt\ instead." -ForegroundColor Yellow
       return $alt
     }

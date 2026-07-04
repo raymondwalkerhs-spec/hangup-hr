@@ -5,7 +5,7 @@
  */
 if (process.platform !== "darwin") {
   console.error("");
-  console.error("Hangup HR: macOS builds cannot run on " + process.platform + ".");
+  console.error("Hangup Portal: macOS builds cannot run on " + process.platform + ".");
   console.error("");
   console.error("Use one of these options:");
   console.error("  1. On a Mac — cd hr-app && npm run dist:mac");

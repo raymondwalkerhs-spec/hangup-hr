@@ -18,8 +18,8 @@ foreach ($d in $dirs) {
   Get-ChildItem $d -File -ErrorAction SilentlyContinue | ForEach-Object {
     $name = $_.Name
     $remove = $false
-    if ($name -match '^Hangup-HR-.+\.(zip|blockmap)$') { $remove = $name -notmatch [regex]::Escape($version) }
-    elseif ($name -match '^Hangup-HR-Beta.*Setup.+\.exe$') { $remove = $name -notmatch [regex]::Escape($version) }
+    if ($name -match '^Hangup-(HR|Portal)-.+\.(zip|blockmap)$') { $remove = $name -notmatch [regex]::Escape($version) }
+    elseif ($name -match '^Hangup-(HR-Beta.*Setup|Portal-Setup).+\.exe$') { $remove = $name -notmatch [regex]::Escape($version) }
     elseif ($name -match '^\.patch-staging') { $remove = $true }
     if ($remove) {
       if ($DryRun) { Write-Host "  would remove $name" }

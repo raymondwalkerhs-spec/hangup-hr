@@ -1,10 +1,10 @@
-# Hangup HR — Desktop App
+# Hangup Portal — Desktop App
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
-**Hangup HR** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
+**Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.3.9`
+**Current version:** `1.3.10`
 
 | Document | Purpose |
 |----------|---------|
@@ -121,9 +121,9 @@ Outputs in **`dist\`** (or **`dist-build\`** if `dist\` is locked):
 
 | File | Purpose |
 |------|---------|
-| `Hangup-HR-Beta-v2-Setup-{version}.exe` | Installer |
-| `Hangup-HR-Beta-v2-Portable-{version}.exe` | Portable (USB / folder) |
-| `win-unpacked\Hangup HR Beta.exe` | Unpacked (used for GitHub patch zips) |
+| `Hangup-Portal-Setup-{version}.exe` | Installer |
+| `Hangup-Portal-Portable-{version}.exe` | Portable (USB / folder) |
+| `win-unpacked\Hangup Portal.exe` | Unpacked (used for GitHub patch zips) |
 
 Other scripts:
 
@@ -134,7 +134,7 @@ Other scripts:
 npm run dist:all                 # same via npm
 ```
 
-**Before building:** close any running **Hangup HR** / Electron windows so `dist*` folders are not locked.
+**Before building:** close any running **Hangup Portal** / Electron windows so `dist*` folders are not locked.
 
 **Code signing (optional):** set `CSC_LINK` and `CSC_KEY_PASSWORD`, then run the build script.
 
@@ -165,6 +165,7 @@ If Electron fails to start: `npm run fix:electron`
 | `npm run dist:all` | Installer + portable → `dist\` |
 | `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
 | `npm run publish:github` | Package + upload Setup.exe, zips, manifests to GitHub |
+| `npm run dist:web-installer` | Build small GUI web installer (embeds GitHub token from `.env`; private repo OK) |
 | `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
 | `npm run test:supabase` | Check Supabase env and clients |

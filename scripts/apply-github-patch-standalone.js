@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * One-time patch apply when in-app updater is broken (e.g. 1.2.0 adm-zip chmod bug).
- * Close Hangup HR completely before running.
+ * Close Hangup Portal (or legacy Hangup HR) completely before running.
  *
  * Usage:
  *   node scripts/apply-github-patch-standalone.js --install-dir "C:\path\to\folder\with\exe"
@@ -50,6 +50,7 @@ function findInstallDirs() {
     process.cwd(),
     path.join(process.cwd(), "dist-build2"),
     path.join(process.cwd(), "dist"),
+    path.join(os.homedir(), "AppData", "Local", "Programs", "Hangup Portal"),
     path.join(os.homedir(), "AppData", "Local", "Programs", "Hangup HR Beta"),
     path.dirname(process.execPath),
     path.join(os.homedir(), "Desktop"),
@@ -58,9 +59,13 @@ function findInstallDirs() {
   for (const root of roots) {
     if (!root || !fs.existsSync(root)) continue;
     try {
-      const exe = path.join(root, "Hangup HR Beta.exe");
-      if (fs.existsSync(exe) && fs.existsSync(path.join(root, "resources", "app.asar"))) {
-        hits.push(root);
+      const exeNames = ["Hangup Portal.exe", "Hangup HR Beta.exe", "Hangup HR.exe"];
+      for (const exeName of exeNames) {
+        const exe = path.join(root, exeName);
+        if (fs.existsSync(exe) && fs.existsSync(path.join(root, "resources", "app.asar"))) {
+          hits.push(root);
+          break;
+        }
       }
     } catch {
       /* ignore */
@@ -147,14 +152,18 @@ async function pickPatchAsset(fromVersion) {
     (a) => new RegExp(`patch-from-${fromVersion.replace(/\./g, "\\.")}\\.zip$`, "i").test(a.name) && /win-x64/i.test(a.name)
   );
   if (any) return any;
-  const full = assets.find((a) => new RegExp(`hangup-hr-${TARGET_VERSION.replace(/\./g, "\\.")}-win-x64-full\\.zip$`, "i").test(a.name));
+  const full = assets.find(
+    (a) =>
+      new RegExp(`hangup-(portal|hr)-${TARGET_VERSION.replace(/\./g, "\\.")}-win-x64-full\\.zip$`, "i").test(a.name)
+  );
   if (full) return full;
   throw new Error(`No patch or full zip for ${fromVersion} → ${TARGET_VERSION} on GitHub`);
 }
 
 async function applyToInstall(installDir, fromVersion) {
-  const exe = path.join(installDir, "Hangup HR Beta.exe");
-  if (!fs.existsSync(exe)) throw new Error(`Not found: ${exe}`);
+  const exeNames = ["Hangup Portal.exe", "Hangup HR Beta.exe", "Hangup HR.exe"];
+  const exe = exeNames.map((name) => path.join(installDir, name)).find((p) => fs.existsSync(p));
+  if (!exe) throw new Error(`No app executable found in ${installDir}`);
   console.log(`Install folder: ${installDir}`);
   console.log(`Current version (from asar): ${fromVersion || "unknown"}`);
   console.log(`Target: ${TARGET_VERSION}`);
@@ -222,7 +231,7 @@ async function main() {
     else if (found.length > 1) {
       console.log("Multiple installs found:");
       found.forEach((d, i) => console.log(`  [${i + 1}] ${d}`));
-      throw new Error("Pass --install-dir with the folder containing Hangup HR Beta.exe");
+      throw new Error("Pass --install-dir with the folder containing Hangup Portal.exe");
     }
   }
 
@@ -238,7 +247,7 @@ async function main() {
     process.exit(0);
   }
 
-  console.log("\n*** Close Hangup HR completely before continuing ***\n");
+  console.log("\n*** Close Hangup Portal completely before continuing ***\n");
   await new Promise((r) => setTimeout(r, 3000));
 
   await applyToInstall(installDir, fromVersion);

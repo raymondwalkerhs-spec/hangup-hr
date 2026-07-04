@@ -3,6 +3,8 @@ hr-app/
 dist/
 dist-build/
 dist-build2/
+dist-bootstrap/
+dist-bootstrap2/
 dist-beta7/
 dist-release/
 cache/

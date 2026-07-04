@@ -1,8 +1,8 @@
-# Hangup HR — User Guide
+# Hangup Portal — User Guide
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
-Quick guide for daily use of the **Hangup HR** desktop app.  
+Quick guide for daily use of the **Hangup Portal** desktop app.  
 **Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.2.0`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).
@@ -11,7 +11,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 
 ## 1. Sign in
 
-1. Open **Hangup HR Beta** (installer shortcut or portable EXE).
+1. Open **Hangup Portal** (installer shortcut or portable EXE).
 2. Enter **username** and **password** (managed by Raymond in **Users**).
 3. Optional: **Remember my username** and/or **Save password on this device** (stored locally on this PC only).
 4. Click **Sign in**.
@@ -23,7 +23,7 @@ For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.
 | No access assigned | Raymond must set your **role** in **Users** |
 | Forgot password | Contact Raymond, or use **Settings → Change password** if you know the current one |
 | Version blocked | Install the latest EXE from Admin (`app_versions` policy) |
-| Update available (login or in-app) | Click **Update now** to patch via GitHub, or ask Admin for a new EXE installer |
+| Update available (login or in-app) | Click **Update now** — silent installer (Windows) or full app replace (macOS) |
 
 **Notifications** — bell icon in the sidebar (pending leave, document expiry, alerts).
 
@@ -198,11 +198,12 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **HR / admin / CEO** approve or deny; approved bonuses post to payroll.
 - **HR / RTM / quality / admin / office_assistant** cannot receive bonuses via requests — only via **payslip** direct add by HR+.
 
-### Updates (1.2.4+)
+### Updates (1.3.2+)
 
-- In-app **Update now** downloads a small patch zip from GitHub (not a full installer).
-- If update fails with **Invalid package app.asar**, you are on an old build — install **1.2.4+** via standalone script or full zip (see [`UPDATES.md`](UPDATES.md)).
-- **macOS:** Download `.dmg` from GitHub Releases; in-app updates use the same patch system as Windows.
+- **Windows (installed):** **Update now** downloads the Setup installer from GitHub and upgrades silently (~130 MB). The app closes while the installer runs.
+- **Windows (portable):** **Update now** downloads the full update zip and restarts the app when ready.
+- **macOS:** **Update now** downloads the full `.app` and replaces it on restart.
+- If you see **Invalid package app.asar**, use **Update now** again or run the latest Setup.exe manually (see [`UPDATES.md`](UPDATES.md)).
 
 ### Agent registration & training (1.2.3+)
 
@@ -213,13 +214,14 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 ### Sales (1.0.5+; MLA-Ray form 1.0.9-beta.5+)
 
 - **TL/OP add sale:** Pick **client**, **device**, and **price** from the catalog (required when RTM/Admin configured clients in Settings).
-- Quality ticket: listen inline, download, or copy Dropbox share link for recordings.
+- Quality ticket: listen inline, download, or **Share link** (signed Supabase URL, ~7 days — click Share again to refresh).
+- **Export:** Use the format dropdown + **Export list** for current filters, or **Export** on a row for one sale (CSV / Excel / PDF).
 - **Edit sale:** Agent and closer are fixed (shown read-only); set them when creating the sale.
 - Month view filters by **submission date** (not billing/effective date).
 - Quality/RTM can toggle which units (HS-1/2/3) appear in the log.
 - Statuses: **passed**, **pending**, **postdated**, **denied**, **callback** — approve/deny/callback (quality/RTM/HR/admin).
 - **Admin → Sales field permissions** — per-role visibility for form fields.
-- **Attachments:** Download, delete, replace, or copy Dropbox share link from the sale form (Dropbox-only for new uploads).
+- **Attachments:** Download, delete, replace, or **Share link** from the sale form. Files live in **Supabase Storage** (`sales-attachments/…`). Legacy Dropbox files must be migrated once: `npm run migrate:sale-attachments` (valid `DROPBOX_ACCESS_TOKEN` in `.env`).
 - **Break reminders:** Popup when a scheduled break starts (dismiss for this session).
 - **Dashboard** shows weekly passed/pending counts.
 - Agents see own sales only; TL sees team; OP sees unit; quality/RTM/HR see company.

@@ -1108,7 +1108,7 @@ async function updateSidebarBrand() {
 
 function applyCompanyBranding() {
   const title = document.getElementById("brand-title");
-  if (title) title.textContent = state.companyContext === "hs2" ? "Hangup HS-2" : "Hangup HR";
+  if (title) title.textContent = state.companyContext === "hs2" ? "Hangup HS-2" : "Hangup Portal";
   document.body.classList.toggle("company-hs2", state.companyContext === "hs2");
   const wrap = document.getElementById("company-toggle-wrap");
   if (!wrap) return;
@@ -2581,7 +2581,7 @@ async function openPromoteEmployeeModal(emp) {
 
 async function exportEmployeePayrolls(emp) {
   if (!window.hrDesktop?.pickFolder) {
-    alert("Export requires the Hangup HR desktop app.");
+    alert("Export requires the Hangup Portal desktop app.");
     return;
   }
   const data = await api(`/employees/${emp.id}/payroll-months`);
@@ -3853,7 +3853,7 @@ async function openLoansManagerModal() {
 
 async function bulkExportAllPayslips(payrollRows) {
   if (!window.hrDesktop?.pickFolder) {
-    alert("Bulk payslip export requires the Hangup HR desktop app.");
+    alert("Bulk payslip export requires the Hangup Portal desktop app.");
     return;
   }
   if (!payrollRows.length) {

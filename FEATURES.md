@@ -1,15 +1,15 @@
-# Hangup HR — Feature Overview
+# Hangup Portal — Feature Overview
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.3.9 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.3.10 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
-## What is Hangup HR?
+## What is Hangup Portal?
 
-Hangup HR is an all-in-one **HR operations desktop app** for a call-center / BPO-style workforce. It replaces scattered spreadsheets with one place to manage:
+Hangup Portal is an all-in-one **HR operations desktop app** for a call-center / BPO-style workforce. It replaces scattered spreadsheets with one place to manage:
 
 - Who works here  
 - Whether they showed up  
@@ -328,7 +328,7 @@ Same layout everywhere — only colors change.
 
 ## One-line pitch
 
-> **Hangup HR** is a fast, offline-friendly desktop HR system that keeps your workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
+> **Hangup Portal** is a fast, offline-friendly desktop HR system that keeps your workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
 
 ---
 

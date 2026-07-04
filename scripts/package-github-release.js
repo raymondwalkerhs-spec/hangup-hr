@@ -22,7 +22,7 @@ function shouldSkipPatch(relPath) {
   if (shouldSkip(relPath)) return true;
   const norm = String(relPath || "").replace(/\\/g, "/");
   const base = path.basename(norm);
-  if (/^Hangup HR/i.test(base) && /\.exe$/i.test(base)) return true;
+  if (/^Hangup (HR|Portal)/i.test(base) && /\.exe$/i.test(base)) return true;
   return false;
 }
 
@@ -210,7 +210,7 @@ function buildPatchZip({ sourceDir, platform, version, dist, prevManifest, nextF
   };
   fs.writeFileSync(path.join(staging, "update-info.json"), JSON.stringify(updateInfo, null, 2));
 
-  const patchZip = path.join(dist, `Hangup-HR-${version}-${platform}-patch-from-${prevVersion}.zip`);
+  const patchZip = path.join(dist, `Hangup-Portal-${version}-${platform}-patch-from-${prevVersion}.zip`);
   zipDirectory(staging, patchZip);
   fs.rmSync(staging, { recursive: true, force: true });
   return { patchZip, patchFiles: patchFiles.length };
@@ -279,7 +279,7 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
   }
 
   if (includeFull || !prevVersion) {
-    const fullZip = path.join(dist, `Hangup-HR-${version}-${platform}-full.zip`);
+    const fullZip = path.join(dist, `Hangup-Portal-${version}-${platform}-full.zip`);
     zipDirectory(sourceDir, fullZip);
     const fullSize = fs.statSync(fullZip).size;
     console.log(`Created full ${path.basename(fullZip)} (${formatBytes(fullSize)})`);

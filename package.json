@@ -1,7 +1,7 @@
 {
   "name": "hangup-hr",
-  "version": "1.3.9",
-  "description": "Hangup HR desktop app — Supabase backend",
+  "version": "1.3.10",
+  "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
     "start": "node scripts/ensure-electron.js && electron .",
@@ -17,6 +17,8 @@
     "package:github": "node scripts/package-github-release.js",
     "verify:update": "node scripts/verify-update-package.js",
     "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+    "dist:bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
+    "dist:web-installer": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
     "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
     "push:sheet": "node scripts/push-excel-to-sheet.js",
     "import:excel": "python ../scripts/import_data.py && node scripts/push-excel-to-sheet.js",
@@ -33,7 +35,7 @@
   },
   "build": {
     "appId": "com.hangup.hr",
-    "productName": "Hangup HR Beta",
+    "productName": "Hangup Portal",
     "directories": {
       "output": "dist"
     },
@@ -74,7 +76,7 @@
           ]
         }
       ],
-      "artifactName": "Hangup-HR-Beta-v2-Setup-${version}.${ext}"
+      "artifactName": "Hangup-Portal-Setup-${version}.${ext}"
     },
     "npmRebuild": true,
     "forceCodeSigning": false,
@@ -84,8 +86,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Hangup HR Beta",
-      "uninstallDisplayName": "Hangup HR Beta"
+      "shortcutName": "Hangup Portal",
+      "uninstallDisplayName": "Hangup Portal"
+    },
+    "portable": {
+      "artifactName": "Hangup-Portal-Portable-${version}.${ext}"
     },
     "mac": {
       "icon": "build/icon.png",
@@ -106,14 +111,14 @@
           ]
         }
       ],
-      "artifactName": "Hangup-HR-${version}-${arch}.${ext}",
+      "artifactName": "Hangup-Portal-${version}-${arch}.${ext}",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "Hangup HR ${version}",
-      "artifactName": "Hangup-HR-${version}.${ext}"
+      "title": "Hangup Portal ${version}",
+      "artifactName": "Hangup-Portal-${version}.${ext}"
     }
   },
   "dependencies": {

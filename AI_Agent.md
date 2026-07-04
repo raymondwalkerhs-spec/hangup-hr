@@ -1,18 +1,18 @@
-# AI Agent — Hangup HR project context
+# AI Agent — Hangup Portal project context
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** Historical sheet layout: [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Internal reference for Cursor / coding agents. **Read this at the start of a session** when working on
-Hangup HR. Keep it updated when architecture, release process, or key decisions change.
+Hangup Portal. Keep it updated when architecture, release process, or key decisions change.
 
 ---
 
 ## What this app is
 
-- **Hangup HR** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
+- **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
-- **Product name in builds:** `Hangup HR Beta` (`package.json` → `build.productName`)
-- **Current version:** `1.3.9` (`package.json` → `version`)
+- **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
+- **Current version:** `1.3.10` (`package.json` → `version`)
 
 ---
 
@@ -297,7 +297,7 @@ ON CONFLICT (version) DO UPDATE SET
 .\scripts\build.ps1 all
 ```
 
-Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant (or `dist-build\` if `dist\` is locked).
+Output: `dist\Hangup-Portal-Setup-{version}.exe` and portable variant (or `dist-build\` if `dist\` is locked).
 
 6. **Optional — GitHub in-app updates** (does not replace step 5):
 
@@ -305,7 +305,7 @@ Output: `dist\Hangup-HR-Beta-v2-Setup-{version}.exe` and portable variant (or `d
 .\scripts\build.ps1 all
 node scripts/fetch-all-release-manifests.js
 npm run package:github -- --full
-npm run verify:update -- dist\Hangup-HR-{version}-win-x64-full.zip
+npm run verify:update -- dist\Hangup-Portal-{version}-win-x64-full.zip
 .\scripts\publish-github-release.ps1 -IncludeFull
 ```
 
@@ -316,8 +316,8 @@ In-app updater uses **Setup.exe** (NSIS silent) on Windows and **full zips** on 
 8. **Manual recovery** (if in-app update broken on old builds):
 
 ```powershell
-# Close Hangup HR first!
-node scripts/apply-github-patch-standalone.js --install-dir "$env:LOCALAPPDATA\Programs\Hangup HR Beta"
+# Close Hangup Portal first!
+node scripts/apply-github-patch-standalone.js --install-dir "$env:LOCALAPPDATA\Programs\Hangup Portal"
 ```
 
 9. **Do not** host installers in Supabase Storage (each EXE ~130–180 MB; use USB/share folder instead).

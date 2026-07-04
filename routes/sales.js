@@ -535,7 +535,7 @@ router.get("/export", async (req, res) => {
       employees,
       format,
       meta: {
-        title: req.query.saleId ? "Hangup HR — Sale export" : "Hangup HR — Sales export",
+        title: req.query.saleId ? "Hangup Portal — Sale export" : "Hangup Portal — Sales export",
         subtitle,
       },
     });

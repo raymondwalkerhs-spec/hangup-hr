@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to the Hangup HR desktop app.
+All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
+
+## [1.3.10] — 2026-07-04
+
+### Changed
+- **Product name** — rebranded from “Hangup HR” / “Hangup HR Beta” to **Hangup Portal** in the app UI, PDF exports, installers, and GitHub release assets (`Hangup-Portal-*`). In-app updater still accepts legacy `Hangup-HR-*` assets for upgrades.
+- **Web installer** — `Hangup-Portal-Web-Setup.exe` (small bootstrap with progress bar; downloads full Setup from GitHub)
 
 ## [1.3.9] — 2026-07-04
 

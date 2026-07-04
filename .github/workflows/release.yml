@@ -111,7 +111,10 @@ jobs:
       - name: Verify Windows update packages
         shell: pwsh
         run: |
-          Get-ChildItem dist -Filter "Hangup-HR-*-win-x64*.zip" | ForEach-Object {
+          Get-ChildItem dist -Filter "Hangup-Portal-*-win-x64*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+            node scripts/verify-update-package.js $_.FullName
+          }
+          Get-ChildItem dist -Filter "Hangup-HR-*-win-x64*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
             node scripts/verify-update-package.js $_.FullName
           }
 
@@ -120,6 +123,7 @@ jobs:
         with:
           name: release-windows
           path: |
+            dist/Hangup-Portal-*-win-x64*.zip
             dist/Hangup-HR-*-win-x64*.zip
             dist/update-manifests/win-x64-latest.json
             dist/*Setup*.exe
@@ -181,7 +185,7 @@ jobs:
 
       - name: Verify macOS update packages
         run: |
-          find dist -name 'Hangup-HR-*-mac-*.zip' -print | while read -r z; do
+          find dist \( -name 'Hangup-Portal-*-mac-*.zip' -o -name 'Hangup-HR-*-mac-*.zip' \) -print | while read -r z; do
             node scripts/verify-update-package.js "$z"
           done
 
@@ -190,6 +194,7 @@ jobs:
         with:
           name: release-macos
           path: |
+            dist/Hangup-Portal-*-mac-*.zip
             dist/Hangup-HR-*-mac-*.zip
             dist/update-manifests/mac-*-latest.json
             dist/*.dmg
@@ -221,7 +226,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-tag.outputs.tag }}
-          name: Hangup HR ${{ needs.resolve-tag.outputs.version }}
+          name: Hangup Portal ${{ needs.resolve-tag.outputs.version }}
           generate_release_notes: true
           draft: false
           prerelease: true

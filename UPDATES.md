@@ -1,16 +1,46 @@
-# Hangup HR — App updates
+# Hangup Portal — App updates
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
-Hangup HR uses **two separate distribution channels**. They work together but do not replace each other.
+Hangup Portal uses **two separate distribution channels**. They work together but do not replace each other.
 
 | Channel | What it delivers | Who uses it | Size |
 |---------|------------------|-------------|------|
+| **Web installer** (`Hangup-Portal-Web-Setup.exe`) | Small GUI exe with progress bar; downloads full Setup.exe | New PCs via USB/email | **~9 KB** exe → downloads ~95 MB at run time |
 | **NSIS installer** (your PC build or CI) | Full first-time install | New PCs, reinstall | ~130–180 MB |
 | **macOS DMG** (Mac or CI `build-macos`) | Full first-time install on Mac | New Macs, reinstall | ~150–200 MB |
 | **GitHub in-app update** | Silent NSIS installer (Windows) or full `.app` replace (macOS) | PCs already running the app | ~130–180 MB (NSIS) / ~150–200 MB (mac full zip) |
 
-**Your local build workflow:** run `.\scripts\build.ps1 all` on Windows (NSIS Setup + portable) or `./scripts/build-macos.sh` on a Mac (DMG). GitHub in-app updates use **Setup.exe** (NSIS) or **full zips** — not patch overlays.
+**Your local build workflow:** run `.\scripts\build.ps1 all` on Windows (NSIS Setup + portable) or `./scripts/build-macos.sh` on a Mac (DMG). For a **small USB-friendly bootstrap**, run `npm run dist:web-installer` and copy `dist-bootstrap/Hangup-Portal-Web-Setup.exe` — it downloads the full installer from GitHub when the user runs it.
+
+---
+
+## Web installer (small bootstrap)
+
+Ship **`Hangup-Portal-Web-Setup.exe`** (~10 KB) instead of the full Setup.exe on USB or email:
+
+```powershell
+npm run dist:web-installer
+```
+
+Requires **`GITHUB_UPDATES_TOKEN`** in `.env` at build time (read once; embedded in the EXE). The token is **not** in any zip or script — only inside the compiled installer.
+
+**What it does:** normal Windows installer UI with **progress bar and percentage** → uses the embedded token to download Setup.exe from your **private** GitHub release → launches the full NSIS installer.
+
+**On a new PC:** double-click `Hangup-Portal-Web-Setup.exe` → wait for download → full installer runs. No `.env`, no GitHub login, no `gh` CLI on the target PC.
+
+| Note | Detail |
+|------|--------|
+| Rebuild each release | Run `npm run dist:web-installer` after publishing (pins to `package.json` version) |
+| Distribution | USB / internal share only — **do not** upload this EXE to public sites (contains your GitHub token) |
+| Token scope | Fine-grained PAT with read access to repo contents/releases is enough |
+
+```powershell
+# Optional: always fetch newest release (empty pin) when building
+powershell -File scripts/build-web-installer.ps1 -Version ""
+```
+
+Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.exe` only.
 
 ---
 
@@ -111,23 +141,25 @@ Each GitHub Release must include (for in-app updates):
 
 | Asset | Purpose |
 |-------|---------|
-| `Hangup-HR-Beta-v2-Setup-{version}.exe` | **Required** — in-app update on NSIS installs (silent `/S`) |
-| `Hangup-HR-{version}-win-x64-full.zip` | Portable Windows + dev `win-unpacked` |
+| `Hangup-Portal-Setup-{version}.exe` | **Required** — in-app update on NSIS installs (silent `/S`) |
+| `Hangup-Portal-{version}-win-x64-full.zip` | Portable Windows + dev `win-unpacked` |
 | `win-x64-latest.json` | Manifest for CI patch packaging (not used in-app) |
+
+Legacy `Hangup-HR-*` assets from older releases are still accepted by the in-app updater.
 
 Optional (CI / manual recovery):
 
 | Asset | Purpose |
 |-------|---------|
-| `Hangup-HR-{version}-win-x64-patch-from-{prev}.zip` | Manual apply only (`apply-github-patch-standalone.js`) |
-| `Hangup-HR-Beta-v2-Portable-{version}.exe` | Optional on GitHub (`-IncludeExtras`) |
+| `Hangup-Portal-{version}-win-x64-patch-from-{prev}.zip` | Manual apply only (`apply-github-patch-standalone.js`) |
+| `Hangup-Portal-Portable-{version}.exe` | Optional on GitHub (`-IncludeExtras`) |
 
 macOS (CI or local Mac build):
 
 | Asset | Purpose |
 |-------|---------|
-| `Hangup-HR-{version}-mac-x64-full.zip` / `mac-arm64-full.zip` | **Required** — in-app update replaces full `.app` |
-| `Hangup-HR-{version}-mac-*-patch-from-{prev}.zip` | Manual / CI only (not used in-app) |
+| `Hangup-Portal-{version}-mac-x64-full.zip` / `mac-arm64-full.zip` | **Required** — in-app update replaces full `.app` |
+| `Hangup-Portal-{version}-mac-*-patch-from-{prev}.zip` | Manual / CI only (not used in-app) |
 | `mac-x64-latest.json` / `mac-arm64-latest.json` | Manifests for CI patch diff |
 
 electron-builder outputs `.app` bundles under `dist/mac-x64/` and `dist/mac-arm64/` — `package-github-release.js` discovers these automatically.
@@ -138,7 +170,7 @@ Patch zips contain an `update-info.json` with `removed` file paths (deleted in t
 
 ## Update process (end user)
 
-1. User opens Hangup HR (desktop EXE).
+1. User opens Hangup Portal (desktop EXE).
 2. App checks **Supabase `app_versions`** — warn or block if policy requires a newer version.
 3. App checks **GitHub Releases** for **every signed-in user** (and on the login page when configured):
    - Boot, session poll (~5 min), background interval (~30 min), tab visibility return

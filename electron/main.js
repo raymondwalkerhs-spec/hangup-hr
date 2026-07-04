@@ -62,7 +62,7 @@ function startServer() {
         if (err.code === "EADDRINUSE") {
           reject(
             new Error(
-              `Port ${PORT} is already in use. Close any other Hangup HR window or app using that port, then try again.`
+              `Port ${PORT} is already in use. Close any other Hangup Portal window or app using that port, then try again.`
             )
           );
           return;
@@ -81,7 +81,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: "Hangup HR",
+    title: "Hangup Portal",
     icon: path.join(__dirname, "..", "Asset", "HRTeam.png"),
     autoHideMenuBar: true,
     show: false,
@@ -101,8 +101,8 @@ function createWindow() {
     (_event, errorCode, errorDescription, validatedURL) => {
       if (validatedURL && !validatedURL.includes(`${HOST}:${PORT}`)) return;
       showFatalError(
-        "Hangup HR — Could not open login page",
-        `The app could not load the sign-in screen.\n\n${errorDescription} (${errorCode})\n\nTry closing other Hangup HR windows and restart. If this continues, reinstall the app.`
+        "Hangup Portal — Could not open login page",
+        `The app could not load the sign-in screen.\n\n${errorDescription} (${errorCode})\n\nTry closing other Hangup Portal windows and restart. If this continues, reinstall the app.`
       );
     }
   );
@@ -150,7 +150,7 @@ async function pollSession() {
       if (mainWindow) {
         await dialog.showMessageBox(mainWindow, {
           type: "warning",
-          title: "Hangup HR",
+          title: "Hangup Portal",
           message: check.message || "Contact Admin.",
           buttons: ["OK"],
         });
@@ -167,7 +167,7 @@ async function bootstrap() {
   try {
     assertSupabaseConfigured();
   } catch (err) {
-    showFatalError("Hangup HR — Configuration error", err.message || String(err));
+    showFatalError("Hangup Portal — Configuration error", err.message || String(err));
     app.quit();
     return;
   }
@@ -176,7 +176,7 @@ async function bootstrap() {
     ensureCacheDirectory(path.join(app.getPath("userData"), "hr-cache"));
   } catch (err) {
     showFatalError(
-      "Hangup HR — Storage error",
+      "Hangup Portal — Storage error",
       `Could not create local cache folder:\n${err.message}`
     );
     app.quit();
@@ -186,7 +186,7 @@ async function bootstrap() {
   try {
     httpServer = await startServer();
   } catch (err) {
-    showFatalError("Hangup HR — Startup error", err.message || String(err));
+    showFatalError("Hangup Portal — Startup error", err.message || String(err));
     app.quit();
     return;
   }
@@ -281,7 +281,7 @@ if (!gotSingleInstanceLock) {
 
     await bootstrap();
   }).catch((err) => {
-    showFatalError("Hangup HR — Startup error", err.message || String(err));
+    showFatalError("Hangup Portal — Startup error", err.message || String(err));
     app.quit();
   });
 
@@ -303,6 +303,6 @@ app.on("window-all-closed", () => {
 });
 
 process.on("uncaughtException", (err) => {
-  showFatalError("Hangup HR — Unexpected error", err.message || String(err));
+  showFatalError("Hangup Portal — Unexpected error", err.message || String(err));
   app.quit();
 });

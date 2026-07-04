@@ -93,11 +93,28 @@ node @packageArgs 2>&1 | Write-Host
 $ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+function Test-VersionAsset {
+  param([string]$Name)
+  return $Name -match [regex]::Escape($version)
+}
+
+function Get-UpdateZipFiles {
+  param([string]$Pattern)
+  $legacy = @()
+  $next = @()
+  if ($Pattern -eq "patch") {
+    $legacy = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue)
+    $next = @(Get-ChildItem $dist -Filter "Hangup-Portal-*-patch-*.zip" -ErrorAction SilentlyContinue)
+  } else {
+    $legacy = @(Get-ChildItem $dist -Filter "Hangup-HR-*-full.zip" -ErrorAction SilentlyContinue)
+    $next = @(Get-ChildItem $dist -Filter "Hangup-Portal-*-full.zip" -ErrorAction SilentlyContinue)
+  }
+  @($legacy + $next) | Where-Object { Test-VersionAsset $_.Name }
+}
+
 # If no patch was produced, auto-build full zip once.
-$patchZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -match [regex]::Escape($version) })
-$fullZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-full.zip" -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -match [regex]::Escape($version) })
+$patchZips = @(Get-UpdateZipFiles -Pattern "patch")
+$fullZips = @(Get-UpdateZipFiles -Pattern "full")
 if (-not $patchZips.Count -and -not $fullZips.Count -and -not $IncludeFull) {
   Write-Host "No patch zip - building full win-unpacked zip for this release..." -ForegroundColor Yellow
   $ErrorActionPreference = "Continue"
@@ -106,17 +123,7 @@ if (-not $patchZips.Count -and -not $fullZips.Count -and -not $IncludeFull) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-function Test-VersionAsset {
-  param([string]$Name)
-  return $Name -match [regex]::Escape($version)
-}
-
 $uploads = [System.Collections.Generic.List[string]]::new()
-
-$patchZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-patch-*.zip" -ErrorAction SilentlyContinue |
-  Where-Object { Test-VersionAsset $_.Name })
-$fullZips = @(Get-ChildItem $dist -Filter "Hangup-HR-*-full.zip" -ErrorAction SilentlyContinue |
-  Where-Object { Test-VersionAsset $_.Name })
 
 foreach ($z in $patchZips) { $uploads.Add($z.FullName) }
 foreach ($z in $fullZips) { $uploads.Add($z.FullName) }
@@ -162,7 +169,7 @@ Write-Host "Uploading $($uploads.Count) asset(s), $([math]::Round($totalMb, 1)) 
 foreach ($u in $uploads) { Write-Host "  $(Split-Path $u -Leaf)" -ForegroundColor DarkGray }
 
 if (-not $Notes) {
-  $Notes = "Hangup HR $version - see CHANGELOG.md"
+  $Notes = "Hangup Portal $version - see CHANGELOG.md"
 }
 
 $releaseExists = $false
@@ -185,8 +192,8 @@ if ($releaseExists) {
   Write-Host "Release $Tag exists - uploading with --clobber..." -ForegroundColor Cyan
   & $ghExe release upload $Tag $uploads.ToArray() --clobber
 } else {
-  $ghArgs = @("release", "create", $Tag, "--title", "Hangup HR $version", "--notes", $Notes)
-  if ($Draft) { $ghArgs = @("release", "create", $Tag, "--draft", "--title", "Hangup HR $version", "--notes", $Notes) }
+  $ghArgs = @("release", "create", $Tag, "--title", "Hangup Portal $version", "--notes", $Notes)
+  if ($Draft) { $ghArgs = @("release", "create", $Tag, "--draft", "--title", "Hangup Portal $version", "--notes", $Notes) }
   $ghArgs += $uploads.ToArray()
   Write-Host "Creating GitHub release $Tag..." -ForegroundColor Cyan
   & $ghExe @ghArgs
