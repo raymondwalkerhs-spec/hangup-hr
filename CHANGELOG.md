@@ -12,6 +12,7 @@ All notable changes to the Hangup Portal desktop app.
 - **Optional ID prefix enforcement** — **Enforce unit / role ID prefix** checkbox on Reposition and Change app ID (unchecked = any unused ID allowed)
 - **Web installer** — uses GitHub **Latest** release and picks `Setup.exe` matching that release version (was grabbing stale 1.4.4 Setup on the v1.4.5 release page)
 - **Release CI** — manifest fetch via GitHub API asset download; patch zips required when a prior manifest exists
+- **Sales log** — restored missing `PERIOD_LABELS` (ReferenceError when opening Sales log since 1.4.3)
 
 ## [1.4.4] — 2026-07-04
 

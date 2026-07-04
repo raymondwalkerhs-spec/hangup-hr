@@ -20,6 +20,7 @@ window.SalesModule = (function () {
     "Callback",
   ];
   const SALES_UNITS = ["HS-1", "HS-2", "HS-3"];
+  const PERIOD_LABELS = { day: "Day", week: "Week", month: "Month" };
 
   function deviceLabel(device) {
     const key = String(device || "").toLowerCase();
