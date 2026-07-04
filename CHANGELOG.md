@@ -23,6 +23,7 @@ All notable changes to the Hangup Portal desktop app.
 ### Ops
 - **Trainee rate** seeded live at **7,000 EGP/mo** (Salaries); HR can adjust per month
 - **`npm run cleanup:artifacts`** — deletes stale GitHub Actions CI artifacts when storage quota blocks release upload
+- **Release CI** publishes directly to GitHub Releases (no Actions artifacts); auto-promotes to **Latest**
 
 ## [1.4.6] — 2026-07-04
 
