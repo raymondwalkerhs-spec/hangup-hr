@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.3.11] — 2026-07-04
+
+### Fixed
+- **Registration approve “HS1-XX already exists”** — ID allocation now reads live Supabase employees (and app-user IDs), retries on collision, normalizes unit names, and sets login password without failing when `createEmployee` auto-creates an inactive user.
+
 ## [1.3.10] — 2026-07-04
 
 ### Changed
