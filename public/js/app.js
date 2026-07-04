@@ -2274,7 +2274,7 @@ function openEmployeeModal(emp, options = {}) {
   const canRevert = canManagePayrollEvents() && emp.promoted_from_id && !emp.promoted_to_id;
   const canChangeAppId = canManagePayrollEvents() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
   const canRelease = canManagePayrollEvents() && (isUnassignedIdStub(emp) || emp.status !== "Deleted");
-  const canPurgeUser = canManageUsers() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
+  const canPurgeUser = isUserManager() && emp.status !== "Deleted" && !isUnassignedIdStub(emp);
   openModal(`
     <div class="modal-header"><h2>Edit employee</h2><button class="btn btn-sm" data-close>✕</button></div>
     <div class="modal-body" id="emp-modal-body">
