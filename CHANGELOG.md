@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.3.12] — 2026-07-04
+
+### Fixed
+- **Employees / Attendance / Payroll search** — separate search box per tab (no shared filter), multi-word name matching, and table-only updates so the search field keeps focus while typing full names.
+
 ## [1.3.11] — 2026-07-04
 
 ### Fixed

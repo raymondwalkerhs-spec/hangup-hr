@@ -76,7 +76,8 @@ const state = {
   companyContext: sessionStorage.getItem("companyContext") || "hangup",
   salesPickDate: new Date().toISOString().slice(0, 10),
   salesWeekDate: new Date().toISOString().slice(0, 10),
-  empFilter: { q: "", status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
+  tabSearch: { employees: "", attendance: "", payroll: "" },
+  empFilter: { status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
   changesFilter: { user: "", entity: "" },
   meta: { statuses: [], units: [], positions: [], backendPools: [] },
   pendingAttendance: new Map(),
@@ -1417,36 +1418,69 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function matchesEmployeeSearch(emp, q) {
-  const needle = String(q || "").trim().toLowerCase();
-  if (!needle) return true;
-  const hay = [
-    emp.id,
-    emp.employeeId,
-    emp.american_name,
-    emp.arabic_name,
-    emp.name,
-    emp.team,
-    emp.unit,
-    emp.position,
+function normalizeSearchQuery(q) {
+  return String(q || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function employeeSearchHaystack(emp) {
+  return [
+    emp?.id,
+    emp?.employeeId,
+    emp?.american_name,
+    emp?.arabic_name,
+    emp?.name,
+    emp?.team,
+    emp?.unit,
+    emp?.position,
+    emp?.email,
+    emp?.phone,
+    emp?.paymentMethod,
+    emp?.payrollStatus,
   ]
     .map((v) => String(v || "").toLowerCase())
     .join(" ");
-  return hay.includes(needle);
 }
 
-function employeeSearchInputHtml() {
-  return `<input class="search-input" id="employee-search" type="search" placeholder="Search name or ID…" value="${escapeHtml(state.empFilter.q)}" autocomplete="off" spellcheck="false" />`;
+function matchesEmployeeSearch(emp, q) {
+  const needle = normalizeSearchQuery(q);
+  if (!needle) return true;
+  const hay = employeeSearchHaystack(emp);
+  const tokens = needle.split(" ").filter(Boolean);
+  return tokens.every((tok) => hay.includes(tok));
 }
 
-function bindEmployeeSearch(root, onFilter) {
-  const input = root.querySelector("#employee-search");
+function getTabSearch(tabKey) {
+  return state.tabSearch[tabKey] || "";
+}
+
+function pageSearchInputHtml(tabKey, placeholder = "Search name or ID…") {
+  const q = getTabSearch(tabKey);
+  return `<label class="field field-inline field-search"><span>Search</span><input class="search-input" id="search-${tabKey}" type="search" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(q)}" autocomplete="off" spellcheck="false" /></label>`;
+}
+
+function bindTabSearch(root, tabKey, onFilter) {
+  const input = root.querySelector(`#search-${tabKey}`);
   if (!input) return;
-  const run = debounce(() => {
-    state.empFilter.q = input.value.trim().toLowerCase();
-    onFilter();
-  }, 200);
-  input.addEventListener("input", run);
+  let rafId = 0;
+  const apply = () => {
+    state.tabSearch[tabKey] = input.value;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      onFilter();
+    });
+  };
+  input.addEventListener("input", apply);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      input.value = "";
+      state.tabSearch[tabKey] = "";
+      apply();
+    }
+  });
 }
 
 function filterEmployeesList(employees) {
@@ -1454,7 +1488,7 @@ function filterEmployeesList(employees) {
   if (state.hideOut) {
     list = list.filter((e) => !isOutEmployee(e) || isUnassignedIdStub(e));
   }
-  if (state.empFilter.q) list = list.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  if (getTabSearch("employees")) list = list.filter((e) => matchesEmployeeSearch(e, getTabSearch("employees")));
   if (state.empFilter.status) list = list.filter((e) => e.status === state.empFilter.status);
   if (state.empFilter.unit) list = list.filter((e) => e.unit === state.empFilter.unit);
   if (state.empFilter.nationality) {
@@ -1699,8 +1733,8 @@ function updateAttendanceTable(root) {
   if (state.hideOut) {
     employees = employees.filter((e) => !isOutEmployee(e));
   }
-  if (state.empFilter.q) {
-    employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  if (getTabSearch("attendance")) {
+    employees = employees.filter((e) => matchesEmployeeSearch(e, getTabSearch("attendance")));
   }
   const tbody = root.querySelector("#att-tbody");
   const countEl = root.querySelector("#att-emp-count");
@@ -1743,8 +1777,8 @@ function updatePayrollTable(root) {
   if (!data) return;
   let rows = data.payroll;
   rows = filterPayrollByZeroNet(rows);
-  if (state.empFilter.q) {
-    rows = rows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
+  if (getTabSearch("payroll")) {
+    rows = rows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
   const tbody = root.querySelector("#payroll-tbody");
   const countEl = root.querySelector("#payroll-emp-count");
@@ -3162,7 +3196,7 @@ async function renderEmployees(root) {
       ${canAddEmployee() ? '<button class="btn btn-primary" id="add-emp">+ Add agent</button>' : ""}
     </div>
     ${showFilters ? `<div class="toolbar">
-      ${employeeSearchInputHtml()}
+      ${pageSearchInputHtml("employees", "Search name, Arabic name, or ID…")}
       <select id="filter-status"><option value="">All statuses</option>${data.statuses.map((s) =>
         `<option value="${s}" ${state.empFilter.status === s ? "selected" : ""}>${s || "(blank)"}</option>`
       ).join("")}</select>
@@ -3181,16 +3215,16 @@ async function renderEmployees(root) {
         <option value="not_insured" ${state.empFilter.insuranceStatus === "not_insured" ? "selected" : ""}>Not insured</option>
       </select>
       ${hideOutToggle()}
-    </div>` : ""}
+    </div>` : `<div class="toolbar">${pageSearchInputHtml("employees", "Search name, Arabic name, or ID…")}</div>`}
     <div class="table-wrap"><table>
       <thead><tr><th>Employee</th><th>ID</th><th>Unit</th><th>Team</th><th>Position</th>${showFilters ? "<th>Nationality</th><th>Permit / Insurance</th>" : ""}<th>Status</th><th></th></tr></thead>
       <tbody id="emp-tbody">${list.map(employeeListRowHtml).join("")}</tbody>
     </table></div>`;
 
   root.querySelector("#add-emp")?.addEventListener("click", () => openAddAgentWizard());
+  bindTabSearch(root, "employees", () => updateEmployeesTable(root));
   if (showFilters) {
     bindHideOut(root);
-    bindEmployeeSearch(root, () => updateEmployeesTable(root));
     root.querySelector("#filter-status")?.addEventListener("change", (e) => {
       state.empFilter.status = e.target.value;
       updateEmployeesTable(root);
@@ -3233,8 +3267,8 @@ async function renderAttendance(root) {
   root.__attendanceCtx = ctx;
 
   let employees = data.employees;
-  if (state.empFilter.q) {
-    employees = employees.filter((e) => matchesEmployeeSearch(e, state.empFilter.q));
+  if (getTabSearch("attendance")) {
+    employees = employees.filter((e) => matchesEmployeeSearch(e, getTabSearch("attendance")));
   }
 
   const federalHolidays = (data.holidays || []).filter((h) => h.country !== "EGY" && h.active !== false);
@@ -3242,7 +3276,7 @@ async function renderAttendance(root) {
   root.innerHTML = `
     <div class="page-header"><div><h1>Attendance</h1><p class="muted" id="att-emp-count">${employees.length} employees · ${monthLabel(state.month)}</p></div></div>
     ${window.HRMSFeatures?.attendanceBannersHtml(data) || ""}
-    ${monthToolbar(`${employeeSearchInputHtml()}
+    ${monthToolbar(`${pageSearchInputHtml("attendance", "Search name, Arabic name, or ID…")}
     <select id="unit-filter"><option value="">All units</option>${(data.units || []).map((u) =>
       `<option value="${u}" ${state.unit === u ? "selected" : ""}>${u}</option>`
     ).join("")}</select>
@@ -3286,7 +3320,7 @@ async function renderAttendance(root) {
 
   bindMonthNav(root);
   bindHideOut(root);
-  bindEmployeeSearch(root, () => updateAttendanceTable(root));
+  bindTabSearch(root, "attendance", () => updateAttendanceTable(root));
   root.querySelector("#unit-filter").onchange = (e) => {
     state.unit = e.target.value;
     state.team = "";
@@ -3500,8 +3534,8 @@ async function renderPayroll(root) {
   root.__payrollData = data;
 
   let payrollRows = filterPayrollByZeroNet(data.payroll);
-  if (state.empFilter.q) {
-    payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, state.empFilter.q));
+  if (getTabSearch("payroll")) {
+    payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
 
   root.innerHTML = `
@@ -3521,7 +3555,7 @@ async function renderPayroll(root) {
         <button class="btn btn-sm" id="export-bank-pdf" title="Bank payroll sheet (PDF)">Bank PDF</button>` : ""}
       </div>
     </div>
-    ${monthToolbar(`${employeeSearchInputHtml()}${hideOutToggle()}
+    ${monthToolbar(`${pageSearchInputHtml("payroll", "Search name, Arabic name, or ID…")}${hideOutToggle()}
     <label class="toggle-label"><input type="checkbox" id="hide-zero-net" ${state.hideZeroNet ? "checked" : ""} /> Hide zero net pay</label>`)}
     <div class="card" style="margin-bottom:1rem">
       <div class="flex-between" style="margin-bottom:.75rem">
@@ -3557,7 +3591,7 @@ async function renderPayroll(root) {
     state.hideZeroNet = e.target.checked;
     updatePayrollTable(root);
   });
-  bindEmployeeSearch(root, () => updatePayrollTable(root));
+  bindTabSearch(root, "payroll", () => updatePayrollTable(root));
 
   let tierIndex = tiers.length || 1;
   root.querySelector("#add-tier-btn").onclick = () => {
