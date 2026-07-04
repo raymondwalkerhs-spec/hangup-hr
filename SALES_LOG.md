@@ -1,8 +1,8 @@
 # Sales Log — Reference Guide
 
-> **Version:** 1.4.1 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 1.4.2 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
-This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended in v1.4.1).
+This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended in v1.4.1 and v1.4.2).
 
 ---
 
@@ -154,8 +154,9 @@ When **Payment method = Card**, bank fields are hidden; card number, expiry, and
 ### Edit sale
 
 - **Agent** and **Closer** are read-only (set at create).  
-- Other fields follow **Sales permissions** matrix.  
+- Other fields follow the **Sales permissions** ACL.  
 - **Verifier feedback** and **Client feedback** use dropdowns (see below).
+- **Client / Device / Price preselect (1.4.2):** the edit form preselects the catalog Client, Device, and Price from the sale. Catalog IDs are kept on every save; older sales are matched by client name + device type + price. If a sale still shows empty dropdowns, its client/device combination does not exist in the catalog (**Settings → Sales clients & breaks**) — add the product there, or run `node scripts/backfill-sale-catalog-ids.js`.
 
 ### Quality ticket
 
@@ -204,13 +205,14 @@ View access for both fields is configurable per role on **Sales permissions**.
 
 ## Permissions pages
 
-### Sales permissions (sidebar)
+### Sales permissions (sidebar) — role-first (1.4.2)
 
-Full-page matrix: **View** and **Edit** per field × role group (Agent, TL, OP, Quality, RTM, PR, Admin, HR, Finance).
+Works like **Access Control**: **1) pick a role** (Agent, TL, OP, Quality, RTM, Public relations, Admin, CEO, HR, Finance), **2) toggle View / Edit per field** for that role only. Fields are grouped by form section.
 
+- Changes are tracked as **unsaved** until you press **Save changes** (button is disabled when nothing changed).  
 - Controls what appears in **Add sale**, **Edit sale**, and **Quality ticket**.  
-- **Reset defaults** — re-seeds from catalog (also refreshes log column seeds).  
-- Replaces the old modal opened from Access Control.
+- **Reset all to defaults** — re-seeds every role from the catalog (also refreshes log column seeds).  
+- Replaces the old field × role-group matrix and the modal opened from Access Control.
 
 ### Log columns (sidebar)
 
@@ -230,11 +232,12 @@ Users with export permission can download the current filtered list or a single 
 
 ## Admin setup after upgrade
 
-1. **Sales permissions → Reset defaults** — loads new bank and feedback fields.  
+1. **Sales permissions → Reset all to defaults** — loads new bank and feedback fields.  
 2. **Log columns → Reset defaults** — registers all column keys in the database.  
 3. Enable desired columns → **Save**.  
-4. Adjust field view/edit checkboxes → **Save permissions**.  
-5. Configure clients/devices/prices under **Settings** if not already done.
+4. Per role: adjust View/Edit toggles → **Save changes**.  
+5. Configure clients/devices/prices under **Settings** if not already done.  
+6. *(1.4.2, one-time)* `node scripts/backfill-sale-catalog-ids.js` — fills catalog IDs on old sales so Edit preselects client/device/price. Already run on production during the 1.4.2 release.
 
 ---
 

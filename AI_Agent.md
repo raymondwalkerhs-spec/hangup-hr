@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.4.1` (`package.json` → `version`)
-- **Previous:** `1.4.0` (sales log overhaul), `1.3.13` (notifications)
+- **Current version:** `1.4.2` (`package.json` → `version`)
+- **Previous:** `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
 
@@ -91,8 +91,14 @@ to Supabase via Express, then re-sync.
 - **Sales edit:** Agent and closer are **read-only** after creation; reviewer, verifier, and bank-account chooser use employee dropdowns.
 - **Sales toolbar filters (1.4.1+):** Client, Agent, Closer, Status on day/week/month views.
 - **Advanced filter:** Value dropdowns for employee/client/team/status fields; AND/OR/NOT logic only when 2+ rules.
-- **Modals:** `openModal()` auto-focuses first input; closes mobile sidebar; z-index 5000.
+- **Modals:** `openModal()` auto-focuses first input; closes mobile sidebar; z-index 5000. `closeModal()` plays an exit animation (`.modal-closing`) before clearing.
 - **Page load:** Search/toolbar inputs stay clickable during `page-loading` (only tables are temporarily non-interactive).
+- **Design tokens (1.4.2+):** shared `:root` tokens in `public/css/app.css` — spacing (`--space-*`), radius (`--radius*`), theme-aware surfaces (`--surface`, `--surface-2`) and badge tints (`--tint-ok-bg` etc., via `color-mix` so all 7 themes work). Use tokens instead of hardcoded hex.
+- **Buttons (1.4.2+):** variants `btn-primary`, `btn-secondary`, `btn-outline`, `btn-success`, `btn-danger`, `btn-ghost`, `btn-icon`, sizes `btn-sm`/`btn-lg`; `.is-loading` spinner state; consistent disabled/focus-visible styles.
+- **Dialogs:** prefer `openConfirmModal` / `openPromptModal` / `showRegistrationCredentialsModal` over native `confirm()` / `alert()`.
+- **Sales edit prefill (1.4.2):** edit modal resolves client/device/price catalog IDs from `form_data` and falls back to name/device/price matching (`resolveCatalogSelection` in `sales-config-breaks.js`); the sanitizer preserves `salesClientId`/`salesProductId`/`salesPriceId` (see `PASSTHROUGH_KEYS` in `lib/sales-field-catalog.js`). Backfill script: `scripts/backfill-sale-catalog-ids.js` (`--dry-run` supported).
+- **Sales permissions (1.4.2+):** role-first page like Access Control — pick role, toggle View/Edit per field, pending-change tracking, batch save via `PUT /sales/field-permissions/:fieldKey`.
+- **Registration (1.4.2+):** login page has a 3-step wizard (PIN → details → success pipeline); approval shows a credentials modal with copy buttons.
 
 ---
 
@@ -153,7 +159,7 @@ Sales field permissions remain in `sales_field_permissions` — managed on **Sal
 | **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | View |
 | **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + **Sales permissions** / **Log columns** pages (RTM/admin/hr) | Full + release to agent | Full |
 
-**Sales admin pages (1.4.1+):** sidebar **Sales permissions** (field view/edit matrix) and **Log columns** (which columns appear). Visible when `canManageSalesFieldPermissions` or role admin/ceo/rtm/hr.
+**Sales admin pages (1.4.1+, role-first since 1.4.2):** sidebar **Sales permissions** (pick a role, then toggle View/Edit per field — same flow as Access Control) and **Log columns** (which columns appear). Visible when `canManageSalesFieldPermissions` or role admin/ceo/rtm/hr.
 
 **Notes:** HR/admin read employee warnings; TL/OP/quality/RTM can add notes without reading list.
 
@@ -285,17 +291,19 @@ cd "F:\download app hr"   # or your repo root
 node scripts/publish-app-version.js --notes "One-line release notes"
 ```
 
-**1.4.0 → 1.4.1 example (minor — optional in-app update, no force block):**
+**1.4.1 → 1.4.2 example (minor — optional in-app update, no force block):**
 
 ```powershell
-node scripts/publish-app-version.js --version 1.4.1 --notes "Sales log columns, filters, bank fields, permissions pages, org/search fixes"
+node scripts/publish-app-version.js --version 1.4.2 --notes "Sales edit prefill fix, role-first sales permissions, UI/UX overhaul, stepped registration"
 .\scripts\build.ps1 all
 npm run package:github -- --full
-npm run verify:update -- dist\Hangup-Portal-1.4.1-win-x64-full.zip
+npm run verify:update -- dist\Hangup-Portal-1.4.2-win-x64-full.zip
 .\scripts\publish-github-release.ps1 -IncludeFull
 ```
 
-Users on **1.4.0** see **Update now** via GitHub Releases check (~5 min + on login). No `--field-breaking` needed unless old EXEs break on new API shapes.
+Users on **1.4.x** see **Update now** via GitHub Releases check (~5 min + on login). No `--field-breaking` needed unless old EXEs break on new API shapes.
+
+**Note:** if `dist\win-unpacked` is locked, `build.ps1` falls back to `dist-beta7\` (or another `dist-*`). Set `$env:HR_BUILD_OUTPUT = "dist-beta7"` before running `package-github-release` / `publish-github-release.ps1` so they find the artifacts.
 
 | Release kind | When to use | Command |
 |--------------|-------------|---------|
@@ -410,7 +418,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.4.1** | **true** | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
+| **1.4.2** | **true** | Sales edit prefill fix, role-first Sales permissions, UI/UX overhaul (tokens/buttons/tables/login), stepped registration |
+| 1.4.1 | false | Sales log all columns, filter dropdowns, bank fields, verifier/client feedback, Sales permissions + Log columns pages, org modal/search fixes |
 | 1.4.0 | false | Working day, advanced filter, org/dashboards, sales access surfaces |
 | 1.3.13 | false | Notifications, routing, quality notes, user purge |
 | 1.3.12 | false | Per-tab search, focus fix |

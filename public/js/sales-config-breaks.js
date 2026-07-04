@@ -133,6 +133,62 @@ window.HRSalesConfigBreaks = (function () {
     return `${h}:${mi} ${ampm}`;
   }
 
+  /**
+   * Resolve catalog UUIDs for a sale. Prefers stored salesClientId/ProductId/PriceId,
+   * falls back to matching the sale's client name / device type / price against the
+   * catalog (legacy sales stored only text values).
+   */
+  function resolveCatalogSelection(clients, sale, formData) {
+    const fd = formData || {};
+    let clientId = fd.salesClientId || "";
+    let productId = fd.salesProductId || "";
+    let priceId = fd.salesPriceId || "";
+
+    let client = (clients || []).find((c) => c.id === clientId) || null;
+    if (!client) {
+      clientId = "";
+      const name = String(sale?.client || fd.client || "").trim().toLowerCase();
+      if (name) {
+        client = (clients || []).find((c) => String(c.name || "").trim().toLowerCase() === name) || null;
+        if (client) clientId = client.id;
+      }
+    }
+    if (!client) return { clientId: "", productId: "", priceId: "" };
+
+    const products = client.products || [];
+    let product = products.find((p) => p.id === productId) || null;
+    const priceValue = sale?.price != null ? Number(sale.price) : fd.price != null ? Number(fd.price) : null;
+    if (!product) {
+      productId = "";
+      const deviceType = String(sale?.device || fd.deviceType || "").trim().toLowerCase();
+      let candidates = deviceType
+        ? products.filter((p) => String(p.deviceType || "").trim().toLowerCase() === deviceType)
+        : [];
+      if (candidates.length > 1 && priceValue != null) {
+        const withPrice = candidates.filter((p) => (p.prices || []).some((pr) => Number(pr.price) === priceValue));
+        if (withPrice.length) candidates = withPrice;
+      }
+      if (candidates.length > 1) {
+        const favored = candidates.filter((p) => p.isFavored);
+        if (favored.length) candidates = favored;
+      }
+      product = candidates[0] || null;
+      if (product) productId = product.id;
+    }
+    if (!product) return { clientId, productId: "", priceId: "" };
+
+    const prices = product.prices || [];
+    let price = prices.find((pr) => pr.id === priceId) || null;
+    if (!price) {
+      priceId = "";
+      if (priceValue != null) {
+        price = prices.find((pr) => Number(pr.price) === priceValue) || null;
+        if (price) priceId = price.id;
+      }
+    }
+    return { clientId, productId, priceId };
+  }
+
   function clientPickerHtml(clients, selectedClientId, selectedProductId, selectedPriceId, formData) {
     const clientId = selectedClientId || formData.salesClientId || "";
     const productId = selectedProductId || formData.salesProductId || "";
@@ -182,8 +238,8 @@ window.HRSalesConfigBreaks = (function () {
             </select>
           </label>
           <input type="hidden" name="client" id="sale-client-name" value="${escapeHtml(client?.name || formData.client || "")}" />
-          <input type="hidden" name="device" id="sale-device-type" value="${escapeHtml(product?.deviceType || formData.device || "")}" />
-          <input type="hidden" name="price" id="sale-price-value" value="${escapeHtml(formData.price || "")}" />
+          <input type="hidden" name="device" id="sale-device-type" value="${escapeHtml(product?.deviceType || formData.deviceType || formData.device || "")}" />
+          <input type="hidden" name="price" id="sale-price-value" value="${escapeHtml(prices.find((pr) => pr.id === priceId)?.price ?? formData.price ?? "")}" />
         </div>
       </fieldset>`;
   }
@@ -541,8 +597,9 @@ window.HRSalesConfigBreaks = (function () {
     }
 
     if (clients.length) {
+      const resolved = resolveCatalogSelection(clients, sale, formData);
       const picker = document.createElement("div");
-      picker.innerHTML = clientPickerHtml(clients, formData.salesClientId, formData.salesProductId, formData.salesPriceId, formData);
+      picker.innerHTML = clientPickerHtml(clients, resolved.clientId, resolved.productId, resolved.priceId, formData);
       const firstFieldset = form.querySelector("fieldset");
       if (firstFieldset) form.insertBefore(picker.firstElementChild, firstFieldset);
       else form.prepend(picker.firstElementChild);

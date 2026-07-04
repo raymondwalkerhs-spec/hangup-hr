@@ -4,6 +4,23 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-07-04
+
+### Fixed
+- **Sales edit — client/device preselected** — the Edit sale modal now preselects Client, Device, and Price from the catalog. Catalog IDs (`salesClientId` / `salesProductId` / `salesPriceId`) survive edit saves, and legacy sales fall back to name/device/price matching. Existing sales backfilled via `scripts/backfill-sale-catalog-ids.js`.
+
+### Changed
+- **Sales permissions — role-first** — the Sales permissions page now works like Access Control: pick a role, then toggle View/Edit per field with unsaved-change tracking and batch save.
+- **Registration** — the login page registration is now a 3-step wizard (PIN → details → success with approval pipeline). Approving a registration shows a styled credentials modal with copy buttons instead of a browser alert.
+
+### UI/UX overhaul
+- **Design tokens** — spacing/radius scales, theme-aware surface and badge tints (all 7 themes), shared focus ring, themed scrollbars
+- **Buttons** — new variants (`btn-secondary`, `btn-outline`, `btn-success`, `btn-icon`) with consistent hover/active/focus/disabled/loading states
+- **Tables** — refined uppercase headers, styled empty states, softer container shadow, subtle content fade-in
+- **Modals** — exit animation on close; forms in modals use a proper 2-column grid
+- **Login page** — redesigned card with animated background orbs, password visibility toggle, shake on wrong credentials
+- **Accessibility** — `prefers-reduced-motion` disables animations; focus-visible rings on all interactive elements
+
 ## [1.4.1] — 2026-07-04
 
 ### Added

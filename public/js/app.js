@@ -886,7 +886,24 @@ function timeAgo(iso) {
 }
 
 function closeModal() {
-  document.getElementById("modal-root").innerHTML = "";
+  const root = document.getElementById("modal-root");
+  const backdrop = root?.querySelector(".modal-backdrop");
+  if (!backdrop) {
+    if (root) root.innerHTML = "";
+    return;
+  }
+  if (backdrop.classList.contains("modal-closing")) return;
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  if (reduceMotion) {
+    root.innerHTML = "";
+    return;
+  }
+  backdrop.classList.add("modal-closing");
+  const cleanup = () => {
+    if (root.querySelector(".modal-closing") === backdrop) root.innerHTML = "";
+  };
+  backdrop.addEventListener("animationend", cleanup, { once: true });
+  setTimeout(cleanup, 260);
 }
 
 function versionNoticeDismissKey(currentVersion) {
@@ -1199,6 +1216,46 @@ function openConfirmModal({ title, message, confirmLabel = "Confirm", danger = f
       alert(e.message);
     }
   };
+}
+
+/** Styled handoff modal for newly approved registrations (replaces alert with copyable credentials). */
+function showRegistrationCredentialsModal(res, note = "") {
+  const copyRow = (label, value) => `
+    <div class="cred-row">
+      <div><span class="muted small">${escapeHtml(label)}</span><strong class="cred-value">${escapeHtml(value ?? "—")}</strong></div>
+      <button type="button" class="btn btn-sm" data-copy-value="${escapeHtml(value ?? "")}">Copy</button>
+    </div>`;
+  openModal(
+    `<div class="modal-header"><h2>Registration approved</h2><button class="btn btn-sm" data-close>✕</button></div>
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0">Share these credentials with the new agent. The account stays <strong>inactive</strong> until Mark or Raymond activates it on the Users page.</p>
+      <div class="cred-box">
+        ${copyRow("User ID (login)", res.username)}
+        ${copyRow("Temp password", res.tempPassword)}
+        ${res.employeeId ? copyRow("Employee ID", res.employeeId) : ""}
+      </div>
+      ${note ? `<p class="muted small" style="margin-bottom:0">${escapeHtml(note)}</p>` : ""}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" data-close>Done</button>
+    </div>`
+  );
+  document.querySelectorAll("#modal-root [data-copy-value]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copyValue || "");
+        const old = btn.textContent;
+        btn.textContent = "Copied!";
+        btn.classList.add("btn-success");
+        setTimeout(() => {
+          btn.textContent = old;
+          btn.classList.remove("btn-success");
+        }, 1400);
+      } catch {
+        /* clipboard unavailable */
+      }
+    });
+  });
 }
 
 function openPromptModal({ title, message = "", defaultValue = "", inputType = "text", placeholder = "", confirmLabel = "OK", required = false, onSubmit }) {
@@ -5408,15 +5465,17 @@ async function renderUsers(root) {
     updateUsersTable(root);
   });
   root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Approve this registration? Creates employee + inactive login (no team yet).")) return;
-      try {
-        const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
-        alert(`Approved. Username: ${res.username}\nTemp password: ${res.tempPassword}\nAssign team on Organization page.`);
-        render();
-      } catch (e) {
-        alert(e.message);
-      }
+    btn.addEventListener("click", () => {
+      openConfirmModal({
+        title: "Approve registration",
+        message: "Approve this registration? Creates employee + inactive login (no team yet).",
+        confirmLabel: "Approve",
+        onConfirm: async () => {
+          const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
+          render();
+          showRegistrationCredentialsModal(res, "Assign the agent's team on the Organization page.");
+        },
+      });
     });
   });
   root.querySelectorAll("[data-reject-reg]").forEach((btn) => {

@@ -46,7 +46,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | **Organization** | Unit → team → agent; OP/TL assignment; registrations |
 | **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, **break schedules**, refresh |
 | **Sales** | Sales log, add/edit sale, quality tickets, exports |
-| **Sales permissions** | Field view/edit matrix *(Admin / RTM / HR)* |
+| **Sales permissions** | Role-first field View/Edit access *(Admin / RTM / HR)* |
 | **Log columns** | Which columns show on Sales log *(Admin / RTM / HR)* |
 | **Access Control** | App-wide role permissions *(Admin)* |
 | **Users** | App logins *(Raymond only)* — activate inactive employees |
@@ -210,23 +210,25 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **macOS:** **Update now** downloads the full `.app` and replaces it on restart.
 - If you see **Invalid package app.asar**, use **Update now** again or run the latest Setup.exe manually (see [`UPDATES.md`](UPDATES.md)).
 
-### Agent registration & training (1.2.3+)
+### Agent registration & training (1.2.3+, wizard since 1.4.2)
 
-- **New agents** can register from the login screen with today's PIN (ask OP/HR/Quality).
+- **New agents** register from the login screen: click **Create your registration →** and follow the 3 steps — **1)** today's PIN (ask OP/HR/Quality), **2)** your details, **3)** confirmation showing the approval pipeline (submitted → approval → activation by Mark/Raymond).
+- **Approvers** (OP/Admin/HR/CEO): approving a registration shows a **credentials card** with the new User ID and temp password — use the **Copy** buttons to hand them to the agent.
 - **HR** adds agents with optional **4-week training program** (Mon–Fri phases, sales count per phase).
 - **Organization** page: assign OP/TL, add/edit teams, approve registrations, view daily PIN.
 
-### Sales (1.4.1)
+### Sales (1.4.1–1.4.2)
 
 See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 
 - **Toolbar:** filter by **Client**, **Agent**, **Closer**, and **Status** (day/week/month).
 - **Advanced filter:** add rules; pick AND/OR/NOT when you have two or more rules; employee/client dropdowns for ID fields.
 - **Add sale:** catalog client/device/price; unit → team → agent; bank or card payment fields.
+- **Edit sale (1.4.2):** Client, Device, and Price come preselected from the sale — no need to re-choose them.
 - **Bank account:** routing number, bank name, account number, address, who chose bank account.
 - **Edit / Quality ticket:** **Verifier feedback** and **Client feedback** are dropdowns (see SALES_LOG for who may edit).
 - **Export:** format dropdown + **Export list**, or row **Export** (CSV / Excel / PDF).
-- **Admin:** **Sales permissions** (field ACL) and **Log columns** (which columns appear) — run **Reset defaults** once after upgrade, then Save.
+- **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. **Log columns** controls which columns appear. Run **Reset defaults** once after upgrade.
 - Attachments in Supabase Storage; **Share link** for signed URLs (~7 days).
 - Agents see own sales; TL team; OP unit; quality/RTM/HR see company (plus unit toggles for quality roles).
 

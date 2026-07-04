@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.4.1 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.4.2 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -225,18 +225,19 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Action Plan Week** (formerly AIP) · lifecycle modals  
 - **Payroll** hide zero net · **Nationality** dropdown + aliases  
 
-## Sales (1.4.1)
+## Sales (1.4.1–1.4.2)
 
 Full reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 - Per-sale records with **dynamic MLA-Ray form** (all fields in `form_data`)
+- **Edit prefill (1.4.2)** — Client/Device/Price preselected on edit; catalog IDs persist through saves; legacy sales matched by name/device/price (backfill script included)
 - **Log columns** — admin enables any catalog field + Day/Time/Agent/Closer/Customer columns; intersected with role view ACL
 - **Advanced filter** — AND/OR/NOT rules; dropdown values for IDs, clients, teams, statuses; logic shown only with 2+ rules
 - **Toolbar filters** — Client, Agent, Closer, Status on day/week/month views
 - **Working day** — sales until 1 AM Cairo → previous day; Day + Time columns; payroll `sales_count` auto-recalc
 - **Bank payment fields** — routing, bank name, account number, address, who chose bank account
 - **Verifier feedback** / **Client feedback** — dropdowns with role-based edit (verifier assignee; RTM/Admin override)
-- **Sales permissions** page — field view/edit matrix per role group
+- **Sales permissions** page (role-first, 1.4.2) — pick a role, toggle View/Edit per field; unsaved-change tracking + batch save, like Access Control
 - **Log columns** page — enable/disable list columns (separate from Access Control)
 - **Field-level permissions** — main view, quality ticket, edit surfaces
 - **Supabase attachments** — recordings and confirmations; signed share links
@@ -297,11 +298,21 @@ Full reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ## Appearance & UX
 
-Six color themes (saved per device):
+Seven color themes (saved per device):
 
-Light · Dark · Grey · Dark wine · Dark grey · Alabaster
+Light · Dark · Grey · Dark wine · Dark grey · Alabaster · Girly pink
 
 Same layout everywhere — only colors change.
+
+**1.4.2 design overhaul:**
+
+- Shared design tokens (spacing, radii, theme-aware surfaces and badge tints) — every theme renders badges and statuses correctly
+- Full button system: primary, secondary, outline, success, danger, ghost, icon — with hover, active, focus, disabled, and loading states
+- Polished tables: refined headers, styled empty states, smooth content fade-in
+- Modal enter **and exit** animations; styled confirm dialogs replace browser popups in key flows
+- Redesigned **login page** with animated background, password visibility toggle, and inline error feedback
+- **3-step registration wizard** (PIN → details → success) with an approval-pipeline explainer
+- Honors Windows **reduced motion** preference; consistent keyboard focus rings
 
 ---
 

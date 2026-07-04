@@ -198,19 +198,22 @@ window.AccessControlModule = (function () {
       }
     });
 
-    root.querySelector("#rbac-reset-role")?.addEventListener("click", async () => {
-      if (!confirm(`Reset all overrides for ${roleLabel(selectedRole)} to built-in defaults?`)) return;
-      try {
-        await api("/rbac/reset", { method: "POST", body: JSON.stringify({ role: selectedRole }) });
-        pending.clear();
-        await loadData(api);
-        renderMatrix(root);
-        updateSaveState(root);
-        if (typeof helpers.refreshStatus === "function") await helpers.refreshStatus();
-        helpers.showSaveIndicator?.("Role reset to defaults");
-      } catch (e) {
-        alert(e.message);
-      }
+    root.querySelector("#rbac-reset-role")?.addEventListener("click", () => {
+      openConfirmModal({
+        title: "Reset role",
+        message: `Reset all overrides for ${roleLabel(selectedRole)} to built-in defaults?`,
+        confirmLabel: "Reset",
+        danger: true,
+        onConfirm: async () => {
+          await api("/rbac/reset", { method: "POST", body: JSON.stringify({ role: selectedRole }) });
+          pending.clear();
+          await loadData(api);
+          renderMatrix(root);
+          updateSaveState(root);
+          if (typeof helpers.refreshStatus === "function") await helpers.refreshStatus();
+          helpers.showSaveIndicator?.("Role reset to defaults");
+        },
+      });
     });
   }
 

@@ -552,26 +552,33 @@ window.HRMSFeatures = (function () {
         </tbody></table></div></section>` : ""}`;
 
     root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
-      btn.onclick = async () => {
-        if (!confirm("Approve this registration? Creates inactive employee login.")) return;
-        try {
-          const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
-          alert(`Approved. User ID (login): ${res.username}\nEmployee ${res.employeeId} — temp password: ${res.tempPassword}\nUser must be activated by Mark or Raymond.`);
-          await renderOrgPage(root, api, helpers);
-        } catch (e) {
-          alert(e.message);
-        }
+      btn.onclick = () => {
+        openConfirmModal({
+          title: "Approve registration",
+          message: "Approve this registration? Creates inactive employee login.",
+          confirmLabel: "Approve",
+          onConfirm: async () => {
+            const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
+            await renderOrgPage(root, api, helpers);
+            if (typeof showRegistrationCredentialsModal === "function") {
+              showRegistrationCredentialsModal(res, "The account must be activated by Mark or Raymond before first sign-in.");
+            }
+          },
+        });
       };
     });
     root.querySelectorAll("[data-reject-reg]").forEach((btn) => {
-      btn.onclick = async () => {
-        if (!confirm("Reject this registration?")) return;
-        try {
-          await api(`/registration/${btn.dataset.rejectReg}/reject`, { method: "POST", body: "{}" });
-          await renderOrgPage(root, api, helpers);
-        } catch (e) {
-          alert(e.message);
-        }
+      btn.onclick = () => {
+        openConfirmModal({
+          title: "Reject registration",
+          message: "Reject this registration?",
+          confirmLabel: "Reject",
+          danger: true,
+          onConfirm: async () => {
+            await api(`/registration/${btn.dataset.rejectReg}/reject`, { method: "POST", body: "{}" });
+            await renderOrgPage(root, api, helpers);
+          },
+        });
       };
     });
 
