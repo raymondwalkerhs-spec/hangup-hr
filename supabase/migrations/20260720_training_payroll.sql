@@ -13,7 +13,7 @@ ALTER TABLE agent_training_phases
     CHECK (exit_reason IN ('none', 'agent_left', 'company', 'failed_evaluation')),
   ADD COLUMN IF NOT EXISTS min_sales_required int NOT NULL DEFAULT 4;
 
-INSERT INTO position_rates (position, monthly_rate)
+INSERT INTO position_rates (position, monthly_salary)
 VALUES ('Trainee', 0)
 ON CONFLICT (position) DO NOTHING;
 
