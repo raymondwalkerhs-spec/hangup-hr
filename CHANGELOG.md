@@ -4,6 +4,12 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.6.3] — 2026-07-05
+
+### Fixed
+- **One training payroll per program** — trainees appear on the Training tab only in the **anchor accrual month** (promotion/pass or last training day), with pay consolidated across all program months; earlier months no longer show a partial duplicate row
+- **Training defer/splits** — split validation uses the training payslip balance (not agent pay); defer remainder and new splits default to `training_payroll` on training payslips; fixed `getPositionRates(month)` typo that broke split validation
+
 ## [1.6.2] — 2026-07-05
 
 ### Fixed

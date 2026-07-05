@@ -137,7 +137,7 @@ These tables exist in production; DDL was applied outside early migration stubs.
 | `agent_training_programs` | `employee_id` | 4-week program |
 | `agent_training_phases` | `id` uuid | Phase 1–4 status |
 
-**Trainee basic pay (app logic, not stored):** each payable attendance date in phase 2+ × **600 EGP/day** (`lib/training-pay-rules.js` — attendance-driven eligibility since 1.6.2; pay units include Attended, WFH, lateness, half/quarter, paid leave).
+**Trainee basic pay (app logic, not stored):** one **anchor-month** training payslip per program; all phase attendance summed × **600 EGP/day**. Splits/defer use `training_payroll` on that anchor month (`lib/training-payroll.js`, `lib/training-pay-rules.js`).
 
 ## Finance HR extensions
 

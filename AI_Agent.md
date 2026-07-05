@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.2` (`package.json` → `version`)
-- **Previous:** `1.6.1` (trainee pay units), `1.6.0` (training payroll split), `1.5.3` (working days sync)
+- **Current version:** `1.6.3` (`package.json` → `version`)
+- **Previous:** `1.6.2` (trainee day count UTC fix), `1.6.1` (pay units), `1.6.0` (training payroll split)
 
 ---
 

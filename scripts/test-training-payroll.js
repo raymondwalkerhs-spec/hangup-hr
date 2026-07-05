@@ -70,6 +70,59 @@ test("weekdaysInMonth uses local calendar dates not UTC ISO shift", () => {
   assert(!days.includes("2026-06-30"), "June 30 must not appear in July list");
 });
 
+test("training spanning two months is one payroll on anchor month only", () => {
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { TRAINING_DAILY_RATE, resolveTrainingPayrollAnchorMonth } = require("../lib/training-pay-rules");
+  const emp = { id: "HS3-36", american_name: "Trainee", unit: "HS3", position: "Trainee" };
+  const standardRow = { employeeId: "HS3-36", name: "Trainee", netSalary: 0, basicSalary: 0 };
+  const program = {
+    outcome: "active",
+    allPhases: [
+      { phaseNumber: 2, weekStart: "2026-06-23", weekEnd: "2026-06-27", status: "passed" },
+      { phaseNumber: 3, weekStart: "2026-06-30", weekEnd: "2026-07-04", status: "passed" },
+    ],
+  };
+  const programPayroll = {
+    months: ["2026-06", "2026-07"],
+    attendanceRecords: [
+      { date: "2026-06-24", status: "Attended" },
+      { date: "2026-06-25", status: "Attended" },
+      { date: "2026-07-01", status: "Attended" },
+      { date: "2026-07-02", status: "Attended" },
+    ],
+    bonusEvents: [],
+    deductionEvents: [],
+  };
+  const anchor = resolveTrainingPayrollAnchorMonth(program, programPayroll.attendanceRecords);
+  assert.equal(anchor, "2026-07");
+  const baseCtx = {
+    config: { latenessRules: { tierA: { amount: 50 }, tierB: { amount: 100 } } },
+    actionPlans: [],
+    rates: [{ position: "Trainee", monthlySalary: 12000 }],
+    commissionTiers: [],
+    loans: [],
+    loanPayments: [],
+    allPayrollSplits: [],
+  };
+  const juneRow = enrichPayrollRow(
+    emp,
+    standardRow,
+    { ...baseCtx, ym: "2026-06", attendanceRecords: [], bonusEvents: [], deductionEvents: [] },
+    program,
+    programPayroll
+  );
+  assert.equal(juneRow.payrollKind, "training_deferred_month");
+  const julyRow = enrichPayrollRow(
+    emp,
+    standardRow,
+    { ...baseCtx, ym: "2026-07", attendanceRecords: [], bonusEvents: [], deductionEvents: [] },
+    program,
+    programPayroll
+  );
+  assert.equal(julyRow.payrollKind, "training");
+  assert.equal(julyRow.basicSalary, 4 * TRAINING_DAILY_RATE);
+});
+
 console.log("training-payroll");
 test("4 Attended days in phase 2 pay 2400 basic (HS3-36 style)", () => {
   const { enrichPayrollRow } = require("../lib/training-payroll");

@@ -140,8 +140,8 @@ Discipline week (Mon–Fri) with payroll consequences:
 
 - **Three payroll tabs** — Main (agents), Training (trainees), Total (payments due/received in month)
 - **Fixed trainee pay** — **12,000 EGP/mo**, **20 days**, **600 EGP/day**, **3,000 EGP/week** (not Salaries ÷ working days)
-- **Pay units (1.6.1+)** — trainee basic = eligible phase attendance day-units × 600; counts Attended, WFH, lateness, half (0.5), quarter (0.25), paid leave
-- **Attendance-driven eligibility (1.6.2)** — walks actual attendance in phase 2+ (v1.5 model); fixes UTC date shift that could pay only 1×600 when four Attended days were eligible
+- **Single training payslip (1.6.3)** — one consolidated training payroll per program on the anchor month, even when training spans two calendar months
+- **Pay units (1.6.1+)** — trainee basic = eligible phase attendance day-units × 600
 - **4-week program** — Phase 1 unpaid; Phase 2–4 trainee rate when phase passed  
 - **12 passed sales** (4 per evaluation phase) + HR **Promote to Agent**  
 - **Dual payslip** same month when promotion mid-month: Training tab + Main tab; separate PDFs  

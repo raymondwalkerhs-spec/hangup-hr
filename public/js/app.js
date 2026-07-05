@@ -2989,6 +2989,15 @@ async function openPayslipModal(employeeId, options = {}) {
     : "";
   const emp = data.employee || { id: employeeId, american_name: p.name, profile_photo_file_id: p.profile_photo_file_id };
   const slipForRender = activeSlip;
+  const isTrainingSlip =
+    options.kind === "training" ||
+    slipForRender.payrollKind === "training" ||
+    (isDual && initialTab === "training");
+  const defaultSplitKind = isTrainingSlip ? "training_payroll" : "payment";
+  const trainingSpanBanner =
+    isTrainingSlip && (p.trainingSpanMonths?.length > 1 || slipForRender.trainingSpanMonths?.length > 1)
+      ? `<div class="alert alert-info" style="margin-bottom:1rem">Training payroll covers <strong>${(p.trainingSpanMonths || slipForRender.trainingSpanMonths || []).map(monthLabel).join(", ")}</strong> — one consolidated payslip (accrual month ${monthLabel(p.trainingPayrollAnchorMonth || slipForRender.trainingPayrollAnchorMonth || state.month)}).</div>`
+      : "";
   const bonusRows = Object.entries(slipForRender.bonuses || {})
     .filter(([, v]) => v > 0)
     .map(([k, v]) => `<div class="payslip-row"><span>${k}</span><span class="amount-pos">+${fmt(v)}</span></div>`)
@@ -3060,6 +3069,7 @@ async function openPayslipModal(employeeId, options = {}) {
       </div></div>
     <div class="modal-body payslip" id="payslip-modal-body">
       ${dualBanner}
+      ${trainingSpanBanner}
       ${gateBanner}
       ${finalPayBanner}
       <div class="payslip-header">
@@ -3186,9 +3196,9 @@ async function openPayslipModal(employeeId, options = {}) {
         <form id="split-form" class="field-grid" style="margin-top:.75rem">
           <label class="field"><span>Amount (EGP)</span><input name="amount" type="number" step="0.01" required /></label>
           <label class="field"><span>Type</span><select name="splitKind">
-            <option value="payment">Payment</option>
+            <option value="payment" ${defaultSplitKind === "payment" ? "selected" : ""}>Payment</option>
             <option value="training_bonus">Training bonus</option>
-            <option value="training_payroll">Training payroll</option>
+            <option value="training_payroll" ${defaultSplitKind === "training_payroll" ? "selected" : ""}>Training payroll</option>
             <option value="correction">Correction (+/−)</option>
           </select></label>
           <label class="field"><span>Status</span><select name="status">
@@ -3382,6 +3392,7 @@ async function openPayslipModal(employeeId, options = {}) {
             employeeId,
             yearMonth: state.month,
             amount,
+            splitKind: isTrainingSlip ? "training_payroll" : "payment",
             status: "deferred",
             deferToMonth,
             notes: "Deferred remainder",

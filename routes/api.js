@@ -203,28 +203,39 @@ async function loadEmployeePayslipBundle(emp, month) {
     splitMaps.deferredIn.get(emp.id) || []
   );
 
-  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { enrichPayrollRow, buildProgramPayrollDataForEmployees } = require("../lib/training-payroll");
   const { useSupabase } = require("../lib/backend");
   if (useSupabase()) {
     try {
       const trainingPhases = require("../lib/training-phases");
       const program = await trainingPhases.getProgram(emp.id);
       if (program) {
-        payslip = enrichPayrollRow(emp, payslip, {
-          ym: month,
-          config,
-          rates,
-          bonusEvents,
-          deductionEvents,
-          adjustment,
-          attendanceRecords: records,
-          commissionTiers,
-          loans,
-          loanPayments,
-          actionPlans,
-          payslipGateNotes: gate.payslipNotes || [],
-          allPayrollSplits,
-        }, program);
+        const programPayrollByEmployee = buildProgramPayrollDataForEmployees(new Map([[emp.id, program]]), {
+          getAttendance: (ym, id) => store.getAttendanceEvents(ym).filter((r) => r.employeeId === id),
+          getBonuses: (ym, id) => store.getBonusEvents(ym, id),
+          getDeductions: (ym, id) => store.getDeductionEvents(ym, id),
+        });
+        payslip = enrichPayrollRow(
+          emp,
+          payslip,
+          {
+            ym: month,
+            config,
+            rates,
+            bonusEvents,
+            deductionEvents,
+            adjustment,
+            attendanceRecords: records,
+            commissionTiers,
+            loans,
+            loanPayments,
+            actionPlans,
+            payslipGateNotes: gate.payslipNotes || [],
+            allPayrollSplits,
+          },
+          program,
+          programPayrollByEmployee.get(emp.id)
+        );
       }
     } catch (err) {
       console.warn(`training payroll enrich failed for ${emp.id}:`, err.message);
@@ -257,9 +268,14 @@ async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
   if (!useSupabase()) return payroll;
   try {
     const trainingPhases = require("../lib/training-phases");
-    const { enrichPayrollRows } = require("../lib/training-payroll");
+    const { enrichPayrollRows, buildProgramPayrollDataForEmployees } = require("../lib/training-payroll");
     const programs = await trainingPhases.loadProgramsForEmployees(employees.map((e) => e.id), {
       withSales: false,
+    });
+    const programPayrollByEmployee = buildProgramPayrollDataForEmployees(programs, {
+      getAttendance: (ym, empId) => store.getAttendanceEvents(ym).filter((r) => r.employeeId === empId),
+      getBonuses: (ym, empId) => store.getBonusEvents(ym, empId),
+      getDeductions: (ym, empId) => store.getDeductionEvents(ym, empId),
     });
     return enrichPayrollRows(
       payroll,
@@ -271,7 +287,8 @@ async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
         attendanceByEmployee: ctx.attendanceMap,
         adjustments: ctx.adjustments || [],
       },
-      programs
+      programs,
+      programPayrollByEmployee
     );
   } catch (err) {
     console.warn("training payroll batch enrich failed:", err.message);
@@ -2427,18 +2444,40 @@ router.get("/payroll-splits", (req, res) => {
   res.json({ splits, splitKinds: SPLIT_KINDS, splitStatuses: SPLIT_STATUSES.filter((s) => s !== "cancelled") });
 });
 
-async function getSplitValidationContext(employeeId, yearMonth, excludeSplitId = null) {
+async function getSplitValidationContext(employeeId, yearMonth, excludeSplitId = null, options = {}) {
+  const splitKind = options.splitKind || "payment";
   const emp = store.getEmployeeById(employeeId);
   if (!emp) return null;
-  const config = store.getConfig();
-  const rates = store.getPositionRates(month);
+  const allPayrollSplits = store.getAllPayrollSplits();
+  const splitMaps = buildSplitMaps(allPayrollSplits, yearMonth);
+  const { filterTrainingSplits, filterAgentSplits, resolvePayslipFromBundle } = require("../lib/training-payroll");
+
+  if (splitKind === "training_payroll" || splitKind === "training_bonus") {
+    const bundle = await loadEmployeePayslipBundle(emp, yearMonth);
+    const trainingSlip = resolvePayslipFromBundle({ payslip: bundle.payslip }, "training");
+    if (!trainingSlip) return null;
+    const splitsForMonth = filterTrainingSplits(splitMaps.byEmployeeMonth.get(employeeId) || []);
+    const deferredIn = filterTrainingSplits(splitMaps.deferredIn.get(employeeId) || []);
+    const calculatedNet =
+      trainingSlip.calculatedNet ??
+      trainingSlip.netSalary + (trainingSlip.receivedTotal || 0) + (trainingSlip.deferredOut || 0);
+    return buildValidationContext(calculatedNet, splitsForMonth, deferredIn, excludeSplitId);
+  }
+
+  const { config, workingDays } = await resolvePayrollConfig(yearMonth);
+  const rates = store.getPositionRates(yearMonth);
   const records = store.getAttendanceEvents(yearMonth).filter((r) => r.employeeId === employeeId);
   const bonusEvents = store.getBonusEvents(yearMonth, employeeId);
   const deductionEvents = store.getDeductionEvents(yearMonth, employeeId);
   const adjustment = store.getPayrollAdjustment(yearMonth, employeeId);
   const actionPlans = await loadActionPlansSafe();
   const gate = await payrollGates.getPayrollBlockers(employeeId, yearMonth, emp).catch(() => ({ payslipNotes: [] }));
-  const summary = summarizeEmployeeMonth(emp, records, config, actionPlans.filter((p) => p.employeeId === employeeId && p.status === "active"));
+  const summary = summarizeEmployeeMonth(
+    emp,
+    records,
+    config,
+    actionPlans.filter((p) => p.employeeId === employeeId && p.status === "active")
+  );
   const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(yearMonth);
   const raw = calcPayrollRow(
     emp,
@@ -2456,10 +2495,8 @@ async function getSplitValidationContext(employeeId, yearMonth, excludeSplitId =
     actionPlans,
     gate.payslipNotes || []
   );
-  const allPayrollSplits = store.getAllPayrollSplits();
-  const splitMaps = buildSplitMaps(allPayrollSplits, yearMonth);
-  const splitsForMonth = splitMaps.byEmployeeMonth.get(employeeId) || [];
-  const deferredIn = splitMaps.deferredIn.get(employeeId) || [];
+  const splitsForMonth = filterAgentSplits(splitMaps.byEmployeeMonth.get(employeeId) || []);
+  const deferredIn = filterAgentSplits(splitMaps.deferredIn.get(employeeId) || []);
   return buildValidationContext(raw.netSalary, splitsForMonth, deferredIn, excludeSplitId);
 }
 
@@ -2480,7 +2517,7 @@ router.post("/payroll-splits", async (req, res) => {
     deferToMonth: deferToMonth || "",
     notes: notes || "",
   };
-  const ctx = await getSplitValidationContext(employeeId, yearMonth);
+  const ctx = await getSplitValidationContext(employeeId, yearMonth, null, { splitKind: split.splitKind });
   const err = validateSplit(split, ctx);
   if (err) return res.status(400).json({ error: err });
   const saved = await store.createPayrollSplit(split, req.username);
@@ -2501,7 +2538,9 @@ router.patch("/payroll-splits/:id", async (req, res) => {
     yearMonth: existing.yearMonth,
     amount: req.body.amount != null ? Number(req.body.amount) : existing.amount,
   };
-  const ctx = await getSplitValidationContext(existing.employeeId, existing.yearMonth, existing.id);
+  const ctx = await getSplitValidationContext(existing.employeeId, existing.yearMonth, existing.id, {
+    splitKind: merged.splitKind,
+  });
   const err = validateSplit(merged, ctx);
   if (err) return res.status(400).json({ error: err });
   const saved = await store.updatePayrollSplitRecord(merged, req.username);
