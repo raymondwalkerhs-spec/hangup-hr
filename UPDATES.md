@@ -1,3 +1,15 @@
+## v1.6.5 release checklist
+
+1. Bump `package.json` → `1.6.5`
+2. Document FP import AM/PM, local dates, shift grouping, dedupe, check-in-only days; run `node scripts/test-fp-import.js`
+3. `git push` then trigger CI: `gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=v1.6.5`
+4. After CI: `gh release edit v1.6.5 --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest`
+5. `node scripts/publish-app-version.js` and `npm run dist:web-installer`
+6. `gh release upload v1.6.5 dist-bootstrap/Hangup-Portal-Web-Setup.exe --clobber`
+
+**1.6.5 change:** Fingerprint import fixes (1:36 PM → 13:36, local calendar dates, agent shift grouping, dedupe punches, check-in-only days).
+
+---
 ## v1.6.4 release checklist
 
 1. Bump `package.json` → `1.6.4`

@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.5.3 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.5 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -95,7 +95,7 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - Transport allowance override on eligible statuses  
 - **Guards** — no edits after depart or outside employment period  
 - **Month lock** — payroll-finalized months cannot be edited  
-- **FP import (1.6.4)** — accepts ID + Date rows (name optional); date-only punches default to **Attended** with **FP date only** note  
+- **FP import (1.6.5)*** — accepts ID + Date rows (name optional); date-only punches default to **Attended** with **FP date only** note; agent shift grouping (check-in before 7 PM, check-out 7 PM–1 AM next day, early AM logout on previous work date); check-in-only days allowed with **no logout punch** note  
 
 ---
 

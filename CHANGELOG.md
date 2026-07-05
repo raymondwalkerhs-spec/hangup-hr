@@ -2,6 +2,14 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.5] — 2026-07-05
+
+### Fixed
+- **Fingerprint import** — AM/PM datetime parsing (e.g. `7/1/2026 1:36:58 PM` → 13:36 not 01:36); local calendar dates (no UTC `toISOString` shift); agent shift grouping (check-in = earliest punch before 7 PM excluding 00:00–01:00 logout grace; check-out = last punch from 7 PM through 1 AM next day on previous work date); days with check-in only keep `checkOut` null; duplicate punch times deduped per employee per work day
+
+### Added
+- **tests** — `scripts/test-fp-import.js` (9 unit tests for FP parse + shift grouping)
+
 ## [Unreleased]
 
 ## [1.6.4] — 2026-07-05

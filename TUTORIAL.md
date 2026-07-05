@@ -108,9 +108,10 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 1. Set each agent’s **FP number** on the employee profile (or run `npm run seed:fp-june` after placing `Asset/june fp example.xls`).  
 2. **Attendance** → **FP rules** — adjust check-in/out thresholds per month.  
-3. **Import FP file** — upload CSV/XLS from the device → **Preview** → **Apply**. Rows with **ID + Date** only (no name, no punch times) import as **Attended** with note **FP date only**.  
-4. Default check-in: before 2:50 PM = OK; 2:50–3:00 Lateness A; 3:00–3:30 Lateness B; 3:30–5:00 Quarter day; after 5:00 Half day.  
-5. Check-out: grace until 1 PM; 7–10 PM = Half day; 10–11:55 PM = Quarter day (unless HR overrides).
+3. **Import FP file** — upload CSV/XLS from the device → **Preview** → **Apply**. Rows with **ID + Date** only (no name, no punch times) import as **Attended** with note **FP date only**. Days with check-in but no logout punch import with note **FP in HH:MM (no logout punch)**.  
+4. **Agent shift grouping** — earliest punch before **7 PM** = check-in; last punch from **7 PM** through **1 AM** next calendar day (attached to the previous work date) = check-out; duplicate times on the same day are deduped.  
+5. Default check-in: before 2:50 PM = OK; 2:50–3:00 Lateness A; 3:00–3:30 Lateness B; 3:30–5:00 Quarter day; after 5:00 Half day.  
+6. Check-out: grace until 1 PM; 7–10 PM = Half day; 10–11:55 PM = Quarter day (unless HR overrides).
 
 **Policy vs FP import (1.5.0):** live attendance policy may differ from FP import defaults — checkout grace in FP import uses **13:00**; manual attendance edits skip FP re-import for that day. HR should align FP rules monthly rather than changing import thresholds without sign-off.
 
