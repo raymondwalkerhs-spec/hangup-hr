@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.5.0 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.5.1 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -145,6 +145,7 @@ Discipline week (Mon–Fri) with payroll consequences:
 - Outcomes: failed (partial phase 2 pay), agent left (zero), company terminated (phase rules)  
 - Split kind **training_payroll**; defer agent portion to next month  
 - Resignation: notice-period pay scale (5–10 sales); no-notice 10-day deduction  
+- **1.5.1 fix:** Payroll page no longer crashes when trainees have program phases configured (batch enrich passes action plans)
 
 ---
 

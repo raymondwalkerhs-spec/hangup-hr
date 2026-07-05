@@ -69,6 +69,16 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 
 ---
 
+## v1.5.1 release checklist
+
+1. Bump `package.json` → `1.5.1`
+2. `git push` then trigger CI: `gh workflow run "Release (update packages)" --ref desktop/1.0.8-beta.1-updates -f tag=v1.5.1`
+3. After CI: `gh release edit v1.5.1 --prerelease=false --latest` — verify Setup, full zips, patch-from-1.5.0
+4. `node scripts/publish-app-version.js --notes "Payroll page fix for trainee training programs"`
+5. Optional: `npm run dist:web-installer` for USB bootstrap
+
+**1.5.1 change:** Payroll page loads when agents have training programs (fixes `/api/payroll` crash on missing actionPlans in training enrich).
+
 ## v1.5.0 release checklist
 
 1. Bump `package.json` → `1.5.0`

@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.5.0` (`package.json` → `version`)
-- **Previous:** `1.4.6` (sales filter hotfix), `1.4.5` (reposition / web installer / release CI), `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
+- **Current version:** `1.5.1` (`package.json` → `version`)
+- **Previous:** `1.5.0` (training payroll), `1.4.6` (sales filter hotfix), `1.4.5` (reposition / web installer / release CI), `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
 
 ---
 
@@ -453,7 +453,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.5.0** | **true** | Training payroll, dual payslips, Trainee position, resignation notice rules |
+| **1.5.1** | **true** | Payroll page fix when trainees have training programs (actionPlans in batch enrich) |
+| **1.5.0** | false | Training payroll, dual payslips, Trainee position, resignation notice rules |
 | **1.4.6** | false | Sales log PERIOD_LABELS hotfix; advanced filter empty-rule fix (empty list) |
 | 1.4.5 | false | Reposition HR/IT/RTM backend_pool fix; optional enforce ID prefix on reposition / change app ID |
 | 1.4.4 | false | Hotfix: blank screen (app.js brace), IT role assignable + Access Control picker, payslip nav fix |

@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-07-05
+
+### Fixed
+- **Payroll page crash with trainees** — batch training payroll enrichment now receives `actionPlans` and defaults safely; Payroll loads when agents have training programs and phase 2+ dates (was `Cannot read properties of undefined (reading 'filter')` on `/api/payroll`)
+
 ## [1.5.0] — 2026-07-05
 
 ### Added

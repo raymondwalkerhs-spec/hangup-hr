@@ -251,6 +251,7 @@ async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
       {
         ym: month,
         ...ctx,
+        actionPlans: ctx.actionPlans || [],
         attendanceByEmployee: ctx.attendanceMap,
         adjustments: ctx.adjustments || [],
       },
@@ -1768,6 +1769,7 @@ router.get("/payroll", async (req, res) => {
     loans,
     loanPayments,
     allPayrollSplits,
+    actionPlans,
   });
   const monthLock = useSupabase() ? await hrms.getPayrollMonthLock(month) : null;
   res.json({
