@@ -112,6 +112,16 @@ function listHideOutQuery() {
   return q;
 }
 
+function payrollRowNet(r) {
+  if (r?.payrollKind === "dual") return r.combinedNet ?? r.netSalary ?? 0;
+  return r?.netSalary ?? 0;
+}
+
+function payrollRowBasic(r) {
+  if (r?.payrollKind === "dual") return r.combinedBasic ?? r.basicSalary ?? 0;
+  return r?.basicSalary ?? 0;
+}
+
 function payrollNetAmount(row) {
   if (!row) return 0;
   if (row.hasSplits) return Number(row.calculatedNet ?? payrollRowNet(row) ?? 0);
@@ -1570,8 +1580,9 @@ function matchesEmployeeSearch(emp, q) {
   const needle = normalizeSearchQuery(q);
   if (!needle) return true;
   const hay = employeeSearchHaystack(emp);
+  const hayLower = hay.toLowerCase();
   const tokens = needle.split(" ").filter(Boolean);
-  return tokens.every((tok) => hay.includes(tok));
+  return tokens.every((tok) => hayLower.includes(tok) || hay.includes(tok));
 }
 
 function getTabSearch(tabKey) {
@@ -1583,17 +1594,26 @@ function pageSearchInputHtml(tabKey, placeholder = "Search name or ID…") {
   return `<label class="field field-inline field-search"><span>Search</span><input class="search-input" id="search-${tabKey}" type="search" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(q)}" autocomplete="off" spellcheck="false" /></label>`;
 }
 
-function bindTabSearch(root, tabKey, onFilter) {
+function bindTabSearch(root, tabKey, onFilter, debounceMs = 0) {
   const input = root.querySelector(`#search-${tabKey}`);
   if (!input) return;
   let rafId = 0;
-  const apply = () => {
-    state.tabSearch[tabKey] = input.value;
+  let debounceTimer = 0;
+  const runFilter = () => {
     if (rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(() => {
       rafId = 0;
       onFilter();
     });
+  };
+  const apply = () => {
+    state.tabSearch[tabKey] = input.value;
+    if (debounceMs > 0) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(runFilter, debounceMs);
+      return;
+    }
+    runFilter();
   };
   input.addEventListener("input", apply);
   input.addEventListener("keydown", (e) => {
@@ -1873,16 +1893,6 @@ function updateAttendanceTable(root) {
   }
   if (countEl) countEl.textContent = `${employees.length} employees · ${monthLabel(state.month)}`;
   bindAttendanceGridEvents(root, ctx);
-}
-
-function payrollRowNet(r) {
-  if (r?.payrollKind === "dual") return r.combinedNet ?? r.netSalary ?? 0;
-  return r.netSalary ?? 0;
-}
-
-function payrollRowBasic(r) {
-  if (r?.payrollKind === "dual") return r.combinedBasic ?? r.basicSalary ?? 0;
-  return r.basicSalary ?? 0;
 }
 
 function payrollRowHtml(r) {
@@ -3871,7 +3881,7 @@ async function renderPayroll(root) {
     state.hideZeroNet = e.target.checked;
     updatePayrollTable(root);
   });
-  bindTabSearch(root, "payroll", () => updatePayrollTable(root));
+  bindTabSearch(root, "payroll", () => updatePayrollTable(root), 180);
 
   let tierIndex = tiers.length || 1;
   root.querySelector("#add-tier-btn").onclick = () => {

@@ -4,6 +4,13 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-07-05
+
+### Fixed
+- **Trainee working days** — always load month working days after sync (fixes stale cached **20** when Attendance/Salaries shows **22** for that month)
+- **Payroll search** — Arabic name matching; debounced filter (less UI lag while typing)
+- **Payroll page load** — batch-load training programs (2 Supabase queries + no per-employee sales fetch on payroll list)
+
 ## [1.5.2] — 2026-07-05
 
 ### Fixed

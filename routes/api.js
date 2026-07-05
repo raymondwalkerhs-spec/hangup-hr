@@ -49,11 +49,10 @@ async function loadActionPlansSafe() {
   }
 }
 
-/** Merge month working days from store into config so daily rate matches payroll header. */
+/** Merge month working days from store (after sync) so daily rate matches Attendance/Salaries. */
 async function resolvePayrollConfig(month) {
+  const workingDays = await store.getWorkingDaysForMonth(month);
   const base = store.getConfig();
-  const workingDays =
-    base.workingDaysByMonth?.[month] ?? (await store.getWorkingDaysForMonth(month));
   const config = {
     ...base,
     workingDaysByMonth: {
@@ -259,7 +258,9 @@ async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
   try {
     const trainingPhases = require("../lib/training-phases");
     const { enrichPayrollRows } = require("../lib/training-payroll");
-    const programs = await trainingPhases.loadProgramsForEmployees(employees.map((e) => e.id));
+    const programs = await trainingPhases.loadProgramsForEmployees(employees.map((e) => e.id), {
+      withSales: false,
+    });
     return enrichPayrollRows(
       payroll,
       employees,
@@ -1745,13 +1746,24 @@ router.get("/payroll", async (req, res) => {
   const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
   const allPayrollSplits = store.getAllPayrollSplits();
   const actionPlans = await loadActionPlansSafe();
+  const actionPlansByEmployee = new Map();
+  for (const p of actionPlans) {
+    if (p.status !== "active") continue;
+    if (!actionPlansByEmployee.has(p.employeeId)) actionPlansByEmployee.set(p.employeeId, []);
+    actionPlansByEmployee.get(p.employeeId).push(p);
+  }
+  const recordsByEmployee = new Map();
+  for (const r of records) {
+    if (!recordsByEmployee.has(r.employeeId)) recordsByEmployee.set(r.employeeId, []);
+    recordsByEmployee.get(r.employeeId).push(r);
+  }
 
   const summaries = employees.map((emp) =>
     summarizeEmployeeMonth(
       emp,
-      records.filter((r) => r.employeeId === emp.id),
+      recordsByEmployee.get(emp.id) || [],
       config,
-      actionPlans.filter((p) => p.employeeId === emp.id && p.status === "active")
+      actionPlansByEmployee.get(emp.id) || []
     )
   );
 

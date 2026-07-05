@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.5.2` (`package.json` → `version`)
-- **Previous:** `1.5.1` (payroll trainee crash fix), `1.5.0` (training payroll), `1.4.6` (sales filter hotfix), `1.4.5` (reposition / web installer / release CI), `1.4.1` (sales columns/filters/permissions pages), `1.4.0` (sales log overhaul)
+- **Current version:** `1.5.3` (`package.json` → `version`)
+- **Previous:** `1.5.2` (working days sync + payroll perf), `1.5.1` (payroll trainee crash fix), `1.5.0` (training payroll)
 
 ---
 
@@ -453,7 +453,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.5.2** | **true** | Payroll search (Arabic/ID); trainee rate uses month working days |
+| **1.5.3** | **true** | Stale working-days sync fix; fast batch training load; search debounce |
+| **1.5.2** | false | Payroll search (Arabic/ID); trainee rate uses month working days |
 | **1.5.1** | false | Payroll page fix when trainees have training programs |
 | **1.5.0** | false | Training payroll, dual payslips, Trainee position, resignation notice rules |
 | **1.4.6** | false | Sales log PERIOD_LABELS hotfix; advanced filter empty-rule fix (empty list) |
