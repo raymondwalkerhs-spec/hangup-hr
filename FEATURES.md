@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.6.6 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.7 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -95,6 +95,7 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - Transport allowance override on eligible statuses  
 - **Guards** — no edits after depart or outside employment period  
 - **Month lock** — payroll-finalized months cannot be edited  
+- **Quality ticket (1.6.7)** — field view/edit/attachments follow Sales permissions catalog on quality surface; assigned OP/TL verifiers edit only permitted cells  
 - **Access control (1.6.6)** — sales edit/approve/export and dashboard unit toggles respect Access Control; dual-role TL via org `tl_employee_id`; team dashboard role scope + weekend DAY-OFF; org agent privacy; equipment issue to any employee  
 
 ---

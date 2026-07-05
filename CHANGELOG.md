@@ -2,6 +2,17 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.7] — 2026-07-06
+
+### Fixed
+- **Quality ticket field permissions** — quality ticket uses server-side `surface=quality` field catalog with per-field `canEdit` (same rules as edit sale); assigned OP/TL verifiers can edit only fields their role may edit (e.g. reviewer status when assignee)
+- **Sales attachments** — upload/delete/replace gated by attachment kind view/edit ACL; quality ticket users can manage files their role allows
+- **Sales permissions admin** — view toggles sync `quality_view_roles` so quality ticket visibility matches configured field access
+- **Quality full edit** — quality role with `editSales` can use full edit sale form (field ACL still applies)
+
+### Added
+- **tests** — `scripts/test-quality-sales-perms.js`
+
 ## [1.6.6] — 2026-07-06
 
 ### Fixed

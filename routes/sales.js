@@ -617,6 +617,12 @@ router.patch("/:id", async (req, res) => {
 });
 
 const saleStorage = require("../lib/sale-attachment-storage");
+
+function canUserManageAttachmentKind(userRole, kind) {
+  const role = userRole?.role || "agent";
+  if (!salesCatalog.canEditAttachmentKind(kind || "recording", role)) return false;
+  return roles.canEditSale(userRole) || roles.canWorkQualityTicket(userRole);
+}
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");
 
@@ -671,16 +677,34 @@ router.get("/field-catalog", async (req, res) => {
     const perms = await business.readSalesFieldPermissions();
     const permMap = Object.fromEntries(perms.map((p) => [p.fieldKey, p]));
     const role = req.userRole?.role || "agent";
+    const surface = String(req.query.surface || "main").toLowerCase();
     const allFields = req.query.allFields === "1" && roles.canManageAll(req.userRole);
-    const fields = allFields
-      ? salesCatalog.FIELDS
-      : salesCatalog.listFieldsForRole(role, permMap);
+    let sale = null;
+    if (req.query.saleId) {
+      sale = await business.getSale(String(req.query.saleId));
+      if (sale) {
+        const employees = store.getEmployees();
+        const grants = await business.readSalesVisibilityGrants(req.username);
+        const visible = salesScope.filterSalesForUser([sale], req.userRole, employees, grants);
+        if (!visible.length) sale = null;
+      }
+    }
+    const fieldOpts = { user: req.userRole, sale };
+    let fields;
+    if (allFields) {
+      fields = salesCatalog.FIELDS.map((f) => salesCatalog.mapFieldForRole(f, role, permMap[f.key], fieldOpts));
+    } else if (surface === "quality") {
+      fields = salesCatalog.listFieldsForRoleOnSurface(role, permMap, "quality", fieldOpts);
+    } else {
+      fields = salesCatalog.listFieldsForRole(role, permMap, fieldOpts);
+    }
     res.json({
       fields,
       sections: salesCatalog.listSections(),
       attachmentKinds: salesCatalog.listAttachmentKindsForRole(role),
       permissions: perms,
       storageConfigured: saleStorage.isConfigured(),
+      surface,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -806,8 +830,18 @@ router.get("/attachments/:attachmentId/file", async (req, res) => {
 
 router.get("/:id/attachments", async (req, res) => {
   try {
+    const existing = await business.getSale(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Sale not found" });
+    const employees = scopedEmployees(req);
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
+    if (!visible.length) return res.status(403).json({ error: "No access" });
     const attachments = await business.readSaleAttachments(req.params.id);
-    res.json({ attachments });
+    const role = req.userRole?.role || "agent";
+    const filtered = attachments.filter(
+      (a) => !a.kind || salesCatalog.canViewAttachmentKind(a.kind, role)
+    );
+    res.json({ attachments: filtered });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -826,17 +860,21 @@ router.post("/:id/attachments", async (req, res) => {
     }
     const { fileName, contentBase64, kind } = req.body || {};
     if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
+    const kindKey = kind || "recording";
+    if (!canUserManageAttachmentKind(req.userRole, kindKey)) {
+      return res.status(403).json({ error: "No permission to upload this attachment type" });
+    }
     const buffer = Buffer.from(contentBase64, "base64");
     const uploaded = await saleStorage.uploadSaleAttachmentBuffer({
       saleId: req.params.id,
-      kind: kind || "recording",
+      kind: kindKey,
       fileName,
       buffer,
     });
     const att = await business.createSaleAttachment(
       {
         saleId: req.params.id,
-        kind,
+        kind: kindKey,
         fileName: uploaded.fileName,
         dropboxPath: uploaded.dropboxPath,
         dropboxLink: uploaded.dropboxLink,
@@ -850,11 +888,14 @@ router.post("/:id/attachments", async (req, res) => {
 });
 
 router.delete("/attachments/:attachmentId", async (req, res) => {
-  if (!roles.canEditSale(req.userRole)) {
-    return res.status(403).json({ error: "No permission" });
-  }
   try {
-    const att = await business.deleteSaleAttachment(req.params.attachmentId);
+    const access = await assertAttachmentAccess(req, req.params.attachmentId);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    if (!canUserManageAttachmentKind(req.userRole, access.att?.kind)) {
+      return res.status(403).json({ error: "No permission to delete this attachment type" });
+    }
+    const att = access.att;
+    await business.deleteSaleAttachment(req.params.attachmentId);
     if (att?.dropboxPath) {
       try {
         await saleStorage.deleteSaleAttachmentFile(att.dropboxPath);
@@ -876,6 +917,10 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
 async function assertAttachmentAccess(req, attachmentId) {
   const att = await business.getSaleAttachment(attachmentId);
   if (!att) return { error: "Attachment not found", status: 404 };
+  const role = req.userRole?.role || "agent";
+  if (att.kind && !salesCatalog.canViewAttachmentKind(att.kind, role)) {
+    return { error: "No access to this attachment", status: 403 };
+  }
   const sale = await business.getSale(att.saleId);
   if (!sale) return { error: "Sale not found", status: 404 };
   const employees = store.getEmployees();
@@ -923,12 +968,12 @@ router.get("/attachments/:attachmentId/share-link", async (req, res) => {
 });
 
 router.put("/attachments/:attachmentId/replace", async (req, res) => {
-  if (!roles.canEditSale(req.userRole)) {
-    return res.status(403).json({ error: "No permission" });
-  }
   try {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
     if (access.error) return res.status(access.status).json({ error: access.error });
+    if (!canUserManageAttachmentKind(req.userRole, access.att?.kind)) {
+      return res.status(403).json({ error: "No permission to replace this attachment type" });
+    }
     const { fileName, contentBase64 } = req.body || {};
     if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
     const buffer = Buffer.from(contentBase64, "base64");

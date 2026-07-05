@@ -372,7 +372,6 @@ window.SalesModule = (function () {
   }
 
   function canFullEditSale() {
-    if (isQualityAgent()) return false;
     return state.user?.canEditSales === true;
   }
 
@@ -1092,40 +1091,21 @@ window.SalesModule = (function () {
 
   async function openQualityTicketModal(api, employees, helpers, sale, onDone) {
     const { escapeHtml, closeModal, openModal } = helpers;
-    const catalog = await api("/sales/field-catalog?allFields=1").catch(() => ({ fields: [], attachmentKinds: [], permissions: [] }));
-    const permMap = Object.fromEntries((catalog.permissions || []).map((p) => [p.fieldKey, p]));
-    const role = String(state.user?.role || "agent").toLowerCase();
-    const roleIn = (list) => (list || []).map((r) => String(r).toLowerCase()).includes(role);
-
-    function canSeeField(key) {
-      const p = permMap[key] || {};
-      return (
-        roleIn(p.viewRoles || p.view_roles) ||
-        roleIn(p.editRoles || p.edit_roles) ||
-        roleIn(p.mainViewRoles || p.main_view_roles) ||
-        roleIn(p.qualityViewRoles || p.quality_view_roles)
-      );
-    }
-
-    function canEditField(key) {
-      const p = permMap[key] || {};
-      return roleIn(p.editRoles || p.edit_roles);
-    }
-
-    const attachKinds = catalog.attachmentKinds?.length
-      ? catalog.attachmentKinds
-      : defaultQualityAttachKinds();
+    const catalog = await api(`/sales/field-catalog?surface=quality&saleId=${encodeURIComponent(sale.id)}`).catch(() => ({
+      fields: [],
+      attachmentKinds: [],
+    }));
+    const attachKinds = catalog.attachmentKinds?.length ? catalog.attachmentKinds : [];
     const formData = sale?.formData || {};
-    const allFields = catalog.fields?.length ? catalog.fields : [];
-    const ticketFields = allFields.filter(
-      (f) => canSeeField(f.key) && !["client", "deviceType", "unit", "team", "price"].includes(f.key)
+    const ticketFields = (catalog.fields || []).filter(
+      (f) => !["client", "deviceType", "unit", "team", "price"].includes(f.key)
     );
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
 
     function qFieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key;
-      const editable = canEditField(f.key);
+      const editable = f.canEdit === true;
       const ro = editable ? "" : " readonly";
       const dis = editable ? "" : " disabled";
       if (f.type === "employee") {
@@ -1177,7 +1157,10 @@ window.SalesModule = (function () {
     );
 
     const listEl = document.getElementById("sale-attachments-list");
-    await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, false, { inlineAudio: true });
+    const canManageFiles = attachKinds.some((k) => k.canEdit);
+    await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, canManageFiles, {
+      inlineAudio: true,
+    });
 
     document.getElementById("quality-ticket-form").onsubmit = async (e) => {
       e.preventDefault();
@@ -1212,7 +1195,8 @@ window.SalesModule = (function () {
   async function openSaleModal(api, employees, helpers, sale, onDone) {
     const { escapeHtml, closeModal, openModal } = helpers;
     const isEdit = !!sale;
-    const catalog = await api("/sales/field-catalog").catch(() => ({ fields: [], attachmentKinds: [] }));
+    const catalogQuery = isEdit && sale?.id ? `?saleId=${encodeURIComponent(sale.id)}` : "";
+    const catalog = await api(`/sales/field-catalog${catalogQuery}`).catch(() => ({ fields: [], attachmentKinds: [] }));
     let fields = (catalog.fields || []).filter((f) => {
       if (isEdit && f.hideOnEdit) return false;
       if (!isEdit && f.hideOnCreate) return false;

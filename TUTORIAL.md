@@ -243,7 +243,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. **Log columns** controls which columns appear (batch save as of 1.6.6). Run **Reset defaults** once after upgrade.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
 - **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
-- **Team dashboards (1.6.6):** scoped by role; weekends show **DAY-OFF** unless someone has Attended/WFH/Half Day.
+- **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).
 
 ### Sales (legacy notes)
 

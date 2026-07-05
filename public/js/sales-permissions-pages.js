@@ -196,7 +196,9 @@ window.SalesPermissionsPages = (function () {
             viewRoles: [...rolesOf(p, "view")],
             editRoles: [...rolesOf(p, "edit")],
             mainViewRoles: [...(p.mainViewRoles || p.main_view_roles || rolesOf(p, "view"))],
-            qualityViewRoles: [...(p.qualityViewRoles || p.quality_view_roles || [])],
+            qualityViewRoles: [
+              ...(p.qualityViewRoles || p.quality_view_roles || rolesOf(p, "view")),
+            ],
           };
         }
         const listKey = kind === "view" ? "viewRoles" : "editRoles";
@@ -204,12 +206,19 @@ window.SalesPermissionsPages = (function () {
         if (enabled) set.add(role);
         else set.delete(role);
         byField[fieldKey][listKey] = [...set];
-        // Keep the main sales log surface in sync with general view access.
+        // Keep sales log and quality ticket view access in sync.
         if (kind === "view") {
           const mainSet = new Set(byField[fieldKey].mainViewRoles.map((r) => String(r).toLowerCase()));
-          if (enabled) mainSet.add(role);
-          else mainSet.delete(role);
+          const qualitySet = new Set(byField[fieldKey].qualityViewRoles.map((r) => String(r).toLowerCase()));
+          if (enabled) {
+            mainSet.add(role);
+            qualitySet.add(role);
+          } else {
+            mainSet.delete(role);
+            qualitySet.delete(role);
+          }
           byField[fieldKey].mainViewRoles = [...mainSet];
+          byField[fieldKey].qualityViewRoles = [...qualitySet];
         }
       }
       const saveBtn = root.querySelector("#sf-perms-save");
