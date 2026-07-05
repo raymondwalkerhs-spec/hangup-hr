@@ -114,8 +114,8 @@ function listHideOutQuery() {
 
 function payrollNetAmount(row) {
   if (!row) return 0;
-  if (row.hasSplits) return Number(row.calculatedNet ?? row.netSalary ?? 0);
-  return Number(row.netSalary ?? 0);
+  if (row.hasSplits) return Number(row.calculatedNet ?? payrollRowNet(row) ?? 0);
+  return Number(payrollRowNet(row) ?? 0);
 }
 
 function filterPayrollByZeroNet(rows) {
@@ -1549,8 +1549,10 @@ function employeeSearchHaystack(emp) {
   return [
     emp?.id,
     emp?.employeeId,
+    emp?.internal_id,
     emp?.american_name,
     emp?.arabic_name,
+    emp?.arabicName,
     emp?.name,
     emp?.team,
     emp?.unit,

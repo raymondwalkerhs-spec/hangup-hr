@@ -64,6 +64,42 @@ test("12 sale minimum evaluation", () => {
   assert(ev.readyToPass);
 });
 
+console.log("training-payroll");
+test("trainee daily rate uses month working days from config", () => {
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const emp = { id: "T01", american_name: "Trainee", unit: "NW", position: "Trainee" };
+  const standardRow = { employeeId: "T01", name: "Trainee", netSalary: 0, basicSalary: 0 };
+  const program = {
+    outcome: "active",
+    allPhases: [{ phaseNumber: 2, weekStart: "2026-07-14", weekEnd: "2026-07-18", status: "passed" }],
+  };
+  const lateness = { tierA: { amount: 50 }, tierB: { amount: 100 } };
+  const rates = [{ position: "Trainee", monthlySalary: 11000 }];
+  const att = [{ date: "2026-07-14", status: "Attended" }];
+  const ctx22 = {
+    ym: "2026-07",
+    config: { latenessRules: lateness, workingDaysByMonth: { "2026-07": 22 } },
+    actionPlans: [],
+    rates,
+    bonusEvents: [],
+    deductionEvents: [],
+    adjustment: null,
+    attendanceRecords: att,
+    commissionTiers: [],
+    loans: [],
+    loanPayments: [],
+    allPayrollSplits: [],
+  };
+  const row22 = enrichPayrollRow(emp, standardRow, ctx22, program);
+  assert.equal(row22.workingDaysInMonth, 22);
+  assert.equal(row22.dailyRate, Math.round((11000 / 22) * 100) / 100);
+
+  const ctx20 = { ...ctx22, config: { latenessRules: lateness, workingDaysByMonth: { "2026-07": 20 } } };
+  const row20 = enrichPayrollRow(emp, standardRow, ctx20, program);
+  assert.equal(row20.workingDaysInMonth, 20);
+  assert.notEqual(row22.dailyRate, row20.dailyRate);
+});
+
 console.log("resignation-payroll");
 test("notice pay scale 5-10 sales", () => {
   assert.equal(resignation.noticePayPercent(4), 0);

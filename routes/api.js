@@ -49,6 +49,21 @@ async function loadActionPlansSafe() {
   }
 }
 
+/** Merge month working days from store into config so daily rate matches payroll header. */
+async function resolvePayrollConfig(month) {
+  const base = store.getConfig();
+  const workingDays =
+    base.workingDaysByMonth?.[month] ?? (await store.getWorkingDaysForMonth(month));
+  const config = {
+    ...base,
+    workingDaysByMonth: {
+      ...(base.workingDaysByMonth || {}),
+      [month]: workingDays,
+    },
+  };
+  return { config, workingDays };
+}
+
 async function assertCanEditAttendanceDate(employeeId, date) {
   if (!useSupabase()) return;
   const periods = await hrms.getEmploymentPeriods(employeeId);
@@ -156,7 +171,7 @@ function listRecentMonths(count = 12) {
 }
 
 async function loadEmployeePayslipBundle(emp, month) {
-  const config = store.getConfig();
+  const { config } = await resolvePayrollConfig(month);
   const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month).filter((r) => r.employeeId === emp.id);
   const bonusEvents = store.getBonusEvents(month, emp.id);
@@ -1720,7 +1735,7 @@ router.get("/payroll", async (req, res) => {
   employees = filterEmployeesForRequest(employees, req);
   if (unit) employees = employees.filter((e) => e.unit === unit);
 
-  const config = store.getConfig();
+  const { config, workingDays } = await resolvePayrollConfig(month);
   const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const bonusEvents = store.getBonusEvents(month);
@@ -1729,8 +1744,6 @@ router.get("/payroll", async (req, res) => {
   const attendanceMap = store.buildAttendanceMap(month);
   const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
   const allPayrollSplits = store.getAllPayrollSplits();
-  const workingDays =
-    config.workingDaysByMonth?.[month] ?? (await store.getWorkingDaysForMonth(month));
   const actionPlans = await loadActionPlansSafe();
 
   const summaries = employees.map((emp) =>
@@ -1806,7 +1819,7 @@ router.get("/payroll/pdf", async (req, res) => {
   employees = filterEmployeesForRequest(employees, req);
   if (unit) employees = employees.filter((e) => e.unit === unit);
 
-  const config = store.getConfig();
+  const { config } = await resolvePayrollConfig(month);
   const rates = store.getPositionRates(month);
   const records = store.getAttendanceEvents(month);
   const bonusEvents = store.getBonusEvents(month);

@@ -4,6 +4,12 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-07-05
+
+### Fixed
+- **Payroll search** — matches Arabic name (`arabicName`), database ID, and dual/training rows (enriched rows keep employee fields from standard payroll row)
+- **Trainee daily rate** — training payroll now uses the same **month working days** as the Payroll page header (from Salaries/config), not a stale or calendar-only divisor
+
 ## [1.5.1] — 2026-07-05
 
 ### Fixed
