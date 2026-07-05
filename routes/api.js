@@ -121,10 +121,12 @@ function requireAuth(req, res, next) {
     req.username = effectiveUsername;
     const empLinkId =
       impersonatedUser?.employee_id || store.getAppUserEmployeeId(effectiveUsername) || null;
+    const orgTeams = await roles.loadOrgTeamsForScope();
     req.userRole = roles.enrichUserRole(
       roles.resolveUserRole(effectiveUsername, valid.role),
       store.getEmployees(),
-      empLinkId ? { employee_id: empLinkId } : null
+      empLinkId ? { employee_id: empLinkId } : null,
+      orgTeams
     );
     req.userRole.username = effectiveUsername;
     if (!roles.hasAppAccess(req.userRole)) {
@@ -752,6 +754,7 @@ router.get("/status", async (req, res) => {
       canViewSales: roles.canViewSales(req.userRole),
       canSubmitSales: roles.canSubmitSales(req.userRole),
       canEditSales: roles.canEditSale(req.userRole),
+      canApproveSales: roles.canApproveSales(req.userRole),
       canWorkQualityTicket: roles.canWorkQualityTicket(req.userRole),
       canApproveRegistration: registration.canApproveRegistration(req.userRole?.role),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
@@ -764,6 +767,9 @@ router.get("/status", async (req, res) => {
       canViewQualityNotes: roles.canViewQualityNotes(req.userRole),
       canWriteQualityNotes: roles.canWriteQualityNotes(req.userRole),
       canExportSales: roles.canExportSales(req.userRole),
+      canViewDashboardUnits: roles.canViewDashboardUnits(req.userRole),
+      canViewTeamDashboard: roles.canViewTeamDashboard(req.userRole),
+      canIssueEquipment: roles.canIssueEquipment(req.userRole),
       canViewEquipment: roles.canViewEquipment(req.userRole),
       canViewEquipmentAll: roles.canViewEquipmentAll(req.userRole),
       canViewEquipmentUnit: roles.canViewEquipmentUnit(req.userRole),
@@ -921,14 +927,23 @@ router.post("/impersonate/stop", async (req, res) => {
 
 router.use("/admin/users", require("./admin-users"));
 router.use("/bonus-requests", (req, res, next) => {
+  if (req.userRole?.employeeId) {
+    req.userRole.username = req.username;
+    return next();
+  }
   const empLink = store.getAppUserEmployeeId(req.username);
-  req.userRole = roles.enrichUserRole(
-    roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees(),
-    empLink ? { employee_id: empLink } : null
-  );
-  req.userRole.username = req.username;
-  next();
+  roles
+    .enrichUserRoleWithOrgTeams(
+      req.userRole || roles.resolveUserRole(req.username, req.appSession?.role),
+      store.getEmployees(),
+      empLink ? { employee_id: empLink } : null
+    )
+    .then((ur) => {
+      req.userRole = ur;
+      req.userRole.username = req.username;
+      next();
+    })
+    .catch(next);
 }, require("./bonus-requests"));
 router.use("/sales", (req, res, next) => {
   const empLink = store.getAppUserEmployeeId(req.username);
@@ -955,12 +970,23 @@ router.use("/expenses", (req, res, next) => {
   next();
 }, require("./expenses"));
 router.use("/loan-requests", (req, res, next) => {
-  req.userRole = roles.enrichUserRole(
-    roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees()
-  );
-  req.userRole.username = req.username;
-  next();
+  if (req.userRole?.employeeId) {
+    req.userRole.username = req.username;
+    return next();
+  }
+  const empLink = store.getAppUserEmployeeId(req.username);
+  roles
+    .enrichUserRoleWithOrgTeams(
+      req.userRole || roles.resolveUserRole(req.username, req.appSession?.role),
+      store.getEmployees(),
+      empLink ? { employee_id: empLink } : null
+    )
+    .then((ur) => {
+      req.userRole = ur;
+      req.userRole.username = req.username;
+      next();
+    })
+    .catch(next);
 }, require("./loan-requests"));
 router.use("/hrms", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);

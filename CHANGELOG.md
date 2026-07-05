@@ -2,6 +2,25 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.6] — 2026-07-06
+
+### Fixed
+- **Access control enforcement** — sales Edit/Approve/Export respect Access Control flags (removed hardcoded OP/approver UI bypasses); field editability follows saved Sales Permissions; `resolve_callback` and attachment upload gated
+- **Dual-role TL scope** — org-assigned TL (`tl_employee_id`) grants team visibility for led team only; home-team agent peers hidden (e.g. agent on Daemon + TL for Ayla)
+- **Team dashboards** — employee roster scoped by role; Sat/Sun show **DAY-OFF** unless Attended/WFH/Half Day; empty teams (no agents/TL) hidden
+- **Organization (agents)** — hide peer ID/Position; OP/TL shown as names only; peer employee cards blocked
+- **Sales log columns** — batch save + page refresh after save
+- **Bonus/loan routes** — preserve dual-role `leadTeams` from auth (sub-router no longer re-enriches without org teams)
+
+### Changed
+- **Export sales** — default allowed only for Quality, RTM, CEO, Admin (overridable in Access Control)
+- **Dashboard units** — HS-1/2/3 toggles only for HR/RTM/Admin/Quality (`viewDashboardUnits`)
+- **Issue equipment** — picker includes all active employees; gated by `issueEquipment` permission
+
+### Added
+- **Access Control keys** — `approveSales`, `viewDashboardUnits`, `viewTeamDashboard`, `issueEquipment`
+- **tests** — `scripts/test-access-scope.js`
+
 ## [1.6.5] — 2026-07-05
 
 ### Fixed

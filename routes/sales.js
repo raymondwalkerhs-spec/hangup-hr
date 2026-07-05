@@ -23,6 +23,9 @@ const router = express.Router();
 function scopedEmployees(req, opts = {}) {
   let employees = store.getEmployees({ hideOut: opts.hideOut !== undefined ? opts.hideOut : false });
   employees = companyContext.filterEmployeesByCompany(employees, req.query.company);
+  if (req.userRole) {
+    employees = roles.filterEmployeesForUser(employees, req.userRole);
+  }
   return employees;
 }
 
@@ -536,6 +539,9 @@ router.patch("/:id", async (req, res) => {
       patch.callbackVisibleToAgent = callbackVisibleToAgent === true;
       patch.reviewedBy = req.username;
     } else if (action === "resolve_callback") {
+      if (!salesScope.canApproveSale(req.userRole)) {
+        return res.status(403).json({ error: "No permission to resolve callback" });
+      }
       patch.status = "pending";
       patch.feedback = feedback || existing.feedback;
     } else if (req.body.edit === true || (!action && roles.canEditSale(req.userRole))) {
@@ -723,6 +729,23 @@ router.get("/list-columns", async (req, res) => {
   }
 });
 
+router.put("/list-columns", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const updates = Array.isArray(req.body?.columns) ? req.body.columns : req.body;
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: "columns array required" });
+    }
+    const cols = await salesListColumns.upsertColumnsBatch(updates);
+    salesListColumns.invalidateCache();
+    res.json({ ok: true, columns: cols });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.put("/list-columns/:columnKey", async (req, res) => {
   if (!roles.canManageSalesFieldPermissions(req.userRole)) {
     return res.status(403).json({ error: "Admin/RTM only" });
@@ -792,6 +815,15 @@ router.get("/:id/attachments", async (req, res) => {
 
 router.post("/:id/attachments", async (req, res) => {
   try {
+    const existing = await business.getSale(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Sale not found" });
+    const employees = scopedEmployees(req);
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
+    if (!visible.length) return res.status(403).json({ error: "No access" });
+    if (!roles.canEditSale(req.userRole) && !roles.canWorkQualityTicket(req.userRole)) {
+      return res.status(403).json({ error: "No permission to upload attachments" });
+    }
     const { fileName, contentBase64, kind } = req.body || {};
     if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
     const buffer = Buffer.from(contentBase64, "base64");

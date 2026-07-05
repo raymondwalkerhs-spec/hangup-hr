@@ -344,15 +344,15 @@ window.SalesModule = (function () {
   }
 
   function canToggleSalesUnits() {
-    return ["quality", "rtm", "hr", "admin", "ceo"].includes(state.user?.role);
+    return state.user?.canViewDashboardUnits === true;
   }
 
   function canApprove() {
-    return ["hr", "admin", "ceo", "quality", "rtm"].includes(state.user?.role);
+    return state.user?.canApproveSales === true;
   }
 
   function canEdit() {
-    return state.user?.canEditSales === true || canApprove() || state.user?.role === "op";
+    return state.user?.canEditSales === true;
   }
 
   function canSubmit() {
@@ -373,7 +373,7 @@ window.SalesModule = (function () {
 
   function canFullEditSale() {
     if (isQualityAgent()) return false;
-    return state.user?.canEditSales === true || canApprove() || state.user?.role === "op";
+    return state.user?.canEditSales === true;
   }
 
   function canWorkQualityTicket() {
@@ -1125,18 +1125,7 @@ window.SalesModule = (function () {
     function qFieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key;
-      let editable = canEditField(f.key);
-      if (f.key === "verifierFeedback") {
-        const assignVerifier = formData.assignVerifier || sale?.formData?.assignVerifier;
-        const role = String(state.user?.role || "").toLowerCase();
-        editable =
-          ["admin", "ceo", "rtm"].includes(role) ||
-          (role === "quality" && assignVerifier && state.user?.employeeId === assignVerifier) ||
-          (assignVerifier && state.user?.employeeId === assignVerifier);
-      }
-      if (f.key === "clientFeedback") {
-        editable = ["admin", "ceo", "rtm"].includes(String(state.user?.role || "").toLowerCase());
-      }
+      const editable = canEditField(f.key);
       const ro = editable ? "" : " readonly";
       const dis = editable ? "" : " disabled";
       if (f.type === "employee") {
@@ -1254,17 +1243,9 @@ window.SalesModule = (function () {
       const name = f.key === "deviceType" ? "device" : f.key;
       const cardClass = f.cardField ? " sale-card-fields hidden" : f.bankField ? " sale-bank-fields hidden" : "";
       const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
-      let editable = f.canEdit !== false;
-      if (isEdit && f.key === "verifierFeedback") {
-        const assignVerifier = formData.assignVerifier;
-        const role = String(state.user?.role || "").toLowerCase();
-        editable =
-          ["admin", "ceo", "rtm"].includes(role) ||
-          (assignVerifier && state.user?.employeeId === assignVerifier) ||
-          role === "quality";
-      }
-      if (isEdit && f.key === "clientFeedback") {
-        editable = ["admin", "ceo", "rtm"].includes(String(state.user?.role || "").toLowerCase());
+      let editable = f.canEdit === true;
+      if (f.key === "verifierFeedback" || f.key === "clientFeedback") {
+        editable = f.canEdit === true;
       }
       const ro = editable ? "" : " readonly";
       const dis = editable ? "" : " disabled";
@@ -1616,12 +1597,14 @@ window.SalesModule = (function () {
       onDone();
     });
     document.getElementById("list-cols-save")?.addEventListener("click", async () => {
-      for (const input of document.querySelectorAll("[data-list-col]")) {
-        await api(`/sales/list-columns/${encodeURIComponent(input.dataset.listCol)}`, {
-          method: "PUT",
-          body: JSON.stringify({ enabled: input.checked }),
-        });
-      }
+      const columns = [...document.querySelectorAll("[data-list-col]")].map((input) => ({
+        columnKey: input.dataset.listCol,
+        enabled: input.checked,
+      }));
+      await api("/sales/list-columns", {
+        method: "PUT",
+        body: JSON.stringify({ columns }),
+      });
       closeModal();
       onDone();
     });

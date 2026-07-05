@@ -13,6 +13,10 @@ const CHECKS = [
   ["manageOrgStructure", (ur) => roles.canManageOrgStructure(ur)],
   ["manageEmployees", (ur) => roles.canManageEmployees(ur)],
   ["exportSales", (ur) => roles.canExportSales(ur)],
+  ["approveSales", (ur) => roles.canApproveSales(ur)],
+  ["viewDashboardUnits", (ur) => roles.canViewDashboardUnits(ur)],
+  ["viewTeamDashboard", (ur) => roles.canViewTeamDashboard(ur)],
+  ["issueEquipment", (ur) => roles.canIssueEquipment(ur)],
   ["editSales", (ur) => roles.canEditSale(ur)],
   ["manageSalesFieldPermissions", (ur) => roles.canManageSalesFieldPermissions(ur)],
 ];

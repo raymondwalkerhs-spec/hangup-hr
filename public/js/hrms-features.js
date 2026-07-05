@@ -378,6 +378,9 @@ window.HRMSFeatures = (function () {
     const canManage =
       (typeof canManageOrgStructure === "function" && canManageOrgStructure()) ||
       (typeof canManagePayrollEvents === "function" && canManagePayrollEvents());
+    const viewerRole = String(typeof state !== "undefined" ? state.user?.role : "").toLowerCase();
+    const agentPrivacyView =
+      !canManage && (viewerRole === "agent" || viewerRole === "office_assistant");
     const eq = typeof employeesQuery === "function" ? employeesQuery() : "";
     const [structure, empData, teamsRes, mgrRes] = await Promise.all([
       api(`/hrms/org-structure${eq}`),
@@ -391,10 +394,12 @@ window.HRMSFeatures = (function () {
     const mgrByUnit = new Map((mgrRes.managers || []).map((m) => [m.unit, m]));
     if (typeof state !== "undefined") state.orgTeams = allTeams;
 
-    function empName(id) {
+    function empName(id, opts = {}) {
       if (!id) return "—";
       const e = employees.find((x) => x.id === id);
-      return e ? `${e.id} — ${e.american_name || e.id}` : id;
+      if (!e) return id;
+      if (opts.nameOnly || agentPrivacyView) return e.american_name || e.arabic_name || e.id;
+      return `${e.id} — ${e.american_name || e.id}`;
     }
 
     function opOptions(unit, selected) {
@@ -447,7 +452,7 @@ window.HRMSFeatures = (function () {
                 <option value="">— Select OP —</option>
                 ${opOptions(unit, opId)}
               </select></label>`
-          : `<span class="muted">OP: ${esc(empName(opId))}</span>`;
+          : `<span class="muted">OP: ${esc(empName(opId, { nameOnly: true }))}</span>`;
       return `<section class="card org-unit-block org-hierarchy-unit" style="margin-bottom:1rem" data-unit="${esc(unit)}">
         <div class="flex-between" style="margin-bottom:.75rem;align-items:flex-start;gap:1rem;flex-wrap:wrap">
           <div><h2 style="margin:0">${esc(unit)}${unit === "HS-2" ? ' <span class="badge">HS2 Company</span>' : ""}</h2>${opHeader}</div>
@@ -464,23 +469,21 @@ window.HRMSFeatures = (function () {
                   <option value="">— Select TL —</option>
                   ${tlOptions(t.name, tlId)}
                 </select></label>`
-            : `<span class="muted">TL: ${esc(empName(tlId))}</span>`;
+            : `<span class="muted">TL: ${esc(empName(tlId, { nameOnly: true }))}</span>`;
           return `<details class="card card-flat org-team-card" open data-team="${esc(t.name)}">
             <summary class="flex-between" style="align-items:center;gap:.5rem;flex-wrap:wrap">
               <span><strong>${esc(t.name)}</strong> ${dialBadge} <span class="muted">(${agents.length} agents)</span></span>
               <span class="org-team-meta">${tlHeader} ${canManage ? `<button type="button" class="btn btn-sm" data-edit-team="${esc(meta.id || "")}" data-team-name="${esc(t.name)}">Edit</button>` : ""}</span>
             </summary>
             <div class="table-wrap" style="margin-top:.5rem"><table>
-              <thead><tr><th>ID</th><th>Name</th><th>Position</th>${canManage ? "<th>Team</th>" : ""}</tr></thead>
-              <tbody>${agents.map((a) => `<tr class="clickable-row" data-agent-id="${esc(a.id)}">
-                <td>${esc(a.id)}</td>
-                <td>${esc(a.name)}</td>
-                <td>${esc(a.position || "—")}</td>
+              <thead><tr>${agentPrivacyView ? "<th>Name</th>" : "<th>ID</th><th>Name</th><th>Position</th>"}${canManage ? "<th>Team</th>" : ""}</tr></thead>
+              <tbody>${agents.map((a) => `<tr class="${agentPrivacyView ? "" : "clickable-row"}" ${agentPrivacyView ? "" : `data-agent-id="${esc(a.id)}"`}>
+                ${agentPrivacyView ? `<td>${esc(a.name)}</td>` : `<td>${esc(a.id)}</td><td>${esc(a.name)}</td><td>${esc(a.position || "—")}</td>`}
                 ${canManage ? `<td><select class="org-team-select" data-emp-id="${esc(a.id)}">
                   <option value="">—</option>
                   ${teamNames.map((tn) => `<option value="${esc(tn)}" ${tn === t.name ? "selected" : ""}>${esc(tn)}</option>`).join("")}
                 </select></td>` : ""}
-              </tr>`).join("") || `<tr><td colspan="${canManage ? 4 : 3}" class="muted">No agents</td></tr>`}
+              </tr>`).join("") || `<tr><td colspan="${canManage ? (agentPrivacyView ? 2 : 4) : (agentPrivacyView ? 1 : 3)}" class="muted">No agents</td></tr>`}
               </tbody>
             </table></div>
           </details>`;
@@ -942,11 +945,11 @@ window.HRMSFeatures = (function () {
     const equipment = data.equipment || [];
     const assignments = data.assignments || [];
     const employees = empData.employees || [];
-    const agentEmployees = employees.filter((e) => {
-      const pos = String(e.position || "").toLowerCase();
-      return pos === "agent" || pos.includes("agent");
-    });
-    const pickerEmployees = agentEmployees.length ? agentEmployees : employees;
+    const pickerEmployees = employees.filter(
+      (e) => String(e.status || "").toLowerCase() !== "out"
+    );
+    const canIssue =
+      typeof state !== "undefined" && state.user?.canIssueEquipment === true;
     const filterEmp = state.hrmsEmployeeFilter || "";
     const equipById = new Map(equipment.map((e) => [e.id, e]));
     let activeRows = assignments
@@ -960,8 +963,8 @@ window.HRMSFeatures = (function () {
 
     root.innerHTML = `
       <div class="page-header flex-between">
-        <div><h1>Equipment</h1><p class="muted">Devices issued to agents — unit comes from the employee record${filterEmp ? ` · filtered: <strong>${escapeHtml(filterEmp)}</strong> <button class="btn btn-sm" id="clear-equip-filter">Show all</button>` : ""}</p></div>
-        <button class="btn btn-primary btn-sm" id="add-equipment-btn">+ Issue device</button>
+        <div><h1>Equipment</h1><p class="muted">Devices issued to employees — unit comes from the employee record${filterEmp ? ` · filtered: <strong>${escapeHtml(filterEmp)}</strong> <button class="btn btn-sm" id="clear-equip-filter">Show all</button>` : ""}</p></div>
+        ${canIssue ? `<button class="btn btn-primary btn-sm" id="add-equipment-btn">+ Issue device</button>` : ""}
       </div>
       <div class="toolbar equip-toolbar">
         <label class="field field-inline field-search"><span>View agent equipment</span>

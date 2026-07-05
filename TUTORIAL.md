@@ -239,10 +239,11 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Edit sale (1.4.2):** Client, Device, and Price come preselected from the sale — no need to re-choose them.
 - **Bank account:** routing number, bank name, account number, address, who chose bank account.
 - **Edit / Quality ticket:** **Verifier feedback** and **Client feedback** are dropdowns (see SALES_LOG for who may edit).
-- **Export:** format dropdown + **Export list**, or row **Export** (CSV / Excel / PDF).
-- **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. **Log columns** controls which columns appear. Run **Reset defaults** once after upgrade.
-- Attachments in Supabase Storage; **Share link** for signed URLs (~7 days).
-- Agents see own sales; TL team; OP unit; quality/RTM/HR see company (plus unit toggles for quality roles).
+- **Export (1.6.6):** default allowed for **Quality, RTM, CEO, Admin** only — toggle **Export sales** in Access Control for other roles.
+- **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. **Log columns** controls which columns appear (batch save as of 1.6.6). Run **Reset defaults** once after upgrade.
+- **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
+- **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
+- **Team dashboards (1.6.6):** scoped by role; weekends show **DAY-OFF** unless someone has Attended/WFH/Half Day.
 
 ### Sales (legacy notes)
 

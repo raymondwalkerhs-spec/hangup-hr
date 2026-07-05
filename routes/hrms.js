@@ -457,7 +457,7 @@ router.get("/equipment/:employeeId", async (req, res) => {
 });
 
 router.post("/equipment", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to issue equipment" });
   try {
     const equipment = await hrms.createEquipment(req.body, req.username);
     res.json({ ok: true, equipment });
@@ -491,7 +491,7 @@ router.patch("/equipment/:id", async (req, res) => {
 });
 
 router.post("/equipment/assign", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to issue equipment" });
   try {
     const a = await hrms.assignEquipment(req.body.equipmentId, req.body.employeeId, req.username);
     res.json({ ok: true, assignment: a });

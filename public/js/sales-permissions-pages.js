@@ -279,13 +279,16 @@ window.SalesPermissionsPages = (function () {
 
     root.querySelector("#sl-cols-save")?.addEventListener("click", async () => {
       try {
-        for (const input of root.querySelectorAll("[data-list-col]")) {
-          await api(`/sales/list-columns/${encodeURIComponent(input.dataset.listCol)}`, {
-            method: "PUT",
-            body: JSON.stringify({ enabled: input.checked }),
-          });
-        }
+        const columns = [...root.querySelectorAll("[data-list-col]")].map((input) => ({
+          columnKey: input.dataset.listCol,
+          enabled: input.checked,
+        }));
+        await api("/sales/list-columns", {
+          method: "PUT",
+          body: JSON.stringify({ columns }),
+        });
         showSaveIndicator?.("Columns saved", "saved");
+        await renderSalesLogColumnsPage(root, api, helpers);
       } catch (e) {
         alert(e.message);
       }

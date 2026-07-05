@@ -1419,8 +1419,9 @@ function applyChangesButtonVisibility() {
   const salesBtn = document.getElementById("nav-sales");
   const teamDashBtn = document.getElementById("nav-team-dashboard");
   const showSales = state.user?.canViewSales !== false || canViewBonusesDeductions();
+  const showTeamDash = state.user?.canViewTeamDashboard !== false && showSales;
   if (salesBtn) salesBtn.classList.toggle("hidden", !showSales);
-  if (teamDashBtn) teamDashBtn.classList.toggle("hidden", !showSales);
+  if (teamDashBtn) teamDashBtn.classList.toggle("hidden", !showTeamDash);
   const costsBtn = document.getElementById("nav-costs");
   if (costsBtn) {
     const showCosts = state.user?.canAccessCosts === true || state.user?.canSubmitExpense === true;
