@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-07-05
+
+### Fixed
+- **Trainee basic with WFH** — training basic now uses eligible phase **pay units** (Attended, WFH, lateness, half/quarter, paid leave) × **600 EGP/day**; WFH days no longer excluded from `workingDays` summary
+
 ## [1.6.0] — 2026-07-05
 
 ### Added

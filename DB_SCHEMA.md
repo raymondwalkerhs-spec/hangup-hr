@@ -137,6 +137,8 @@ These tables exist in production; DDL was applied outside early migration stubs.
 | `agent_training_programs` | `employee_id` | 4-week program |
 | `agent_training_phases` | `id` uuid | Phase 1–4 status |
 
+**Trainee basic pay (app logic, not stored):** eligible phase dates with payable attendance × **600 EGP/day** (`lib/training-pay-rules.js` — Attended, WFH, lateness, half/quarter, paid leave count as pay units).
+
 ## Finance HR extensions
 
 | Table | PK | Purpose |

@@ -136,10 +136,11 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Finance handoff ZIP** — payroll CSV + all payslip PDFs + change log  
 - Payment exports: **Cash**, **Bank**, **Instapay** (CSV + PDF)  
 
-### Training payroll (1.6.0)
+### Training payroll (1.6.0+)
 
 - **Three payroll tabs** — Main (agents), Training (trainees), Total (payments due/received in month)
 - **Fixed trainee pay** — **12,000 EGP/mo**, **20 days**, **600 EGP/day**, **3,000 EGP/week** (not Salaries ÷ working days)
+- **Pay units (1.6.1)** — trainee basic = eligible phase attendance day-units × 600; counts Attended, **WFH**, lateness, half (0.5), quarter (0.25), paid leave
 - **4-week program** — Phase 1 unpaid; Phase 2–4 trainee rate when phase passed  
 - **12 passed sales** (4 per evaluation phase) + HR **Promote to Agent**  
 - **Dual payslip** same month when promotion mid-month: Training tab + Main tab; separate PDFs  

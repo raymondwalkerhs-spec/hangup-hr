@@ -65,6 +65,74 @@ test("12 sale minimum evaluation", () => {
 });
 
 console.log("training-payroll");
+test("4 WFH days in phase 2 pay 2400 basic", () => {
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { TRAINING_DAILY_RATE } = require("../lib/training-pay-rules");
+  const emp = { id: "HS3-36", american_name: "Trainee WFH", unit: "HS3", position: "Trainee" };
+  const standardRow = { employeeId: "HS3-36", name: "Trainee WFH", netSalary: 0, basicSalary: 0 };
+  const program = {
+    outcome: "active",
+    allPhases: [{ phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" }],
+  };
+  const att = [
+    { date: "2026-07-14", status: "WFH" },
+    { date: "2026-07-15", status: "WFH" },
+    { date: "2026-07-16", status: "WFH" },
+    { date: "2026-07-17", status: "WFH" },
+  ];
+  const ctx = {
+    ym: "2026-07",
+    config: { latenessRules: { tierA: { amount: 50 }, tierB: { amount: 100 } }, workingDaysByMonth: { "2026-07": 22 } },
+    actionPlans: [],
+    rates: [{ position: "Trainee", monthlySalary: 12000 }],
+    bonusEvents: [],
+    deductionEvents: [],
+    adjustment: null,
+    attendanceRecords: att,
+    commissionTiers: [],
+    loans: [],
+    loanPayments: [],
+    allPayrollSplits: [],
+  };
+  const row = enrichPayrollRow(emp, standardRow, ctx, program);
+  assert.equal(row.basicSalary, 4 * TRAINING_DAILY_RATE);
+  assert.equal(row.totalWorkingDays, 4);
+});
+
+test("Attended + WFH mix counts all pay units", () => {
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { TRAINING_DAILY_RATE } = require("../lib/training-pay-rules");
+  const emp = { id: "T02", american_name: "Mix Trainee", unit: "NW", position: "Trainee" };
+  const standardRow = { employeeId: "T02", name: "Mix Trainee", netSalary: 0, basicSalary: 0 };
+  const program = {
+    outcome: "active",
+    allPhases: [{ phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" }],
+  };
+  const att = [
+    { date: "2026-07-14", status: "Attended" },
+    { date: "2026-07-15", status: "WFH" },
+    { date: "2026-07-16", status: "Lateness A" },
+    { date: "2026-07-17", status: "Half Day" },
+  ];
+  const ctx = {
+    ym: "2026-07",
+    config: { latenessRules: { tierA: { amount: 50 }, tierB: { amount: 100 } }, workingDaysByMonth: { "2026-07": 22 } },
+    actionPlans: [],
+    rates: [{ position: "Trainee", monthlySalary: 12000 }],
+    bonusEvents: [],
+    deductionEvents: [],
+    adjustment: null,
+    attendanceRecords: att,
+    commissionTiers: [],
+    loans: [],
+    loanPayments: [],
+    allPayrollSplits: [],
+  };
+  const row = enrichPayrollRow(emp, standardRow, ctx, program);
+  assert.equal(row.totalWorkingDays, 3.5);
+  assert.equal(row.basicSalary, 3.5 * TRAINING_DAILY_RATE);
+});
+
 test("trainee daily rate is fixed 600/day regardless of attendance working days", () => {
   const { enrichPayrollRow } = require("../lib/training-payroll");
   const { TRAINING_DAILY_RATE, TRAINING_DAYS_PER_MONTH } = require("../lib/training-pay-rules");

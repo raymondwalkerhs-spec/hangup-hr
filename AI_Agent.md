@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.0` (`package.json` → `version`)
-- **Previous:** `1.5.3` (working days sync), `1.5.2` (payroll search), `1.5.1` (trainee crash fix), `1.5.0` (training payroll)
+- **Current version:** `1.6.1` (`package.json` → `version`)
+- **Previous:** `1.6.0` (training payroll split), `1.5.3` (working days sync), `1.5.2` (payroll search), `1.5.1` (trainee crash fix), `1.5.0` (training payroll)
 
 ---
 
@@ -453,7 +453,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.6.0** | **true** | Training payroll split (Main/Training/Total tabs); fixed 12k/20/600 trainee pay |
+| **1.6.1** | **true** | Trainee basic uses pay units (WFH included) × 600/day |
+| **1.6.0** | false | Training payroll split (Main/Training/Total tabs); fixed 12k/20/600 trainee pay |
 | **1.5.3** | false | Stale working-days sync fix; fast batch training load; search debounce |
 | **1.5.2** | false | Payroll search (Arabic/ID); trainee rate uses month working days |
 | **1.5.1** | false | Payroll page fix when trainees have training programs |
