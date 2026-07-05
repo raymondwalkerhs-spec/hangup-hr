@@ -97,6 +97,17 @@ Legacy PowerShell zip bootstrap is deprecated — use `Hangup-Portal-Web-Setup.e
 
 **1.5.1 change:** Payroll page loads when agents have training programs (fixes `/api/payroll` crash on missing actionPlans in training enrich).
 
+## v1.6.0 release checklist
+
+1. Bump `package.json` → `1.6.0`
+2. `npm run test:training-payroll`
+3. `git push` then trigger CI: `gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=v1.6.0`
+4. After CI: `gh release edit v1.6.0 --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest`
+5. `node scripts/publish-app-version.js --notes "Training payroll split, fixed 12k/20/600, three tabs"`
+6. `npm run dist:web-installer` for USB bootstrap
+
+**1.6.0 change:** Training payroll split — Main | Training | Total tabs; fixed 12,000/20/600 trainee pay; agent due 15th next month.
+
 ## v1.5.0 release checklist
 
 1. Bump `package.json` → `1.5.0`

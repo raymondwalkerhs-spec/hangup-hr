@@ -25,7 +25,7 @@ const {
 } = require("../lib/attendance");
 const { buildPayroll, calcPayrollRow, BONUS_TYPES, DEDUCTION_TYPES, bonusTypesForCompany } = require("../lib/payroll");
 const { PAYROLL_STATUSES: PROFILE_STATUSES } = require("../lib/month-profile");
-const { SPLIT_KINDS, SPLIT_STATUSES, validateSplit, applyPayrollSplits, buildSplitMaps, buildValidationContext } = require("../lib/payroll-splits");
+const { SPLIT_KINDS, SPLIT_STATUSES, validateSplit, applyPayrollSplits, buildSplitMaps, buildValidationContext, shiftMonth } = require("../lib/payroll-splits");
 const {
   getMonthCalendar,
   parseYearMonth,
@@ -277,6 +277,102 @@ async function enrichPayrollWithTraining(payroll, employees, month, ctx) {
     console.warn("training payroll batch enrich failed:", err.message);
     return payroll;
   }
+}
+
+async function loadProgramsForEmployees(employees) {
+  const { useSupabase } = require("../lib/backend");
+  if (!useSupabase()) return new Map();
+  try {
+    const trainingPhases = require("../lib/training-phases");
+    return trainingPhases.loadProgramsForEmployees(employees.map((e) => e.id), { withSales: false });
+  } catch {
+    return new Map();
+  }
+}
+
+async function buildEnrichedPayrollForMonth(month, req, { unit = "", hideOut } = {}) {
+  const hide = hideOut ?? parseHideOut(req);
+  let employees = store.getEmployeesForMonth(month, { hideOut: hide });
+  employees = filterEmployeesForRequest(employees, req);
+  if (unit) employees = employees.filter((e) => e.unit === unit);
+
+  const { config, workingDays } = await resolvePayrollConfig(month);
+  const rates = store.getPositionRates(month);
+  const records = store.getAttendanceEvents(month);
+  const bonusEvents = store.getBonusEvents(month);
+  const deductionEvents = store.getDeductionEvents(month);
+  const adjustments = store.getPayrollAdjustments(month);
+  const attendanceMap = store.buildAttendanceMap(month);
+  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
+  const allPayrollSplits = store.getAllPayrollSplits();
+  const actionPlans = await loadActionPlansSafe();
+  const actionPlansByEmployee = new Map();
+  for (const p of actionPlans) {
+    if (p.status !== "active") continue;
+    if (!actionPlansByEmployee.has(p.employeeId)) actionPlansByEmployee.set(p.employeeId, []);
+    actionPlansByEmployee.get(p.employeeId).push(p);
+  }
+  const recordsByEmployee = new Map();
+  for (const r of records) {
+    if (!recordsByEmployee.has(r.employeeId)) recordsByEmployee.set(r.employeeId, []);
+    recordsByEmployee.get(r.employeeId).push(r);
+  }
+
+  const summaries = employees.map((emp) =>
+    summarizeEmployeeMonth(
+      emp,
+      recordsByEmployee.get(emp.id) || [],
+      config,
+      actionPlansByEmployee.get(emp.id) || []
+    )
+  );
+
+  let payroll = buildPayroll(
+    employees,
+    summaries,
+    month,
+    config,
+    rates,
+    bonusEvents,
+    deductionEvents,
+    adjustments,
+    attendanceMap,
+    commissionTiers,
+    loans,
+    loanPayments,
+    allPayrollSplits,
+    actionPlans
+  );
+  payroll = await enrichPayrollWithTraining(payroll, employees, month, {
+    config,
+    rates,
+    bonusEvents,
+    deductionEvents,
+    adjustments,
+    attendanceMap,
+    commissionTiers,
+    loans,
+    loanPayments,
+    allPayrollSplits,
+    actionPlans,
+  });
+
+  return {
+    payroll,
+    employees,
+    config,
+    workingDays,
+    commissionTiers,
+    allPayrollSplits,
+    rates,
+    bonusEvents,
+    deductionEvents,
+    adjustments,
+    attendanceMap,
+    loans,
+    loanPayments,
+    actionPlans,
+  };
 }
 
 async function upsertTlBonusPair(req, { employeeId, date, amount, reason, unit, deductFromEmployeeId }) {
@@ -1730,76 +1826,45 @@ router.get("/payroll", async (req, res) => {
   }
   const month = req.query.month || new Date().toISOString().slice(0, 7);
   const unit = req.query.unit || "";
-  const hideOut = parseHideOut(req);
 
-  let employees = store.getEmployeesForMonth(month, { hideOut });
-  employees = filterEmployeesForRequest(employees, req);
-  if (unit) employees = employees.filter((e) => e.unit === unit);
+  const bundle = await buildEnrichedPayrollForMonth(month, req, { unit });
+  const { payroll, workingDays, commissionTiers, allPayrollSplits, employees } = bundle;
 
-  const { config, workingDays } = await resolvePayrollConfig(month);
-  const rates = store.getPositionRates(month);
-  const records = store.getAttendanceEvents(month);
-  const bonusEvents = store.getBonusEvents(month);
-  const deductionEvents = store.getDeductionEvents(month);
-  const adjustments = store.getPayrollAdjustments(month);
-  const attendanceMap = store.buildAttendanceMap(month);
-  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
-  const allPayrollSplits = store.getAllPayrollSplits();
-  const actionPlans = await loadActionPlansSafe();
-  const actionPlansByEmployee = new Map();
-  for (const p of actionPlans) {
-    if (p.status !== "active") continue;
-    if (!actionPlansByEmployee.has(p.employeeId)) actionPlansByEmployee.set(p.employeeId, []);
-    actionPlansByEmployee.get(p.employeeId).push(p);
-  }
-  const recordsByEmployee = new Map();
-  for (const r of records) {
-    if (!recordsByEmployee.has(r.employeeId)) recordsByEmployee.set(r.employeeId, []);
-    recordsByEmployee.get(r.employeeId).push(r);
-  }
+  const {
+    TRAINING_MONTHLY_SALARY,
+    TRAINING_DAYS_PER_MONTH,
+    TRAINING_DAILY_RATE,
+    TRAINING_WEEKLY_SALARY,
+  } = require("../lib/training-pay-rules");
+  const { buildPayrollViews } = require("../lib/training-payroll");
+  const { buildTotalPaidView } = require("../lib/payroll-schedule");
 
-  const summaries = employees.map((emp) =>
-    summarizeEmployeeMonth(
-      emp,
-      recordsByEmployee.get(emp.id) || [],
-      config,
-      actionPlansByEmployee.get(emp.id) || []
-    )
-  );
-
-  let payroll = buildPayroll(
-    employees,
-    summaries,
+  const views = buildPayrollViews(payroll);
+  const priorMonth = shiftMonth(month, -1);
+  const priorBundle = await buildEnrichedPayrollForMonth(priorMonth, req, { unit });
+  const programsByEmployee = await loadProgramsForEmployees(employees);
+  const totalPaid = buildTotalPaidView(
     month,
-    config,
-    rates,
-    bonusEvents,
-    deductionEvents,
-    adjustments,
-    attendanceMap,
-    commissionTiers,
-    loans,
-    loanPayments,
+    { [month]: payroll, [priorMonth]: priorBundle.payroll },
     allPayrollSplits,
-    actionPlans
+    programsByEmployee
   );
-  payroll = await enrichPayrollWithTraining(payroll, employees, month, {
-    config,
-    rates,
-    bonusEvents,
-    deductionEvents,
-    adjustments,
-    attendanceMap,
-    commissionTiers,
-    loans,
-    loanPayments,
-    allPayrollSplits,
-    actionPlans,
-  });
+
   const monthLock = useSupabase() ? await hrms.getPayrollMonthLock(month) : null;
   res.json({
     month,
     payroll,
+    views: {
+      agent: views.agent,
+      training: views.training,
+      totalPaid,
+    },
+    trainingPay: {
+      monthly: TRAINING_MONTHLY_SALARY,
+      days: TRAINING_DAYS_PER_MONTH,
+      daily: TRAINING_DAILY_RATE,
+      weekly: TRAINING_WEEKLY_SALARY,
+    },
     workingDays,
     monthLock,
     bonusTypes: bonusTypesForCompany(req.query.company),
@@ -1807,15 +1872,7 @@ router.get("/payroll", async (req, res) => {
     commissionTypes: store.getCommissionTypes(),
     commissionTiers,
     payrollStatuses: PROFILE_STATUSES,
-    totals: {
-      employees: payroll.length,
-      totalBasic: payroll.reduce((s, p) => s + payrollRowBasic(p), 0),
-      totalBonuses: payroll.reduce((s, p) => s + p.totalBonuses, 0),
-      totalLateness: payroll.reduce((s, p) => s + p.latenessDeduction, 0),
-      totalDeductions: payroll.reduce((s, p) => s + p.totalDeductions, 0),
-      totalBonusTransfers: payroll.reduce((s, p) => s + (p.bonusTransferPayroll || 0), 0),
-      totalNet: payroll.reduce((s, p) => s + payrollRowNet(p), 0),
-    },
+    totals: views.agent.totals,
   });
 });
 
@@ -1825,51 +1882,36 @@ router.get("/payroll/pdf", async (req, res) => {
   }
   const month = req.query.month || new Date().toISOString().slice(0, 7);
   const unit = req.query.unit || "";
-  const hideOut = parseHideOut(req);
+  const scope = (req.query.scope || "agent").toLowerCase();
 
-  let employees = store.getEmployeesForMonth(month, { hideOut });
-  employees = filterEmployeesForRequest(employees, req);
-  if (unit) employees = employees.filter((e) => e.unit === unit);
+  const bundle = await buildEnrichedPayrollForMonth(month, req, { unit });
+  const { buildPayrollViews } = require("../lib/training-payroll");
+  const { buildTotalPaidView } = require("../lib/payroll-schedule");
+  const views = buildPayrollViews(bundle.payroll);
 
-  const { config } = await resolvePayrollConfig(month);
-  const rates = store.getPositionRates(month);
-  const records = store.getAttendanceEvents(month);
-  const bonusEvents = store.getBonusEvents(month);
-  const deductionEvents = store.getDeductionEvents(month);
-  const adjustments = store.getPayrollAdjustments(month);
-  const attendanceMap = store.buildAttendanceMap(month);
-  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
-  const allPayrollSplits = store.getAllPayrollSplits();
+  let payrollRows = views.agent.rows;
+  let totals = views.agent.totals;
+  if (scope === "training") {
+    payrollRows = views.training.rows;
+    totals = views.training.totals;
+  } else if (scope === "total") {
+    const priorMonth = shiftMonth(month, -1);
+    const priorBundle = await buildEnrichedPayrollForMonth(priorMonth, req, { unit });
+    const programsByEmployee = await loadProgramsForEmployees(bundle.employees);
+    const totalPaid = buildTotalPaidView(
+      month,
+      { [month]: bundle.payroll, [priorMonth]: priorBundle.payroll },
+      bundle.allPayrollSplits,
+      programsByEmployee
+    );
+    payrollRows = totalPaid.rows;
+    totals = totalPaid.totals;
+  }
 
-  const summaries = employees.map((emp) =>
-    summarizeEmployeeMonth(
-      emp,
-      records.filter((r) => r.employeeId === emp.id),
-      config
-    )
-  );
-
-  const payroll = buildPayroll(
-    employees,
-    summaries,
-    month,
-    config,
-    rates,
-    bonusEvents,
-    deductionEvents,
-    adjustments,
-    attendanceMap,
-    commissionTiers,
-    loans,
-    loanPayments,
-    allPayrollSplits
-  );
-  const totals = {
-    totalNet: payroll.reduce((s, p) => s + p.netSalary, 0),
-  };
   const { buildPayrollTablePdf } = require("../lib/pdf-export");
-  const pdf = await buildPayrollTablePdf(payroll, month, totals);
-  res.type("application/pdf").attachment(`payroll-${month}.pdf`).send(pdf);
+  const pdf = await buildPayrollTablePdf(payrollRows, month, { totalNet: totals.totalNet });
+  const suffix = scope === "agent" ? "" : `-${scope}`;
+  res.type("application/pdf").attachment(`payroll-${month}${suffix}.pdf`).send(pdf);
 });
 
 router.get("/payroll/my-payslip/available", (req, res) => {
@@ -1905,13 +1947,18 @@ router.get("/payroll/:employeeId", async (req, res) => {
   }
 
   const bundle = await loadEmployeePayslipBundle(emp, month);
-  const payslip = bundle.payslip;
+  const kind = req.query.kind || "";
+  const { resolvePayslipFromBundle } = require("../lib/training-payroll");
+  const payslip = kind ? resolvePayslipFromBundle(bundle, kind) : bundle.payslip;
+  if (kind && !payslip) {
+    return res.status(404).json({ error: `Payslip kind "${kind}" not found for this month` });
+  }
   res.json({
     month,
     payslip,
     payrollKind: payslip.payrollKind || "standard",
-    trainingPayslip: payslip.training || null,
-    agentPayslip: payslip.agent || null,
+    trainingPayslip: bundle.payslip?.training || null,
+    agentPayslip: bundle.payslip?.agent || null,
     splits: payslip.splits || [],
     splitKinds: SPLIT_KINDS,
     splitStatuses: SPLIT_STATUSES.filter((s) => s !== "cancelled"),
@@ -3021,39 +3068,14 @@ router.get("/exports/payments", async (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);
   const method = (req.query.method || "all").toLowerCase();
   const format = req.query.format || "json";
-  const hideOut = parseHideOut(req);
+  const scope = (req.query.scope || "agent").toLowerCase();
 
-  let employees = store.getEmployeesForMonth(month, { hideOut });
-  employees = filterEmployeesForRequest(employees, req);
-  const config = store.getConfig();
-  const rates = store.getPositionRates(month);
-  const records = store.getAttendanceEvents(month);
-  const adjustments = store.getPayrollAdjustments(month);
-  const attendanceMap = store.buildAttendanceMap(month);
-  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month);
-  const allPayrollSplits = store.getAllPayrollSplits();
-  const summaries = employees.map((emp) =>
-    summarizeEmployeeMonth(
-      emp,
-      records.filter((r) => r.employeeId === emp.id),
-      config
-    )
-  );
-  const payroll = buildPayroll(
-    employees.filter(isPayrollEligible),
-    summaries,
-    month,
-    config,
-    rates,
-    store.getBonusEvents(month),
-    store.getDeductionEvents(month),
-    adjustments,
-    attendanceMap,
-    commissionTiers,
-    loans,
-    loanPayments,
-    allPayrollSplits
-  );
+  const bundle = await buildEnrichedPayrollForMonth(month, req);
+  const { buildPayrollViews } = require("../lib/training-payroll");
+  const views = buildPayrollViews(bundle.payroll);
+  const payroll =
+    scope === "training" ? views.training.rows : scope === "total" ? views.agent.rows : views.agent.rows;
+  const employees = bundle.employees;
   const {
     buildPaymentExports,
     toCsvWithTotal,

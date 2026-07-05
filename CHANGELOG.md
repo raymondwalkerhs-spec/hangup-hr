@@ -4,6 +4,20 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-05
+
+### Added
+- **Training payroll split** — Payroll page has three tabs: **Main payroll** (agents only), **Training payroll** (trainees in training), **Total payrolls** (cash due/received in selected month)
+- **Fixed training pay** — 12,000 EGP/mo ÷ 20 days = **600 EGP/day** (3,000 EGP/week); code-authoritative, not Salaries lookup
+- **Full-month training adjustments** — bonuses, deductions, and attendance apply to the full accrual month while in training period
+- **`lib/payroll-schedule.js`** — agent due **15th of next month**; training due on pass/promotion/program end
+- **API views** — `GET /payroll` returns `views.agent`, `views.training`, `views.totalPaid`, and `trainingPay` constants
+- **Scoped exports** — payroll PDF and payment exports support `?scope=agent|training|total`; payslip `?kind=training|agent`
+
+### Changed
+- Legacy `totals` on `/payroll` = Main (agent) tab totals only — trainees no longer appear on Main tab
+- Dual-month promotion: training portion on Training tab, agent portion on Main tab
+
 ## [1.5.3] — 2026-07-05
 
 ### Fixed

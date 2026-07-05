@@ -323,18 +323,20 @@ router.get("/training/:employeeId/pay-preview", async (req, res) => {
     const emp = store.getEmployeeById(req.params.employeeId);
     if (!emp) return res.status(404).json({ error: "Employee not found" });
     const records = store.getAttendanceEvents(ym).filter((r) => r.employeeId === emp.id);
-    const rates = store.getPositionRates(ym);
-    const config = store.getConfig();
-    const { lookupSalary } = require("../lib/month-profile");
-    const workingDays =
-      config.workingDaysByMonth?.[ym] ?? (await store.getWorkingDaysForMonth(ym));
-    const monthly = lookupSalary("Trainee", rates);
-    const dailyRate = workingDays > 0 ? monthly / workingDays : 0;
+    const {
+      TRAINING_DAILY_RATE,
+      TRAINING_MONTHLY_SALARY,
+    } = require("../lib/training-pay-rules");
     const preview = await trainingPhases.getTrainingPayPreview(req.params.employeeId, ym, {
       attendance: records,
-      traineeDailyRate: dailyRate,
+      traineeDailyRate: TRAINING_DAILY_RATE,
     });
-    res.json({ month: ym, preview, traineeMonthlyRate: monthly, traineeDailyRate: Math.round(dailyRate * 100) / 100 });
+    res.json({
+      month: ym,
+      preview,
+      traineeMonthlyRate: TRAINING_MONTHLY_SALARY,
+      traineeDailyRate: TRAINING_DAILY_RATE,
+    });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

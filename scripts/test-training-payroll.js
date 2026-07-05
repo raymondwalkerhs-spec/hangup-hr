@@ -65,8 +65,9 @@ test("12 sale minimum evaluation", () => {
 });
 
 console.log("training-payroll");
-test("trainee daily rate uses month working days from config", () => {
+test("trainee daily rate is fixed 600/day regardless of attendance working days", () => {
   const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { TRAINING_DAILY_RATE, TRAINING_DAYS_PER_MONTH } = require("../lib/training-pay-rules");
   const emp = { id: "T01", american_name: "Trainee", unit: "NW", position: "Trainee" };
   const standardRow = { employeeId: "T01", name: "Trainee", netSalary: 0, basicSalary: 0 };
   const program = {
@@ -74,13 +75,12 @@ test("trainee daily rate uses month working days from config", () => {
     allPhases: [{ phaseNumber: 2, weekStart: "2026-07-14", weekEnd: "2026-07-18", status: "passed" }],
   };
   const lateness = { tierA: { amount: 50 }, tierB: { amount: 100 } };
-  const rates = [{ position: "Trainee", monthlySalary: 11000 }];
   const att = [{ date: "2026-07-14", status: "Attended" }];
   const ctx22 = {
     ym: "2026-07",
     config: { latenessRules: lateness, workingDaysByMonth: { "2026-07": 22 } },
     actionPlans: [],
-    rates,
+    rates: [{ position: "Trainee", monthlySalary: 11000 }],
     bonusEvents: [],
     deductionEvents: [],
     adjustment: null,
@@ -91,13 +91,14 @@ test("trainee daily rate uses month working days from config", () => {
     allPayrollSplits: [],
   };
   const row22 = enrichPayrollRow(emp, standardRow, ctx22, program);
-  assert.equal(row22.workingDaysInMonth, 22);
-  assert.equal(row22.dailyRate, Math.round((11000 / 22) * 100) / 100);
+  assert.equal(row22.workingDaysInMonth, TRAINING_DAYS_PER_MONTH);
+  assert.equal(row22.dailyRate, TRAINING_DAILY_RATE);
 
   const ctx20 = { ...ctx22, config: { latenessRules: lateness, workingDaysByMonth: { "2026-07": 20 } } };
   const row20 = enrichPayrollRow(emp, standardRow, ctx20, program);
-  assert.equal(row20.workingDaysInMonth, 20);
-  assert.notEqual(row22.dailyRate, row20.dailyRate);
+  assert.equal(row20.workingDaysInMonth, TRAINING_DAYS_PER_MONTH);
+  assert.equal(row20.dailyRate, TRAINING_DAILY_RATE);
+  assert.equal(row22.dailyRate, row20.dailyRate);
 });
 
 console.log("resignation-payroll");

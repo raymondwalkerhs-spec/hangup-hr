@@ -136,16 +136,20 @@ Discipline week (Mon–Fri) with payroll consequences:
 - **Finance handoff ZIP** — payroll CSV + all payslip PDFs + change log  
 - Payment exports: **Cash**, **Bank**, **Instapay** (CSV + PDF)  
 
-### Training payroll (1.5.0)
+### Training payroll (1.6.0)
 
-- **Trainee** position rate (Salaries page) — separate from Agent basic pay; live default **7,000 EGP/mo** (July 2026)
+- **Three payroll tabs** — Main (agents), Training (trainees), Total (payments due/received in month)
+- **Fixed trainee pay** — **12,000 EGP/mo**, **20 days**, **600 EGP/day**, **3,000 EGP/week** (not Salaries ÷ working days)
 - **4-week program** — Phase 1 unpaid; Phase 2–4 trainee rate when phase passed  
 - **12 passed sales** (4 per evaluation phase) + HR **Promote to Agent**  
-- **Dual payslip** same month when promotion mid-month: Training PDF + Agent PDF  
+- **Dual payslip** same month when promotion mid-month: Training tab + Main tab; separate PDFs  
 - Outcomes: failed (partial phase 2 pay), agent left (zero), company terminated (phase rules)  
-- Split kind **training_payroll**; defer agent portion to next month  
+- Split kind **training_payroll**; agent payroll due **15th of next month**  
 - Resignation: notice-period pay scale (5–10 sales); no-notice 10-day deduction  
-- **1.5.3 fix:** Trainee daily rate divisor = **Working days** saved on Attendance for that month (not a stale cached 20)
+
+### Training payroll (1.5.0 — superseded by 1.6.0 split)
+
+- Original dual payslip + Trainee Salaries rate model replaced by fixed 12k/20/600 in 1.6.0
 
 ---
 

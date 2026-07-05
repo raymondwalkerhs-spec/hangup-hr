@@ -77,6 +77,7 @@ const state = {
   salesPickDate: new Date().toISOString().slice(0, 10),
   salesWeekDate: new Date().toISOString().slice(0, 10),
   tabSearch: { employees: "", attendance: "", payroll: "" },
+  payrollTab: "agent",
   empFilter: { status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
   changesFilter: { user: "", entity: "" },
   meta: { statuses: [], units: [], positions: [], backendPools: [] },
@@ -1895,55 +1896,127 @@ function updateAttendanceTable(root) {
   bindAttendanceGridEvents(root, ctx);
 }
 
-function payrollRowHtml(r) {
+function payrollRowHtmlForTab(r, tab = "agent") {
+  const isTotal = tab === "total";
   const dualBadge =
-    r.payrollKind === "dual"
-      ? `<span class="badge badge-ok" style="font-size:.65rem;margin-left:.25rem">Training + Agent</span>`
-      : r.payrollKind === "training"
+    !isTotal && tab === "agent" && r.payrollKind === "dual"
+      ? `<span class="badge badge-ok" style="font-size:.65rem;margin-left:.25rem">Agent portion</span>`
+      : !isTotal && tab === "training" && r.payrollKind === "training"
         ? `<span class="badge" style="font-size:.65rem;margin-left:.25rem">Training</span>`
         : "";
-  return `<tr class="clickable" data-pay="${r.employeeId}">
-    <td><div class="emp-cell">${avatarHtml({ id: r.employeeId, american_name: r.name, profile_photo_file_id: r.profile_photo_file_id, profile_photo_updated: r.profile_photo_updated })}<div><strong>${r.name}</strong>${dualBadge}<div class="muted">${r.employeeId} · ${r.unit || "—"}</div></div></div></td>
+  const daysCell = isTotal
+    ? `<span class="muted">${r.accrualMonth || "—"}</span>`
+    : r.totalWorkingDays || r.scopedDayCount || "—";
+  const dueCell = isTotal
+    ? `<span class="muted">${r.paymentDueDate || "—"}</span>`
+    : `<span class="badge badge-status">${r.paymentMethod || "—"}</span>`;
+  const kindBadge =
+    isTotal && r.payrollKind === "training"
+      ? `<span class="badge" style="font-size:.65rem;margin-left:.25rem">Training</span>`
+      : isTotal && r.payrollKind === "agent"
+        ? `<span class="badge badge-ok" style="font-size:.65rem;margin-left:.25rem">Agent</span>`
+        : "";
+  const slipKind = tab === "training" ? "training" : tab === "agent" ? "agent" : r.payrollKind === "training" ? "training" : "agent";
+  const netVal = isTotal ? r.netSalary : tab === "agent" || tab === "training" ? r.netSalary : payrollRowNet(r);
+  const basicVal = isTotal ? r.basicSalary : tab === "agent" || tab === "training" ? r.basicSalary : payrollRowBasic(r);
+  return `<tr class="clickable" data-pay="${r.employeeId}" data-slip-kind="${slipKind}">
+    <td><div class="emp-cell">${avatarHtml({ id: r.employeeId, american_name: r.name, profile_photo_file_id: r.profile_photo_file_id, profile_photo_updated: r.profile_photo_updated })}<div><strong>${r.name}</strong>${dualBadge}${kindBadge}<div class="muted">${r.employeeId} · ${r.unit || "—"}${isTotal && r.hasReceivedPayment ? " · paid" : ""}</div></div></div></td>
     <td>${payrollStatusBadge(r.payrollStatus)}</td>
-    <td class="text-center">${r.salesCount || (r.agent?.salesCount) || "—"}</td>
-    <td class="text-right">${r.commissionAmount || r.agent?.commissionAmount ? fmt(r.commissionAmount || r.agent?.commissionAmount) : "—"}</td>
-    <td><span class="badge badge-status">${r.paymentMethod || "—"}</span></td>
-    <td class="text-center">${r.totalWorkingDays || (r.training?.totalWorkingDays || 0) + (r.agent?.totalWorkingDays || 0)}</td>
-    <td class="text-right">${fmt(payrollRowBasic(r))}</td>
-    <td class="text-right amount-pos">${fmt((r.transportAllowance || 0) + (r.agent?.transportAllowance || 0))}</td>
-    <td class="text-right amount-neg">${r.loanDeductionTotal ? `-${fmt(r.loanDeductionTotal)}` : "—"}</td>
-    <td class="text-right"><strong>${fmt(payrollRowNet(r))}</strong>${r.hasSplits ? `<div class="muted" style="font-size:.7rem">calc ${fmt(r.calculatedNet)}</div>` : ""}${r.receivedTotal ? `<div class="muted" style="font-size:.7rem">paid ${fmt(r.receivedTotal)}</div>` : ""}</td>
-    <td><button class="btn btn-sm" data-slip="${r.employeeId}">Payslip</button></td>
+    <td class="text-center">${isTotal ? "—" : r.salesCount || "—"}</td>
+    <td class="text-right">${isTotal ? "—" : r.commissionAmount ? fmt(r.commissionAmount) : "—"}</td>
+    <td>${dueCell}</td>
+    <td class="text-center">${daysCell}</td>
+    <td class="text-right">${fmt(basicVal || 0)}</td>
+    <td class="text-right amount-pos">${isTotal ? "—" : fmt(r.transportAllowance || 0)}</td>
+    <td class="text-right amount-neg">${isTotal ? "—" : r.loanDeductionTotal ? `-${fmt(r.loanDeductionTotal)}` : "—"}</td>
+    <td class="text-right"><strong>${fmt(netVal || 0)}</strong>${r.hasSplits ? `<div class="muted" style="font-size:.7rem">calc ${fmt(r.calculatedNet)}</div>` : ""}${r.receivedTotal ? `<div class="muted" style="font-size:.7rem">paid ${fmt(r.receivedTotal)}</div>` : ""}${isTotal && r.receivedAmount ? `<div class="muted" style="font-size:.7rem">received ${fmt(r.receivedAmount)}</div>` : ""}</td>
+    <td><button class="btn btn-sm" data-slip="${r.employeeId}" data-slip-kind="${slipKind}">Payslip</button></td>
   </tr>`;
+}
+
+function payrollRowHtml(r) {
+  return payrollRowHtmlForTab(r, state.payrollTab || "agent");
 }
 
 function bindPayrollRowClicks(root) {
   root.querySelectorAll("[data-slip], tr[data-pay]").forEach((el) => {
     el.addEventListener("click", (e) => {
       if (e.target.tagName === "BUTTON") e.stopPropagation();
-      openPayslipModal(el.dataset.slip || el.dataset.pay);
+      const kind = el.dataset.slipKind || "";
+      openPayslipModal(el.dataset.slip || el.dataset.pay, kind ? { kind } : {});
     });
   });
+}
+
+function activePayrollView(data) {
+  const tab = state.payrollTab || "agent";
+  if (!data?.views) return { rows: data?.payroll || [], totals: data?.totals || {} };
+  if (tab === "training") return data.views.training || { rows: [], totals: {} };
+  if (tab === "total") return data.views.totalPaid || { rows: [], totals: {} };
+  return data.views.agent || { rows: data.payroll || [], totals: data.totals || {} };
+}
+
+function payrollTabSubtitle(data) {
+  const tab = state.payrollTab || "agent";
+  if (tab === "training") {
+    const tp = data.trainingPay || {};
+    return `${tp.days || 20} training days · ${tp.daily || 600} EGP/day · ${tp.monthly || 12000} EGP/mo · ${tp.weekly || 3000} EGP/week`;
+  }
+  if (tab === "total") {
+    return `Payments due or received in ${monthLabel(state.month)} (agent payroll due 15th of next month)`;
+  }
+  return `${data.workingDays} working days · Transport 3,000 EGP/mo`;
 }
 
 function updatePayrollTable(root) {
   const data = root.__payrollData;
   if (!data) return;
-  let rows = data.payroll;
+  const view = activePayrollView(data);
+  let rows = view.rows || [];
   rows = filterPayrollByZeroNet(rows);
   if (getTabSearch("payroll")) {
     rows = rows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
+  const tab = state.payrollTab || "agent";
+  const totals = view.totals || data.totals || {};
   const tbody = root.querySelector("#payroll-tbody");
   const countEl = root.querySelector("#payroll-emp-count");
+  const tfootBasic = root.querySelector("#payroll-tfoot-basic");
+  const tfootTransport = root.querySelector("#payroll-tfoot-transport");
+  const tfootLoan = root.querySelector("#payroll-tfoot-loan");
+  const tfootNet = root.querySelector("#payroll-tfoot-net");
+  const statBasic = root.querySelector("#payroll-stat-basic");
+  const statBonuses = root.querySelector("#payroll-stat-bonuses");
+  const statDeductions = root.querySelector("#payroll-stat-deductions");
+  const statNet = root.querySelector("#payroll-stat-net");
   if (tbody) {
     tbody.innerHTML = rows.length
-      ? rows.map(payrollRowHtml).join("")
+      ? rows.map((r) => payrollRowHtmlForTab(r, tab)).join("")
       : `<tr><td colspan="11" class="muted">No employees match your search</td></tr>`;
   }
   if (countEl) {
-    countEl.textContent = `${rows.length} employees · ${monthLabel(state.month)} · ${data.workingDays} working days · Transport 3,000 EGP/mo`;
+    countEl.textContent = `${rows.length} employees · ${monthLabel(state.month)} · ${payrollTabSubtitle(data)}`;
   }
+  if (statBasic) statBasic.textContent = fmt(totals.totalBasic || 0);
+  if (statBonuses) statBonuses.textContent = fmt(totals.totalBonuses || 0);
+  if (statDeductions) statDeductions.textContent = fmt(totals.totalDeductions || 0);
+  if (statNet) statNet.textContent = fmt(totals.totalNet || 0);
+  if (tfootBasic) tfootBasic.textContent = fmt(totals.totalBasic || 0);
+  if (tfootTransport) {
+    tfootTransport.textContent =
+      tab === "total"
+        ? "—"
+        : fmt(rows.reduce((s, r) => s + (r.transportAllowance || 0), 0));
+  }
+  if (tfootLoan) {
+    tfootLoan.textContent =
+      tab === "total"
+        ? "—"
+        : rows.some((r) => r.loanDeductionTotal)
+          ? `-${fmt(rows.reduce((s, r) => s + (r.loanDeductionTotal || 0), 0))}`
+          : "—";
+  }
+  if (tfootNet) tfootNet.textContent = fmt(totals.totalNet || 0);
   bindPayrollRowClicks(root);
 }
 
@@ -2879,7 +2952,7 @@ async function exportEmployeePayrolls(emp) {
   alert(`Exported ${ok} payslip PDF(s) to:\n${subfolder}`);
 }
 
-async function openPayslipModal(employeeId) {
+async function openPayslipModal(employeeId, options = {}) {
   const [data, empListRes] = await Promise.all([
     api(`/payroll/${employeeId}?month=${state.month}`),
     api(`/employees${employeesQuery()}`).catch(() => ({ employees: [] })),
@@ -2890,18 +2963,27 @@ async function openPayslipModal(employeeId) {
   const empById = new Map((empListRes.employees || []).map((e) => [e.id, e]));
   const p = data.payslip;
   const isDual = p.payrollKind === "dual";
-  const activeSlip = isDual ? p.training || p : p;
+  const initialTab =
+    options.kind ||
+    (isDual ? (state.payrollTab === "training" ? "training" : state.payrollTab === "agent" ? "agent" : "training") : null);
+  const slipForKind = (tab) => {
+    if (!isDual) return p;
+    if (tab === "agent") return p.agent || p;
+    if (tab === "combined") return p;
+    return p.training || p;
+  };
+  const activeSlip = slipForKind(initialTab);
   const dualBanner = isDual
-    ? `<div class="alert alert-info" style="margin-bottom:1rem">
+    ? `<div class="alert alert-info" style="margin-bottom:1rem" id="dual-payslip-banner">
         <strong>Dual payslip month</strong> — Training: ${fmt(p.training?.netSalary || 0)} EGP · Agent: ${fmt(p.agent?.netSalary || 0)} EGP · Combined: <strong>${fmt(p.combinedNet || 0)} EGP</strong>
         <div class="btn-row" style="margin-top:.5rem">
           <button type="button" class="btn btn-sm" id="pdf-training-btn">Training PDF</button>
           <button type="button" class="btn btn-sm" id="pdf-agent-btn">Agent PDF</button>
         </div>
         <div class="btn-row payslip-tabs" style="margin-top:.5rem">
-          <button type="button" class="btn btn-sm btn-primary" data-payslip-tab="training">Training</button>
-          <button type="button" class="btn btn-sm" data-payslip-tab="agent">Agent</button>
-          <button type="button" class="btn btn-sm" data-payslip-tab="combined">Combined</button>
+          <button type="button" class="btn btn-sm ${initialTab === "training" ? "btn-primary" : ""}" data-payslip-tab="training">Training</button>
+          <button type="button" class="btn btn-sm ${initialTab === "agent" ? "btn-primary" : ""}" data-payslip-tab="agent">Agent</button>
+          <button type="button" class="btn btn-sm ${initialTab === "combined" ? "btn-primary" : ""}" data-payslip-tab="combined">Combined</button>
         </div>
       </div>`
     : "";
@@ -3021,7 +3103,7 @@ async function openPayslipModal(employeeId) {
           <div class="payslip-row"><span>Calculated net</span><span>${fmt(slipForRender.calculatedNet ?? slipForRender.netSalary ?? p.calculatedNet ?? p.netSalary)} EGP</span></div>
           ${slipForRender.receivedTotal || p.receivedTotal ? `<div class="payslip-row"><span>Paid (splits)</span><span class="amount-neg">-${fmt(slipForRender.receivedTotal || p.receivedTotal)}</span></div>` : ""}
           ${slipForRender.deferredOut || p.deferredOut ? `<div class="payslip-row"><span>Deferred to later month</span><span class="amount-neg">-${fmt(slipForRender.deferredOut || p.deferredOut)}</span></div>` : ""}
-          <div class="payslip-row payslip-total"><span>Balance due</span><span>${fmt(isDual ? (p.combinedNet ?? payrollRowNet(p)) : (slipForRender.remainingBalance ?? slipForRender.netSalary ?? p.remainingBalance ?? p.netSalary))} EGP</span></div>
+          <div class="payslip-row payslip-total"><span>Balance due</span><span>${fmt(isDual && initialTab === "combined" ? (p.combinedNet ?? payrollRowNet(p)) : (slipForRender.remainingBalance ?? slipForRender.netSalary ?? p.remainingBalance ?? p.netSalary))} EGP</span></div>
         </div>
       </div>
       <div class="grid-2" style="margin-top:1rem">
@@ -3159,8 +3241,14 @@ async function openPayslipModal(employeeId) {
     }
   });
 
+  document.querySelectorAll("[data-payslip-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openPayslipModal(employeeId, { kind: btn.dataset.payslipTab });
+    });
+  });
+
   bindProfilePhotoUpload(employeeId, () => {
-    openPayslipModal(employeeId);
+    openPayslipModal(employeeId, options);
   });
 
   document.getElementById("hist-slip-btn").onclick = async () => {
@@ -3823,13 +3911,18 @@ async function renderPayroll(root) {
   const tiers = tiersData.tiers || [];
   root.__payrollData = data;
 
-  let payrollRows = filterPayrollByZeroNet(data.payroll);
+  const view = activePayrollView(data);
+  let payrollRows = filterPayrollByZeroNet(view.rows || []);
   if (getTabSearch("payroll")) {
     payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
+  const tab = state.payrollTab || "agent";
+  const totals = view.totals || data.totals || {};
+  const thDue = tab === "total" ? "Due date" : "Payment";
+  const thDays = tab === "total" ? "Accrual" : "Days";
 
   root.innerHTML = `
-    <div class="page-header"><div><h1>Payroll</h1><p class="muted" id="payroll-emp-count">${payrollRows.length} employees · ${monthLabel(state.month)} · ${data.workingDays} working days · Transport 3,000 EGP/mo</p></div>
+    <div class="page-header"><div><h1>Payroll</h1><p class="muted" id="payroll-emp-count">${payrollRows.length} employees · ${monthLabel(state.month)} · ${payrollTabSubtitle(data)}</p></div>
       <div class="btn-row">
         <button class="btn btn-sm btn-primary" id="init-month-profiles">Init month profiles</button>
         <button class="btn btn-sm" id="export-payroll-pdf">Export PDF</button>
@@ -3845,6 +3938,11 @@ async function renderPayroll(root) {
         <button class="btn btn-sm" id="export-bank-pdf" title="Bank payroll sheet (PDF)">Bank PDF</button>` : ""}
       </div>
     </div>
+    <div class="btn-row payslip-tabs" style="margin-bottom:1rem" id="payroll-page-tabs">
+      <button type="button" class="btn btn-sm ${tab === "agent" ? "btn-primary" : ""}" data-payroll-tab="agent">Main payroll</button>
+      <button type="button" class="btn btn-sm ${tab === "training" ? "btn-primary" : ""}" data-payroll-tab="training">Training payroll</button>
+      <button type="button" class="btn btn-sm ${tab === "total" ? "btn-primary" : ""}" data-payroll-tab="total">Total payrolls</button>
+    </div>
     ${monthToolbar(`${pageSearchInputHtml("payroll", "Search name, Arabic name, or ID…")}${hideOutToggle()}
     <label class="toggle-label"><input type="checkbox" id="hide-zero-net" ${state.hideZeroNet ? "checked" : ""} /> Hide zero net pay</label>`)}
     <div class="card" style="margin-bottom:1rem">
@@ -3857,26 +3955,35 @@ async function renderPayroll(root) {
       <button class="btn btn-sm" id="add-tier-btn" style="margin-top:.5rem">+ Add tier</button>
     </div>
     <div class="grid-4">
-      <div class="card card-stat"><strong>${fmt(data.totals.totalBasic)}</strong><span class="muted">Basic (EGP)</span></div>
-      <div class="card card-stat"><strong>${fmt(data.totals.totalBonuses)}</strong><span class="muted">Bonuses</span></div>
-      <div class="card card-stat"><strong>${fmt(data.totals.totalDeductions)}</strong><span class="muted">Deductions</span>${data.totals.totalBonusTransfers ? `<span class="muted" style="display:block;font-size:.75rem;margin-top:.2rem">Agent bonuses from payroll: ${fmt(data.totals.totalBonusTransfers)} (not in deductions)</span>` : ""}</div>
-      <div class="card card-stat"><strong>${fmt(data.totals.totalNet)}</strong><span class="muted">Net payroll</span></div>
+      <div class="card card-stat"><strong id="payroll-stat-basic">${fmt(totals.totalBasic || 0)}</strong><span class="muted">Basic (EGP)</span></div>
+      <div class="card card-stat"><strong id="payroll-stat-bonuses">${fmt(totals.totalBonuses || 0)}</strong><span class="muted">Bonuses</span></div>
+      <div class="card card-stat"><strong id="payroll-stat-deductions">${fmt(totals.totalDeductions || 0)}</strong><span class="muted">Deductions</span>${totals.totalBonusTransfers ? `<span class="muted" style="display:block;font-size:.75rem;margin-top:.2rem">Agent bonuses from payroll: ${fmt(totals.totalBonusTransfers)} (not in deductions)</span>` : ""}</div>
+      <div class="card card-stat"><strong id="payroll-stat-net">${fmt(totals.totalNet || 0)}</strong><span class="muted">Net payroll</span></div>
     </div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Employee</th><th>Status</th><th>Sales</th><th>Commission</th><th>Payment</th><th>Days</th><th class="text-right">Basic</th>
+      <thead><tr><th>Employee</th><th>Status</th><th>Sales</th><th>Commission</th><th>${thDue}</th><th>${thDays}</th><th class="text-right">Basic</th>
         <th class="text-right">Transport</th><th class="text-right">Loan</th><th class="text-right">Net</th><th></th></tr></thead>
-      <tbody id="payroll-tbody">${payrollRows.map(payrollRowHtml).join("")}</tbody>
+      <tbody id="payroll-tbody">${payrollRows.map((r) => payrollRowHtmlForTab(r, tab)).join("")}</tbody>
       <tfoot>
       <tr class="totals-row"><td colspan="6"><strong>Totals</strong></td>
-        <td class="text-right"><strong>${fmt(data.totals.totalBasic)}</strong></td>
-        <td class="text-right"><strong>${fmt(data.payroll.reduce((s, r) => s + (r.transportAllowance || 0), 0))}</strong></td>
-        <td class="text-right"><strong>-${fmt(data.payroll.reduce((s, r) => s + (r.loanDeductionTotal || 0), 0))}</strong></td>
-        <td class="text-right"><strong>${fmt(data.totals.totalNet)}</strong></td><td></td></tr>
+        <td class="text-right"><strong id="payroll-tfoot-basic">${fmt(totals.totalBasic || 0)}</strong></td>
+        <td class="text-right"><strong id="payroll-tfoot-transport">${tab === "total" ? "—" : fmt(payrollRows.reduce((s, r) => s + (r.transportAllowance || 0), 0))}</strong></td>
+        <td class="text-right"><strong id="payroll-tfoot-loan">${tab === "total" ? "—" : payrollRows.some((r) => r.loanDeductionTotal) ? `-${fmt(payrollRows.reduce((s, r) => s + (r.loanDeductionTotal || 0), 0))}` : "—"}</strong></td>
+        <td class="text-right"><strong id="payroll-tfoot-net">${fmt(totals.totalNet || 0)}</strong></td><td></td></tr>
       </tfoot>
     </table></div>`;
 
   bindMonthNav(root);
   bindHideOut(root);
+  root.querySelectorAll("[data-payroll-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.payrollTab = btn.dataset.payrollTab;
+      updatePayrollTable(root);
+      root.querySelectorAll("[data-payroll-tab]").forEach((b) => {
+        b.classList.toggle("btn-primary", b.dataset.payrollTab === state.payrollTab);
+      });
+    });
+  });
   root.querySelector("#hide-zero-net")?.addEventListener("change", (e) => {
     state.hideZeroNet = e.target.checked;
     updatePayrollTable(root);
@@ -3913,7 +4020,11 @@ async function renderPayroll(root) {
     const btn = e.currentTarget;
     setButtonLoading(btn, true);
     try {
-      await downloadFile(`/payroll/pdf?${buildApiQuery({ month: state.month })}`, `payroll-${state.month}.pdf`);
+      const scope = state.payrollTab === "training" ? "training" : state.payrollTab === "total" ? "total" : "agent";
+      await downloadFile(
+        `/payroll/pdf?${buildApiQuery({ month: state.month, scope })}`,
+        `payroll-${state.month}${scope === "agent" ? "" : `-${scope}`}.pdf`
+      );
     } catch (err) {
       alert(err.message);
     } finally {
