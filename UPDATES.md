@@ -1,3 +1,14 @@
+## v1.6.4 release checklist
+
+1. Bump `package.json` → `1.6.4`
+2. Document FP import ID+Date-only → Attended + **FP date only**
+3. `git push` then trigger CI: `gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=v1.6.4`
+4. After CI: `gh release edit v1.6.4 --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest`
+5. `node scripts/publish-app-version.js` and `npm run dist:web-installer`
+
+**1.6.4 change:** Fingerprint import accepts ID+Date-only rows; defaults to Attended with **FP date only** note.
+
+---
 # Hangup Portal — App updates
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).

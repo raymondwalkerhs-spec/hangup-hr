@@ -95,6 +95,7 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - Transport allowance override on eligible statuses  
 - **Guards** — no edits after depart or outside employment period  
 - **Month lock** — payroll-finalized months cannot be edited  
+- **FP import (1.6.4)** — accepts ID + Date rows (name optional); date-only punches default to **Attended** with **FP date only** note  
 
 ---
 

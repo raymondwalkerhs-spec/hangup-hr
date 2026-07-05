@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.6.4] — 2026-07-05
+
+### Fixed
+- **Fingerprint import (ID + Date only)** — device rows with employee ID and date but no name and no punch times import as **Attended** with note **FP date only** (name column optional)
+
 ## [1.6.3] — 2026-07-05
 
 ### Fixed
