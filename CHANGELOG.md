@@ -4,10 +4,15 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-07-05
+
+### Fixed
+- **Trainee day count (HS3-36)** — training pay now walks **attendance dates** in eligible phases (v1.5 model: pay units × 600), not calendar weekdays matched via UTC-shifted `toISOString()` dates that dropped most Attended days (often showed 1×600 instead of 4×600)
+
 ## [1.6.1] — 2026-07-05
 
 ### Fixed
-- **Trainee basic with WFH** — training basic now uses eligible phase **pay units** (Attended, WFH, lateness, half/quarter, paid leave) × **600 EGP/day**; WFH days no longer excluded from `workingDays` summary
+- **Trainee pay units** — training basic uses eligible phase pay units (Attended, WFH, lateness, half/quarter, paid leave) × **600 EGP/day** instead of agent `workingDays` summary alone
 
 ## [1.6.0] — 2026-07-05
 

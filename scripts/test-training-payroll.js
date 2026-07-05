@@ -64,7 +64,48 @@ test("12 sale minimum evaluation", () => {
   assert(ev.readyToPass);
 });
 
+test("weekdaysInMonth uses local calendar dates not UTC ISO shift", () => {
+  const days = rules.weekdaysInMonth("2026-07");
+  assert(days.includes("2026-07-01"), "July 1 must be in July weekday list");
+  assert(!days.includes("2026-06-30"), "June 30 must not appear in July list");
+});
+
 console.log("training-payroll");
+test("4 Attended days in phase 2 pay 2400 basic (HS3-36 style)", () => {
+  const { enrichPayrollRow } = require("../lib/training-payroll");
+  const { TRAINING_DAILY_RATE } = require("../lib/training-pay-rules");
+  const emp = { id: "HS3-36", american_name: "Trainee", unit: "HS3", position: "Trainee" };
+  const standardRow = { employeeId: "HS3-36", name: "Trainee", netSalary: 0, basicSalary: 0 };
+  const program = {
+    outcome: "active",
+    allPhases: [{ phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "passed" }],
+  };
+  const att = [
+    { date: "2026-07-14", status: "Attended" },
+    { date: "2026-07-15", status: "Attended" },
+    { date: "2026-07-16", status: "Attended" },
+    { date: "2026-07-17", status: "Attended" },
+  ];
+  const ctx = {
+    ym: "2026-07",
+    config: { latenessRules: { tierA: { amount: 50 }, tierB: { amount: 100 } }, workingDaysByMonth: { "2026-07": 22 } },
+    actionPlans: [],
+    rates: [{ position: "Trainee", monthlySalary: 12000 }],
+    bonusEvents: [],
+    deductionEvents: [],
+    adjustment: null,
+    attendanceRecords: att,
+    commissionTiers: [],
+    loans: [],
+    loanPayments: [],
+    allPayrollSplits: [],
+  };
+  const row = enrichPayrollRow(emp, standardRow, ctx, program);
+  assert.equal(row.basicSalary, 4 * TRAINING_DAILY_RATE);
+  assert.equal(row.totalWorkingDays, 4);
+  assert.equal(row.scopedDayCount, 4);
+});
+
 test("4 WFH days in phase 2 pay 2400 basic", () => {
   const { enrichPayrollRow } = require("../lib/training-payroll");
   const { TRAINING_DAILY_RATE } = require("../lib/training-pay-rules");
