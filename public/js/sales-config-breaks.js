@@ -461,11 +461,92 @@ window.HRSalesConfigBreaks = (function () {
     return String(e?.status || "").toLowerCase() !== "deleted";
   }
 
-  function closerOptionsHtml(employees, escapeHtml, selectedId) {
-    const leaders = (employees || [])
+  function isCloserCandidate(e) {
+    const id = String(e?.id || "");
+    const role = String(e?.role || "").toLowerCase();
+    if (/^(TL|CL|OP)/i.test(id)) return true;
+    if (["tl", "op"].includes(role)) return true;
+    return isDialingEmployee(e);
+  }
+
+  function isDualRoleAgent(user) {
+    return user?.role === "agent" && (user?.leadTeams || []).length > 0;
+  }
+
+  function unitsForSubmitUser(user) {
+    const units = new Set();
+    if (user?.unit) units.add(user.unit);
+    for (const lt of user?.leadTeams || []) {
+      if (lt.unit) units.add(lt.unit);
+    }
+    return [...units];
+  }
+
+  function isBroadSubmitter(user) {
+    const role = String(user?.role || "").toLowerCase();
+    return ["admin", "ceo", "hr", "finance", "quality", "rtm", "public_relations"].includes(role);
+  }
+
+  function pickAgentsForSubmit(user, employees) {
+    if (isBroadSubmitter(user)) {
+      return (employees || []).filter((e) => isDialingEmployee(e));
+    }
+    const role = String(user?.role || "").toLowerCase();
+    if (role === "tl" || role === "op") {
+      const unit = user?.unit;
+      return (employees || []).filter((e) => isDialingEmployee(e) && (!unit || e.unit === unit));
+    }
+    if (role === "agent") {
+      if (isDualRoleAgent(user)) {
+        const units = new Set(unitsForSubmitUser(user));
+        return (employees || []).filter((e) => isDialingEmployee(e) && units.has(e.unit));
+      }
+      return (employees || []).filter((e) => e.id === user?.employeeId);
+    }
+    return (employees || []).filter((e) => isDialingEmployee(e));
+  }
+
+  function pickClosersForSubmit(user, employees) {
+    if (isBroadSubmitter(user)) {
+      return (employees || []).filter((e) => isCloserCandidate(e));
+    }
+    const role = String(user?.role || "").toLowerCase();
+    if (role === "tl" || role === "op") {
+      const unit = user?.unit;
+      return (employees || []).filter((e) => isCloserCandidate(e) && (!unit || e.unit === unit));
+    }
+    if (role === "agent") {
+      const units = isDualRoleAgent(user) ? unitsForSubmitUser(user) : user?.unit ? [user.unit] : [];
+      if (!units.length) {
+        return (employees || []).filter((e) => e.id === user?.employeeId);
+      }
+      const unitSet = new Set(units);
+      return (employees || []).filter((e) => isCloserCandidate(e) && unitSet.has(e.unit));
+    }
+    return (employees || []).filter((e) => isCloserCandidate(e));
+  }
+
+  function allowedUnitsForSubmit(user, orgTeams) {
+    const dialing = (orgTeams || []).filter((t) => t.dialsSales !== false);
+    if (isBroadSubmitter(user)) {
+      return [...new Set(dialing.map((t) => t.unit).filter(Boolean))].sort();
+    }
+    const role = String(user?.role || "").toLowerCase();
+    if (role === "tl" || role === "op") {
+      return user?.unit ? [user.unit] : unitsForSubmitUser(user);
+    }
+    if (role === "agent") {
+      if (isDualRoleAgent(user)) return unitsForSubmitUser(user).sort();
+      return user?.unit ? [user.unit] : [];
+    }
+    return unitsForSubmitUser(user);
+  }
+
+  function closerOptionsHtml(closers, escapeHtml, selectedId) {
+    const leaders = (closers || [])
       .filter((e) => /^(TL|CL|OP)/i.test(String(e.id || "")) || ["tl", "op"].includes(String(e.role || "").toLowerCase()))
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const agents = (employees || [])
+    const agents = (closers || [])
       .filter((e) => isDialingEmployee(e))
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
     let html = '<option value="">— Select closer —</option>';
@@ -479,10 +560,10 @@ window.HRSalesConfigBreaks = (function () {
     return html;
   }
 
-  function agentOptionsForTeam(employees, teamName, escapeHtml, selectedId) {
+  function agentOptionsForTeam(scopedAgents, teamName, escapeHtml, selectedId) {
     const norm = (t) => String(t || "").replace(/^team\s+/i, "").trim().toLowerCase();
     const want = norm(teamName);
-    const list = (employees || [])
+    const list = (scopedAgents || [])
       .filter((e) => isDialingEmployee(e) && norm(e.team) === want)
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
     return list
@@ -493,11 +574,14 @@ window.HRSalesConfigBreaks = (function () {
       .join("");
   }
 
-  function unitTeamPickerHtml(orgTeams, employees, sale, escapeHtml, defaultCloserId) {
+  function unitTeamPickerHtml(orgTeams, scopedAgents, scopedClosers, sale, escapeHtml, defaultCloserId, pickerOpts = {}) {
+    const { lockAgent = false, lockTeam = false, lockUnit = false, allowedUnits = [] } = pickerOpts;
     const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
-    const units = [...new Set(dialingTeams.map((t) => t.unit).filter(Boolean))].sort();
+    const units = allowedUnits.length
+      ? allowedUnits
+      : [...new Set(dialingTeams.map((t) => t.unit).filter(Boolean))].sort();
     const agentId = sale?.agentId || "";
-    const agent = employees.find((e) => e.id === agentId) || {};
+    const agent = scopedAgents.find((e) => e.id === agentId) || {};
     const defaultUnit = sale?.unit || agent.unit || units[0] || "";
     const defaultTeam = sale?.team || agent.team || "";
     const unitOpts = units
@@ -507,43 +591,59 @@ window.HRSalesConfigBreaks = (function () {
       .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
       .map((t) => `<option value="${escapeHtml(t.name)}" ${defaultTeam === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`)
       .join("");
-    const agentOpts = agentOptionsForTeam(employees, defaultTeam, escapeHtml, agentId);
+    const agentOpts = agentOptionsForTeam(scopedAgents, defaultTeam, escapeHtml, agentId);
+    const unitName = lockUnit ? "" : ' name="unit"';
+    const teamName = lockTeam ? "" : ' name="team"';
+    const agentName = lockAgent ? "" : ' name="agentId"';
+    const hiddenFields = [
+      lockUnit ? `<input type="hidden" name="unit" value="${escapeHtml(defaultUnit)}" />` : "",
+      lockTeam ? `<input type="hidden" name="team" value="${escapeHtml(defaultTeam)}" />` : "",
+      lockAgent ? `<input type="hidden" name="agentId" value="${escapeHtml(agentId)}" />` : "",
+    ].join("");
     return `
       <fieldset class="card card-flat sale-unit-team" style="grid-column:1/-1">
         <legend>Unit, team &amp; assignment</legend>
         <div class="field-grid">
+          ${hiddenFields}
           <label class="field"><span>Unit</span>
-            <select name="unit" id="sale-unit-select" required>
+            <select id="sale-unit-select"${unitName} required ${lockUnit ? "disabled" : ""}>
               <option value="">— Select unit —</option>${unitOpts}
             </select>
           </label>
           <label class="field"><span>Team</span>
-            <select name="team" id="sale-team-select" required>
+            <select id="sale-team-select"${teamName} required ${lockTeam ? "disabled" : ""}>
               <option value="">— Select team —</option>${teamOpts}
             </select>
           </label>
           <label class="field"><span>Agent</span>
-            <select name="agentId" id="sale-agent-select" required>
+            <select id="sale-agent-select"${agentName} required ${lockAgent ? "disabled" : ""}>
               <option value="">— Select agent —</option>${agentOpts}
             </select>
           </label>
           <label class="field"><span>Closer</span>
-            <select name="closerId" id="sale-closer-select">${closerOptionsHtml(employees, escapeHtml, defaultCloserId || "")}</select>
+            <select name="closerId" id="sale-closer-select">${closerOptionsHtml(scopedClosers, escapeHtml, defaultCloserId || "")}</select>
           </label>
         </div>
       </fieldset>`;
   }
 
-  function wireUnitTeamPicker(form, orgTeams, employees, isEdit) {
+  function wireUnitTeamPicker(form, orgTeams, scopedAgents, scopedClosers, pickerOpts = {}) {
+    const { lockAgent = false, lockUnit = false, allowedUnits = [] } = pickerOpts;
     const unitSel = form.querySelector("#sale-unit-select");
     const teamSel = form.querySelector("#sale-team-select");
     const agentSel = form.querySelector("#sale-agent-select") || form.querySelector('[name="agentId"]');
+    const closerSel = form.querySelector("#sale-closer-select");
     const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
     const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
 
+    function refreshCloserOptions() {
+      if (!closerSel) return;
+      closerSel.innerHTML = closerOptionsHtml(scopedClosers, esc, closerSel.value);
+    }
+
     function refreshAgentOptions(team, selectedId) {
       if (!agentSel) return;
-      const opts = agentOptionsForTeam(employees, team, esc, selectedId || agentSel.value);
+      const opts = agentOptionsForTeam(scopedAgents, team, esc, selectedId || agentSel.value);
       agentSel.innerHTML = `<option value="">— Select agent —</option>${opts}`;
       if (selectedId) agentSel.value = selectedId;
     }
@@ -551,6 +651,7 @@ window.HRSalesConfigBreaks = (function () {
     function refreshTeamOptions(unit, selectedTeam) {
       if (!teamSel) return;
       const opts = teamsForUnit(dialingTeams, unit)
+        .filter((t) => !allowedUnits.length || allowedUnits.includes(t.unit))
         .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
         .map((t) => `<option value="${esc(t.name)}" ${selectedTeam === t.name ? "selected" : ""}>${esc(t.name)}</option>`)
         .join("");
@@ -558,19 +659,22 @@ window.HRSalesConfigBreaks = (function () {
       refreshAgentOptions(selectedTeam || teamSel.value, agentSel?.value);
     }
 
-    unitSel?.addEventListener("change", () => {
-      refreshTeamOptions(unitSel.value, "");
-    });
-    teamSel?.addEventListener("change", () => {
-      refreshAgentOptions(teamSel.value, "");
-    });
-    if (!isEdit && agentSel && unitSel && teamSel) {
-      const agent = employees.find((e) => e.id === agentSel.value);
+    if (!lockUnit) {
+      unitSel?.addEventListener("change", () => {
+        refreshTeamOptions(unitSel.value, "");
+      });
+      teamSel?.addEventListener("change", () => {
+        refreshAgentOptions(teamSel.value, "");
+      });
+    }
+    if (agentSel && unitSel && teamSel) {
+      const agent = scopedAgents.find((e) => e.id === agentSel.value);
       if (agent?.unit) {
         unitSel.value = agent.unit;
         refreshTeamOptions(agent.unit, agent.team || "");
       }
     }
+    refreshCloserOptions();
   }
 
   async function enhanceSaleModal(api, helpers, sale, employees, formRoot, canEditFn, openSaleAttachment) {
@@ -583,17 +687,44 @@ window.HRSalesConfigBreaks = (function () {
     const teamsRes = await api("/hrms/teams").catch(() => ({ teams: [] }));
     const orgTeams = teamsRes.teams || [];
     if (!sale?.id) {
-      const defaultCloserId =
-        sale?.closerId || (["tl", "op"].includes(state.user?.role) ? state.user?.employeeId : "") || "";
-      const draftSale = { unit: sale?.unit, team: sale?.team, agentId: sale?.agentId || "" };
+      const user = state.user || {};
+      const scopedAgents = pickAgentsForSubmit(user, employees || []);
+      const scopedClosers = pickClosersForSubmit(user, employees || []);
+      const selfEmp = (employees || []).find((e) => e.id === user.employeeId);
+      const isDialingSelf =
+        user.employeeId &&
+        !/^(TL|CL|OP|HR|MG|OF|NW)/i.test(String(user.employeeId)) &&
+        scopedAgents.some((e) => e.id === user.employeeId);
+      const defaultAgentId = isDialingSelf ? user.employeeId : "";
+      const defaultCloserId = user.employeeId || "";
+      const draftSale = {
+        unit: selfEmp?.unit || user.unit,
+        team: selfEmp?.team,
+        agentId: defaultAgentId,
+      };
+      const plainAgent = user.role === "agent" && !isDualRoleAgent(user);
+      const pickerOpts = {
+        lockAgent: plainAgent,
+        lockTeam: plainAgent,
+        lockUnit: plainAgent || ["tl", "op"].includes(user.role),
+        allowedUnits: allowedUnitsForSubmit(user, orgTeams),
+      };
       const unitTeamWrap = document.createElement("div");
-      unitTeamWrap.innerHTML = unitTeamPickerHtml(orgTeams, employees || [], draftSale, escapeHtml, defaultCloserId);
+      unitTeamWrap.innerHTML = unitTeamPickerHtml(
+        orgTeams,
+        scopedAgents,
+        scopedClosers,
+        draftSale,
+        escapeHtml,
+        defaultCloserId,
+        pickerOpts
+      );
       const agentField = form.querySelector('[name="agentId"]')?.closest("label");
       if (agentField) agentField.remove();
       const closerField = form.querySelector('[name="closerId"]')?.closest("label");
       if (closerField) closerField.remove();
       form.prepend(unitTeamWrap.firstElementChild);
-      wireUnitTeamPicker(form, orgTeams, employees || [], false);
+      wireUnitTeamPicker(form, orgTeams, scopedAgents, scopedClosers, pickerOpts);
     }
 
     if (clients.length) {

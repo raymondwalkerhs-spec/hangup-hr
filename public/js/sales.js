@@ -1341,7 +1341,7 @@ window.SalesModule = (function () {
     const catalogQuery =
       isEdit && sale?.id
         ? `?surface=main&saleId=${encodeURIComponent(sale.id)}`
-        : "?surface=main";
+        : "?surface=submit";
     const catalog = await api(`/sales/field-catalog${catalogQuery}`).catch(() => ({ fields: [], attachmentKinds: [] }));
     let fields = (catalog.fields || []).filter((f) => {
       if (f.canView === false) return false;
@@ -1374,9 +1374,9 @@ window.SalesModule = (function () {
       const name = f.key === "deviceType" ? "device" : f.key;
       const cardClass = paymentFieldClass(f);
       const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
-      let editable = f.canEdit === true;
+      let editable = isEdit ? f.canEdit === true : true;
       if (f.key === "verifierFeedback" || f.key === "clientFeedback") {
-        editable = f.canEdit === true;
+        editable = isEdit && f.canEdit === true;
       }
       if (!editable) {
         let display = val;

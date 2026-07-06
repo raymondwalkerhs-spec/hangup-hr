@@ -431,6 +431,7 @@ router.post("/", async (req, res) => {
   if (!roles.canSubmitSales(req.userRole)) {
     return res.status(403).json({ error: "You may not submit new sales" });
   }
+  const saleSubmitScope = require("../lib/sale-submit-scope");
   const {
     phoneNumber,
     fullName,
@@ -448,9 +449,21 @@ router.post("/", async (req, res) => {
   }
   const emp = store.getEmployeeById(agentId);
   if (!emp) return res.status(404).json({ error: "Agent not found" });
-  if (!roles.canAccessEmployee(req.userRole, emp) && !salesScope.canApproveSale(req.userRole)) {
-    return res.status(403).json({ error: "No access to this agent" });
+  const employees = store.getEmployees({ hideOut: false });
+  const assignment = saleSubmitScope.validateSaleSubmitAssignment(
+    req.userRole,
+    {
+      agentId,
+      closerId,
+      unit: req.body.unit || req.body.formData?.unit,
+      team: req.body.team || req.body.formData?.team,
+    },
+    employees
+  );
+  if (!assignment.ok) {
+    return res.status(403).json({ error: assignment.error });
   }
+  const resolvedCloserId = assignment.closerId;
   const initialStatus = salesScope.initialSaleStatus(
     req.userRole.role,
     salesScope.canApproveSale(req.userRole) ? status : undefined
@@ -510,7 +523,7 @@ router.post("/", async (req, res) => {
         price: catalogResolved.price != null ? catalogResolved.price : payload.price,
         client: catalogResolved.client || payload.client,
         agentId,
-        closerId: closerId || req.userRole.employeeId || "",
+        closerId: resolvedCloserId,
         status: initialStatus,
         submissionDate: dates.submissionDate,
         effectiveDate: payload.effectiveDate || dates.workingDay,
@@ -762,13 +775,24 @@ router.get("/field-catalog", async (req, res) => {
       );
     } else if (surface === "quality") {
       fields = salesCatalog.listFieldsForRoleOnSurface(role, permMap, "quality", fieldOpts);
+    } else if (surface === "submit") {
+      if (!roles.canSubmitSales(req.userRole)) {
+        return res.status(403).json({ error: "You may not submit new sales" });
+      }
+      fields = salesCatalog.listFieldsForSubmit(role, {
+        canApproveStatus: salesScope.canApproveSale(req.userRole),
+      });
     } else {
       fields = salesCatalog.listFieldsForRole(role, permMap, { ...fieldOpts, surface: "main" });
     }
+    const attachmentKinds =
+      surface === "submit"
+        ? salesCatalog.listAttachmentKindsForSubmit(role)
+        : salesCatalog.listAttachmentKindsForRole(role, fieldOpts);
     res.json({
       fields,
       sections: salesCatalog.listSections(),
-      attachmentKinds: salesCatalog.listAttachmentKindsForRole(role, fieldOpts),
+      attachmentKinds,
       attachmentPermissions: Object.values(attachMap),
       permissions: perms,
       storageConfigured: saleStorage.isConfigured(),

@@ -2,6 +2,16 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.12] — 2026-07-06
+
+### Fixed
+- **Add sale form** — new `surface=submit` shows all fields editable (not Sales permissions ACL); create sanitization accepts full payload
+- **Sale assignment pickers** — role-scoped agent/closer/unit: agents default self + unit closers; TL/OP unit-wide; dual-role TL agents see both home and led units
+
+### Changed
+- **My docs** — self-upload limited to National ID, Medical Note, Exam Note; HR/Admin can upload Contract and all types
+- **Requests** — Annual leave hidden from agents (UI + server)
+
 ## [1.6.11] — 2026-07-06
 
 ### Added

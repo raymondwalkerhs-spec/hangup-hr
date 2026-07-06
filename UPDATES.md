@@ -1,3 +1,13 @@
+## v1.6.12 release checklist
+
+1. Bump `package.json` → `1.6.12`
+2. Build: `SKIP_NATIVE_REBUILD=1 npm run dist:installer` + `npm run dist:web-installer`
+3. `npm test`
+4. `git push` then CI or local `.\scripts\publish-github-release.ps1 -Tag v1.6.12`
+5. `gh release edit v1.6.12 --latest` + `node scripts/publish-app-version.js`
+
+**1.6.12 change:** Add sale submit surface (full form); role-scoped agent/closer pickers; My docs self-upload types; hide annual from agents.
+
 ## v1.6.11 release checklist
 
 1. Bump `package.json` → `1.6.11`

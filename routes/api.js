@@ -740,6 +740,7 @@ router.get("/status", async (req, res) => {
       unit: req.userRole.unit,
       team: req.userRole.team,
       employeeId: req.userRole.employeeId,
+      leadTeams: req.userRole.leadTeams || [],
       canManageUsers: roles.canManageAppUsersPerm(req.userRole, req.realUsername || req.username),
       canImpersonate: roles.canImpersonateUsers(req.realUsername || req.username),
       canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
@@ -3028,11 +3029,18 @@ router.post("/documents", async (req, res) => {
   if (!roles.canManageAll(req.userRole) && !isSelf) {
     return res.status(403).json({ error: "No permission" });
   }
+  const documents = require("../lib/documents");
+  if (isSelf && !roles.canManageEmployees(req.userRole)) {
+    if (!documents.SELF_UPLOAD_DOC_TYPES.includes(docType)) {
+      return res.status(403).json({
+        error: "You may only upload National ID, Medical Note, or Exam Note",
+      });
+    }
+  }
 
   const fs = require("fs");
   const os = require("os");
   const path = require("path");
-  const documents = require("../lib/documents");
   const tmpPath = path.join(os.tmpdir(), `hr-doc-${Date.now()}-${fileName}`);
   fs.writeFileSync(tmpPath, Buffer.from(contentBase64, "base64"));
   try {

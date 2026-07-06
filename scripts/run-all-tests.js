@@ -3,6 +3,7 @@ const path = require("path");
 const scripts = [
   "test-access-scope.js",
   "test-quality-sales-perms.js",
+  "test-sale-submit-scope.js",
   "test-rbac-defaults.js",
   "test-fp-import.js",
   "test-training-payroll.js",

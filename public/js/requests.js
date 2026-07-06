@@ -125,6 +125,10 @@ window.RequestsModule = (function () {
     const forOthers = canSubmitForOthers();
     const agentList = forOthers ? employees : employees.filter((e) => e.id === selfId);
     const defaultEmp = request?.employeeId || selfId || (agentList[0]?.id || "");
+    const isAgent = state.user?.role === "agent";
+    const annualOpt = isAgent
+      ? ""
+      : `<option value="annual" ${request?.requestKind === "annual" ? "selected" : ""}>Annual leave (paid)</option>`;
     openModal(`
       <div class="modal-header"><h2>${isEdit ? "Edit request" : "New request"}</h2><button class="btn btn-sm" data-close>✕</button></div>
       <form id="request-form" class="modal-body field-grid modal-body-scroll">
@@ -135,7 +139,7 @@ window.RequestsModule = (function () {
         ${!forOthers ? `<input type="hidden" name="employeeId" value="${escapeHtml(defaultEmp)}" />` : ""}
         <label class="field"><span>Request type</span>
           <select name="requestKind" id="req-kind">
-            <option value="annual" ${request?.requestKind === "annual" ? "selected" : ""}>Annual leave (paid)</option>
+            ${annualOpt}
             <option value="unpaid" ${request?.requestKind === "unpaid" ? "selected" : ""}>Unpaid day off</option>
             <option value="medical" ${request?.requestKind === "medical" ? "selected" : ""}>Medical / sick</option>
             <option value="same_day" ${request?.requestKind === "same_day" ? "selected" : ""}>Same-day off</option>

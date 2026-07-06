@@ -116,6 +116,19 @@ All catalog fields are available as filter fields.
 
 ## Add sale form
 
+**Submit surface (1.6.12):** Add sale uses `surface=submit` — all catalog fields are editable on create (not Sales permissions ACL). Edit sale and quality ticket still use ACL.
+
+### Role-based assignment
+
+| Submitter | Agent | Closer | Unit |
+|-----------|-------|--------|------|
+| **Agent** | Self (locked) | Default self; any closer in home unit | Prefilled, locked |
+| **Agent (dual-role TL)** | Dialing agents in home + led units | Closers in both units | Both units |
+| **TL / OP** | All dialing agents in unit | All closers in unit | Fixed to their unit |
+| **HR / RTM / Quality / …** | Company dialing pool | Company pool | All units |
+
+Agents default **Closer** to themselves; TL/OP default **Closer** to themselves.
+
 ### Catalog (required when configured)
 
 When RTM/Admin has configured clients in Settings:
@@ -126,14 +139,12 @@ When RTM/Admin has configured clients in Settings:
 
 ### Unit → Team → Agent cascade
 
-On create:
+On create (scoped per table above):
 
-1. Pick **unit** (HS-1 / HS-2 / HS-3 dialing units).  
+1. Pick **unit** (or prefilled/locked per role).  
 2. **Team** list filters to teams in that unit.  
-3. **Agent** list filters to agents on the selected team.  
-4. **Closer** — any dialing employee (company-wide).
-
-Dialing agents default **Agent** to themselves; TL/OP default **Closer** to themselves.
+3. **Agent** list filters to allowed agents on the selected team.  
+4. **Closer** — scoped to role (unit or dual-unit).
 
 ### Payment — Bank account
 

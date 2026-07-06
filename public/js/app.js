@@ -5104,6 +5104,9 @@ async function openEmployeeDocsModal(employeeId) {
   const data = await api(`/documents/${employeeId}`);
   const isSelf = state.user?.employeeId === employeeId;
   const canUpload = canManagePayrollEvents() || isSelf;
+  const selfDocTypes = ["National ID", "Medical Note", "Exam Note"];
+  const uploadDocTypes =
+    isSelf && !canManagePayrollEvents() ? selfDocTypes : data.docTypes || [];
   const docList = (data.documents || [])
     .map((d) => {
       const fileUrl = d.driveLink || `/api/documents/${encodeURIComponent(employeeId)}/${encodeURIComponent(d.id || d.driveFileId)}/file`;
@@ -5123,7 +5126,7 @@ async function openEmployeeDocsModal(employeeId) {
       ${canUpload ? `<div class="card" style="margin-top:1rem">
         <h4>Upload document</h4>
         <form id="doc-form" class="field-grid">
-          <label class="field"><span>Type</span><select name="docType">${data.docTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
+          <label class="field"><span>Type</span><select name="docType">${uploadDocTypes.map((t) => `<option value="${t}">${t}</option>`).join("")}</select></label>
           <label class="field"><span>Expiry (optional)</span><input name="expiry" type="date" /></label>
           <label class="toggle-label" style="grid-column:1/-1"><input name="noExpiry" type="checkbox" /> No expiry date</label>
           <label class="field" style="grid-column:1/-1"><span>Notes</span><input name="notes" /></label>
