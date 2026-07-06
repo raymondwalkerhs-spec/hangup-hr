@@ -85,10 +85,16 @@ async function testClientAndSync() {
   const originalFetch = global.fetch;
   global.fetch = async (url, opts) => {
     fetchCalls.push({ url, opts, body: opts?.body ? JSON.parse(opts.body) : null });
+    const payload =
+      String(url).includes("/meta/bases/")
+        ? { tables: [{ name: process.env.AIRTABLE_TABLE_NAME || "Sales All Data", fields: [] }] }
+        : { id: "recAirtable123", fields: {} };
+    const body = JSON.stringify(payload);
     return {
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ id: "recAirtable123", fields: {} }),
+      json: async () => payload,
+      text: async () => body,
     };
   };
 

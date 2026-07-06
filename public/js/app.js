@@ -377,10 +377,15 @@ function teamsForUnit(unit) {
 
 function renderWizardTeamOptions(unit, selected = "") {
   const teams = teamsForUnit(unit);
-  if (!teams.length && state.orgTeams?.length) {
-    return state.orgTeams.map((t) => `<option value="${escapeHtml(t.name)}" ${selected === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
+  if (!teams.length) {
+    return '<option value="" disabled>No teams configured for this unit — add one on Organization</option>';
   }
-  return teams.map((t) => `<option value="${escapeHtml(t.name)}" ${selected === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("");
+  return teams
+    .map(
+      (t) =>
+        `<option value="${escapeHtml(t.name)}" ${selected === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`
+    )
+    .join("");
 }
 
 function pageSkeleton(label = "Loading…") {
@@ -882,10 +887,24 @@ async function uploadProfilePhotoFile(employeeId, file) {
   });
 }
 
-function bindProfilePhotoUpload(employeeId, onDone) {
-  const input = document.getElementById("profile-photo-input");
-  const removeBtn = document.getElementById("remove-photo-btn");
-  const uploadBtn = document.getElementById("upload-photo-btn") || document.getElementById("payslip-photo-btn");
+function bindProfilePhotoUpload(employeeId, onDone, opts = {}) {
+  const input =
+    opts.input ||
+    (opts.inputId ? document.getElementById(opts.inputId) : null) ||
+    document.getElementById("profile-photo-input");
+  const removeBtn =
+    opts.removeBtn ||
+    (opts.removeBtnId ? document.getElementById(opts.removeBtnId) : null) ||
+    document.getElementById("remove-photo-btn");
+  const uploadBtn =
+    opts.uploadBtn ||
+    document.getElementById("upload-photo-btn") ||
+    document.getElementById("payslip-photo-btn") ||
+    input?.closest("label");
+  if (!input) return;
+  if (input.dataset.photoBound === "1") return;
+  input.dataset.photoBound = "1";
+  if (removeBtn) removeBtn.dataset.photoBound = "1";
   input?.addEventListener("change", async () => {
     const file = input.files?.[0];
     if (!file) return;
@@ -5258,7 +5277,10 @@ async function renderSettings(root) {
       ? api(`/employees/${state.user.employeeId}${apiContextQuery()}`).catch(() => null)
       : Promise.resolve(null),
   ]);
-  const emp = profileEmp?.employee || null;
+  const emp =
+    profileEmp?.employee ||
+    (state.user?.employeeId ? (state.meta?.employees || []).find((e) => e.id === state.user.employeeId) : null) ||
+    null;
   const canPhoto = Boolean(emp) && status.user?.canViewSettingsProfilePhoto !== false;
   const canTheme = status.user?.canViewSettingsTheme !== false;
   const canSync = status.user?.canViewSettingsSync !== false;
@@ -5402,11 +5424,10 @@ async function renderSettings(root) {
     bindProfilePhotoUpload(emp.id, async () => {
       await renderSettings(root);
       await updateSidebarBrand();
+    }, {
+      input: root.querySelector("#settings-profile-photo-input"),
+      removeBtn: root.querySelector("#settings-remove-photo-btn"),
     });
-    const settingsInput = root.querySelector("#settings-profile-photo-input");
-    const settingsRemove = root.querySelector("#settings-remove-photo-btn");
-    if (settingsInput) settingsInput.id = "profile-photo-input";
-    if (settingsRemove) settingsRemove.id = "remove-photo-btn";
   }
   root.querySelector("#impersonate-start-btn")?.addEventListener("click", async () => {
     const username = root.querySelector("#impersonate-user-select")?.value;

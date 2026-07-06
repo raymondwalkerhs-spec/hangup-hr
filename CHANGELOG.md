@@ -2,6 +2,19 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.17] — 2026-07-06
+
+### Fixed
+- **Organization TL display** — TL dropdown recognizes `lead_role`, org team `tlEmployeeId`, and app-user TL role syncs `lead_role` on employee
+- **Released employee IDs** — deleted employees no longer reserve `archived_app_id` (e.g. reuse **TL08** after release)
+- **Ghost / deleted teams** — Organization, Add agent wizard, and `/meta/teams` use **org_teams** only (removed hardcoded Justin/Tris from team pickers)
+- **Assign TL on team** — setting team TL updates employee unit, team, and `lead_role`
+- **Registration approve** — team picker lists active org teams for the unit (optional; default unassigned)
+- **Sale delete** — Airtable record delete is required when Airtable is configured (no silent skip)
+
+### Added
+- `scripts/test-employee-id-reuse.js`
+
 ## [1.6.16] — 2026-07-06
 
 ### Added

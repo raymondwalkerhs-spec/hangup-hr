@@ -202,6 +202,12 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 - Statuses: passed, pending, postdated, denied, callback
 - TL/OP submission; Quality / RTM / HR / Admin approval workflow
 
+### Organization & registration
+
+- **Organization** — unit → team → agent; TL/OP pickers use `lead_role`, TL-prefixed IDs, and `org_teams.tlEmployeeId`; team lists come from **org_teams** only (deleted teams like Justin/Tris no longer appear)
+- **Released IDs** — deleting/releasing an employee frees the app ID (e.g. **TL08**) for reuse
+- **Registration approve** — optional team picker from active org teams per unit; default unassigned
+
 ### Sale forms & tickets
 
 - **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers; team auto from agent; no quality section on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; recording upload required on submit; double-submit prevention

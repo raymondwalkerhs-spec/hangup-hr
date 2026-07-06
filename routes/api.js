@@ -1127,10 +1127,19 @@ router.use(async (req, res, next) => {
 
 const { TEAM_OPTIONS, CASH_BRANCHES, PAYMENT_METHOD_OPTIONS, TL_BONUS_TYPE, normalizePaymentMethodValue } = require("../lib/hr-constants");
 
-router.get("/meta/teams", (req, res) => {
+router.get("/meta/teams", async (req, res) => {
   const unit = req.query.unit || "";
-  const fromSheet = unit ? store.getTeams(unit) : [];
-  const teams = [...new Set([...TEAM_OPTIONS, ...fromSheet])].sort();
+  let fromOrg = [];
+  try {
+    const hrmsRepo = require("../lib/hrms-repo");
+    const orgTeams = await hrmsRepo.readOrgTeams();
+    fromOrg = unit
+      ? orgTeams.filter((t) => t.unit === unit).map((t) => t.name)
+      : orgTeams.map((t) => t.name);
+  } catch {
+    fromOrg = unit ? store.getTeams(unit) : [];
+  }
+  const teams = [...new Set(fromOrg.filter(Boolean))].sort();
   res.json({
     teams,
     units: store.getUnits(),

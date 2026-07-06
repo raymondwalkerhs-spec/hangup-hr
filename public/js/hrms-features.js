@@ -420,7 +420,9 @@ window.HRMSFeatures = (function () {
     }
 
     function isTlEmployee(e) {
-      return /^TL/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "tl";
+      const lead = String(e?.lead_role || e?.role || "").toUpperCase();
+      const tlOnTeam = allTeams.some((t) => t.tlEmployeeId === e?.id);
+      return /^TL/i.test(String(e?.id || "")) || lead === "TL" || tlOnTeam;
     }
 
     function tlOptions(teamName, selected) {
@@ -437,7 +439,7 @@ window.HRMSFeatures = (function () {
         <optgroup label="Agents (unusual)">${agents.slice(0, 80).map(opt).join("")}</optgroup>`;
     }
 
-    const teamNames = [...new Set(allTeams.map((t) => t.name).concat(employees.map((e) => e.team).filter(Boolean)))].sort();
+    const teamNames = [...new Set(allTeams.map((t) => t.name).filter(Boolean))].sort();
     const unitSections = (structure.units || []).map((section) => {
       const teams = section.teams || [];
       const unit = section.unit;
@@ -556,18 +558,54 @@ window.HRMSFeatures = (function () {
 
     root.querySelectorAll("[data-approve-reg]").forEach((btn) => {
       btn.onclick = () => {
-        openConfirmModal({
-          title: "Approve registration",
-          message: "Approve this registration? Creates inactive employee login.",
-          confirmLabel: "Approve",
-          onConfirm: async () => {
-            const res = await api(`/registration/${btn.dataset.approveReg}/approve`, { method: "POST", body: "{}" });
+        const regId = btn.dataset.approveReg;
+        const row = btn.closest("tr");
+        const unitCell = row?.querySelector("td:nth-child(5)");
+        const regUnit = unitCell?.textContent?.trim() || "HS-3";
+        const unitTeams = allTeams.filter((t) => t.unit === regUnit);
+        const teamOpts = unitTeams.length
+          ? unitTeams
+              .map(
+                (t) =>
+                  `<option value="${esc(t.name)}">${esc(t.name)}</option>`
+              )
+              .join("")
+          : "";
+        openModal(
+          `<div class="modal-header"><h2>Approve registration</h2><button class="btn btn-sm" data-close>✕</button></div>
+          <form id="approve-reg-form" class="modal-body field-grid">
+            <p class="muted" style="grid-column:1/-1">Creates employee + inactive login. Assign a team from Organization (active teams only).</p>
+            <label class="field"><span>Unit</span><input value="${esc(regUnit)}" readonly /></label>
+            <label class="field"><span>Team</span>
+              <select name="team" id="approve-reg-team">
+                <option value="">— Unassigned (assign later) —</option>
+                ${teamOpts}
+              </select>
+            </label>
+          </form>
+          <div class="modal-footer"><button type="button" class="btn" data-close>Cancel</button><button type="submit" form="approve-reg-form" class="btn btn-primary">Approve</button></div>`,
+          true
+        );
+        document.getElementById("approve-reg-form").onsubmit = async (e) => {
+          e.preventDefault();
+          const team = document.getElementById("approve-reg-team")?.value || "";
+          try {
+            const res = await api(`/registration/${regId}/approve`, {
+              method: "POST",
+              body: JSON.stringify({ unit: regUnit, team }),
+            });
+            closeModal();
             await renderOrgPage(root, api, helpers);
             if (typeof showRegistrationCredentialsModal === "function") {
-              showRegistrationCredentialsModal(res, "The account must be activated by Mark or Raymond before first sign-in.");
+              showRegistrationCredentialsModal(
+                res,
+                team ? `Team set to ${team}.` : "Assign the agent's team on Organization if needed."
+              );
             }
-          },
-        });
+          } catch (err) {
+            alert(err.message);
+          }
+        };
       };
     });
     root.querySelectorAll("[data-reject-reg]").forEach((btn) => {

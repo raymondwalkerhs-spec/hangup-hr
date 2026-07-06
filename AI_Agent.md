@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.16` (`package.json` → `version`)
-- **Previous:** `1.6.15` (sale attachments UX), `1.6.14` (Airtable sync)
+- **Current version:** `1.6.17` (`package.json` → `version`)
+- **Previous:** `1.6.16` (sales form hardening), `1.6.15` (sale attachments UX)
 
 ---
 
@@ -455,6 +455,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.17** | **true** | Org TL display, released ID reuse, org_teams-only team pickers, sale delete → Airtable |
 | **1.6.16** | **true** | Sales form hardening: delete sale, reassignment pickers, validation, draft, double-submit guard |
 | **1.6.13** | **true** | Add sale team auto from agent; hide quality section on submit |
 | **1.6.12** | **true** | Add sale submit surface; role-scoped pickers; My docs upload types; hide annual from agents |
