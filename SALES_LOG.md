@@ -14,6 +14,7 @@ The Sales log tracks MLA-Ray sales from submission through quality review and cl
 |------|----------------|
 | Sales list & filters | **Sales log** (sidebar) |
 | Add / edit sale | **+ Add sale** or row **Edit** |
+| View sale (read-only) | Row **View sale** — Access Control **View sale**; fields from Sales permissions **Edit sale** tab |
 | Quality review | Row **Quality ticket** |
 | Field view/edit ACL | **Sales permissions** (sidebar) — RTM / Admin only |
 | Which columns appear | **Log columns** (sidebar) — RTM / Admin only |

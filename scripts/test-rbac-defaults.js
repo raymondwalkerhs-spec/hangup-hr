@@ -16,6 +16,7 @@ const CHECKS = [
   ["viewTeamDashboard", (ur) => roles.canViewTeamDashboard(ur)],
   ["issueEquipment", (ur) => roles.canIssueEquipment(ur)],
   ["editSales", (ur) => roles.canEditSale(ur)],
+  ["viewSale", (ur) => roles.canViewSale(ur)],
   ["submitSales", (ur) => roles.canSubmitSales(ur)],
   ["workQualityTicket", (ur) => roles.canWorkQualityTicket(ur)],
   ["grantSalesVisibility", (ur) => roles.canGrantSalesVisibility(ur)],

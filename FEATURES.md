@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 *Presentation-style summary of what the app does today.*  
-**Version:** 1.6.10 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.11 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -95,6 +95,7 @@ Data lives in **Supabase** (cloud). Each PC keeps a **local copy** so daily work
 - Transport allowance override on eligible statuses  
 - **Guards** — no edits after depart or outside employment period  
 - **Month lock** — payroll-finalized months cannot be edited  
+- **View sale (1.6.11)** — read-only sale detail modal; button gated by Access Control **View sale**; visible fields from Sales permissions **Edit sale** tab (`main_view_roles`); attachments view-only per **Attachments** tab
 - **Sales ACL (1.6.10)** — Unified resolver; tabbed Sales permissions (Edit / Quality / Attachments); quality-only defaults; cross-unit closer names; live user-exception defaults
 - **Sales ACL (1.6.9)** — Edit + Quality ticket driven by Sales permissions surfaces; OP verifier-scoped tickets; payment card/bank toggle; leadType hidden
 - **Audit remediation (1.6.8)** — full ACL/RBAC audit fixes; `sales_action_permissions` UI + approve gate; web installer pinned to release version; single-patch publish default; `npm test`

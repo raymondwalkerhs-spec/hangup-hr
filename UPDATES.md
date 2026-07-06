@@ -1,3 +1,14 @@
+## v1.6.11 release checklist
+
+1. Bump `package.json` → `1.6.11`
+2. Run `npm test`
+3. Build NSIS: `npm run dist:installer` (use `SKIP_NATIVE_REBUILD=1` if VS 2022 C++ workload unavailable)
+4. `git push` then CI or local `.\scripts\publish-github-release.ps1 -Tag v1.6.11`
+5. `node scripts/publish-app-version.js`
+
+**1.6.11 change:** View sale — read-only modal; Access Control **viewSale** permission; fields from Sales permissions Edit sale tab.
+
+---
 ## v1.6.10 release checklist
 
 1. Bump `package.json` → `1.6.10`

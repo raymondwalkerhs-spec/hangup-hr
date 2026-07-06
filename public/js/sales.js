@@ -367,6 +367,10 @@ window.SalesModule = (function () {
     return state.user?.canEditSales === true;
   }
 
+  function canViewSale() {
+    return state.user?.canViewSale === true;
+  }
+
   function canWorkQualityTicket() {
     return state.user?.canWorkQualityTicket === true;
   }
@@ -502,10 +506,16 @@ window.SalesModule = (function () {
     }
   }
 
-  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false } = {}) {
-    if (!isEdit) return "";
+  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false } = {}) {
+    if (!isEdit && !viewOnly) return "";
     const viewKinds = (attachKinds || []).filter((k) => k.canView);
     if (!viewKinds.length && !forceShow) return "";
+    if (viewOnly) {
+      return `<div class="card card-flat sale-attachments-block" style="grid-column:1/-1">
+        <h4>Attachments</h4>
+        <div id="sale-attachments-list" class="sale-attachments-list muted">Loading…</div>
+      </div>`;
+    }
     const uploadKinds = viewKinds.filter((k) => k.canEdit);
     const uploadHtml = uploadKinds.length
       ? `<div class="attachment-upload-grid">${uploadKinds
@@ -927,6 +937,7 @@ window.SalesModule = (function () {
           .map((s) => {
             const cells = listColumns.map((c) => `<td>${renderSaleListCell(c.columnKey, s, empById, escapeHtml, fmt)}</td>`).join("");
             return `<tr>${cells}<td class="btn-row">
+              ${canViewSale() ? `<button class="btn btn-sm" data-view-sale="${s.id}">View sale</button>` : ""}
               ${canFullEditSale() ? `<button class="btn btn-sm" data-edit-sale="${s.id}">Edit</button>` : ""}
               ${canOpenQualityTicketForSale(s) ? `<button class="btn btn-sm ${canFullEditSale() ? "" : "btn-primary"}" data-quality-ticket="${s.id}">${canFullEditSale() ? "Quality ticket" : "Open ticket"}</button>` : ""}
               ${canApprove() && s.status === "pending" ? `<button class="btn btn-sm" data-approve="${s.id}">Approve</button>
@@ -1030,6 +1041,12 @@ window.SalesModule = (function () {
     root.querySelectorAll("[data-export-sale]").forEach((btn) => {
       btn.onclick = () => runSalesExport({ saleId: btn.dataset.exportSale });
     });
+    root.querySelectorAll("[data-view-sale]").forEach((btn) => {
+      btn.onclick = () => {
+        const sale = sales.find((s) => s.id === btn.dataset.viewSale);
+        if (sale) openViewSaleModal(api, employees, helpers, sale);
+      };
+    });
     root.querySelectorAll("[data-edit-sale]").forEach((btn) => {
       btn.onclick = () => {
         const sale = sales.find((s) => s.id === btn.dataset.editSale);
@@ -1117,6 +1134,83 @@ window.SalesModule = (function () {
       html += `<option value="${e.id}" ${selectedId === e.id ? "selected" : ""}>${e.id} — ${escapeHtml(e.american_name || e.id)}</option>`;
     }
     return html;
+  }
+
+  function readonlyFieldHtml(f, val, employees, escapeHtml, cardClass = "") {
+    let display = val;
+    if (f.type === "employee") {
+      const emp = employees.find((e) => e.id === val);
+      display = emp ? emp.american_name || emp.name || val : val;
+    }
+    return `<div class="field${cardClass}"><span>${escapeHtml(f.label)}</span><div class="field-readonly">${escapeHtml(display || "—")}</div></div>`;
+  }
+
+  async function openViewSaleModal(api, employees, helpers, sale) {
+    const { escapeHtml, openModal } = helpers;
+    const catalog = await api(`/sales/field-catalog?surface=main&saleId=${encodeURIComponent(sale.id)}`).catch(() => ({
+      fields: [],
+      attachmentKinds: [],
+    }));
+    const attachKinds = (catalog.attachmentKinds || []).filter((k) => k.canView);
+    const formData = sale?.formData || {};
+    const viewFields = (catalog.fields || []).filter((f) => f.canView !== false && !f.hideOnEdit);
+    const agentEmp = employees.find((e) => e.id === sale?.agentId);
+    const closerEmp = employees.find((e) => e.id === sale?.closerId);
+    const closerName =
+      closerEmp?.american_name || sale.closerDisplayName || formData.closerName || "";
+    const inferredPayment = inferPaymentMethod(formData, sale);
+
+    function viewFieldHtml(f) {
+      const val = formData[f.key] ?? sale?.[f.key] ?? "";
+      const cardClass = paymentFieldClass(f);
+      return readonlyFieldHtml(f, val, employees, escapeHtml, cardClass);
+    }
+
+    const bySection = [...new Set(viewFields.map((f) => f.section || "general"))];
+    const fieldsHtml = bySection
+      .map((sec) => {
+        const secFields = viewFields.filter((f) => (f.section || "general") === sec);
+        if (!secFields.length) return "";
+        return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(viewFieldHtml).join("")}</div></fieldset>`;
+      })
+      .join("");
+
+    const attachBlock = attachKinds.length ? buildAttachmentsBlock(attachKinds, true, { viewOnly: true }) : "";
+
+    openModal(
+      `<div class="modal-header"><h2>View sale</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div id="view-sale-panel" class="form-grid modal-body-scroll">
+        <div class="card card-flat quality-ticket-summary" style="grid-column:1/-1">
+          <div class="field-grid">
+            <div><span class="muted">Customer</span><div><strong>${escapeHtml(sale.fullName || "—")}</strong></div><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span></div>
+            <div><span class="muted">Client</span><div>${escapeHtml(sale.client || formData.client || "—")}</div></div>
+            <div><span class="muted">Device</span><div>${escapeHtml(deviceLabel(sale.device || formData.deviceType))}</div></div>
+            <div><span class="muted">Agent</span><div>${escapeHtml(sale.agentId || "—")} — ${escapeHtml(agentEmp?.american_name || sale.agentDisplayName || "")}</div></div>
+            <div><span class="muted">Closer</span><div>${escapeHtml(sale.closerId || "—")} — ${escapeHtml(closerName)}</div></div>
+            <div><span class="muted">Status</span><div><span class="badge">${escapeHtml(sale.status || "")}</span></div></div>
+          </div>
+        </div>
+        ${fieldsHtml}
+        ${attachBlock}
+        <div class="form-actions"><button type="button" class="btn" data-close>Close</button></div>
+      </div>`,
+      true
+    );
+
+    const listEl = document.getElementById("sale-attachments-list");
+    if (listEl && attachKinds.length) {
+      await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, false, {
+        inlineAudio: attachKinds.some((k) => k.key === "recording" && k.canView),
+      });
+    }
+    const panel = document.getElementById("view-sale-panel");
+    if (panel && viewFields.some((f) => f.key === "paymentMethod" || f.cardField || f.bankField)) {
+      const method = inferredPayment;
+      const isCard = method === "Card";
+      const isBank = method === "Bank account";
+      panel.querySelectorAll(".sale-card-fields").forEach((el) => el.classList.toggle("hidden", !isCard));
+      panel.querySelectorAll(".sale-bank-fields").forEach((el) => el.classList.toggle("hidden", !isBank));
+    }
   }
 
   async function openQualityTicketModal(api, employees, helpers, sale, onDone) {

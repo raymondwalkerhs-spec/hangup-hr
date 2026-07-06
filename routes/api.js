@@ -754,6 +754,7 @@ router.get("/status", async (req, res) => {
       canViewSales: roles.canViewSales(req.userRole),
       canSubmitSales: roles.canSubmitSales(req.userRole),
       canEditSales: roles.canEditSale(req.userRole),
+      canViewSale: roles.canViewSale(req.userRole),
       canApproveSales: roles.canApproveSales(req.userRole),
       canWorkQualityTicket: roles.canWorkQualityTicket(req.userRole),
       canApproveRegistration: registration.canApproveRegistration(req.userRole?.role),

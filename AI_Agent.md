@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.10` (`package.json` → `version`)
-- **Previous:** `1.6.8` (audit remediation), `1.6.7` (quality ticket ACL)
+- **Current version:** `1.6.11` (`package.json` → `version`)
+- **Previous:** `1.6.10` (robust sales ACL), `1.6.8` (audit remediation)
 
 ---
 
@@ -453,6 +453,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.11** | **true** | View sale — read-only modal; Access Control viewSale; fields from Sales permissions Edit sale tab |
 | **1.6.10** | **true** | Robust sales ACL: unified resolver, tabbed permissions, attachment ACL DB, cross-unit closer names, live user-exception defaults |
 | **1.6.9** | **true** | Sales field ACL surfaces; OP verifier tickets; remove bankAccountChosenBy; payment backfill flags |
 | **1.6.8** | **true** | Audit remediation: ACL/RBAC fixes, sales action permissions wired, web installer version pin, single-patch publish, `npm test` |
