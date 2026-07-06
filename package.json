@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.6.7",
+  "version": "1.6.10",
   "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -34,7 +34,13 @@
     "migrate:sale-attachments": "node scripts/migrate-sale-attachments-to-supabase.js",
     "apply:github-patch": "node scripts/apply-github-patch-standalone.js",
     "seed:fp-june": "node scripts/seed-june-fp-mappings.js",
-    "apply:migrations": "node scripts/apply-pending-migrations.js"
+    "apply:migrations": "node scripts/apply-pending-migrations.js",
+    "test": "node scripts/run-all-tests.js",
+    "test:access-scope": "node scripts/test-access-scope.js",
+    "test:quality-sales-perms": "node scripts/test-quality-sales-perms.js",
+    "test:rbac-defaults": "node scripts/test-rbac-defaults.js",
+    "backup": "node scripts/ensure-electron.js && electron electron/backup-main.js",
+    "start:backup": "node scripts/ensure-electron.js && electron electron/backup-main.js"
   },
   "build": {
     "appId": "com.hangup.hr",

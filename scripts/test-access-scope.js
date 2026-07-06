@@ -103,6 +103,65 @@ test("weekend with Attended shows agent row", () => {
   if (!worked) throw new Error("expected HS1-10 row when Attended on Saturday");
 });
 
+test("quality role sees full employee roster", () => {
+  const ur = { role: "quality", username: "qa" };
+  const scoped = roles.filterEmployeesForUser(employees, ur).map((e) => e.id).sort();
+  const all = employees.map((e) => e.id).sort();
+  if (JSON.stringify(scoped) !== JSON.stringify(all)) {
+    throw new Error(`quality expected full roster, got ${scoped.join(", ")}`);
+  }
+});
+
+test("rtm role sees full employee roster", () => {
+  const ur = { role: "rtm", username: "rtm" };
+  const scoped = roles.filterEmployeesForUser(employees, ur).map((e) => e.id).sort();
+  const all = employees.map((e) => e.id).sort();
+  if (JSON.stringify(scoped) !== JSON.stringify(all)) {
+    throw new Error(`rtm expected full roster, got ${scoped.join(", ")}`);
+  }
+});
+
+test("dual-role org filter hides home-team peer agents", () => {
+  const hrms = require("../lib/hrms-repo");
+  const store = require("../lib/data-store");
+  const origGet = store.getEmployeeById.bind(store);
+  store.getEmployeeById = (id) => employees.find((e) => e.id === id) || origGet(id);
+
+  const ur = roles.enrichUserRole(
+    roles.resolveUserRole("hs1-05", "agent"),
+    employees,
+    { employee_id: "HS1-05" },
+    orgTeams
+  );
+  const structure = {
+    units: [
+      {
+        unit: "HS-1",
+        teams: [
+          { name: "Phoenix", agents: [{ id: "HS1-05" }, { id: "HS1-10" }] },
+        ],
+      },
+      {
+        unit: "HS-3",
+        teams: [{ name: "Ayla", agents: [{ id: "HS3-20" }] }],
+      },
+    ],
+    unassigned: [],
+  };
+  const filtered = hrms.filterOrgStructureForRole(structure, ur);
+  const phoenix = filtered.units.flatMap((u) => u.teams).find((t) => t.name === "Phoenix");
+  const ayla = filtered.units.flatMap((u) => u.teams).find((t) => t.name === "Ayla");
+  const phoenixIds = (phoenix?.agents || []).map((a) => a.id).sort();
+  const aylaIds = (ayla?.agents || []).map((a) => a.id);
+  store.getEmployeeById = origGet;
+  if (JSON.stringify(phoenixIds) !== JSON.stringify(["HS1-05"])) {
+    throw new Error(`Phoenix should only show self, got ${phoenixIds.join(", ")}`);
+  }
+  if (JSON.stringify(aylaIds) !== JSON.stringify(["HS3-20"])) {
+    throw new Error(`Ayla should show led agent HS3-20, got ${aylaIds.join(", ")}`);
+  }
+});
+
 if (process.exitCode) {
   console.error("\nSome tests failed.");
   process.exit(1);

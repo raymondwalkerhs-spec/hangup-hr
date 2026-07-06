@@ -3,6 +3,7 @@ const roles = require("../lib/roles");
 const { useSupabase } = require("../lib/backend");
 const usersAdmin = require("../lib/users-admin");
 const userPermissions = require("../lib/user-permissions");
+const rolePermissions = require("../lib/role-permissions");
 const permissionCatalog = require("../lib/permission-catalog");
 const store = require("../lib/data-store");
 
@@ -92,8 +93,17 @@ router.get("/:username/permissions", async (req, res) => {
     const user = await usersAdmin.getAppUser(username);
     if (!user) return res.status(404).json({ error: "User not found" });
     const overrides = await userPermissions.listForUser(username);
-    const role = require("../lib/roles").normalizeRole(user.role);
-    const defaults = permissionCatalog.defaultForRole(role, { role, username });
+    const appRoles = require("../lib/roles");
+    const role = appRoles.normalizeRole(req.query.role || user.role);
+    const catalogDefaults = permissionCatalog.defaultForRole(role, { role, username });
+    const defaults = {};
+    for (const p of permissionCatalog.listPermissions()) {
+      defaults[p.key] = rolePermissions.isAllowedSync(
+        p.key,
+        { role, username, employeeId: user.employeeId },
+        () => catalogDefaults[p.key]
+      );
+    }
     res.json({ username, role, defaults, overrides });
   } catch (err) {
     res.status(500).json({ error: err.message });

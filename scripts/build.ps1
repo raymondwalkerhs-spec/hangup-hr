@@ -113,6 +113,10 @@ if ($env:CI -eq "true") {
 } elseif ($env:SKIP_NATIVE_REBUILD -eq "1") {
   Write-Host "SKIP_NATIVE_REBUILD=1 - skipping electron-rebuild (use prebuilt native modules)" -ForegroundColor Yellow
 } else {
+  if (-not $env:npm_config_msvs_version) {
+    $env:npm_config_msvs_version = "2022"
+    Write-Host "Using npm_config_msvs_version=2022 for native rebuild (VS 18 may be unsupported)" -ForegroundColor DarkGray
+  }
   Write-Host "Rebuilding native modules for Electron..." -ForegroundColor Cyan
   npm run rebuild:native
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

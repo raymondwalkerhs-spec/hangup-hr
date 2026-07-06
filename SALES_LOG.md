@@ -144,7 +144,6 @@ When **Payment method = Bank account**, these fields appear (card fields hidden)
 | Bank name | Required |
 | Bank account number | Required |
 | Bank address | Optional |
-| Who chose bank account | Employee dropdown |
 
 ### Payment — Card
 
@@ -163,7 +162,7 @@ When **Payment method = Card**, bank fields are hidden; card number, expiry, and
 
 ### Quality ticket
 
-Quality / RTM open **Quality ticket** for review workflow fields (reviewer, quality comments, assign verifier, attachments, verifier feedback). Summary shows client, device, agent, status.
+Quality / RTM (and assigned OP/TL verifiers) open **Quality ticket** for fields allowed in **Sales permissions** `quality_view_roles`. Card/bank payment fields show based on `paymentMethod`. Summary shows client, device, agent, status.
 
 ---
 
@@ -208,14 +207,16 @@ View access for both fields is configurable per role on **Sales permissions**.
 
 ## Permissions pages
 
-### Sales permissions (sidebar) — role-first (1.4.2)
+### Sales permissions (sidebar) — tabbed (1.6.10)
 
-Works like **Access Control**: **1) pick a role** (Agent, TL, OP, Quality, RTM, Public relations, Admin, CEO, HR, Finance), **2) toggle View / Edit per field** for that role only. Fields are grouped by form section.
+**Tabs:** **Edit sale** (`main_view_roles` + `edit_roles`), **Quality ticket** (`quality_view_roles` + `edit_roles`), **Attachments** (`sales_attachment_permissions`), **Actions** (approve/deny/callback). Main and Quality **view** columns are independent — changing one tab does not sync the other.
 
-- Changes are tracked as **unsaved** until you press **Save changes** (button is disabled when nothing changed).  
-- Controls what appears in **Add sale**, **Edit sale**, and **Quality ticket**.  
-- **Reset all to defaults** — re-seeds every role from the catalog (also refreshes log column seeds).  
-- Replaces the old field × role-group matrix and the modal opened from Access Control.
+Works like **Access Control**: **1) pick a role**, **2) toggle View / Edit** for the active tab. Fields are grouped by form section.
+
+- Changes are tracked as **unsaved** until you press **Save changes**.  
+- **Quality ticket** defaults: only quality-section fields unless explicitly granted in the Quality tab.  
+- **Reset all to defaults** — re-seeds fields, attachments, actions, and log columns.  
+- App-level gates (`editSales`, `workQualityTicket`, etc.) remain on **Access Control**; per-user exceptions use live role defaults from Access Control.
 
 ### Log columns (sidebar)
 

@@ -1,3 +1,28 @@
+## v1.6.10 release checklist
+
+1. Bump `package.json` → `1.6.10`
+2. Run `npm test` (includes extended `test-quality-sales-perms.js`)
+3. Apply migration: `npm run apply:migrations` (adds `sales_attachment_permissions`)
+4. In app: **Sales permissions → Reset all to defaults** (seeds attachment ACL + quality-only field defaults)
+5. Build NSIS: `npm run dist:installer`
+6. `git push` then CI or local `.\scripts\publish-github-release.ps1`
+7. `node scripts/publish-app-version.js`
+
+**1.6.10 change:** Robust sales ACL — unified resolver, tabbed Sales permissions (Edit / Quality / Attachments), DB attachment ACL, cross-unit closer names, live user-exception defaults.
+
+---
+## v1.6.8 release checklist
+
+1. Bump `package.json` → `1.6.8`
+2. Run `npm test` (access-scope, quality-sales-perms, rbac-defaults, fp-import, training-payroll)
+3. Build with native rebuild (VS 2022 / `npm_config_msvs_version=2022` on Windows)
+4. Publish **latest-only** assets: Setup.exe, Web-Setup.exe, `win-x64-latest.json`, single `patch-from-{previous}.zip`
+5. `git push` then CI or local `.\scripts\publish-github-release.ps1` (no `-MultiPatch` unless legacy manual apply)
+6. `node scripts/publish-app-version.js`
+
+**1.6.8 change:** Full audit remediation — ACL/RBAC fixes, sales action permissions UI, web installer version pin, single-patch publish default.
+
+---
 ## v1.6.5 release checklist
 
 1. Bump `package.json` → `1.6.5`
@@ -48,7 +73,7 @@ npm run dist:web-installer
 
 Requires **`GITHUB_UPDATES_TOKEN`** in `.env` at build time (read once; embedded in the EXE). The token is **not** in any zip or script — only inside the compiled installer.
 
-**What it does:** normal Windows installer UI with **progress bar and percentage** → uses the embedded token to download **Setup.exe from the GitHub release marked Latest** → launches the full NSIS installer. Picks the Setup whose version matches that release tag (ignores stale duplicate assets on the same release page).
+**What it does:** normal Windows installer UI with **progress bar and percentage** → uses the embedded token to download **Setup.exe for the pinned release** (defaults to `package.json` version at build time) → launches the full NSIS installer.
 
 **On a new PC:** double-click `Hangup-Portal-Web-Setup.exe` → wait for download → full installer runs. No `.env`, no GitHub login, no `gh` CLI on the target PC.
 

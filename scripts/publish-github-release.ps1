@@ -16,6 +16,7 @@ param(
   [switch]$IncludeFull,
   [switch]$IncludeExtras,
   [switch]$IncludeInstaller,
+  [switch]$MultiPatch,
   [switch]$Recreate
 )
 
@@ -88,6 +89,7 @@ $ErrorActionPreference = $prevEap
 Write-Host "Packaging win-unpacked for v$version..." -ForegroundColor Cyan
 $packageArgs = @("scripts/package-github-release.js")
 if ($IncludeFull) { $packageArgs += "--full" }
+if ($MultiPatch) { $packageArgs += "--multi-patch" }
 $ErrorActionPreference = "Continue"
 node @packageArgs 2>&1 | Write-Host
 $ErrorActionPreference = $prevEap
@@ -114,6 +116,10 @@ function Get-UpdateZipFiles {
 
 # If no patch was produced, auto-build full zip once.
 $patchZips = @(Get-UpdateZipFiles -Pattern "patch")
+if (-not $MultiPatch -and $patchZips.Count -gt 1) {
+  $patchZips = @($patchZips | Sort-Object Name -Descending | Select-Object -First 1)
+  Write-Host "Single-patch publish: using $($patchZips[0].Name)" -ForegroundColor DarkGray
+}
 $fullZips = @(Get-UpdateZipFiles -Pattern "full")
 if (-not $patchZips.Count -and -not $fullZips.Count -and -not $IncludeFull) {
   Write-Host "No patch zip - building full win-unpacked zip for this release..." -ForegroundColor Yellow
@@ -137,6 +143,12 @@ if (Test-Path $manifestDir) {
 $setupExes = @(Get-ChildItem $dist -Filter "*Setup*.exe" -ErrorAction SilentlyContinue |
   Where-Object { Test-VersionAsset $_.Name })
 foreach ($s in $setupExes) { $uploads.Add($s.FullName) }
+
+$webSetup = Join-Path "dist-bootstrap" "Hangup-Portal-Web-Setup.exe"
+if (Test-Path $webSetup) {
+  $uploads.Add((Resolve-Path $webSetup).Path)
+  Write-Host "Including web installer: Hangup-Portal-Web-Setup.exe" -ForegroundColor DarkGray
+}
 
 if (-not $setupExes.Count) {
   Write-Host "WARNING: No *Setup*.exe for v$version in $dist - NSIS in-app updates will fail." -ForegroundColor Yellow

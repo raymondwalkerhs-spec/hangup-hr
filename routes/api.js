@@ -946,24 +946,42 @@ router.use("/bonus-requests", (req, res, next) => {
     .catch(next);
 }, require("./bonus-requests"));
 router.use("/sales", (req, res, next) => {
+  if (req.userRole?.employeeId) {
+    req.userRole.username = req.username;
+    return next();
+  }
   const empLink = store.getAppUserEmployeeId(req.username);
-  req.userRole = req.userRole || roles.enrichUserRole(
-    roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees(),
-    empLink ? { employee_id: empLink } : null
-  );
-  req.userRole.username = req.username;
-  next();
+  roles
+    .enrichUserRoleWithOrgTeams(
+      req.userRole || roles.resolveUserRole(req.username, req.appSession?.role),
+      store.getEmployees(),
+      empLink ? { employee_id: empLink } : null
+    )
+    .then((ur) => {
+      req.userRole = ur;
+      req.userRole.username = req.username;
+      next();
+    })
+    .catch(next);
 }, require("./sales"));
 router.use("/sales-config", (req, res, next) => {
+  if (req.userRole?.employeeId) {
+    req.userRole.username = req.username;
+    return next();
+  }
   const empLink = store.getAppUserEmployeeId(req.username);
-  req.userRole = req.userRole || roles.enrichUserRole(
-    roles.resolveUserRole(req.username, req.appSession?.role),
-    store.getEmployees(),
-    empLink ? { employee_id: empLink } : null
-  );
-  req.userRole.username = req.username;
-  next();
+  roles
+    .enrichUserRoleWithOrgTeams(
+      req.userRole || roles.resolveUserRole(req.username, req.appSession?.role),
+      store.getEmployees(),
+      empLink ? { employee_id: empLink } : null
+    )
+    .then((ur) => {
+      req.userRole = ur;
+      req.userRole.username = req.username;
+      next();
+    })
+    .catch(next);
 }, require("./sales-config"));
 router.use("/expenses", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
@@ -1319,6 +1337,9 @@ router.get("/employees/:id", (req, res) => {
     return res.status(404).json({ error: "Employee not found" });
   }
   if (!roles.canAccessEmployee(req.userRole, emp)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  if (!roles.canOpenEmployeeCard(req.userRole, emp)) {
     return res.status(403).json({ error: "Not allowed" });
   }
   const employeePrivacy = require("../lib/employee-privacy");

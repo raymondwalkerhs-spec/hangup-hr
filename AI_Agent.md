@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.7` (`package.json` → `version`)
-- **Previous:** `1.6.4` (FP ID+Date-only), `1.6.3` (training payroll consolidation), `1.6.2` (trainee day count UTC fix), `1.6.1` (pay units)
+- **Current version:** `1.6.10` (`package.json` → `version`)
+- **Previous:** `1.6.8` (audit remediation), `1.6.7` (quality ticket ACL)
 
 ---
 
@@ -453,6 +453,9 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.10** | **true** | Robust sales ACL: unified resolver, tabbed permissions, attachment ACL DB, cross-unit closer names, live user-exception defaults |
+| **1.6.9** | **true** | Sales field ACL surfaces; OP verifier tickets; remove bankAccountChosenBy; payment backfill flags |
+| **1.6.8** | **true** | Audit remediation: ACL/RBAC fixes, sales action permissions wired, web installer version pin, single-patch publish, `npm test` |
 | **1.6.7** | **true** | Quality ticket uses sales field ACL (`surface=quality`); attachment kind gates; assigned verifier OP/TL edit rules; `test-quality-sales-perms.js` |
 | **1.6.6** | **true** | Access control scope fixes: dual-role TL (`leadTeams`), sales RBAC enforcement, export defaults, team dashboard weekends, org privacy, `test-access-scope.js` |
 | **1.6.5** | **true** | FP import: AM/PM parse, local dates, agent shift grouping, dedupe, check-in-only days + `test-fp-import.js` |

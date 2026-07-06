@@ -16,6 +16,7 @@ const salesCatalog = require("../lib/sales-field-catalog");
 const salesFilter = require("../lib/sales-filter");
 const salesListColumns = require("../lib/sales-list-columns");
 const salesActionPerms = require("../lib/sales-action-permissions");
+const salesAttachmentPerms = require("../lib/sales-attachment-permissions");
 const workingDayLib = require("../lib/sales-working-day");
 
 const router = express.Router();
@@ -32,6 +33,16 @@ function scopedEmployees(req, opts = {}) {
 function filterSalesByCompany(sales, employees) {
   const ids = new Set(employees.map((e) => e.id));
   return sales.filter((s) => !s.agentId || ids.has(s.agentId));
+}
+
+function enrichSalesDisplayNames(sales, employees) {
+  const allEmployees = employees || store.getEmployees();
+  const empById = new Map(allEmployees.map((e) => [e.id, e]));
+  return (sales || []).map((s) => ({
+    ...s,
+    agentDisplayName: empById.get(s.agentId)?.american_name || "",
+    closerDisplayName: empById.get(s.closerId)?.american_name || "",
+  }));
 }
 
 async function recalcAgentSalesFromSale(sale, actor) {
@@ -168,10 +179,20 @@ async function notifyCallback(sale, employees) {
   if (sale.agentId && sale.callbackVisibleToAgent) empIds.push(sale.agentId);
   const agent = employees.find((e) => e.id === sale.agentId);
   if (agent?.team) {
-    const tl = employees.find(
-      (e) => e.team === agent.team && /^TL/i.test(String(e.id || ""))
-    );
-    if (tl) empIds.push(tl.id);
+    let tlId = "";
+    try {
+      const orgTeams = await hrmsRepo.readOrgTeams();
+      const { teamsMatch } = require("../lib/team-names");
+      const meta = orgTeams.find((t) => teamsMatch(t.name, agent.team));
+      tlId = meta?.tlEmployeeId || "";
+    } catch {
+      /* optional */
+    }
+    if (!tlId) {
+      const tl = employees.find((e) => e.team === agent.team && /^TL/i.test(String(e.id || "")));
+      tlId = tl?.id || "";
+    }
+    if (tlId) empIds.push(tlId);
   }
   if (agent?.unit) {
     const op = employees.find(
@@ -211,6 +232,7 @@ router.get("/", async (req, res) => {
     if (req.query.filter) {
       sales = salesFilter.applySalesFilter(sales, req.query.filter);
     }
+    sales = enrichSalesDisplayNames(sales, store.getEmployees());
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     const listColumns = await salesListColumns.getVisibleColumnsForUser(req.userRole?.role);
     res.json({ sales, devices: business.SALE_DEVICES, statuses: business.SALE_STATUSES, listColumns });
@@ -261,6 +283,9 @@ router.get("/period-grid", async (req, res) => {
 });
 
 router.get("/team-dashboard", async (req, res) => {
+  if (!roles.canViewTeamDashboard(req.userRole)) {
+    return res.status(403).json({ error: "No permission for team dashboards" });
+  }
   try {
     const employees = scopedEmployees(req);
     const grants = await business.readSalesVisibilityGrants(req.username);
@@ -360,6 +385,9 @@ router.post("/visibility-grants", async (req, res) => {
     if (!salesScope.canGrantVisibility(req.userRole.role, granteeRole, scopeType)) {
       return res.status(403).json({ error: "Cannot grant this visibility" });
     }
+    if (!roles.canGrantSalesVisibility(req.userRole)) {
+      return res.status(403).json({ error: "No permission to grant sales visibility" });
+    }
     if (req.userRole.role === "tl" && granteeRole === "agent" && scopeType !== "team") {
       return res.status(403).json({ error: "TL cannot grant cross-team visibility to agents" });
     }
@@ -381,6 +409,17 @@ router.post("/visibility-grants", async (req, res) => {
 
 router.delete("/visibility-grants/:id", async (req, res) => {
   try {
+    const grant = await business.getSalesVisibilityGrant(req.params.id);
+    if (!grant) return res.status(404).json({ error: "Grant not found" });
+    const isGranter =
+      String(grant.granterUsername).toLowerCase() === String(req.username || "").toLowerCase();
+    const isAdmin = ["admin", "ceo", "hr"].includes(req.userRole?.role);
+    if (!isGranter && !isAdmin) {
+      return res.status(403).json({ error: "Only the granter or admin can revoke this grant" });
+    }
+    if (!roles.canGrantSalesVisibility(req.userRole) && !isAdmin) {
+      return res.status(403).json({ error: "No permission" });
+    }
     await business.deleteSalesVisibilityGrant(req.params.id);
     res.json({ ok: true });
   } catch (err) {
@@ -547,7 +586,7 @@ router.patch("/:id", async (req, res) => {
     } else if (req.body.edit === true || (!action && roles.canEditSale(req.userRole))) {
       const ticketOnly = req.body.qualityTicket === true;
       if (ticketOnly) {
-        if (!roles.canWorkQualityTicket(req.userRole)) {
+        if (!roles.canOpenQualityTicketOnSale(req.userRole, existing)) {
           return res.status(403).json({ error: "No permission for quality tickets" });
         }
       } else if (!roles.canEditSale(req.userRole)) {
@@ -556,9 +595,11 @@ router.patch("/:id", async (req, res) => {
       const sanitizedForm = await salesFieldAccess.sanitizeIncomingFormData(
         { ...(existing.formData || {}), ...(req.body.formData || {}) },
         req.userRole,
-        { create: false, sale: existing }
+        { create: false, sale: existing, qualityTicket: ticketOnly, surface: ticketOnly ? "quality" : "main" }
       );
-      const built = salesFieldAccess.buildPayloadFromBody(req.body, sanitizedForm);
+      const paymentMethod = normalizePaymentMethod(sanitizedForm.paymentMethod);
+      const scrubbedForm = paymentMethod ? scrubPaymentForm(sanitizedForm, paymentMethod) : sanitizedForm;
+      const built = salesFieldAccess.buildPayloadFromBody(req.body, scrubbedForm);
       patch = {
         phoneNumber: built.phoneNumber || existing.phoneNumber,
         fullName: built.fullName || existing.fullName,
@@ -569,9 +610,16 @@ router.patch("/:id", async (req, res) => {
         submissionDate: built.submissionDate || existing.submissionDate,
         status: built.status || existing.status,
         feedback: built.feedback != null ? built.feedback : existing.feedback,
-        formData: sanitizedForm,
+        formData: scrubbedForm,
       };
-      if (req.body.agentId) patch.agentId = req.body.agentId;
+      if (req.body.agentId) {
+        const emp = store.getEmployeeById(req.body.agentId);
+        if (!emp) return res.status(404).json({ error: "Agent not found" });
+        if (!roles.canAccessEmployee(req.userRole, emp)) {
+          return res.status(403).json({ error: "No access to assign this agent" });
+        }
+        patch.agentId = req.body.agentId;
+      }
       if (req.body.closerId !== undefined) patch.closerId = req.body.closerId;
       if (patch.agentId) {
         const emp = store.getEmployeeById(patch.agentId);
@@ -584,7 +632,16 @@ router.patch("/:id", async (req, res) => {
       if (!salesScope.canApproveSale(req.userRole)) {
         return res.status(403).json({ error: "Approver required" });
       }
-      patch = { ...req.body };
+      patch = {
+        status: req.body.status,
+        feedback: req.body.feedback != null ? req.body.feedback : existing.feedback,
+        effectiveDate: req.body.effectiveDate || existing.effectiveDate,
+        callbackVisibleToAgent:
+          req.body.callbackVisibleToAgent != null
+            ? req.body.callbackVisibleToAgent === true
+            : existing.callbackVisibleToAgent,
+        reviewedBy: req.username,
+      };
     } else {
       return res.status(400).json({ error: "Invalid action" });
     }
@@ -618,10 +675,16 @@ router.patch("/:id", async (req, res) => {
 
 const saleStorage = require("../lib/sale-attachment-storage");
 
-function canUserManageAttachmentKind(userRole, kind) {
+async function canUserManageAttachmentKind(userRole, kind, sale = null) {
   const role = userRole?.role || "agent";
-  if (!salesCatalog.canEditAttachmentKind(kind || "recording", role)) return false;
-  return roles.canEditSale(userRole) || roles.canWorkQualityTicket(userRole);
+  const attachMap = await salesAttachmentPerms.loadMap();
+  if (!salesCatalog.canEditAttachmentKind(kind || "recording", role, attachMap)) return false;
+  if (roles.canEditSale(userRole)) return true;
+  if (roles.canWorkQualityTicket(userRole)) return true;
+  if (sale && roles.canOpenQualityTicketOnSale(userRole, sale)) {
+    return salesCatalog.canEditAttachmentKind(kind || "recording", role, attachMap);
+  }
+  return false;
 }
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");
@@ -648,6 +711,7 @@ router.get("/export", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = enrichSalesDisplayNames(sales, store.getEmployees());
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     if (req.query.saleId) {
       sales = sales.filter((s) => s.id === req.query.saleId);
@@ -676,6 +740,7 @@ router.get("/field-catalog", async (req, res) => {
   try {
     const perms = await business.readSalesFieldPermissions();
     const permMap = Object.fromEntries(perms.map((p) => [p.fieldKey, p]));
+    const attachMap = await salesAttachmentPerms.loadMap();
     const role = req.userRole?.role || "agent";
     const surface = String(req.query.surface || "main").toLowerCase();
     const allFields = req.query.allFields === "1" && roles.canManageAll(req.userRole);
@@ -689,19 +754,22 @@ router.get("/field-catalog", async (req, res) => {
         if (!visible.length) sale = null;
       }
     }
-    const fieldOpts = { user: req.userRole, sale };
+    const fieldOpts = { user: req.userRole, sale, surface, attachPermMap: attachMap };
     let fields;
     if (allFields) {
-      fields = salesCatalog.FIELDS.map((f) => salesCatalog.mapFieldForRole(f, role, permMap[f.key], fieldOpts));
+      fields = salesCatalog.FIELDS.filter((f) => !salesCatalog.isSystemHiddenField(f)).map((f) =>
+        salesCatalog.mapFieldForRole(f, role, permMap[f.key], { ...fieldOpts, surface })
+      );
     } else if (surface === "quality") {
       fields = salesCatalog.listFieldsForRoleOnSurface(role, permMap, "quality", fieldOpts);
     } else {
-      fields = salesCatalog.listFieldsForRole(role, permMap, fieldOpts);
+      fields = salesCatalog.listFieldsForRole(role, permMap, { ...fieldOpts, surface: "main" });
     }
     res.json({
       fields,
       sections: salesCatalog.listSections(),
-      attachmentKinds: salesCatalog.listAttachmentKindsForRole(role),
+      attachmentKinds: salesCatalog.listAttachmentKindsForRole(role, fieldOpts),
+      attachmentPermissions: Object.values(attachMap),
       permissions: perms,
       storageConfigured: saleStorage.isConfigured(),
       surface,
@@ -732,10 +800,12 @@ router.post("/field-permissions/seed", async (req, res) => {
     const { getSupabaseAdmin } = require("../lib/supabase-client");
     await salesCatalog.seedDefaultPermissions(getSupabaseAdmin());
     await salesActionPerms.seedDefaults();
+    await salesAttachmentPerms.seedDefaults();
     await salesListColumns.seedDefaultColumns();
     salesFieldAccess.invalidatePermissionsCache();
     salesListColumns.invalidateCache();
     salesActionPerms.invalidateCache();
+    salesAttachmentPerms.invalidateCache();
     const perms = await business.readSalesFieldPermissions();
     res.json({ ok: true, count: perms.length });
   } catch (err) {
@@ -807,18 +877,62 @@ router.get("/action-permissions", async (req, res) => {
   }
 });
 
+router.put("/action-permissions/:actionKey", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const { allowedRoles, label } = req.body || {};
+    if (!Array.isArray(allowedRoles)) {
+      return res.status(400).json({ error: "allowedRoles array required" });
+    }
+    const action = await salesActionPerms.upsertActionPermission(req.params.actionKey, {
+      label,
+      allowedRoles,
+    });
+    res.json({ ok: true, action });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/attachment-permissions", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const kinds = await salesAttachmentPerms.listAll();
+    res.json({ attachments: kinds });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/attachment-permissions/:attachmentKey", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const { viewRoles, editRoles, label } = req.body || {};
+    if (!Array.isArray(viewRoles) || !Array.isArray(editRoles)) {
+      return res.status(400).json({ error: "viewRoles and editRoles arrays required" });
+    }
+    const attachment = await salesAttachmentPerms.upsert(req.params.attachmentKey, {
+      label,
+      viewRoles,
+      editRoles,
+    });
+    res.json({ ok: true, attachment });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get("/attachments/:attachmentId/file", async (req, res) => {
   try {
-    const att = await business.getSaleAttachment(req.params.attachmentId);
-    if (!att) return res.status(404).json({ error: "Attachment not found" });
-    const sale = await business.getSale(att.saleId);
-    if (!sale) return res.status(404).json({ error: "Sale not found" });
-    const employees = store.getEmployees();
-    const grants = await business.readSalesVisibilityGrants(req.username);
-    const visible = salesScope.filterSalesForUser([sale], req.userRole, employees, grants);
-    if (!visible.length) return res.status(403).json({ error: "No access" });
-
-    const file = await saleAttachmentCache.getOrFetch(att);
+    const access = await assertAttachmentAccess(req, req.params.attachmentId);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const file = await saleAttachmentCache.getOrFetch(access.att);
     res.setHeader("Content-Type", file.mimeType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.fileName)}"`);
     res.setHeader("X-Cache-Hit", file.fromCache ? "1" : "0");
@@ -838,8 +952,9 @@ router.get("/:id/attachments", async (req, res) => {
     if (!visible.length) return res.status(403).json({ error: "No access" });
     const attachments = await business.readSaleAttachments(req.params.id);
     const role = req.userRole?.role || "agent";
+    const attachMap = await salesAttachmentPerms.loadMap();
     const filtered = attachments.filter(
-      (a) => !a.kind || salesCatalog.canViewAttachmentKind(a.kind, role)
+      (a) => !a.kind || salesCatalog.canViewAttachmentKind(a.kind, role, attachMap)
     );
     res.json({ attachments: filtered });
   } catch (err) {
@@ -855,13 +970,17 @@ router.post("/:id/attachments", async (req, res) => {
     const grants = await business.readSalesVisibilityGrants(req.username);
     const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
     if (!visible.length) return res.status(403).json({ error: "No access" });
-    if (!roles.canEditSale(req.userRole) && !roles.canWorkQualityTicket(req.userRole)) {
+    if (
+      !roles.canEditSale(req.userRole) &&
+      !roles.canWorkQualityTicket(req.userRole) &&
+      !roles.canOpenQualityTicketOnSale(req.userRole, existing)
+    ) {
       return res.status(403).json({ error: "No permission to upload attachments" });
     }
     const { fileName, contentBase64, kind } = req.body || {};
     if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
     const kindKey = kind || "recording";
-    if (!canUserManageAttachmentKind(req.userRole, kindKey)) {
+    if (!(await canUserManageAttachmentKind(req.userRole, kindKey, existing))) {
       return res.status(403).json({ error: "No permission to upload this attachment type" });
     }
     const buffer = Buffer.from(contentBase64, "base64");
@@ -891,7 +1010,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
   try {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
     if (access.error) return res.status(access.status).json({ error: access.error });
-    if (!canUserManageAttachmentKind(req.userRole, access.att?.kind)) {
+    if (!(await canUserManageAttachmentKind(req.userRole, access.att?.kind, access.sale))) {
       return res.status(403).json({ error: "No permission to delete this attachment type" });
     }
     const att = access.att;
@@ -918,7 +1037,8 @@ async function assertAttachmentAccess(req, attachmentId) {
   const att = await business.getSaleAttachment(attachmentId);
   if (!att) return { error: "Attachment not found", status: 404 };
   const role = req.userRole?.role || "agent";
-  if (att.kind && !salesCatalog.canViewAttachmentKind(att.kind, role)) {
+  const attachMap = await salesAttachmentPerms.loadMap();
+  if (att.kind && !salesCatalog.canViewAttachmentKind(att.kind, role, attachMap)) {
     return { error: "No access to this attachment", status: 403 };
   }
   const sale = await business.getSale(att.saleId);
@@ -971,7 +1091,7 @@ router.put("/attachments/:attachmentId/replace", async (req, res) => {
   try {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
     if (access.error) return res.status(access.status).json({ error: access.error });
-    if (!canUserManageAttachmentKind(req.userRole, access.att?.kind)) {
+    if (!(await canUserManageAttachmentKind(req.userRole, access.att?.kind, access.sale))) {
       return res.status(403).json({ error: "No permission to replace this attachment type" });
     }
     const { fileName, contentBase64 } = req.body || {};

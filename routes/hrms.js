@@ -35,8 +35,11 @@ router.get("/org-structure", async (req, res) => {
   }
 });
 
-router.get("/teams", async (_req, res) => {
+router.get("/teams", async (req, res) => {
   try {
+    if (!roles.canViewOrgFull(req.userRole) && !roles.canManageOrgStructure(req.userRole)) {
+      return res.status(403).json({ error: "No permission for org team metadata" });
+    }
     const teams = await hrms.readOrgTeams();
     res.json({ teams, orgUnits: hrms.ORG_UNITS });
   } catch (e) {

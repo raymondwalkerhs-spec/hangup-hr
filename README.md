@@ -4,7 +4,7 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.6.7`
+**Current version:** `1.6.10`
 
 | Document | Purpose |
 |----------|---------|
@@ -164,10 +164,11 @@ If Electron fails to start: `npm run fix:electron`
 | Command | Purpose |
 |---------|---------|
 | `npm start` | Run from source (Electron) |
+| `npm run backup` | **Hangup Backup** desktop app (Admin/RTM only — full DB + sales export) |
 | `npm run dist:all` | Installer + portable → `dist\` |
 | `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
 | `npm run publish:github` | Package + upload Setup.exe, zips, manifests to GitHub |
-| `npm run dist:web-installer` | Build small GUI web installer (embeds GitHub token from `.env`; private repo OK) |
+| `npm run dist:web-installer` | Build small GUI web installer (embeds GitHub token from `.env`; pinned to `package.json` version) |
 | `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |
 | `npm run test:supabase` | Check Supabase env and clients |
@@ -239,7 +240,7 @@ ON CONFLICT (version) DO UPDATE SET
   notes = EXCLUDED.notes;
 ```
 
-**Live current version:** `1.4.6` — confirm in Supabase `app_versions` after each release.
+**Live current version:** `1.6.10` — confirm in Supabase `app_versions` after each release.
 
 ---
 

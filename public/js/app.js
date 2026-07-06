@@ -5870,7 +5870,7 @@ function openUserFormModal({ roles, statuses, user = null }) {
       </label>
       ${isEdit ? `<div id="user-exception-access" class="card card-flat" style="margin-top:1rem;padding:.75rem">
         <h4 style="margin:0 0 .5rem">2. Exception access <span class="muted">(optional)</span></h4>
-        <p class="muted small">Override role defaults for this user only. Unlisted permissions use the role default.</p>
+        <p class="muted small">Override Access Control keys for this user only (e.g. editSales, workQualityTicket). Field-level sales ACL follows the user's role on Sales permissions.</p>
         <div id="user-perm-overrides" class="muted">Loading…</div>
         <button type="button" class="btn btn-sm" id="user-clear-exceptions" style="margin-top:.5rem">Clear all exceptions</button>
       </div>` : `<p class="muted small">New users get role access only. Assign team on Organization after linking an employee.</p>`}
@@ -5883,14 +5883,15 @@ function openUserFormModal({ roles, statuses, user = null }) {
   const exceptionState = new Map();
   let roleDefaults = {};
 
-  async function loadExceptionAccess() {
+  async function loadExceptionAccess(previewRole) {
     if (!isEdit || !user?.username) return;
     const wrap = document.getElementById("user-perm-overrides");
     if (!wrap) return;
     try {
+      const roleParam = previewRole ? `?role=${encodeURIComponent(previewRole)}` : "";
       const [cat, permData] = await Promise.all([
         api("/rbac/catalog"),
-        api(`/admin/users/${encodeURIComponent(user.username)}/permissions`),
+        api(`/admin/users/${encodeURIComponent(user.username)}/permissions${roleParam}`),
       ]);
       const defaults = permData.defaults || {};
       roleDefaults = defaults;
@@ -5923,6 +5924,10 @@ function openUserFormModal({ roles, statuses, user = null }) {
   }
 
   loadExceptionAccess();
+  document.getElementById("user-form-role")?.addEventListener("change", (e) => {
+    exceptionState.clear();
+    loadExceptionAccess(e.target.value);
+  });
   document.getElementById("user-clear-exceptions")?.addEventListener("click", () => {
     exceptionState.clear();
     document.querySelectorAll("[data-user-perm]").forEach((input) => {

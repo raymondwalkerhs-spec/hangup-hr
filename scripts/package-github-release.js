@@ -292,7 +292,7 @@ function packagePlatform({ sourceDir, platform, version, dist, manifestDir, from
 function main() {
   const args = process.argv.slice(2);
   const includeFull = args.includes("--full");
-  const multiPatch = args.includes("--multi-patch") || args.includes("--full");
+  const multiPatch = args.includes("--multi-patch");
   const fromArg = args.find((a) => a.startsWith("--from-version="));
   const fromVersion = fromArg ? fromArg.split("=")[1] : null;
 

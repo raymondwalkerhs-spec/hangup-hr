@@ -226,7 +226,7 @@ jobs:
 
   promote:
     needs: [resolve-tag, build-windows, build-macos]
-    if: always() && needs.build-windows.result == 'success'
+    if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -54,13 +54,13 @@ if (-not $token) {
 }
 
 $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-# Default: no pin — EXE always resolves the newest full Setup from GitHub at run time.
-# Pass -Version 1.3.10 only when you need to test a specific release.
+# Default: pin to package.json version so Web-Setup tracks the shipped release.
 $pinVersion = ""
-if ($PSBoundParameters.ContainsKey("Version") -and $Version) {
-  $pinVersion = $Version
-} elseif (-not $PSBoundParameters.ContainsKey("Version")) {
-  Write-Host "Pin: none (downloads latest Setup from GitHub at run time)" -ForegroundColor DarkGray
+if ($PSBoundParameters.ContainsKey("Version")) {
+  if ($Version) { $pinVersion = $Version }
+} else {
+  $pinVersion = $pkg.version
+  Write-Host "Pin: $($pkg.version) (from package.json)" -ForegroundColor DarkGray
 }
 
 $srcDir = Join-Path $PSScriptRoot "web-installer"
@@ -94,6 +94,8 @@ Write-Host "Compiling web installer (repo: $repo, pin: $pinLabel)..." -Foregroun
   /reference:System.Web.Extensions.dll `
   $workCs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Remove-Item -LiteralPath $workCs -Force -ErrorAction SilentlyContinue
 
 $sizeKb = [math]::Round((Get-Item $outExe).Length / 1KB, 1)
 Write-Host ""

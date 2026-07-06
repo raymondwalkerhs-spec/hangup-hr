@@ -1,4 +1,5 @@
 const express = require("express");
+const saleStorage = require("../lib/sale-attachment-storage");
 const {
   isSupabaseConfigured,
   hasSupabaseAdminKey,
@@ -49,6 +50,19 @@ router.get(
       dbError = err.message;
     }
 
+    let legacyAttachments = null;
+    if (dbOk) {
+      try {
+        const { count, error: attErr } = await req.supabaseAdmin
+          .from("sales_attachments")
+          .select("id", { count: "exact", head: true })
+          .like("dropbox_path", "/Hangup-HR/%");
+        legacyAttachments = attErr ? { error: attErr.message } : { dropboxPathCount: count || 0 };
+      } catch (err) {
+        legacyAttachments = { error: err.message };
+      }
+    }
+
     res.json({
       ok: true,
       authMode: req.supabaseContext?.authMode,
@@ -56,6 +70,8 @@ router.get(
       databaseError: dbError,
       configured: isSupabaseConfigured(),
       adminReady: hasSupabaseAdminKey(),
+      saleAttachmentStorage: saleStorage.isConfigured() ? "configured" : "not_configured",
+      legacyDropboxAttachments: legacyAttachments,
     });
   }
 );

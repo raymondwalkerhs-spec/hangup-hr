@@ -47,14 +47,6 @@ window.SalesModule = (function () {
     { key: "bankName", label: "Bank name", section: "payment", type: "text", bankField: true },
     { key: "bankAccountNumber", label: "Bank account number", section: "payment", type: "text", bankField: true },
     { key: "bankAddress", label: "Bank address", section: "payment", type: "text", bankField: true },
-    {
-      key: "bankAccountChosenBy",
-      label: "Who chose bank account",
-      section: "payment",
-      type: "employee",
-      employeeFilter: "all",
-      bankField: true,
-    },
     { key: "cardType", label: "Card Type", section: "payment", type: "text", cardField: true },
     { key: "cardNumber", label: "Card Number", section: "payment", type: "text", cardField: true },
     { key: "cardExpDate", label: "Card Exp Date", section: "payment", type: "text", cardField: true, placeholder: "MM/YY" },
@@ -107,8 +99,10 @@ window.SalesModule = (function () {
 
   function renderSaleListCell(colKey, sale, empById, escapeHtml, fmt) {
     const agent = empById.get(sale.agentId);
-    const agentName = agent ? agent.american_name || sale.agentId : sale.agentId;
     const fd = sale.formData || {};
+    const agentName = agent?.american_name || sale.agentDisplayName || fd.agentName || "";
+    const closerName =
+      empById.get(sale.closerId)?.american_name || sale.closerDisplayName || fd.closerName || "";
     switch (colKey) {
       case "workingDay":
         return escapeHtml(sale.workingDay || String(sale.submissionDate || "").slice(0, 10) || sale.effectiveDate || "—");
@@ -126,8 +120,7 @@ window.SalesModule = (function () {
         return `${escapeHtml(sale.agentId || "—")}<br><span class="muted">${escapeHtml(agentName || "")}</span>`;
       case "closer":
       case "closerName": {
-        const closer = empById.get(sale.closerId);
-        return `${escapeHtml(sale.closerId || "—")}<br><span class="muted">${escapeHtml(closer?.american_name || "")}</span>`;
+        return `${escapeHtml(sale.closerId || "—")}<br><span class="muted">${escapeHtml(closerName || "")}</span>`;
       }
       case "team":
         return escapeHtml(sale.team || fd.team || "—");
@@ -142,8 +135,7 @@ window.SalesModule = (function () {
       case "price":
         return sale.price != null ? fmt(sale.price) : fd.price != null ? fmt(fd.price) : "—";
       case "assignVerifier":
-      case "reviewer":
-      case "bankAccountChosenBy": {
+      case "reviewer": {
         const id = fd[colKey] || sale[colKey] || "";
         const emp = empById.get(id);
         return id ? `${escapeHtml(id)}<br><span class="muted">${escapeHtml(emp?.american_name || "")}</span>` : "—";
@@ -379,14 +371,46 @@ window.SalesModule = (function () {
     return state.user?.canWorkQualityTicket === true;
   }
 
-  function defaultQualityAttachKinds() {
-    return [
-      { key: "recording", label: "Recordings", canView: true, canEdit: false },
-      { key: "raw_call", label: "Raw call record", canView: true, canEdit: false },
-      { key: "quality_record", label: "Quality Record", canView: true, canEdit: false },
-      { key: "receipt", label: "Receipt Attachment", canView: true, canEdit: false },
-      { key: "confirmation", label: "Confirmation", canView: true, canEdit: false },
-    ];
+  function canOpenQualityTicketForSale(sale) {
+    if (canWorkQualityTicket()) return true;
+    const role = state.user?.role;
+    if (!["op", "tl"].includes(role)) return false;
+    const assignVerifier = sale?.formData?.assignVerifier;
+    return Boolean(
+      assignVerifier && state.user?.employeeId && String(assignVerifier) === String(state.user.employeeId)
+    );
+  }
+
+  function inferPaymentMethod(formData = {}, sale = null) {
+    const fd = formData || sale?.formData || {};
+    const method = String(fd.paymentMethod || "").trim();
+    if (method === "Card" || method === "Bank account") return method;
+    if (String(fd.cardNumber || "").trim()) return "Card";
+    if (String(fd.routingNumber || fd.bankAccountNumber || "").trim()) return "Bank account";
+    if (/routing|routoing|account\s*#?/i.test(String(fd.notes || ""))) return "Bank account";
+    return "";
+  }
+
+  function paymentFieldClass(f) {
+    if (f.cardField) return " sale-card-fields hidden";
+    if (f.bankField) return " sale-bank-fields hidden";
+    return "";
+  }
+
+  function wirePaymentToggle(form, { initialMethod } = {}) {
+    if (!form) return;
+    const sel = form.querySelector("#sale-payment-method");
+    const cardFields = form.querySelectorAll(".sale-card-fields");
+    const bankFields = form.querySelectorAll(".sale-bank-fields");
+    function sync() {
+      const method = sel?.value || initialMethod || "";
+      const isCard = method === "Card";
+      const isBank = method === "Bank account";
+      cardFields.forEach((el) => el.classList.toggle("hidden", !isCard));
+      bankFields.forEach((el) => el.classList.toggle("hidden", !isBank));
+    }
+    sel?.addEventListener("change", sync);
+    sync();
   }
 
   async function wireSaleAttachmentsList(container, saleId, api, attachKinds, openSaleAttachment, canManageFiles, opts = {}) {
@@ -411,15 +435,17 @@ window.SalesModule = (function () {
       return /\.pdf$/i.test(String(name || ""));
     }
 
+    const kindCanEdit = Object.fromEntries((attachKinds || []).map((k) => [k.key, k.canEdit === true]));
     container.innerHTML = visible
       .map((a) => {
         const kind = kindLabel[a.kind] || a.kind || "file";
+        const rowCanEdit = kindCanEdit[a.kind] === true;
         const inlineAudio =
           opts.inlineAudio && isAudioName(a.fileName)
             ? `<audio controls preload="metadata" class="sale-inline-audio" data-inline-audio="${a.id}" data-file-name="${escapeHtml(a.fileName || "")}" style="width:100%;max-width:420px;margin-top:.35rem"></audio><p class="muted sale-audio-err hidden" data-audio-err="${a.id}" style="font-size:.8rem;margin-top:.25rem"></p>`
             : "";
         const actions = window.HRSalesConfigBreaks?.attachmentRowHtml
-          ? window.HRSalesConfigBreaks.attachmentRowHtml(a, escapeHtml, () => canManageFiles)
+          ? window.HRSalesConfigBreaks.attachmentRowHtml(a, escapeHtml, () => rowCanEdit)
           : `<div class="adj-row"><button type="button" class="btn btn-sm btn-link" data-open-attach="${a.id}">${escapeHtml(a.fileName)}</button> <span class="muted">${escapeHtml(kind)}</span></div>`;
         return `<div class="attachment-kind-group" data-kind="${escapeHtml(a.kind || "")}">${actions}${inlineAudio}</div>`;
       })
@@ -463,7 +489,12 @@ window.SalesModule = (function () {
     };
 
     if (window.HRSalesConfigBreaks) {
-      window.HRSalesConfigBreaks.wireAttachmentActions(container, api, safeOpenAttachment, () => canManageFiles);
+      window.HRSalesConfigBreaks.wireAttachmentActions(
+        container,
+        api,
+        safeOpenAttachment,
+        () => Object.values(kindCanEdit).some(Boolean)
+      );
     } else {
       container.querySelectorAll("[data-open-attach]").forEach((btn) => {
         btn.onclick = () => safeOpenAttachment(btn.dataset.openAttach, btn.textContent);
@@ -473,9 +504,9 @@ window.SalesModule = (function () {
 
   function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false } = {}) {
     if (!isEdit) return "";
-    if (!attachKinds?.length && !forceShow) return "";
-    const uploadKinds = attachKinds.filter((k) => k.canEdit);
-    const viewKinds = attachKinds.filter((k) => k.canView);
+    const viewKinds = (attachKinds || []).filter((k) => k.canView);
+    if (!viewKinds.length && !forceShow) return "";
+    const uploadKinds = viewKinds.filter((k) => k.canEdit);
     const uploadHtml = uploadKinds.length
       ? `<div class="attachment-upload-grid">${uploadKinds
           .map(
@@ -897,8 +928,7 @@ window.SalesModule = (function () {
             const cells = listColumns.map((c) => `<td>${renderSaleListCell(c.columnKey, s, empById, escapeHtml, fmt)}</td>`).join("");
             return `<tr>${cells}<td class="btn-row">
               ${canFullEditSale() ? `<button class="btn btn-sm" data-edit-sale="${s.id}">Edit</button>` : ""}
-              ${canWorkQualityTicket() && !canFullEditSale() ? `<button class="btn btn-sm btn-primary" data-quality-ticket="${s.id}">Open ticket</button>` : ""}
-              ${canWorkQualityTicket() && canFullEditSale() ? `<button class="btn btn-sm" data-quality-ticket="${s.id}">Quality ticket</button>` : ""}
+              ${canOpenQualityTicketForSale(s) ? `<button class="btn btn-sm ${canFullEditSale() ? "" : "btn-primary"}" data-quality-ticket="${s.id}">${canFullEditSale() ? "Quality ticket" : "Open ticket"}</button>` : ""}
               ${canApprove() && s.status === "pending" ? `<button class="btn btn-sm" data-approve="${s.id}">Approve</button>
                 <button class="btn btn-sm btn-danger" data-deny="${s.id}">Deny</button>` : ""}
               ${canApprove() ? `<button class="btn btn-sm" data-callback="${s.id}">Callback</button>` : ""}
@@ -1095,35 +1125,45 @@ window.SalesModule = (function () {
       fields: [],
       attachmentKinds: [],
     }));
-    const attachKinds = catalog.attachmentKinds?.length ? catalog.attachmentKinds : [];
+    const attachKinds = (catalog.attachmentKinds || []).filter((k) => k.canView);
     const formData = sale?.formData || {};
     const ticketFields = (catalog.fields || []).filter(
-      (f) => !["client", "deviceType", "unit", "team", "price"].includes(f.key)
+      (f) =>
+        f.canView !== false &&
+        !["agentName", "closerName", "leadType", "client", "deviceType", "unit", "team", "price"].includes(f.key)
     );
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
+    const inferredPayment = inferPaymentMethod(formData, sale);
 
     function qFieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key;
       const editable = f.canEdit === true;
-      const ro = editable ? "" : " readonly";
-      const dis = editable ? "" : " disabled";
-      if (f.type === "employee") {
-        if (!editable) {
-          return `<label class="field"><span>${escapeHtml(f.label)}</span><input value="${escapeHtml(val)}" readonly /></label>`;
+      const cardClass = paymentFieldClass(f);
+      const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
+      if (!editable) {
+        let display = val;
+        if (f.type === "employee") {
+          const emp = employees.find((e) => e.id === val);
+          display = emp ? emp.american_name || emp.name || val : val;
         }
-        return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, val, f.employeeFilter || "all")}</select></label>`;
+        return `<div class="field${cardClass}"><span>${escapeHtml(f.label)}</span><div class="field-readonly">${escapeHtml(display || "—")}</div></div>`;
+      }
+      if (f.type === "employee") {
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, val, f.employeeFilter || "all")}</select></label>`;
       }
       if (f.type === "textarea") {
-        return `<label class="field" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}"${ro}>${escapeHtml(val)}</textarea></label>`;
+        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
       }
       if (f.type === "select" && f.options) {
+        const placeholder = f.selectPlaceholder ? '<option value="">— Select —</option>' : "";
         const opts = f.options
           .map((o) => `<option value="${escapeHtml(o)}" ${String(val) === o ? "selected" : ""}>${escapeHtml(o)}</option>`)
           .join("");
-        return `<label class="field"><span>${escapeHtml(f.label)}</span><select name="${name}"${dis}>${opts}</select></label>`;
+        return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}"${idAttr}>${placeholder}${opts}</select></label>`;
       }
-      return `<label class="field"><span>${escapeHtml(f.label)}</span><input name="${name}" type="text" value="${escapeHtml(val)}"${ro} /></label>`;
+      const inputType = f.type === "tel" ? "tel" : f.type === "number" ? "number" : f.type === "date" ? "date" : "text";
+      return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}" /></label>`;
     }
 
     const bySection = [...new Set(ticketFields.map((f) => f.section || "general"))];
@@ -1135,7 +1175,7 @@ window.SalesModule = (function () {
       })
       .join("");
 
-    const attachBlock = buildAttachmentsBlock(attachKinds, true, { forceShow: true });
+    const attachBlock = attachKinds.length ? buildAttachmentsBlock(attachKinds, true) : "";
 
     openModal(
       `<div class="modal-header"><h2>Quality ticket</h2><button class="btn btn-sm" data-close>✕</button></div>
@@ -1157,10 +1197,15 @@ window.SalesModule = (function () {
     );
 
     const listEl = document.getElementById("sale-attachments-list");
-    const canManageFiles = attachKinds.some((k) => k.canEdit);
-    await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, canManageFiles, {
-      inlineAudio: true,
-    });
+    if (listEl && attachKinds.length) {
+      await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, false, {
+        inlineAudio: attachKinds.some((k) => k.key === "recording" && k.canView),
+      });
+    }
+    const qForm = document.getElementById("quality-ticket-form");
+    if (qForm && ticketFields.some((f) => f.key === "paymentMethod" && f.canView)) {
+      wirePaymentToggle(qForm, { initialMethod: inferredPayment });
+    }
 
     document.getElementById("quality-ticket-form").onsubmit = async (e) => {
       e.preventDefault();
@@ -1195,9 +1240,13 @@ window.SalesModule = (function () {
   async function openSaleModal(api, employees, helpers, sale, onDone) {
     const { escapeHtml, closeModal, openModal } = helpers;
     const isEdit = !!sale;
-    const catalogQuery = isEdit && sale?.id ? `?saleId=${encodeURIComponent(sale.id)}` : "";
+    const catalogQuery =
+      isEdit && sale?.id
+        ? `?surface=main&saleId=${encodeURIComponent(sale.id)}`
+        : "?surface=main";
     const catalog = await api(`/sales/field-catalog${catalogQuery}`).catch(() => ({ fields: [], attachmentKinds: [] }));
     let fields = (catalog.fields || []).filter((f) => {
+      if (f.canView === false) return false;
       if (isEdit && f.hideOnEdit) return false;
       if (!isEdit && f.hideOnCreate) return false;
       if (!isEdit && !canApprove() && f.key === "status") return false;
@@ -1205,7 +1254,7 @@ window.SalesModule = (function () {
     });
     if (!isEdit) {
       for (const pf of PAYMENT_SUBMIT_FIELDS) {
-        if (!fields.some((f) => f.key === pf.key)) fields.push({ ...pf, canEdit: true });
+        if (!fields.some((f) => f.key === pf.key)) fields.push({ ...pf, canView: true, canEdit: true });
       }
     }
     const formData = sale?.formData || {};
@@ -1225,14 +1274,25 @@ window.SalesModule = (function () {
     function fieldHtml(f) {
       const val = formData[f.key] ?? sale?.[f.key] ?? "";
       const name = f.key === "deviceType" ? "device" : f.key;
-      const cardClass = f.cardField ? " sale-card-fields hidden" : f.bankField ? " sale-bank-fields hidden" : "";
+      const cardClass = paymentFieldClass(f);
       const idAttr = f.key === "paymentMethod" ? ' id="sale-payment-method"' : "";
       let editable = f.canEdit === true;
       if (f.key === "verifierFeedback" || f.key === "clientFeedback") {
         editable = f.canEdit === true;
       }
-      const ro = editable ? "" : " readonly";
-      const dis = editable ? "" : " disabled";
+      if (!editable) {
+        let display = val;
+        if (f.type === "employee") {
+          const emp = employees.find((e) => e.id === val);
+          display = emp ? emp.american_name || emp.name || val : val;
+        }
+        if (f.type === "datetime" && !isEdit) {
+          display = formatEgyptDateTime();
+        }
+        return `<div class="field${cardClass}"><span>${escapeHtml(f.label)}</span><div class="field-readonly">${escapeHtml(display || "—")}</div></div>`;
+      }
+      const ro = "";
+      const dis = "";
       if (f.type === "datetime") {
         if (!isEdit) {
           const display = formatEgyptDateTime();
@@ -1264,19 +1324,8 @@ window.SalesModule = (function () {
       return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}"${req}${inputMode}${maxLength}${autoComplete}${placeholder}${ro} /></label>`;
     }
 
-    function wirePaymentToggle(form) {
-      const sel = form.querySelector("#sale-payment-method");
-      const cardFields = form.querySelectorAll(".sale-card-fields");
-      const bankFields = form.querySelectorAll(".sale-bank-fields");
-      function sync() {
-        const method = sel?.value;
-        const isCard = method === "Card";
-        const isBank = method === "Bank account";
-        cardFields.forEach((el) => el.classList.toggle("hidden", !isCard));
-        bankFields.forEach((el) => el.classList.toggle("hidden", !isBank));
-      }
-      sel?.addEventListener("change", sync);
-      sync();
+    function wirePaymentToggleLocal(form) {
+      wirePaymentToggle(form, { initialMethod: inferPaymentMethod(formData, sale) });
     }
 
     const agentCloserHtml = isEdit
@@ -1293,7 +1342,7 @@ window.SalesModule = (function () {
       return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(fieldHtml).join("")}</div></fieldset>`;
     }).join("");
 
-    const attachKinds = catalog.attachmentKinds || [];
+    const attachKinds = (catalog.attachmentKinds || []).filter((k) => k.canView);
     const attachHtml = buildAttachmentsBlock(attachKinds, isEdit);
 
     openModal(`
@@ -1308,7 +1357,7 @@ window.SalesModule = (function () {
     document.querySelector("#modal-root .modal")?.classList.add("sale-form-modal");
 
     const saleForm = document.getElementById("sale-form");
-    wirePaymentToggle(saleForm);
+    wirePaymentToggleLocal(saleForm);
 
     let salesClientsMeta = null;
     if (window.HRSalesConfigBreaks) {

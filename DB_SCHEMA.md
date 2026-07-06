@@ -115,7 +115,8 @@ These tables exist in production; DDL was applied outside early migration stubs.
 | Table | PK | Purpose |
 |-------|-----|---------|
 | `sales` | `id` uuid | MLA-Ray sales log; `form_data` jsonb |
-| `sales_field_permissions` | `field_key` | Column view/edit roles |
+| `sales_field_permissions` | `field_key` | Column view/edit roles (`main_view_roles`, `quality_view_roles`, `edit_roles`) |
+| `sales_attachment_permissions` | `attachment_key` | Attachment kind view/edit roles (1.6.10) |
 | `sales_attachments` | `id` uuid | Dropbox file refs |
 | `sales_visibility_grants` | `id` uuid | Temporary wider view; `expires_at` |
 | `bonus_requests` | `id` uuid | Bonus approval workflow |

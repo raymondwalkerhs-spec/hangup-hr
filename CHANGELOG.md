@@ -2,6 +2,48 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.10] — 2026-07-06
+
+### Fixed
+- **Sales ACL v2** — unified `sales-access-resolver.js`; quality ticket defaults deny non-quality fields (no `DEFAULT_VIEW` fallback); always hidden on quality: agentName, closerName, leadType, client, deviceType, unit, team, price
+- **Sales permissions admin** — tabbed UI: Edit sale / Quality ticket / Attachments / Actions; independent `main_view_roles` vs `quality_view_roles`
+- **Attachments ACL** — `sales_attachment_permissions` table + admin tab; upload/view routes use DB permissions
+- **Quality ticket UI** — non-editable fields render display-only (omitted from submit); attachment block gated by `canView`/`canEdit`
+- **Sales log** — `agentDisplayName` / `closerDisplayName` from full employee roster (cross-unit closer names)
+- **User exceptions** — defaults from live Access Control (`app_role_permissions`); role change refreshes exception panel
+
+## [1.6.9] — 2026-07-06
+
+### Fixed
+- **Sales field ACL** — Edit sale (`surface=main`) and Quality ticket (`surface=quality`) honor **Sales permissions** (`main_view_roles`, `quality_view_roles`, `edit_roles`); non-viewable fields hidden (not readonly-leaked); PATCH sanitizes per surface
+- **OP/TL quality workflow** — removed default `editSales` for OP; **Open ticket** only when `assignVerifier` matches employee ID; assignee OP/TL see/edit verifier fields per permissions; no recording view/delete for OP
+- **Payment UI** — card vs bank fields toggle on Edit and Quality ticket modals
+- **Data repair** — extended `backfill-sales-payment-from-csv.js` (`--fix-missing-method`, `--fix-from-notes`, `--overwrite`, `--report`)
+
+### Removed
+- **Who chose bank account** (`bankAccountChosenBy`) — app-only field not in migration CSV; use `submitted_by` / closer for audit
+
+### Changed
+- **Lead Type** — system-hidden, server-set default (`MLA Lead`); never editable in UI
+- **medicalConditions** — Yes/No dropdown; **monthlyBillingDate** — date input
+
+## [1.6.8] — 2026-07-06
+
+### Fixed (audit remediation)
+- **Critical ACL** — quality/RTM company-wide employee scope; attachment `/file` stream ACL; visibility grant delete auth; PATCH body whitelist; `agentId` reassignment scope; org tree filters agents via `canAccessEmployee` + `leadTeams`
+- **RBAC** — team dashboard gate; dual-role TL bonus transfer scope; sales sub-router preserves `leadTeams`; `sales_action_permissions` wired to approve flow; catalog-aligned notes/edit/submit fallbacks; public_relations in edit/submit
+- **Consistency** — visibility grant alignment; callback TL notify from org teams; orgTeams cache TTL 15s; HRMS teams metadata gated; quality notes in permission catalog; `viewEquipment` rank fallback; RBAC test uses legacy defaults only
+- **Low debt** — quality ticket readonly employee names; fail-closed attachment kinds on catalog fetch; employee card API gate; business cache refresh; attachment migration uses storage helper; CI promote requires macOS success
+
+### Changed
+- **Web installer** — defaults to `package.json` version pin; compiled token source removed after build
+- **Publish** — single patch-from-previous by default (`--multi-patch` opt-in); Web-Setup included in publish script
+- **Build** — local native rebuild prefers VS 2022 (`npm_config_msvs_version=2022`)
+
+### Added
+- **Sales action permissions UI** — admin matrix for approve/deny/callback roles (AND with Access Control `approveSales`)
+- **`npm test`** — runs access-scope, quality-sales-perms, rbac-defaults, fp-import, training-payroll scripts
+
 ## [1.6.7] — 2026-07-06
 
 ### Fixed

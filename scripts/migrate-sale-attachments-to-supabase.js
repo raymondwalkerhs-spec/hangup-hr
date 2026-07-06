@@ -221,15 +221,12 @@ async function migrateOne(att, sale, csvHit) {
     buffer,
   });
 
-  const { error } = await getSupabaseAdmin()
-    .from("sales_attachments")
-    .update({
-      dropbox_path: uploaded.storagePath,
-      dropbox_link: uploaded.shareLink,
-      file_name: uploaded.fileName || att.file_name,
-    })
-    .eq("id", att.id);
-  if (error) throw new Error(error.message);
+  const business = require("../lib/business-repo");
+  await business.updateSaleAttachmentStorage(att.id, {
+    storagePath: uploaded.storagePath,
+    shareLink: uploaded.shareLink,
+    fileName: uploaded.fileName || att.file_name,
+  });
 
   return { source, path: uploaded.storagePath, bytes: buffer.length };
 }

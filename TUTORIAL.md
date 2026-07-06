@@ -240,9 +240,11 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Bank account:** routing number, bank name, account number, address, who chose bank account.
 - **Edit / Quality ticket:** **Verifier feedback** and **Client feedback** are dropdowns (see SALES_LOG for who may edit).
 - **Export (1.6.6):** default allowed for **Quality, RTM, CEO, Admin** only — toggle **Export sales** in Access Control for other roles.
-- **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. **Log columns** controls which columns appear (batch save as of 1.6.6). Run **Reset defaults** once after upgrade.
+- **Admin (1.6.10):** **Sales permissions** has tabs — **Edit sale**, **Quality ticket**, **Attachments**, **Actions** — with independent main vs quality view columns. **Log columns** controls which columns appear.
+- **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. Run **Reset defaults** once after upgrade.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
 - **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
+- **Quality ticket (1.6.10):** quality surface defaults deny non-quality fields unless granted in **Sales permissions → Quality ticket** tab; agent/closer shown in summary only; non-editable fields are display-only; attachments gated by **Attachments** tab.
 - **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).
 
 ### Sales (legacy notes)

@@ -41,6 +41,7 @@ async function probeState(db) {
     notification_routing: false,
     v140_sales: false,
     training_payroll: false,
+    sales_attachment_permissions: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -81,6 +82,8 @@ async function probeState(db) {
   state.v140_sales = !wd.error;
   const tp = await db.from("agent_training_programs").select("outcome").limit(1);
   state.training_payroll = !tp.error;
+  const sap = await db.from("sales_attachment_permissions").select("attachment_key").limit(1);
+  state.sales_attachment_permissions = !sap.error;
   return state;
 }
 
@@ -113,6 +116,7 @@ function filesToApply(state) {
   }
   if (!state.v140_sales) files.push("20260719_v140_sales_org_dashboards.sql");
   if (!state.training_payroll) files.push("20260720_training_payroll.sql");
+  if (!state.sales_attachment_permissions) files.push("20260720_sales_attachment_permissions.sql");
   return files;
 }
 
@@ -241,7 +245,7 @@ async function main() {
   console.log(
     "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
       "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions, " +
-      "app_user_permissions, notification_routing, quality_notes, v140_sales, training_payroll."
+      "app_user_permissions, notification_routing, quality_notes, v140_sales, training_payroll, sales_attachment_permissions."
   );
 }
 
