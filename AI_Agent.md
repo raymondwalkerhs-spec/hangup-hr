@@ -340,7 +340,24 @@ npm run verify:update -- dist\Hangup-Portal-1.4.2-win-x64-full.zip
 
 Users on **1.4.x** see **Update now** via GitHub Releases check (~5 min + on login). No `--field-breaking` needed unless old EXEs break on new API shapes.
 
-**Note:** if `dist\win-unpacked` is locked, `build.ps1` falls back to `dist-beta7\` (or another `dist-*`). Set `$env:HR_BUILD_OUTPUT = "dist-beta7"` before running `package-github-release` / `publish-github-release.ps1` so they find the artifacts.
+**Fast ship (installer only, ~2 min upload — no patch zips):**
+
+```powershell
+.\scripts\build.ps1 installer
+npm run dist:web-installer
+npm run publish:installer
+```
+
+**Full ship (patch zips for in-app delta updates — slow):**
+
+```powershell
+.\scripts\build.ps1 all
+.\scripts\publish-github-release.ps1 -IncludeFull -MultiPatch
+gh release edit vX.Y.Z --repo raymondwalkerhs-spec/hangup-hr --latest
+node scripts/publish-app-version.js
+```
+
+**Note:** if `dist\win-unpacked` is locked, `build.ps1` falls back to `dist-beta7\` (or another `dist-*`). Set `$env:HR_BUILD_OUTPUT = "dist-beta7"` before publish scripts.
 
 | Release kind | When to use | Command |
 |--------------|-------------|---------|

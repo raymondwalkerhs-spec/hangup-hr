@@ -167,7 +167,8 @@ If Electron fails to start: `npm run fix:electron`
 | `npm run backup` | **Hangup Backup** desktop app (Admin/RTM only — full DB + sales export) |
 | `npm run dist:all` | Installer + portable → `dist\` |
 | `npm run package:github` | Build patch/full zips from `win-unpacked` (changed files only) |
-| `npm run publish:github` | Package + upload Setup.exe, zips, manifests to GitHub |
+| `npm run publish:github` | Package + upload Setup.exe, patch/full zips, manifests (slow; use for patch updates) |
+| `npm run publish:installer` | **Fast ship** — Setup.exe + web installer + manifest only (~2 min upload); marks GitHub **Latest** and runs `publish-app-version.js` |
 | `npm run dist:web-installer` | Build small GUI web installer (embeds GitHub token from `.env`; pinned to `package.json` version) |
 | `npm run bootstrap:github` | Init git repo + print GitHub setup steps |
 | `npm run rebuild:native` | Rebuild `better-sqlite3` for Electron |

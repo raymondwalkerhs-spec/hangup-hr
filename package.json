@@ -17,6 +17,7 @@
     "package:github": "node scripts/package-github-release.js",
     "verify:update": "node scripts/verify-update-package.js",
     "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+    "publish:installer": "powershell -ExecutionPolicy Bypass -File scripts/publish-installer-only.ps1",
     "dist:bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
     "dist:web-installer": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
     "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
