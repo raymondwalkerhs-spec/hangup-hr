@@ -558,7 +558,7 @@ router.post("/", async (req, res) => {
         unit: unitTeam.unit,
         team: unitTeam.team,
       },
-      { hasCatalog, skipRecording: true }
+      { hasCatalog }
     );
     if (!submitValidation.ok) {
       return res.status(400).json({ error: "Validation failed", errors: submitValidation.errors });

@@ -143,19 +143,6 @@
       }
     }
 
-    if (!opts.skipRecording) {
-      const kinds = opts.attachmentKinds || [];
-      const hasPendingRecording =
-        opts.pendingRecording === true || (Array.isArray(kinds) && kinds.includes("recording"));
-      if (!hasPendingRecording) {
-        errors.push({
-          key: "recording",
-          label: "Recordings",
-          message: "At least one recording attachment is required before submit",
-        });
-      }
-    }
-
     return { ok: errors.length === 0, errors };
   }
 

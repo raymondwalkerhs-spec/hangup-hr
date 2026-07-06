@@ -104,6 +104,10 @@ assert("agent quality surface excludes assignVerifier by default", !agentFields.
 
 assert("OP cannot upload recording attachment", !catalog.canEditAttachmentKind("recording", "op"));
 assert("OP cannot view recording attachment", !catalog.canViewAttachmentKind("recording", "op"));
+assert("agent cannot view recording attachment", !catalog.canViewAttachmentKind("recording", "agent"));
+assert("agent cannot upload recording attachment", !catalog.canEditAttachmentKind("recording", "agent"));
+assert("TL cannot view recording attachment", !catalog.canViewAttachmentKind("recording", "tl"));
+assert("TL cannot upload recording attachment", !catalog.canEditAttachmentKind("recording", "tl"));
 assert("OP assignee quality surface gets no attachment kinds", catalog.listAttachmentKindsForRole("op", { surface: "quality", user: opVerifier, sale }).length === 0);
 assert("quality can view raw_call", catalog.canViewAttachmentKind("raw_call", "quality"));
 

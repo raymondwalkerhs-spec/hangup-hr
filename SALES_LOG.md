@@ -27,7 +27,8 @@ The Sales log tracks MLA-Ray sales from submission through quality review and cl
 |---------|-----|--------|
 | **Delete sale** | Admin, RTM | Edit modal → Delete; removes DB row, attachments, storage, Airtable |
 | **Reassign agent/closer** | Admin, RTM, CEO | Unit/team/agent/closer pickers on Edit and Quality ticket |
-| **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; recording required on create |
+| **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; **recording not required** on create |
+| **Recording attachments** | Quality, RTM, admin, HR (upload); finance/CEO view | **Hidden from Agent and TL** — no list, upload, or create UI |
 | **Draft** | All on Add sale | Auto-save to browser; resume or discard; Clear all fields |
 | **Double submit** | All | Save disabled while in flight; server 409 on duplicate within 2 min |
 

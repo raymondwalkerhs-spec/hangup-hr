@@ -2,6 +2,15 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.24] — 2026-07-06
+
+### Fixed
+- **Sale delete confirm** — type-DELETE panel now wires correctly inside modal/form scope (`querySelector` instead of `getElementById` on non-document roots); **Delete permanently** enables after typing DELETE.
+
+### Changed
+- **Sales submit** — recording attachment no longer required on create (client + server validation removed).
+- **Recording visibility** — Agent and TL cannot view, upload, or see recording UI; recordings are quality/admin/RTM (and finance/CEO view-only per catalog).
+
 ## [1.6.23] — 2026-07-06
 
 ### Fixed

@@ -402,12 +402,17 @@ window.SalesModule = (function () {
   }
 
   function wireSaleDeleteHandlers({ saleId, label, api, escapeHtml, closeModal, onDone, root = document, autoOpen = false }) {
-    const startBtn = root.getElementById?.("sale-delete-btn") || root.querySelector?.("[data-sale-delete-start]");
-    const panel = root.getElementById?.("sale-delete-confirm-panel");
-    const input = root.getElementById?.("sale-delete-confirm-input");
-    const confirmBtn = root.getElementById?.("sale-delete-confirm-btn");
-    const cancelBtn = root.getElementById?.("sale-delete-cancel-btn");
+    const scope = root && typeof root.querySelector === "function" ? root : document;
+    const startBtn = scope.querySelector("#sale-delete-btn, [data-sale-delete-start]");
+    const panel = scope.querySelector("#sale-delete-confirm-panel");
+    const input = scope.querySelector("#sale-delete-confirm-input");
+    const confirmBtn = scope.querySelector("#sale-delete-confirm-btn");
+    const cancelBtn = scope.querySelector("#sale-delete-cancel-btn");
     if (!panel || !input || !confirmBtn) return;
+
+    const syncConfirmEnabled = () => {
+      confirmBtn.disabled = input.value.trim() !== "DELETE";
+    };
 
     const hidePanel = () => {
       if (!autoOpen) panel.classList.add("hidden");
@@ -419,17 +424,19 @@ window.SalesModule = (function () {
     if (autoOpen) {
       panel.classList.remove("hidden");
       input.focus();
+      syncConfirmEnabled();
     } else if (startBtn) {
       startBtn.addEventListener("click", () => {
         panel.classList.remove("hidden");
         startBtn.disabled = true;
         input.focus();
+        syncConfirmEnabled();
       });
     }
 
-    input.addEventListener("input", () => {
-      confirmBtn.disabled = input.value.trim() !== "DELETE";
-    });
+    input.addEventListener("input", syncConfirmEnabled);
+    input.addEventListener("keyup", syncConfirmEnabled);
+    input.addEventListener("paste", () => setTimeout(syncConfirmEnabled, 0));
 
     cancelBtn?.addEventListener("click", hidePanel);
 
@@ -806,22 +813,19 @@ window.SalesModule = (function () {
     }
     const uploadKinds = viewKinds.filter((k) => k.canEdit);
     if (!isEdit && allowCreateUpload) {
-      const createUploadKinds = uploadKinds.length ? uploadKinds : viewKinds.filter((k) => k.key === "recording");
-      const uploadHtml = createUploadKinds.length
-        ? `<div class="attachment-upload-grid">${createUploadKinds
-            .map(
-              (k) =>
-                `<label class="field"><span>${escapeHtml(k.label)} — upload (required)</span><input type="file" multiple data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
+      if (!uploadKinds.length) return "";
+      const uploadHtml = `<div class="attachment-upload-grid">${uploadKinds
+        .map(
+          (k) =>
+            `<label class="field"><span>${escapeHtml(k.label)} — upload (optional)</span><input type="file" multiple data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
               <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
                 <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
                 <span class="muted upload-meter-label">Uploading…</span>
               </div></label>`
-            )
-            .join("")}</div>`
-        : "";
+        )
+        .join("")}</div>`;
       return `<div class="card card-flat sale-attachments-block" style="grid-column:1/-1">
         <h4>Attachments</h4>
-        <p class="muted">Upload a call recording before submitting.</p>
         ${uploadHtml}
       </div>`;
     }
@@ -1948,17 +1952,9 @@ window.SalesModule = (function () {
       const fd = new FormData(e.target);
       const body = buildSaleBodyFromForm(fd);
       const hasCatalog = clients.length > 0;
-      const pendingRec = pendingRecordingSelected(e.target);
-      let attachmentKinds = pendingRec ? ["recording"] : [];
-      if (isEdit && sale?.id) {
-        const attRes = await api(`/sales/${sale.id}/attachments`).catch(() => ({ attachments: [] }));
-        attachmentKinds = [...new Set([...(attRes.attachments || []).map((a) => a.kind), ...attachmentKinds])];
-      }
       if (window.HRSaleSubmitRequired && !isEdit) {
         const validation = window.HRSaleSubmitRequired.validateSaleSubmitPayload(body, {
           hasCatalog,
-          attachmentKinds,
-          pendingRecording: pendingRec,
         });
         if (!validation.ok) {
           showSaleValidationErrors(e.target, validation.errors);

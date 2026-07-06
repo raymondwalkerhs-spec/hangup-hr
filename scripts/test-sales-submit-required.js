@@ -57,7 +57,7 @@ function test(name, fn) {
 test("missing firstName fails", () => {
   const body = baseBody();
   delete body.formData.firstName;
-  const r = validateSaleSubmitPayload(body, { hasCatalog: true, skipRecording: true });
+  const r = validateSaleSubmitPayload(body, { hasCatalog: true });
   assert.strictEqual(r.ok, false);
   assert.ok(r.errors.some((e) => e.key === "firstName"));
 });
@@ -68,7 +68,7 @@ test("bank payment requires bank fields", () => {
   delete body.formData.cardNumber;
   delete body.formData.cardExpDate;
   delete body.formData.cvv;
-  const r = validateSaleSubmitPayload(body, { hasCatalog: true, skipRecording: true });
+  const r = validateSaleSubmitPayload(body, { hasCatalog: true });
   assert.strictEqual(r.ok, false);
   assert.ok(r.errors.some((e) => e.key === "routingNumber"));
 });
@@ -77,24 +77,14 @@ test("firstTimeDevice No requires serviceActiveInfo", () => {
   const body = baseBody();
   body.formData.firstTimeDevice = "No";
   delete body.formData.serviceActiveInfo;
-  const r = validateSaleSubmitPayload(body, { hasCatalog: true, skipRecording: true });
+  const r = validateSaleSubmitPayload(body, { hasCatalog: true });
   assert.strictEqual(r.ok, false);
   assert.ok(r.errors.some((e) => e.key === "serviceActiveInfo"));
 });
 
-test("recording required on submit by default", () => {
+test("valid payload passes without recording", () => {
   const body = baseBody();
   const r = validateSaleSubmitPayload(body, { hasCatalog: true });
-  assert.strictEqual(r.ok, false);
-  assert.ok(r.errors.some((e) => e.key === "recording"));
-});
-
-test("valid payload passes with recording", () => {
-  const body = baseBody();
-  const r = validateSaleSubmitPayload(body, {
-    hasCatalog: true,
-    attachmentKinds: ["recording"],
-  });
   assert.strictEqual(r.ok, true);
 });
 
