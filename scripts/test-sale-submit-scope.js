@@ -75,6 +75,10 @@ assert(
   submitFields.some((f) => f.key === "paymentMethod" && f.canEdit === true)
 );
 assert(
+  "submit surface excludes quality section",
+  !submitFields.some((f) => f.section === "quality")
+);
+assert(
   "submit surface excludes verifierFeedback",
   !submitFields.some((f) => f.key === "verifierFeedback")
 );

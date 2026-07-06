@@ -12,7 +12,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.12` (`package.json` → `version`)
+- **Current version:** `1.6.13` (`package.json` → `version`)
 - **Previous:** `1.6.10` (robust sales ACL), `1.6.8` (audit remediation)
 
 ---
@@ -453,6 +453,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.13** | **true** | Add sale team auto from agent; hide quality section on submit |
 | **1.6.12** | **true** | Add sale submit surface; role-scoped pickers; My docs upload types; hide annual from agents |
 | **1.6.11** | **true** | View sale read-only modal; fix quality ticket Sales permissions (camelCase qualityViewRoles) |
 | **1.6.10** | **true** | Robust sales ACL: unified resolver, tabbed permissions, attachment ACL DB, cross-unit closer names, live user-exception defaults |

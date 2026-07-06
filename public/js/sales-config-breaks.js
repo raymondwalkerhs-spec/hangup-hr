@@ -560,6 +560,18 @@ window.HRSalesConfigBreaks = (function () {
     return html;
   }
 
+  function agentOptionsForUnit(scopedAgents, unit, escapeHtml, selectedId) {
+    const list = (scopedAgents || [])
+      .filter((e) => isDialingEmployee(e) && (!unit || e.unit === unit))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    return list
+      .map(
+        (e) =>
+          `<option value="${escapeHtml(e.id)}" ${selectedId === e.id ? "selected" : ""}>${escapeHtml(e.id)} — ${escapeHtml(e.american_name || e.id)}</option>`
+      )
+      .join("");
+  }
+
   function agentOptionsForTeam(scopedAgents, teamName, escapeHtml, selectedId) {
     const norm = (t) => String(t || "").replace(/^team\s+/i, "").trim().toLowerCase();
     const want = norm(teamName);
@@ -591,14 +603,16 @@ window.HRSalesConfigBreaks = (function () {
       .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || String(a.name).localeCompare(String(b.name)))
       .map((t) => `<option value="${escapeHtml(t.name)}" ${defaultTeam === t.name ? "selected" : ""}>${escapeHtml(t.name)}</option>`)
       .join("");
-    const agentOpts = agentOptionsForTeam(scopedAgents, defaultTeam, escapeHtml, agentId);
+    const agentOpts = lockTeam
+      ? agentOptionsForUnit(scopedAgents, defaultUnit, escapeHtml, agentId)
+      : agentOptionsForTeam(scopedAgents, defaultTeam, escapeHtml, agentId);
     const unitName = lockUnit ? "" : ' name="unit"';
     const teamName = lockTeam ? "" : ' name="team"';
     const agentName = lockAgent ? "" : ' name="agentId"';
     const hiddenFields = [
-      lockUnit ? `<input type="hidden" name="unit" value="${escapeHtml(defaultUnit)}" />` : "",
-      lockTeam ? `<input type="hidden" name="team" value="${escapeHtml(defaultTeam)}" />` : "",
-      lockAgent ? `<input type="hidden" name="agentId" value="${escapeHtml(agentId)}" />` : "",
+      lockUnit ? `<input type="hidden" name="unit" id="sale-unit-hidden" value="${escapeHtml(defaultUnit)}" />` : "",
+      lockTeam ? `<input type="hidden" name="team" id="sale-team-hidden" value="${escapeHtml(defaultTeam)}" />` : "",
+      lockAgent ? `<input type="hidden" name="agentId" id="sale-agent-hidden" value="${escapeHtml(agentId)}" />` : "",
     ].join("");
     return `
       <fieldset class="card card-flat sale-unit-team" style="grid-column:1/-1">
@@ -628,24 +642,55 @@ window.HRSalesConfigBreaks = (function () {
   }
 
   function wireUnitTeamPicker(form, orgTeams, scopedAgents, scopedClosers, pickerOpts = {}) {
-    const { lockAgent = false, lockUnit = false, allowedUnits = [] } = pickerOpts;
+    const { lockAgent = false, lockTeam = true, lockUnit = false, allowedUnits = [] } = pickerOpts;
     const unitSel = form.querySelector("#sale-unit-select");
     const teamSel = form.querySelector("#sale-team-select");
     const agentSel = form.querySelector("#sale-agent-select") || form.querySelector('[name="agentId"]');
     const closerSel = form.querySelector("#sale-closer-select");
+    const teamHidden = form.querySelector("#sale-team-hidden");
+    const unitHidden = form.querySelector("#sale-unit-hidden");
     const dialingTeams = (orgTeams || []).filter((t) => t.dialsSales !== false);
     const esc = typeof escapeHtml === "function" ? escapeHtml : (s) => String(s || "");
+
+    function ensureTeamOption(teamName) {
+      if (!teamSel || !teamName) return;
+      const exists = [...teamSel.options].some((o) => o.value === teamName);
+      if (!exists) {
+        const opt = document.createElement("option");
+        opt.value = teamName;
+        opt.textContent = teamName;
+        teamSel.appendChild(opt);
+      }
+      teamSel.value = teamName;
+    }
+
+    function syncTeamFromAgent(agentId) {
+      const agent = scopedAgents.find((e) => e.id === agentId);
+      if (!agent) return;
+      const team = agent.team || "";
+      ensureTeamOption(team);
+      if (teamHidden) teamHidden.value = team;
+      if (agent.unit && unitSel && !lockUnit) {
+        unitSel.value = agent.unit;
+        if (unitHidden) unitHidden.value = agent.unit;
+      } else if (agent.unit && unitHidden) {
+        unitHidden.value = agent.unit;
+      }
+    }
 
     function refreshCloserOptions() {
       if (!closerSel) return;
       closerSel.innerHTML = closerOptionsHtml(scopedClosers, esc, closerSel.value);
     }
 
-    function refreshAgentOptions(team, selectedId) {
+    function refreshAgentOptionsForUnit(unit, selectedId) {
       if (!agentSel) return;
-      const opts = agentOptionsForTeam(scopedAgents, team, esc, selectedId || agentSel.value);
+      const opts = lockTeam
+        ? agentOptionsForUnit(scopedAgents, unit, esc, selectedId || agentSel.value)
+        : agentOptionsForTeam(scopedAgents, teamSel?.value, esc, selectedId || agentSel.value);
       agentSel.innerHTML = `<option value="">— Select agent —</option>${opts}`;
       if (selectedId) agentSel.value = selectedId;
+      if (selectedId) syncTeamFromAgent(selectedId);
     }
 
     function refreshTeamOptions(unit, selectedTeam) {
@@ -656,23 +701,38 @@ window.HRSalesConfigBreaks = (function () {
         .map((t) => `<option value="${esc(t.name)}" ${selectedTeam === t.name ? "selected" : ""}>${esc(t.name)}</option>`)
         .join("");
       teamSel.innerHTML = `<option value="">— Select team —</option>${opts}`;
-      refreshAgentOptions(selectedTeam || teamSel.value, agentSel?.value);
+      if (lockTeam) {
+        refreshAgentOptionsForUnit(unit, agentSel?.value);
+      } else {
+        refreshAgentOptionsForUnit(unit, agentSel?.value);
+        if (selectedTeam) ensureTeamOption(selectedTeam);
+      }
     }
 
     if (!lockUnit) {
       unitSel?.addEventListener("change", () => {
+        if (unitHidden) unitHidden.value = unitSel.value;
         refreshTeamOptions(unitSel.value, "");
-      });
-      teamSel?.addEventListener("change", () => {
-        refreshAgentOptions(teamSel.value, "");
+        refreshAgentOptionsForUnit(unitSel.value, "");
       });
     }
+    if (!lockTeam) {
+      teamSel?.addEventListener("change", () => {
+        refreshAgentOptionsForUnit(unitSel?.value || unitHidden?.value, "");
+      });
+    }
+    agentSel?.addEventListener("change", () => {
+      syncTeamFromAgent(agentSel.value);
+    });
+
     if (agentSel && unitSel && teamSel) {
       const agent = scopedAgents.find((e) => e.id === agentSel.value);
-      if (agent?.unit) {
+      const unit = agent?.unit || unitSel.value || unitHidden?.value;
+      if (agent?.unit && !lockUnit) {
         unitSel.value = agent.unit;
-        refreshTeamOptions(agent.unit, agent.team || "");
       }
+      if (unit) refreshTeamOptions(unit, agent?.team || teamSel.value);
+      if (agentSel.value) syncTeamFromAgent(agentSel.value);
     }
     refreshCloserOptions();
   }
@@ -705,7 +765,7 @@ window.HRSalesConfigBreaks = (function () {
       const plainAgent = user.role === "agent" && !isDualRoleAgent(user);
       const pickerOpts = {
         lockAgent: plainAgent,
-        lockTeam: plainAgent,
+        lockTeam: true,
         lockUnit: plainAgent || ["tl", "op"].includes(user.role),
         allowedUnits: allowedUnitsForSubmit(user, orgTeams),
       };

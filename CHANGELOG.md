@@ -2,6 +2,11 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.13] — 2026-07-06
+
+### Fixed
+- **Add sale** — team auto-fills from selected agent (team field read-only); quality section hidden on submit form
+
 ## [1.6.12] — 2026-07-06
 
 ### Fixed

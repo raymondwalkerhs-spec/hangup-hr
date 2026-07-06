@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.6.12 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.13 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -204,7 +204,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Sale forms & tickets
 
-- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers
+- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers; team auto from agent; no quality section on create
 - **Edit sale** — field visibility and edit rights from Sales permissions
 - **View sale** — read-only detail modal (Access Control **View sale**); fields from Edit sale tab
 - **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted
@@ -423,4 +423,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **1.6.12** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **1.6.13** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

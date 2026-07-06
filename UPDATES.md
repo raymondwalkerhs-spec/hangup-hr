@@ -1,3 +1,13 @@
+## v1.6.13 release checklist
+
+1. Bump `package.json` → `1.6.13`
+2. Build: `SKIP_NATIVE_REBUILD=1 npm run dist:installer` + `npm run dist:web-installer`
+3. `npm test`
+4. `git push` then `.\scripts\publish-github-release.ps1 -IncludeFull -Tag v1.6.13`
+5. `gh release edit v1.6.13 --latest` + `node scripts/publish-app-version.js`
+
+**1.6.13 change:** Add sale team auto from agent; hide quality section on submit.
+
 ## v1.6.12 release checklist
 
 1. Bump `package.json` → `1.6.12`

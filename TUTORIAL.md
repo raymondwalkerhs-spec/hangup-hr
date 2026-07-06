@@ -244,6 +244,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. Run **Reset defaults** once after upgrade.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
 - **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
+- **Add sale (1.6.13):** team auto-fills from selected agent; quality section hidden on submit.
 - **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (unit closers allowed).
 - **My docs (1.6.12):** self-upload National ID, Medical Note, Exam Note only; HR/Admin upload Contract and all types.
 - **Requests (1.6.12):** annual leave hidden from agents.

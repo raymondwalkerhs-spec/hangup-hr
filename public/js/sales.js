@@ -1347,6 +1347,7 @@ window.SalesModule = (function () {
       if (f.canView === false) return false;
       if (isEdit && f.hideOnEdit) return false;
       if (!isEdit && f.hideOnCreate) return false;
+      if (!isEdit && f.section === "quality") return false;
       if (!isEdit && !canApprove() && f.key === "status") return false;
       return true;
     });

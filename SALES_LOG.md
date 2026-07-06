@@ -116,7 +116,7 @@ All catalog fields are available as filter fields.
 
 ## Add sale form
 
-**Submit surface (1.6.12):** Add sale uses `surface=submit` — all catalog fields are editable on create (not Sales permissions ACL). Edit sale and quality ticket still use ACL.
+**Submit surface (1.6.12+):** Add sale uses `surface=submit` — all catalog fields are editable on create (not Sales permissions ACL). **Quality section is hidden** on submit (1.6.13). Edit sale and quality ticket still use ACL.
 
 ### Role-based assignment
 
@@ -127,7 +127,7 @@ All catalog fields are available as filter fields.
 | **TL / OP** | All dialing agents in unit | All closers in unit | Fixed to their unit |
 | **HR / RTM / Quality / …** | Company dialing pool | Company pool | All units |
 
-Agents default **Closer** to themselves; TL/OP default **Closer** to themselves.
+Agents default **Closer** to themselves; TL/OP default **Closer** to themselves. **Team** is read-only and follows the selected agent.
 
 ### Catalog (required when configured)
 
