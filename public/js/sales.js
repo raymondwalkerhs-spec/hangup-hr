@@ -668,31 +668,46 @@ window.SalesModule = (function () {
   async function uploadPendingAttachments(formEl, saleId) {
     if (!saleId || !formEl) return;
     for (const input of formEl.querySelectorAll("[data-attach-kind]")) {
-      if (input.dataset.uploaded === "1") continue;
-      const file = input.files?.[0];
-      if (!file) continue;
-      if (window.HRSalesConfigBreaks?.uploadSaleAttachmentWithProgress) {
-        await window.HRSalesConfigBreaks.uploadSaleAttachmentWithProgress(
-          saleId,
-          file,
-          input.dataset.attachKind || "recording",
-          { getSessionId: typeof getSessionId === "function" ? getSessionId : () => "" }
-        );
-      } else {
-        const b64 = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(String(r.result).split(",")[1]);
-          r.onerror = reject;
-          r.readAsDataURL(file);
-        });
-        await api(`/sales/${saleId}/attachments`, {
-          method: "POST",
-          body: JSON.stringify({ fileName: file.name, contentBase64: b64, kind: input.dataset.attachKind }),
-        });
+      const kind = input.dataset.attachKind || "recording";
+      const files = [...(input.files || [])];
+      for (const file of files) {
+        if (!file) continue;
+        if (window.HRSalesConfigBreaks?.uploadSaleAttachmentWithProgress) {
+          await window.HRSalesConfigBreaks.uploadSaleAttachmentWithProgress(
+            saleId,
+            file,
+            kind,
+            { getSessionId: typeof getSessionId === "function" ? getSessionId : () => "" }
+          );
+        } else {
+          const b64 = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result).split(",")[1]);
+            r.onerror = reject;
+            r.readAsDataURL(file);
+          });
+          await api(`/sales/${saleId}/attachments`, {
+            method: "POST",
+            body: JSON.stringify({ fileName: file.name, contentBase64: b64, kind }),
+          });
+        }
       }
-      input.dataset.uploaded = "1";
-      input.value = "";
+      if (files.length) {
+        input.dataset.uploaded = "1";
+        input.value = "";
+      }
     }
+  }
+
+  function sortSalesBySubmissionTime(list) {
+    const key = (s) => {
+      const date = String(s.submissionDate || s.effectiveDate || "").slice(0, 10);
+      const m = String(s.submissionTime || "").match(/^(\d{1,2}):(\d{2})/);
+      const mins = m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
+      const dayMs = date ? Date.parse(`${date}T00:00:00Z`) : 0;
+      return (Number.isFinite(dayMs) ? dayMs : 0) * 100000 + mins;
+    };
+    return (list || []).slice().sort((a, b) => key(b) - key(a));
   }
 
   function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false, allowCreateUpload = false } = {}) {
@@ -712,7 +727,7 @@ window.SalesModule = (function () {
         ? `<div class="attachment-upload-grid">${createUploadKinds
             .map(
               (k) =>
-                `<label class="field"><span>${escapeHtml(k.label)} — upload (required)</span><input type="file" data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
+                `<label class="field"><span>${escapeHtml(k.label)} — upload (required)</span><input type="file" multiple data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
               <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
                 <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
                 <span class="muted upload-meter-label">Uploading…</span>
@@ -731,7 +746,7 @@ window.SalesModule = (function () {
       ? `<div class="attachment-upload-grid">${uploadKinds
           .map(
             (k) =>
-              `<label class="field"><span>${escapeHtml(k.label)} — upload</span><input type="file" data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
+              `<label class="field"><span>${escapeHtml(k.label)} — upload</span><input type="file" multiple data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
               <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
                 <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
                 <span class="muted upload-meter-label">Uploading…</span>
@@ -1096,7 +1111,7 @@ window.SalesModule = (function () {
       api("/sales/field-catalog?allFields=1").catch(() => ({ fields: [] })),
       api("/sales-config/catalog").catch(() => ({ clients: [] })),
     ]);
-    let sales = salesRes.sales || [];
+    let sales = sortSalesBySubmissionTime(salesRes.sales || []);
     let salesForStats = sales.slice();
     if (state.salesHiddenUnits?.length) {
       const hidden = new Set(state.salesHiddenUnits);

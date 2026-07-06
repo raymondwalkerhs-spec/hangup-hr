@@ -192,6 +192,7 @@ Discipline week (Mon–Fri) with automatic payroll impact:
 Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Sales log
+- Sorted by **submission date + time** (newest first)
 
 - Per-sale records with dynamic MLA-Ray form (all fields in `form_data`)
 - Day / week / month dashboards with status filters and stat cards

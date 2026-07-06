@@ -187,4 +187,24 @@ assert(
   new Set(opCamelQuality.map((f) => f.section)).size >= 4
 );
 
+const fullSale = {
+  formData: {
+    firstName: "Jane",
+    lastName: "Doe",
+    phoneNumber: "5551234567",
+    qualityComments: "old",
+    reviewer: "QV1",
+  },
+};
+const qualityUser = { role: "quality", username: "qa1", employeeId: "QV1" };
+const sanitizedTicket = catalog.sanitizeFormPayload(
+  { ...fullSale.formData, qualityComments: "updated comment", reviewer: "QV2" },
+  "quality",
+  permMap,
+  { create: false, user: qualityUser, sale: fullSale, surface: "quality" }
+);
+assert("quality ticket save keeps unrelated form fields", sanitizedTicket.firstName === "Jane" && sanitizedTicket.phoneNumber === "5551234567");
+assert("quality ticket save updates qualityComments", sanitizedTicket.qualityComments === "updated comment");
+assert("quality ticket save updates reviewer", sanitizedTicket.reviewer === "QV2");
+
 if (!process.exitCode) console.log("\nAll tests passed.");

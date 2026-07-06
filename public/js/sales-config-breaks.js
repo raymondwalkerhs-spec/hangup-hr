@@ -527,39 +527,47 @@ window.HRSalesConfigBreaks = (function () {
       if (input.dataset.immediateUploadBound === "1") return;
       input.dataset.immediateUploadBound = "1";
       input.addEventListener("change", async () => {
-        const file = input.files?.[0];
-        if (!file) return;
+        const files = [...(input.files || [])];
+        if (!files.length) return;
         const kind = input.dataset.attachKind || "recording";
         if (!editableKinds.has(kind)) return;
-        const dedupeKey = `${kind}:${file.name}:${file.size}:${file.lastModified}`;
-        if (uploading.has(dedupeKey)) {
-          input.value = "";
-          return;
-        }
-        uploading.add(dedupeKey);
+        input.disabled = true;
         const statusEl = scopeEl.querySelector(`[data-upload-status="${kind}"]`);
         const fill = statusEl?.querySelector(".upload-meter-fill");
         const label = statusEl?.querySelector(".upload-meter-label");
-        input.disabled = true;
         if (statusEl) statusEl.hidden = false;
         const setProgress = (pct) => {
           if (fill) fill.style.width = `${Math.min(100, pct)}%`;
           if (label) label.textContent = pct >= 100 ? "Uploaded" : `Uploading… ${pct}%`;
         };
+        let done = 0;
         try {
-          setProgress(0);
-          await uploadSaleAttachmentWithProgress(saleId, file, kind, {
-            onProgress: setProgress,
-            getSessionId,
-          });
+          for (const file of files) {
+            const dedupeKey = `${kind}:${file.name}:${file.size}:${file.lastModified}`;
+            if (uploading.has(dedupeKey)) continue;
+            uploading.add(dedupeKey);
+            try {
+              setProgress(Math.round((done / files.length) * 100));
+              await uploadSaleAttachmentWithProgress(saleId, file, kind, {
+                onProgress: (pct) => {
+                  const overall = Math.round(((done + pct / 100) / files.length) * 100);
+                  setProgress(overall);
+                },
+                getSessionId,
+              });
+              done += 1;
+            } finally {
+              uploading.delete(dedupeKey);
+            }
+          }
           input.dataset.uploaded = "1";
           input.value = "";
+          setProgress(100);
           if (typeof refreshList === "function") await refreshList();
         } catch (e) {
           alert(e.message || "Upload failed");
           input.value = "";
         } finally {
-          uploading.delete(dedupeKey);
           input.disabled = false;
           setTimeout(() => {
             if (statusEl) statusEl.hidden = true;

@@ -2,6 +2,13 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.20] — 2026-07-06
+
+### Fixed
+- **Sales log sort** — list ordered by submission date + time (newest first)
+- **Quality ticket save** — quality comments, reviewer, and assign verifier persist without wiping other sale fields
+- **Multiple attachment uploads** — select several files at once on quality/edit sale; each uploads immediately without save-and-reopen
+
 ## [1.6.19] — 2026-07-06
 
 ### Security / access
