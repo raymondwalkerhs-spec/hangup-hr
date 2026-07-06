@@ -2,6 +2,35 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.16] — 2026-07-06
+
+### Added
+- **Delete sale** — Admin and RTM can permanently delete a sale (database, Supabase attachments, Airtable record) from the edit modal
+- **Agent/closer reassignment** — Admin, RTM, and CEO can change unit, team, agent, and closer on **Edit sale** and **Quality ticket**
+- **Submit validation** — client and server `validateSaleSubmitPayload` aligned with MLA Airtable form required fields (including conditional payment and first-time device rules)
+- **Draft auto-save** — Add sale form saves to `localStorage` per user; resume or discard on next open; **Clear all fields** on create
+- **Double-submit guard** — Save button disabled while saving; server rejects duplicate phone+agent within 120 seconds (409)
+- **Recording on create** — upload block on Add sale; recording required before first submit
+- `scripts/introspect-airtable-form-required.js`, `scripts/test-sales-submit-required.js`
+
+### Changed
+- `lib/sales-field-catalog.js` — expanded `required` flags to match submit validation
+
+## [1.6.15] — 2026-07-06
+
+### Fixed
+- **Sale attachments** — delete takes effect immediately after confirmation (list refreshes from server); upload on edit/quality ticket starts immediately with progress meter (no double-upload on Save)
+- **Settings profile photo** — upload/remove wired to correct controls (was broken due to wrong element IDs)
+- **Self employee profile** — users can load their own employee record for Settings photo when employee card is otherwise restricted
+
+### Added
+- `npm run sync:airtable` — backfill existing sales to Airtable (`scripts/backfill-airtable-sales.js`)
+
+## [1.6.14] — 2026-07-06
+
+### Added
+- **Airtable sales sync** — when `AIRTABLE_API_KEY` and `AIRTABLE_BASE_ID` are set, every sale create/edit and attachment upload/delete asynchronously syncs to Airtable table **Sales All Data** (fail-open; Supabase remains source of truth). Stores `airtable_record_id` on each sale for updates.
+
 ## [1.6.13] — 2026-07-06
 
 ### Fixed

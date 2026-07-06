@@ -4,7 +4,7 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.6.13`
+**Current version:** `1.6.16`
 
 | Document | Purpose |
 |----------|---------|
@@ -66,7 +66,7 @@ Schema changes live in `supabase/migrations/`.
 
 **Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260718_notifications_quality_notes.sql`).
+**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260721_sales_airtable_sync.sql`).
 
 ### Access Control (v1.3.6+)
 
@@ -89,7 +89,7 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Assets** | Equipment registry and assignments |
 | **Documents** | Upload, expiry alerts, bulk ZIP export |
 | **Reporting** | Monthly HR report, turnover, attendance rankings |
-| **Sales** | MLA-Ray form, catalog, Supabase attachments, export CSV/Excel/PDF, approval workflow |
+| **Sales** | MLA-Ray form, catalog, Supabase attachments, Airtable outbound sync (optional), export CSV/Excel/PDF, approval workflow |
 | **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners |
 | **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
 | **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab; superadmin purge + release ID |
@@ -240,7 +240,7 @@ ON CONFLICT (version) DO UPDATE SET
   notes = EXCLUDED.notes;
 ```
 
-**Live current version:** `1.6.11` — confirm in Supabase `app_versions` after each release.
+**Live current version:** `1.6.14` — confirm in Supabase `app_versions` after each release.
 
 ---
 

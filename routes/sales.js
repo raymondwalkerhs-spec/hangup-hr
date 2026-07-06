@@ -18,8 +18,14 @@ const salesListColumns = require("../lib/sales-list-columns");
 const salesActionPerms = require("../lib/sales-action-permissions");
 const salesAttachmentPerms = require("../lib/sales-attachment-permissions");
 const workingDayLib = require("../lib/sales-working-day");
+const airtableSync = require("../lib/airtable-sales-sync");
+const saleSubmitRequired = require("../lib/sales-submit-required");
 
 const router = express.Router();
+
+function afterSaleMutation(saleId) {
+  if (saleId) airtableSync.scheduleSaleSync(saleId);
+}
 
 function scopedEmployees(req, opts = {}) {
   let employees = store.getEmployees({ hideOut: opts.hideOut !== undefined ? opts.hideOut : false });
@@ -505,6 +511,35 @@ router.post("/", async (req, res) => {
         return res.status(400).json({ error: "client required — select from Client & device catalog" });
       }
     }
+    const hasCatalog = await salesClients.catalogHasActiveProducts().catch(() => false);
+    const submitValidation = saleSubmitRequired.validateSaleSubmitPayload(
+      {
+        ...req.body,
+        ...payload,
+        phoneNumber: catalogResolved.phoneNumber || payload.phoneNumber,
+        device: catalogResolved.device || payload.device,
+        client: catalogResolved.client || payload.client,
+        salesClientId: catalogResolved.formData?.salesClientId || req.body.salesClientId,
+        salesProductId: catalogResolved.formData?.salesProductId || req.body.salesProductId,
+        salesPriceId: catalogResolved.formData?.salesPriceId || req.body.salesPriceId,
+        formData: catalogResolved.formData || mergedForm,
+        agentId,
+        closerId: resolvedCloserId,
+        unit: unitTeam.unit,
+        team: unitTeam.team,
+      },
+      { hasCatalog, skipRecording: true }
+    );
+    if (!submitValidation.ok) {
+      return res.status(400).json({ error: "Validation failed", errors: submitValidation.errors });
+    }
+    const dup = await business.findRecentDuplicateSale({
+      phoneNumber: catalogResolved.phoneNumber || payload.phoneNumber,
+      agentId,
+    });
+    if (dup) {
+      return res.status(409).json({ error: "Sale already submitted", saleId: dup.id });
+    }
     if (!agentId) return res.status(400).json({ error: "agentId required" });
     const agentEmp = store.getEmployeeById(agentId);
     if (agentEmp?.team && unitTeam.team && agentEmp.team !== unitTeam.team) {
@@ -560,7 +595,29 @@ router.post("/", async (req, res) => {
     }
     await notifySaleAssignments(sale, {});
     await recalcAgentSalesFromSale(sale, req.username);
+    afterSaleMutation(sale.id);
     res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole))[0] });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  if (!roles.canDeleteSales(req.userRole)) {
+    return res.status(403).json({ error: "No permission to delete sales" });
+  }
+  try {
+    const existing = await business.getSale(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Sale not found" });
+    const employees = store.getEmployees();
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
+    if (!visible.length) return res.status(403).json({ error: "No access" });
+    await business.deleteSaleCompletely(req.params.id);
+    if (existing.agentId) {
+      await recalcAgentSalesFromSale(existing, req.username);
+    }
+    res.json({ ok: true, id: req.params.id });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -631,15 +688,49 @@ router.patch("/:id", async (req, res) => {
         if (!roles.canAccessEmployee(req.userRole, emp)) {
           return res.status(403).json({ error: "No access to assign this agent" });
         }
-        patch.agentId = req.body.agentId;
+        const canReassign = roles.canReassignSaleLead(req.userRole);
+        if (canReassign && (ticketOnly || req.body.edit === true)) {
+          const saleSubmitScope = require("../lib/sale-submit-scope");
+          const assignment = saleSubmitScope.validateSaleSubmitAssignment(
+            req.userRole,
+            {
+              agentId: req.body.agentId,
+              closerId: req.body.closerId ?? existing.closerId,
+              unit: req.body.unit || patch.unit || existing.unit,
+              team: req.body.team || patch.team || existing.team,
+            },
+            employees
+          );
+          if (!assignment.ok) return res.status(403).json({ error: assignment.error });
+          patch.agentId = req.body.agentId;
+          if (req.body.closerId !== undefined) patch.closerId = assignment.closerId;
+        } else {
+          patch.agentId = req.body.agentId;
+        }
       }
-      if (req.body.closerId !== undefined) patch.closerId = req.body.closerId;
-      if (patch.agentId) {
+      if (req.body.closerId !== undefined && patch.closerId === undefined) patch.closerId = req.body.closerId;
+      const canReassign = roles.canReassignSaleLead(req.userRole);
+      if (canReassign && (req.body.unit || req.body.team)) {
+        const ut = await validateSaleUnitTeam(
+          req.body.unit || patch.unit || existing.unit,
+          req.body.team || patch.team || existing.team
+        );
+        if (!ut.ok) return res.status(400).json({ error: ut.error });
+        patch.unit = ut.unit;
+        patch.team = ut.team;
+      } else if (patch.agentId && !canReassign) {
         const emp = store.getEmployeeById(patch.agentId);
         if (!emp) return res.status(404).json({ error: "Agent not found" });
         const geo = enrichSaleAgent(emp);
         patch.team = geo.team;
         patch.unit = geo.unit;
+      } else if (patch.agentId && canReassign && !req.body.unit && !req.body.team) {
+        const emp = store.getEmployeeById(patch.agentId);
+        if (emp) {
+          const geo = enrichSaleAgent(emp);
+          if (!patch.team) patch.team = geo.team;
+          if (!patch.unit) patch.unit = geo.unit;
+        }
       }
     } else if (req.body.status) {
       if (!salesScope.canApproveSale(req.userRole)) {
@@ -680,6 +771,7 @@ router.patch("/:id", async (req, res) => {
     if (existing.agentId && existing.agentId !== sale.agentId) {
       await recalcAgentSalesFromSale(existing, req.username);
     }
+    afterSaleMutation(sale.id);
     res.json({ ok: true, sale: redacted });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1024,6 +1116,7 @@ router.post("/:id/attachments", async (req, res) => {
       },
       req.username
     );
+    afterSaleMutation(req.params.id);
     res.status(201).json({ ok: true, attachment: att });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1051,6 +1144,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
     } catch {
       /* optional */
     }
+    afterSaleMutation(att?.saleId);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1145,6 +1239,7 @@ router.put("/attachments/:attachmentId/replace", async (req, res) => {
     } catch {
       /* optional */
     }
+    afterSaleMutation(att.saleId);
     res.json({ ok: true, attachment: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });

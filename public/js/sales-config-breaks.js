@@ -369,7 +369,7 @@ window.HRSalesConfigBreaks = (function () {
     });
   }
 
-  function wireAttachmentActions(container, api, openSaleAttachment, canEditFn) {
+  function wireAttachmentActions(container, api, openSaleAttachment, canEditFn, onMutated) {
     container.querySelectorAll("[data-open-attach]").forEach((btn) => {
       btn.onclick = () => openSaleAttachment(btn.dataset.openAttach, btn.textContent);
     });
@@ -412,13 +412,26 @@ window.HRSalesConfigBreaks = (function () {
         }
       };
     });
-    if (!canEditFn()) return;
     container.querySelectorAll("[data-att-delete]").forEach((btn) => {
       btn.onclick = async () => {
         if (!confirm("Delete this recording?")) return;
         if (!confirm("This cannot be undone. Delete permanently?")) return;
-        await api(`/sales/attachments/${btn.dataset.attDelete}`, { method: "DELETE" });
-        btn.closest(".attachment-row")?.remove();
+        try {
+          await api(`/sales/attachments/${btn.dataset.attDelete}`, { method: "DELETE" });
+          if (typeof onMutated === "function") {
+            await onMutated();
+          } else {
+            const row = btn.closest(".attachment-row");
+            const group = btn.closest(".attachment-kind-group");
+            row?.remove();
+            if (group && !group.querySelector(".attachment-row")) group.remove();
+            if (!container.querySelector(".attachment-row") && !container.querySelector(".attachment-kind-group")) {
+              container.innerHTML = "<span class='muted'>No attachments yet</span>";
+            }
+          }
+        } catch (e) {
+          alert(e.message || "Could not delete attachment");
+        }
       };
     });
     container.querySelectorAll("[data-att-replace]").forEach((btn) => {
@@ -430,22 +443,125 @@ window.HRSalesConfigBreaks = (function () {
           const file = input.files?.[0];
           if (!file) return;
           if (!confirm(`Replace with "${file.name}"?`)) return;
-          if (!confirm("Confirm replace — old file will be removed from Dropbox.")) return;
-          const b64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-          });
-          await api(`/sales/attachments/${btn.dataset.attReplace}/replace`, {
-            method: "PUT",
-            body: JSON.stringify({ fileName: file.name, contentBase64: b64 }),
-          });
-          alert("File replaced");
-          if (typeof render === "function") render();
+          if (!confirm("Confirm replace — old file will be removed.")) return;
+          try {
+            const b64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(file);
+            });
+            await api(`/sales/attachments/${btn.dataset.attReplace}/replace`, {
+              method: "PUT",
+              body: JSON.stringify({ fileName: file.name, contentBase64: b64 }),
+            });
+            if (typeof onMutated === "function") await onMutated();
+            else alert("File replaced");
+          } catch (e) {
+            alert(e.message || "Replace failed");
+          }
         };
         input.click();
       };
+    });
+  }
+
+  function readFileBase64WithProgress(file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 45));
+        }
+      };
+      reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function uploadSaleAttachmentWithProgress(saleId, file, kind, { onProgress, getSessionId } = {}) {
+    return readFileBase64WithProgress(file, onProgress).then(
+      (contentBase64) =>
+        new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const sessionId = typeof getSessionId === "function" ? getSessionId() : "";
+          xhr.open("POST", `/api/sales/${encodeURIComponent(saleId)}/attachments`);
+          xhr.setRequestHeader("Content-Type", "application/json");
+          if (sessionId) xhr.setRequestHeader("x-session-id", sessionId);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && onProgress) {
+              onProgress(45 + Math.round((e.loaded / e.total) * 55));
+            }
+          };
+          xhr.onload = () => {
+            let data = {};
+            try {
+              data = JSON.parse(xhr.responseText || "{}");
+            } catch {
+              /* ignore */
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+              onProgress?.(100);
+              resolve(data);
+            } else {
+              reject(new Error(data.error || xhr.statusText || "Upload failed"));
+            }
+          };
+          xhr.onerror = () => reject(new Error("Upload failed"));
+          xhr.send(JSON.stringify({ fileName: file.name, contentBase64, kind }));
+        })
+    );
+  }
+
+  function bindImmediateSaleAttachmentUploads(scopeEl, saleId, attachKinds, { refreshList, getSessionId } = {}) {
+    if (!scopeEl || !saleId) return;
+    const uploading = new Set();
+    const editableKinds = new Set((attachKinds || []).filter((k) => k.canEdit).map((k) => k.key));
+    scopeEl.querySelectorAll("input[data-attach-kind]").forEach((input) => {
+      if (input.dataset.immediateUploadBound === "1") return;
+      input.dataset.immediateUploadBound = "1";
+      input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const kind = input.dataset.attachKind || "recording";
+        if (!editableKinds.has(kind)) return;
+        const dedupeKey = `${kind}:${file.name}:${file.size}:${file.lastModified}`;
+        if (uploading.has(dedupeKey)) {
+          input.value = "";
+          return;
+        }
+        uploading.add(dedupeKey);
+        const statusEl = scopeEl.querySelector(`[data-upload-status="${kind}"]`);
+        const fill = statusEl?.querySelector(".upload-meter-fill");
+        const label = statusEl?.querySelector(".upload-meter-label");
+        input.disabled = true;
+        if (statusEl) statusEl.hidden = false;
+        const setProgress = (pct) => {
+          if (fill) fill.style.width = `${Math.min(100, pct)}%`;
+          if (label) label.textContent = pct >= 100 ? "Uploaded" : `Uploading… ${pct}%`;
+        };
+        try {
+          setProgress(0);
+          await uploadSaleAttachmentWithProgress(saleId, file, kind, {
+            onProgress: setProgress,
+            getSessionId,
+          });
+          input.dataset.uploaded = "1";
+          input.value = "";
+          if (typeof refreshList === "function") await refreshList();
+        } catch (e) {
+          alert(e.message || "Upload failed");
+          input.value = "";
+        } finally {
+          uploading.delete(dedupeKey);
+          input.disabled = false;
+          setTimeout(() => {
+            if (statusEl) statusEl.hidden = true;
+            if (fill) fill.style.width = "0%";
+          }, 1200);
+        }
+      });
     });
   }
 
@@ -737,57 +853,71 @@ window.HRSalesConfigBreaks = (function () {
     refreshCloserOptions();
   }
 
-  async function enhanceSaleModal(api, helpers, sale, employees, formRoot, canEditFn, openSaleAttachment) {
+  async function injectUnitTeamPickerBlock(form, sale, employees, api, escapeHtml, mode) {
+    const teamsRes = await api("/hrms/teams").catch(() => ({ teams: [] }));
+    const orgTeams = teamsRes.teams || [];
+    const user = state.user || {};
+    const scopedAgents = pickAgentsForSubmit(user, employees || []);
+    const scopedClosers = pickClosersForSubmit(user, employees || []);
+    const selfEmp = (employees || []).find((e) => e.id === user.employeeId);
+    const isDialingSelf =
+      user.employeeId &&
+      !/^(TL|CL|OP|HR|MG|OF|NW)/i.test(String(user.employeeId)) &&
+      scopedAgents.some((e) => e.id === user.employeeId);
+    const defaultAgentId = sale?.agentId || (isDialingSelf ? user.employeeId : "");
+    const defaultCloserId = sale?.closerId || user.employeeId || "";
+    const draftSale = sale?.id
+      ? { unit: sale.unit, team: sale.team, agentId: sale.agentId }
+      : { unit: selfEmp?.unit || user.unit, team: selfEmp?.team, agentId: defaultAgentId };
+    const plainAgent = user.role === "agent" && !isDualRoleAgent(user);
+    const allUnits = [...new Set((orgTeams || []).map((t) => t.unit).filter(Boolean))].sort();
+    const pickerOpts =
+      mode === "create"
+        ? {
+            lockAgent: plainAgent,
+            lockTeam: true,
+            lockUnit: plainAgent || ["tl", "op"].includes(user.role),
+            allowedUnits: allowedUnitsForSubmit(user, orgTeams),
+          }
+        : { lockAgent: false, lockTeam: false, lockUnit: false, allowedUnits: allUnits };
+    const unitTeamWrap = document.createElement("div");
+    unitTeamWrap.innerHTML = unitTeamPickerHtml(
+      orgTeams,
+      scopedAgents,
+      scopedClosers,
+      draftSale,
+      escapeHtml,
+      defaultCloserId,
+      pickerOpts
+    );
+    const agentField = form.querySelector('[name="agentId"]')?.closest("label");
+    if (agentField) agentField.remove();
+    const closerField = form.querySelector('[name="closerId"]')?.closest("label");
+    if (closerField) closerField.remove();
+    const summary = form.querySelector(".quality-ticket-summary");
+    const firstFieldset = form.querySelector("fieldset");
+    const insertBefore = summary?.nextElementSibling || firstFieldset;
+    if (insertBefore) form.insertBefore(unitTeamWrap.firstElementChild, insertBefore);
+    else form.prepend(unitTeamWrap.firstElementChild);
+    wireUnitTeamPicker(form, orgTeams, scopedAgents, scopedClosers, pickerOpts);
+  }
+
+  async function enhanceSaleModal(api, helpers, sale, employees, formRoot, canEditFn, openSaleAttachment, modalOpts = {}) {
     const { escapeHtml } = helpers;
+    const mode = modalOpts.mode || (sale?.id ? "edit" : "create");
+    const formSelector = modalOpts.formSelector || "#sale-form";
     const catalog = await loadCatalog(api).catch(() => ({ clients: [] }));
     const clients = catalog.clients || [];
     const formData = sale?.formData || {};
-    const form = formRoot.querySelector("#sale-form") || formRoot;
+    const form = formRoot.querySelector(formSelector) || formRoot;
 
-    const teamsRes = await api("/hrms/teams").catch(() => ({ teams: [] }));
-    const orgTeams = teamsRes.teams || [];
-    if (!sale?.id) {
-      const user = state.user || {};
-      const scopedAgents = pickAgentsForSubmit(user, employees || []);
-      const scopedClosers = pickClosersForSubmit(user, employees || []);
-      const selfEmp = (employees || []).find((e) => e.id === user.employeeId);
-      const isDialingSelf =
-        user.employeeId &&
-        !/^(TL|CL|OP|HR|MG|OF|NW)/i.test(String(user.employeeId)) &&
-        scopedAgents.some((e) => e.id === user.employeeId);
-      const defaultAgentId = isDialingSelf ? user.employeeId : "";
-      const defaultCloserId = user.employeeId || "";
-      const draftSale = {
-        unit: selfEmp?.unit || user.unit,
-        team: selfEmp?.team,
-        agentId: defaultAgentId,
-      };
-      const plainAgent = user.role === "agent" && !isDualRoleAgent(user);
-      const pickerOpts = {
-        lockAgent: plainAgent,
-        lockTeam: true,
-        lockUnit: plainAgent || ["tl", "op"].includes(user.role),
-        allowedUnits: allowedUnitsForSubmit(user, orgTeams),
-      };
-      const unitTeamWrap = document.createElement("div");
-      unitTeamWrap.innerHTML = unitTeamPickerHtml(
-        orgTeams,
-        scopedAgents,
-        scopedClosers,
-        draftSale,
-        escapeHtml,
-        defaultCloserId,
-        pickerOpts
-      );
-      const agentField = form.querySelector('[name="agentId"]')?.closest("label");
-      if (agentField) agentField.remove();
-      const closerField = form.querySelector('[name="closerId"]')?.closest("label");
-      if (closerField) closerField.remove();
-      form.prepend(unitTeamWrap.firstElementChild);
-      wireUnitTeamPicker(form, orgTeams, scopedAgents, scopedClosers, pickerOpts);
+    const canReassign = state.user?.canReassignSaleLead === true;
+    const showPickers = !sale?.id || (canReassign && sale?.id && (mode === "edit" || mode === "quality"));
+    if (showPickers) {
+      await injectUnitTeamPickerBlock(form, sale, employees, api, escapeHtml, sale?.id ? mode : "create");
     }
 
-    if (clients.length) {
+    if (formSelector === "#sale-form" && clients.length) {
       const resolved = resolveCatalogSelection(clients, sale, formData);
       const picker = document.createElement("div");
       picker.innerHTML = clientPickerHtml(clients, resolved.clientId, resolved.productId, resolved.priceId, formData);
@@ -801,7 +931,7 @@ window.HRSalesConfigBreaks = (function () {
       if (deviceField?.closest("label")) deviceField.closest("label").style.display = "none";
       const priceField = form.querySelector('[name="price"]');
       if (priceField?.closest("label")) priceField.closest("label").style.display = "none";
-    } else if (!sale?.id) {
+    } else if (formSelector === "#sale-form" && !sale?.id) {
       const warn = document.createElement("p");
       warn.className = "alert alert-warn";
       warn.style.gridColumn = "1 / -1";
@@ -820,12 +950,26 @@ window.HRSalesConfigBreaks = (function () {
 
     const listEl = form.querySelector("#sale-attachments-list");
     if (listEl && sale?.id) {
-      const res = await api(`/sales/${sale.id}/attachments`).catch(() => ({ attachments: [] }));
-      const list = res.attachments || [];
-      listEl.innerHTML = list.length
-        ? list.map((a) => attachmentRowHtml(a, helpers.escapeHtml, canEditFn)).join("")
-        : "<span>No attachments yet</span>";
-      wireAttachmentActions(listEl, api, openSaleAttachment, canEditFn);
+      const catalogRes = await api(`/sales/field-catalog?surface=main&saleId=${encodeURIComponent(sale.id)}`).catch(
+        () => ({ attachmentKinds: [] })
+      );
+      const attachKinds = (catalogRes.attachmentKinds || []).filter((k) => k.canView);
+      const refreshList = async () => {
+        const res = await api(`/sales/${sale.id}/attachments`).catch(() => ({ attachments: [] }));
+        const list = res.attachments || [];
+        const kindCanEdit = Object.fromEntries(attachKinds.map((k) => [k.key, k.canEdit === true]));
+        listEl.innerHTML = list.length
+          ? list
+              .map((a) => attachmentRowHtml(a, helpers.escapeHtml, () => kindCanEdit[a.kind] === true))
+              .join("")
+          : "<span class='muted'>No attachments yet</span>";
+        wireAttachmentActions(listEl, api, openSaleAttachment, canEditFn, refreshList);
+      };
+      await refreshList();
+      bindImmediateSaleAttachmentUploads(form, sale.id, attachKinds, {
+        refreshList,
+        getSessionId: typeof getSessionId === "function" ? getSessionId : () => "",
+      });
     }
 
     return { clients };
@@ -1180,10 +1324,13 @@ window.HRSalesConfigBreaks = (function () {
     handleActiveBreak,
     showBreakOverlay,
     enhanceSaleModal,
+    injectUnitTeamPickerBlock,
     validateClientSubmit,
     renderBreaksPage,
     enhanceSettings,
     wireAttachmentActions,
     attachmentRowHtml,
+    uploadSaleAttachmentWithProgress,
+    bindImmediateSaleAttachmentUploads,
   };
 })();

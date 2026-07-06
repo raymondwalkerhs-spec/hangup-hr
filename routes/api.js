@@ -758,6 +758,8 @@ router.get("/status", async (req, res) => {
       canViewSale: roles.canViewSale(req.userRole),
       canApproveSales: roles.canApproveSales(req.userRole),
       canWorkQualityTicket: roles.canWorkQualityTicket(req.userRole),
+      canDeleteSales: roles.canDeleteSales(req.userRole),
+      canReassignSaleLead: roles.canReassignSaleLead(req.userRole),
       canApproveRegistration: registration.canApproveRegistration(req.userRole?.role),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),

@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 1.4.6 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 1.6.16 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -20,6 +20,16 @@ The Sales log tracks MLA-Ray sales from submission through quality review and cl
 | Which columns appear | **Log columns** (sidebar) — RTM / Admin only |
 | Clients / devices / prices | **Settings → Sales clients & breaks** |
 | App-wide role permissions | **Access Control** (separate from sales field matrix) |
+
+### v1.6.16 — form hardening
+
+| Feature | Who | Notes |
+|---------|-----|--------|
+| **Delete sale** | Admin, RTM | Edit modal → Delete; removes DB row, attachments, storage, Airtable |
+| **Reassign agent/closer** | Admin, RTM, CEO | Unit/team/agent/closer pickers on Edit and Quality ticket |
+| **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; recording required on create |
+| **Draft** | All on Add sale | Auto-save to browser; resume or discard; Clear all fields |
+| **Double submit** | All | Save disabled while in flight; server 409 on duplicate within 2 min |
 
 ---
 

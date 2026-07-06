@@ -375,6 +375,138 @@ window.SalesModule = (function () {
     return state.user?.canWorkQualityTicket === true;
   }
 
+  function canDeleteSales() {
+    return state.user?.canDeleteSales === true;
+  }
+
+  function canReassignSaleLead() {
+    return state.user?.canReassignSaleLead === true;
+  }
+
+  function saleDraftStorageKey() {
+    const uid = state.user?.username || state.user?.employeeId || "anon";
+    return `hr_sale_draft_v1_${uid}`;
+  }
+
+  function clearSaleValidationErrors(form) {
+    if (!form) return;
+    form.querySelectorAll(".field-error").forEach((el) => el.remove());
+    form.querySelectorAll(".field.has-error").forEach((el) => el.classList.remove("has-error"));
+    const summary = form.querySelector(".sale-validation-summary");
+    if (summary) summary.remove();
+  }
+
+  function showSaleValidationErrors(form, errors) {
+    clearSaleValidationErrors(form);
+    if (!errors?.length) return;
+    const summary = document.createElement("div");
+    summary.className = "alert alert-warn sale-validation-summary";
+    summary.style.gridColumn = "1 / -1";
+    summary.innerHTML = `<strong>Fix required fields:</strong><ul>${errors
+      .map((e) => `<li>${escapeHtml(e.message || e.label)}</li>`)
+      .join("")}</ul>`;
+    form.prepend(summary);
+    for (const err of errors) {
+      const key = err.key;
+      const el =
+        form.querySelector(`[name="${key}"]`) ||
+        form.querySelector(`#sale-${key}-select`) ||
+        form.querySelector(`[data-attach-kind="${key}"]`)?.closest("label");
+      if (el) {
+        const field = el.closest("label") || el.closest(".field") || el;
+        field.classList.add("has-error");
+      }
+    }
+    summary.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function pendingRecordingSelected(form) {
+    if (!form) return false;
+    for (const input of form.querySelectorAll("[data-attach-kind]")) {
+      if ((input.dataset.attachKind || "") === "recording" && input.files?.[0]) return true;
+    }
+    return false;
+  }
+
+  function serializeDraftFromForm(form) {
+    const fields = {};
+    if (!form) return { savedAt: Date.now(), fields };
+    for (const el of form.querySelectorAll("input, select, textarea")) {
+      if (!el.name || el.type === "file" || el.disabled) continue;
+      fields[el.name] = el.value;
+    }
+    const clientId = document.getElementById("sale-client-select")?.value;
+    const productId = document.getElementById("sale-product-select")?.value;
+    const priceId = document.getElementById("sale-price-select")?.value;
+    if (clientId) fields.salesClientId = clientId;
+    if (productId) fields.salesProductId = productId;
+    if (priceId) fields.salesPriceId = priceId;
+    return { savedAt: Date.now(), fields };
+  }
+
+  function applyDraftToForm(form, draft) {
+    const fields = draft?.fields || {};
+    for (const [name, val] of Object.entries(fields)) {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el) el.value = val;
+    }
+    if (fields.salesClientId) {
+      const el = document.getElementById("sale-client-select");
+      if (el) el.value = fields.salesClientId;
+    }
+    if (fields.salesProductId) {
+      const el = document.getElementById("sale-product-select");
+      if (el) el.value = fields.salesProductId;
+    }
+    if (fields.salesPriceId) {
+      const el = document.getElementById("sale-price-select");
+      if (el) el.value = fields.salesPriceId;
+    }
+    form.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function buildSaleBodyFromForm(fd) {
+    const body = { formData: {} };
+    const clientId = document.getElementById("sale-client-select")?.value;
+    const productId = document.getElementById("sale-product-select")?.value;
+    const priceId = document.getElementById("sale-price-select")?.value;
+    if (clientId) {
+      body.salesClientId = clientId;
+      body.formData.salesClientId = clientId;
+    }
+    if (productId) {
+      body.salesProductId = productId;
+      body.formData.salesProductId = productId;
+    }
+    if (priceId) {
+      body.salesPriceId = priceId;
+      body.formData.salesPriceId = priceId;
+    }
+    for (const [k, v] of fd.entries()) {
+      if (k === "agentId" || k === "closerId" || k === "unit" || k === "team") body[k] = v;
+      else if (k === "device") {
+        body.device = v;
+        body.formData.deviceType = v;
+      } else {
+        body.formData[k] = v;
+        if (k === "phoneNumber") body.phoneNumber = v;
+        if (k === "fullName") body.fullName = v;
+        if (k === "price") body.price = Number(v) || null;
+        if (k === "client") body.client = v;
+        if (k === "submissionDate") body.submissionDate = v;
+        if (k === "effectiveDate") body.effectiveDate = v;
+        if (k === "status") body.status = v;
+        if (k === "feedback") body.feedback = v;
+      }
+    }
+    if (!body.fullName) {
+      const fn = body.formData.firstName || fd.get("firstName") || "";
+      const ln = body.formData.lastName || fd.get("lastName") || "";
+      body.fullName = [fn, ln].filter(Boolean).join(" ").trim();
+    }
+    return body;
+  }
+
   function canOpenQualityTicketForSale(sale) {
     if (canWorkQualityTicket()) return true;
     const role = state.user?.role;
@@ -493,11 +625,14 @@ window.SalesModule = (function () {
     };
 
     if (window.HRSalesConfigBreaks) {
+      const refreshAttachments = () =>
+        wireSaleAttachmentsList(container, saleId, api, attachKinds, openSaleAttachment, canManageFiles, opts);
       window.HRSalesConfigBreaks.wireAttachmentActions(
         container,
         api,
         safeOpenAttachment,
-        () => Object.values(kindCanEdit).some(Boolean)
+        () => Object.values(kindCanEdit).some(Boolean),
+        refreshAttachments
       );
     } else {
       container.querySelectorAll("[data-open-attach]").forEach((btn) => {
@@ -506,8 +641,51 @@ window.SalesModule = (function () {
     }
   }
 
-  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false } = {}) {
-    if (!isEdit && !viewOnly) return "";
+  function wireSaleAttachmentUploads(scopeEl, saleId, attachKinds) {
+    if (!scopeEl || !saleId || !window.HRSalesConfigBreaks?.bindImmediateSaleAttachmentUploads) return;
+    const listEl = scopeEl.querySelector("#sale-attachments-list");
+    const refreshList =
+      listEl && attachKinds?.length
+        ? () => wireSaleAttachmentsList(listEl, saleId, api, attachKinds, openSaleAttachment, true)
+        : null;
+    window.HRSalesConfigBreaks.bindImmediateSaleAttachmentUploads(scopeEl, saleId, attachKinds, {
+      refreshList,
+      getSessionId: typeof getSessionId === "function" ? getSessionId : () => "",
+    });
+  }
+
+  async function uploadPendingAttachments(formEl, saleId) {
+    if (!saleId || !formEl) return;
+    for (const input of formEl.querySelectorAll("[data-attach-kind]")) {
+      if (input.dataset.uploaded === "1") continue;
+      const file = input.files?.[0];
+      if (!file) continue;
+      if (window.HRSalesConfigBreaks?.uploadSaleAttachmentWithProgress) {
+        await window.HRSalesConfigBreaks.uploadSaleAttachmentWithProgress(
+          saleId,
+          file,
+          input.dataset.attachKind || "recording",
+          { getSessionId: typeof getSessionId === "function" ? getSessionId : () => "" }
+        );
+      } else {
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(",")[1]);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        await api(`/sales/${saleId}/attachments`, {
+          method: "POST",
+          body: JSON.stringify({ fileName: file.name, contentBase64: b64, kind: input.dataset.attachKind }),
+        });
+      }
+      input.dataset.uploaded = "1";
+      input.value = "";
+    }
+  }
+
+  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false, allowCreateUpload = false } = {}) {
+    if (!isEdit && !viewOnly && !allowCreateUpload) return "";
     const viewKinds = (attachKinds || []).filter((k) => k.canView);
     if (!viewKinds.length && !forceShow) return "";
     if (viewOnly) {
@@ -517,11 +695,36 @@ window.SalesModule = (function () {
       </div>`;
     }
     const uploadKinds = viewKinds.filter((k) => k.canEdit);
+    if (!isEdit && allowCreateUpload) {
+      const createUploadKinds = uploadKinds.length ? uploadKinds : viewKinds.filter((k) => k.key === "recording");
+      const uploadHtml = createUploadKinds.length
+        ? `<div class="attachment-upload-grid">${createUploadKinds
+            .map(
+              (k) =>
+                `<label class="field"><span>${escapeHtml(k.label)} — upload (required)</span><input type="file" data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
+              <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
+                <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
+                <span class="muted upload-meter-label">Uploading…</span>
+              </div></label>`
+            )
+            .join("")}</div>`
+        : "";
+      return `<div class="card card-flat sale-attachments-block" style="grid-column:1/-1">
+        <h4>Attachments</h4>
+        <p class="muted">Upload a call recording before submitting.</p>
+        ${uploadHtml}
+      </div>`;
+    }
+    const uploadKinds = viewKinds.filter((k) => k.canEdit);
     const uploadHtml = uploadKinds.length
       ? `<div class="attachment-upload-grid">${uploadKinds
           .map(
             (k) =>
-              `<label class="field"><span>${escapeHtml(k.label)} — upload</span><input type="file" data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" /></label>`
+              `<label class="field"><span>${escapeHtml(k.label)} — upload</span><input type="file" data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
+              <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
+                <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
+                <span class="muted upload-meter-label">Uploading…</span>
+              </div></label>`
           )
           .join("")}</div>`
       : "";
@@ -1270,11 +1473,9 @@ window.SalesModule = (function () {
       .join("");
 
     const attachBlock = attachKinds.length ? buildAttachmentsBlock(attachKinds, true) : "";
-
-    openModal(
-      `<div class="modal-header"><h2>Quality ticket</h2><button class="btn btn-sm" data-close>✕</button></div>
-      <form id="quality-ticket-form" class="form-grid modal-body-scroll">
-        <div class="card card-flat quality-ticket-summary" style="grid-column:1/-1">
+    const reassignSummary = canReassignSaleLead()
+      ? ""
+      : `<div class="card card-flat quality-ticket-summary" style="grid-column:1/-1">
           <div class="field-grid">
             <div><span class="muted">Customer</span><div><strong>${escapeHtml(sale.fullName || "—")}</strong></div><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span></div>
             <div><span class="muted">Client</span><div>${escapeHtml(sale.client || formData.client || "—")}</div></div>
@@ -1282,7 +1483,22 @@ window.SalesModule = (function () {
             <div><span class="muted">Agent</span><div>${escapeHtml(sale.agentId || "—")} — ${escapeHtml(agentEmp?.american_name || "")}</div></div>
             <div><span class="muted">Status</span><div><span class="badge">${escapeHtml(sale.status || "")}</span></div></div>
           </div>
-        </div>
+        </div>`;
+    const customerSummary = canReassignSaleLead()
+      ? `<div class="card card-flat quality-ticket-summary" style="grid-column:1/-1">
+          <div class="field-grid">
+            <div><span class="muted">Customer</span><div><strong>${escapeHtml(sale.fullName || "—")}</strong></div><span class="muted">${escapeHtml(sale.phoneNumber || "")}</span></div>
+            <div><span class="muted">Client</span><div>${escapeHtml(sale.client || formData.client || "—")}</div></div>
+            <div><span class="muted">Device</span><div>${escapeHtml(deviceLabel(sale.device || formData.deviceType))}</div></div>
+            <div><span class="muted">Status</span><div><span class="badge">${escapeHtml(sale.status || "")}</span></div></div>
+          </div>
+        </div>`
+      : reassignSummary;
+
+    openModal(
+      `<div class="modal-header"><h2>Quality ticket</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <form id="quality-ticket-form" class="form-grid modal-body-scroll">
+        ${customerSummary}
         ${fieldsHtml}
         ${attachBlock}
         <div class="form-actions"><button type="submit" class="btn btn-primary">Save ticket</button></div>
@@ -1291,12 +1507,25 @@ window.SalesModule = (function () {
     );
 
     const listEl = document.getElementById("sale-attachments-list");
+    const qForm = document.getElementById("quality-ticket-form");
+    if (canReassignSaleLead() && window.HRSalesConfigBreaks) {
+      await window.HRSalesConfigBreaks.enhanceSaleModal(
+        api,
+        { escapeHtml, closeModal, openModal },
+        sale,
+        employees,
+        document.getElementById("modal-root") || document,
+        () => true,
+        openSaleAttachment,
+        { mode: "quality", formSelector: "#quality-ticket-form" }
+      ).catch(() => null);
+    }
     if (listEl && attachKinds.length) {
       await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, false, {
         inlineAudio: attachKinds.some((k) => k.key === "recording" && k.canView),
       });
     }
-    const qForm = document.getElementById("quality-ticket-form");
+    if (qForm) wireSaleAttachmentUploads(qForm, sale.id, attachKinds.filter((k) => k.canEdit));
     if (qForm && ticketFields.some((f) => f.key === "paymentMethod" && f.canView)) {
       const method = inferredPayment;
       const isCard = method === "Card";
@@ -1309,24 +1538,13 @@ window.SalesModule = (function () {
       e.preventDefault();
       const fd = new FormData(e.target);
       const body = { edit: true, qualityTicket: true, formData: {} };
-      for (const [k, v] of fd.entries()) body.formData[k] = v;
+      for (const [k, v] of fd.entries()) {
+        if (k === "agentId" || k === "closerId" || k === "unit" || k === "team") body[k] = v;
+        else body.formData[k] = v;
+      }
       try {
         await api(`/sales/${sale.id}`, { method: "PATCH", body: JSON.stringify(body) });
-        const saleId = sale.id;
-        for (const input of document.querySelectorAll("[data-attach-kind]")) {
-          const file = input.files?.[0];
-          if (!file) continue;
-          const b64 = await new Promise((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(String(r.result).split(",")[1]);
-            r.onerror = reject;
-            r.readAsDataURL(file);
-          });
-          await api(`/sales/${saleId}/attachments`, {
-            method: "POST",
-            body: JSON.stringify({ fileName: file.name, contentBase64: b64, kind: input.dataset.attachKind }),
-          });
-        }
+        await uploadPendingAttachments(e.target, sale.id);
         closeModal();
         onDone();
       } catch (err) {
@@ -1427,22 +1645,32 @@ window.SalesModule = (function () {
       wirePaymentToggle(form, { initialMethod: inferPaymentMethod(formData, sale) });
     }
 
-    const agentCloserHtml = isEdit
-      ? `<div class="field" style="grid-column:1/-1">
+    const agentCloserHtml =
+      isEdit && !canReassignSaleLead()
+        ? `<div class="field" style="grid-column:1/-1">
           <span class="muted">Agent</span><div><strong>${escapeHtml(sale?.agentId || "—")}</strong> — ${escapeHtml(agentEmp?.american_name || "")}</div>
           <span class="muted">Closer</span><div><strong>${escapeHtml(sale?.closerId || "—")}</strong> — ${escapeHtml(closerEmp?.american_name || "")}</div>
         </div>`
-      : "";
+        : "";
 
     const sections = [...new Set(fields.map((f) => f.section || "general"))];
-    const sectionHtml = sections.map((sec) => {
-      const secFields = fields.filter((f) => (f.section || "general") === sec);
-      if (!secFields.length) return "";
-      return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(fieldHtml).join("")}</div></fieldset>`;
-    }).join("");
+    const sectionHtml = sections
+      .map((sec) => {
+        const secFields = fields.filter((f) => (f.section || "general") === sec);
+        if (!secFields.length) return "";
+        return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(fieldHtml).join("")}</div></fieldset>`;
+      })
+      .join("");
 
     const attachKinds = (catalog.attachmentKinds || []).filter((k) => k.canView);
-    const attachHtml = buildAttachmentsBlock(attachKinds, isEdit);
+    const attachHtml = buildAttachmentsBlock(attachKinds, isEdit, { allowCreateUpload: !isEdit });
+    const deleteBtn =
+      isEdit && canDeleteSales()
+        ? `<button type="button" class="btn btn-danger" id="sale-delete-btn">Delete sale</button>`
+        : "";
+    const clearBtn = !isEdit
+      ? `<button type="button" class="btn" id="sale-clear-all-btn">Clear all fields</button>`
+      : "";
 
     openModal(`
       <div class="modal-header"><h2>${isEdit ? "Edit sale" : "Add sale"}</h2><button class="btn btn-sm" data-close>✕</button></div>
@@ -1450,7 +1678,7 @@ window.SalesModule = (function () {
         ${agentCloserHtml}
         ${sectionHtml}
         ${attachHtml}
-        <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+        <div class="form-actions">${clearBtn}${deleteBtn}<button type="submit" class="btn btn-primary" id="sale-submit-btn">Save</button></div>
       </form>
     `, true);
     document.querySelector("#modal-root .modal")?.classList.add("sale-form-modal");
@@ -1467,78 +1695,110 @@ window.SalesModule = (function () {
         employees,
         document.getElementById("modal-root") || document,
         () => canFullEditSale(),
-        openSaleAttachment
+        openSaleAttachment,
+        { mode: isEdit ? "edit" : "create" }
       ).catch(() => null);
     }
     const listEl = document.getElementById("sale-attachments-list");
     if (isEdit && sale?.id && listEl && !salesClientsMeta) {
       await wireSaleAttachmentsList(listEl, sale.id, api, attachKinds, openSaleAttachment, canFullEditSale());
     }
+    if (isEdit && sale?.id && saleForm) {
+      wireSaleAttachmentUploads(saleForm, sale.id, attachKinds.filter((k) => k.canEdit));
+    }
 
+    if (!isEdit && saleForm) {
+      const draftKey = saleDraftStorageKey();
+      const rawDraft = localStorage.getItem(draftKey);
+      if (rawDraft) {
+        try {
+          const draft = JSON.parse(rawDraft);
+          if (draft?.fields && confirm("Resume saved draft?")) {
+            applyDraftToForm(saleForm, draft);
+            wirePaymentToggleLocal(saleForm);
+          } else {
+            localStorage.removeItem(draftKey);
+          }
+        } catch (_) {
+          localStorage.removeItem(draftKey);
+        }
+      }
+      let draftTimer = null;
+      const queueDraftSave = () => {
+        clearTimeout(draftTimer);
+        draftTimer = setTimeout(() => {
+          try {
+            localStorage.setItem(draftKey, JSON.stringify(serializeDraftFromForm(saleForm)));
+          } catch (_) {
+            /* quota */
+          }
+        }, 500);
+      };
+      saleForm.addEventListener("input", queueDraftSave);
+      saleForm.addEventListener("change", queueDraftSave);
+      document.getElementById("sale-clear-all-btn")?.addEventListener("click", () => {
+        if (!confirm("Clear all fields and discard draft?")) return;
+        saleForm.reset();
+        localStorage.removeItem(draftKey);
+        clearSaleValidationErrors(saleForm);
+        wirePaymentToggleLocal(saleForm);
+      });
+    }
+
+    document.getElementById("sale-delete-btn")?.addEventListener("click", async () => {
+      const label = sale?.fullName || sale?.phoneNumber || "this sale";
+      if (!confirm(`Permanently delete sale for ${label}? This cannot be undone.`)) return;
+      if (prompt('Type DELETE to confirm') !== "DELETE") return;
+      try {
+        await api(`/sales/${sale.id}`, { method: "DELETE" });
+        closeModal();
+        onDone();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    let submitting = false;
     document.getElementById("sale-form").onsubmit = async (e) => {
       e.preventDefault();
+      if (submitting) return;
+      const submitBtn = document.getElementById("sale-submit-btn");
       const clientId = document.getElementById("sale-client-select")?.value;
       const productId = document.getElementById("sale-product-select")?.value;
       const priceId = document.getElementById("sale-price-select")?.value;
       const clients =
         salesClientsMeta?.clients ||
-        (await window.HRSalesConfigBreaks.loadCatalog(api).catch(() => ({ clients: [] }))).clients ||
+        (await window.HRSalesConfigBreaks?.loadCatalog(api).catch(() => ({ clients: [] }))).clients ||
         [];
       if (clients.length && window.HRSalesConfigBreaks) {
         const ok = await window.HRSalesConfigBreaks.validateClientSubmit(clients, clientId, productId, priceId);
         if (!ok) return;
-      } else if (clients.length && !clientId) {
-        alert("Select client, device, and price from the catalog list.");
-        return;
       }
       const fd = new FormData(e.target);
-      const paymentMethod = String(fd.get("paymentMethod") || "").trim();
-      if (!isEdit && !paymentMethod) {
-        alert("Select a payment method (Bank account or Card).");
-        return;
+      const body = buildSaleBodyFromForm(fd);
+      const hasCatalog = clients.length > 0;
+      const pendingRec = pendingRecordingSelected(e.target);
+      let attachmentKinds = pendingRec ? ["recording"] : [];
+      if (isEdit && sale?.id) {
+        const attRes = await api(`/sales/${sale.id}/attachments`).catch(() => ({ attachments: [] }));
+        attachmentKinds = [...new Set([...(attRes.attachments || []).map((a) => a.kind), ...attachmentKinds])];
       }
-      if (paymentMethod === "Card") {
-        if (!String(fd.get("cardNumber") || "").trim() || !String(fd.get("cardExpDate") || "").trim() || !String(fd.get("cvv") || "").trim()) {
-          alert("Enter card number, expiration, and CVV when payment method is Card.");
+      if (window.HRSaleSubmitRequired && !isEdit) {
+        const validation = window.HRSaleSubmitRequired.validateSaleSubmitPayload(body, {
+          hasCatalog,
+          attachmentKinds,
+          pendingRecording: pendingRec,
+        });
+        if (!validation.ok) {
+          showSaleValidationErrors(e.target, validation.errors);
           return;
         }
       }
-      if (paymentMethod === "Bank account") {
-        if (
-          !String(fd.get("routingNumber") || "").trim() ||
-          !String(fd.get("bankName") || "").trim() ||
-          !String(fd.get("bankAccountNumber") || "").trim()
-        ) {
-          alert("Enter routing number, bank name, and account number when payment method is Bank account.");
-          return;
-        }
-      }
-      const body = { formData: {} };
-      for (const [k, v] of fd.entries()) {
-        if (k === "agentId" || k === "closerId" || k === "unit" || k === "team") body[k] = v;
-        else if (k === "device") {
-          body.device = v;
-          body.formData.deviceType = v;
-        } else {
-          body.formData[k] = v;
-          if (k === "phoneNumber") body.phoneNumber = v;
-          if (k === "fullName") body.fullName = v;
-          if (k === "price") body.price = Number(v) || null;
-          if (k === "client") body.client = v;
-          if (k === "salesClientId" || k === "salesProductId" || k === "salesPriceId") {
-            body.formData[k] = v;
-            body[k] = v;
-          }
-          if (k === "submissionDate") body.submissionDate = v;
-          if (k === "effectiveDate") body.effectiveDate = v;
-          if (k === "status") body.status = v;
-          if (k === "feedback") body.feedback = v;
-        }
-      }
-      if (!body.fullName) {
-        const fn = body.formData.firstName || fd.get("firstName") || "";
-        const ln = body.formData.lastName || fd.get("lastName") || "";
-        body.fullName = [fn, ln].filter(Boolean).join(" ").trim();
+      clearSaleValidationErrors(e.target);
+      submitting = true;
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Saving…";
       }
       try {
         let saleId = sale?.id;
@@ -1548,25 +1808,25 @@ window.SalesModule = (function () {
         } else {
           const res = await api("/sales", { method: "POST", body: JSON.stringify(body) });
           saleId = res.sale?.id;
+          localStorage.removeItem(saleDraftStorageKey());
         }
-        for (const input of e.target.querySelectorAll("[data-attach-kind]")) {
-          const file = input.files?.[0];
-          if (!file || !saleId) continue;
-          const b64 = await new Promise((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = () => resolve(String(r.result).split(",")[1]);
-            r.onerror = reject;
-            r.readAsDataURL(file);
-          });
-          await api(`/sales/${saleId}/attachments`, {
-            method: "POST",
-            body: JSON.stringify({ fileName: file.name, contentBase64: b64, kind: input.dataset.attachKind }),
-          });
-        }
+        await uploadPendingAttachments(e.target, saleId);
         closeModal();
         onDone();
       } catch (err) {
-        alert(err.message);
+        const msg = String(err.message || "");
+        if (msg.toLowerCase().includes("already submitted")) {
+          alert("This sale was already submitted.");
+          localStorage.removeItem(saleDraftStorageKey());
+        } else {
+          alert(msg);
+        }
+      } finally {
+        submitting = false;
+        if (submitBtn && document.getElementById("sale-form")) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Save";
+        }
       }
     };
   }

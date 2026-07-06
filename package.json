@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.6.13",
+  "version": "1.6.16",
   "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -35,6 +35,9 @@
     "apply:github-patch": "node scripts/apply-github-patch-standalone.js",
     "seed:fp-june": "node scripts/seed-june-fp-mappings.js",
     "apply:migrations": "node scripts/apply-pending-migrations.js",
+    "sync:airtable": "node scripts/backfill-airtable-sales.js",
+    "provision:airtable": "node scripts/provision-airtable-sales-fields.js",
+    "backfill:confirmations": "node scripts/backfill-confirmation-from-csv.js --csv=\"Asset/cancel MLA-Source.csv\"",
     "test": "node scripts/run-all-tests.js",
     "test:access-scope": "node scripts/test-access-scope.js",
     "test:quality-sales-perms": "node scripts/test-quality-sales-perms.js",

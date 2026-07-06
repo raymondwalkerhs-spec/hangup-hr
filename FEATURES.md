@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.6.13 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.14 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -204,10 +204,10 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Sale forms & tickets
 
-- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers; team auto from agent; no quality section on create
-- **Edit sale** — field visibility and edit rights from Sales permissions
+- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers; team auto from agent; no quality section on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; recording upload required on submit; double-submit prevention
+- **Edit sale** — field visibility and edit rights from Sales permissions; **Delete sale** (Admin/RTM); **reassign unit/team/agent/closer** (Admin/RTM/CEO)
 - **View sale** — read-only detail modal (Access Control **View sale**); fields from Edit sale tab
-- **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted
+- **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted; **reassign unit/team/agent/closer** for Admin/RTM/CEO
 - **Sales catalog** — clients, devices, price tiers (Settings); TL/OP must use catalog when configured
 - Payment method toggle — card vs bank sub-fields
 - **Reviewer status** / **Client status** (verifier feedback / client feedback)
@@ -216,6 +216,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 ### Attachments & export
 
 - Recordings and confirmations in **Supabase Storage** (`hr-documents` / `sales-attachments`)
+- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable **Sales All Data** (all fields + attachments via signed URLs); debounced, non-blocking
 - Inline audio playback, download, signed share links
 - Attachment view/upload gated per role (Sales permissions **Attachments** tab)
 - Export filtered list or single sale: **CSV**, **Excel**, or **PDF**
@@ -423,4 +424,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **1.6.13** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **1.6.14** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

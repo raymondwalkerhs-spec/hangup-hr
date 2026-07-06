@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.13` (`package.json` → `version`)
-- **Previous:** `1.6.10` (robust sales ACL), `1.6.8` (audit remediation)
+- **Current version:** `1.6.16` (`package.json` → `version`)
+- **Previous:** `1.6.15` (sale attachments UX), `1.6.14` (Airtable sync)
 
 ---
 
@@ -27,6 +27,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 | Version policy | `app_versions` table (`lib/version-sheet.js`) |
 | Documents | Supabase Storage bucket `hr-documents` |
 | Sale recordings / confirmations | Supabase Storage `hr-documents` → `sales-attachments/{saleId}/…` (signed share URLs, ~7 days) |
+| Airtable sales sync (optional) | `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` → table **Sales All Data**; `lib/airtable-sales-sync.js` hooks `routes/sales.js` after create/edit/attachments |
 | Local cache | SQLite per PC (`better-sqlite3`) — **keep this**; do not read Postgres on every UI click |
 | Legacy Sheets | **Removed from runtime** — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
 
@@ -57,7 +58,7 @@ to Supabase via Express, then re-sync.
 |------|--------|
 | UI | `public/index.html`, `public/login.html`, `public/js/app.js`, `public/js/theme.js`, `public/css/app.css` |
 | Sales UI | `public/js/sales.js`, `public/js/sales-permissions-pages.js`, `public/js/sales-config-breaks.js` |
-| Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js` |
+| Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js`, `lib/airtable-sales-sync.js`, `lib/airtable-sales-field-map.js`, `lib/airtable-client.js` |
 | Access Control UI | `public/js/access-control.js`, `lib/permission-catalog.js`, `lib/role-permissions.js` |
 | API | `routes/api.js`, `routes/admin-users.js`, `app.js` (Express entry) |
 | Data layer | `lib/data-store.js`, `lib/backend.js`, `lib/supabase-repo.js`, `lib/cache.js` |
@@ -191,6 +192,7 @@ Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
 | **Client feedback** | Dropdown; RTM/Admin edit only |
 | **Quality/RTM** | Unit toggles HS-1/2/3 on log |
 | **Attachments** | Supabase Storage `sales-attachments/{saleId}/…`; signed share URLs ~7 days |
+| **Airtable sync** | Optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME=Sales All Data`; async after create/edit/attachment mutations; `sales.airtable_record_id` |
 | **Export** | CSV / Excel / PDF |
 | **Payroll link** | Sale create/update recalcs agent `sales_count` for working-day month |
 
@@ -453,6 +455,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.16** | **true** | Sales form hardening: delete sale, reassignment pickers, validation, draft, double-submit guard |
 | **1.6.13** | **true** | Add sale team auto from agent; hide quality section on submit |
 | **1.6.12** | **true** | Add sale submit surface; role-scoped pickers; My docs upload types; hide annual from agents |
 | **1.6.11** | **true** | View sale read-only modal; fix quality ticket Sales permissions (camelCase qualityViewRoles) |
