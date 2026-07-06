@@ -2126,3 +2126,39 @@ tr.clickable { cursor: pointer; }
     scroll-behavior: auto !important;
   }
 }
+
+.upload-meter {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+
+.upload-meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+  width: 0;
+}
+
+.sales-flash-banner {
+  display: none;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 1px solid #a5d6a7;
+  font-size: 0.95rem;
+}
+.sales-flash-banner.visible {
+  display: block;
+}
+.quality-ticket-quality-section legend {
+  font-weight: 600;
+}
+
+.attach-upload-status {
+  margin-top: 0.25rem;
+}

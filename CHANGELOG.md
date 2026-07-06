@@ -2,6 +2,16 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.22] — 2026-07-06
+
+### Fixed
+- **Quality tickets** — empty `edit_roles` in sales permissions no longer blocks saves; quality fields stay visible in the sales list for quality/RTM users after save
+- **Sale delete** — removes row from Supabase, local cache, and Airtable (lookup by `airtable_record_id` or Portal Sale ID); cancels pending sync so deleted sales are not re-pushed
+- **Reviewer / verifier pickers** — out and out-still-paid employees excluded; server rejects assigning them
+
+### Changed
+- Quality ticket UX: Quality section first, taller comments field, save button loading state, success banner after save
+
 ## [1.6.21] — 2026-07-06
 
 ### Fixed

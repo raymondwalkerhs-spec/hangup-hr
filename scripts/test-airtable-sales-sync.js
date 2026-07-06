@@ -206,6 +206,11 @@ async function testClientAndSync() {
   await new Promise((r) => setTimeout(r, 120));
   assert("debounce coalesces", debounceRuns === 1);
 
+  fetchCalls.length = 0;
+  const del = await sync.deleteSaleFromAirtable({ ...sale, airtableRecordId: "" });
+  assert("delete uses Portal Sale ID lookup", del.recordId === "recFromLookup");
+  assert("deleteRecord DELETE", fetchCalls.some((c) => c.opts.method === "DELETE"));
+
   business.getSale = origGetSale;
   business.readSaleAttachments = origReadAtt;
   business.setSaleAirtableMeta = origSetMeta;

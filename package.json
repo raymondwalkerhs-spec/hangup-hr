@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "1.6.21",
+  "version": "1.6.22",
   "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {

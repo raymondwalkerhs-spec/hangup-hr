@@ -883,6 +883,46 @@ window.SalesModule = (function () {
       <select id="sales-verifier-feedback-filter" title="Reviewer status"><option value="">All reviewer statuses</option>${revOpts}</select>`;
   }
 
+  function flashSalesMessage(msg) {
+    if (!msg) return;
+    let el = document.getElementById("sales-flash-banner");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "sales-flash-banner";
+      el.className = "sales-flash-banner";
+      el.setAttribute("role", "status");
+      const host = document.getElementById("page-root") || document.body;
+      host.insertBefore(el, host.firstChild);
+    }
+    el.textContent = msg;
+    el.classList.add("visible");
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => el.classList.remove("visible"), 2800);
+  }
+
+  const TICKET_SECTION_ORDER = ["quality", "client", "payment", "general", "lead"];
+
+  function sortTicketSections(sections) {
+    return sections.slice().sort((a, b) => {
+      const ia = TICKET_SECTION_ORDER.indexOf(a);
+      const ib = TICKET_SECTION_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }
+
+  function ticketSectionLabel(sec) {
+    if (sec === "quality") return "Quality";
+    return sec.charAt(0).toUpperCase() + sec.slice(1);
+  }
+
+  function employeeIsOutForPicker(emp) {
+    if (!emp) return true;
+    if (emp.deleted_at) return true;
+    if (typeof isOutEmployeeStatus === "function" && isOutEmployeeStatus(emp.status)) return true;
+    if (typeof isOutEmployee === "function" && isOutEmployee(emp)) return true;
+    return false;
+  }
+
   function employeeSelectOptions(employees, escapeHtml, selectedId = "", filter = "all") {
     let list = employees.slice();
     if (filter === "dialing") {
@@ -932,6 +972,7 @@ window.SalesModule = (function () {
         return false;
       });
     }
+    list = list.filter((e) => !employeeIsOutForPicker(e) || String(e.id) === String(selectedId));
     list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
     let html = '<option value="">— Select —</option>';
     for (const e of list) {
@@ -1475,7 +1516,8 @@ window.SalesModule = (function () {
         return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><select name="${name}">${employeeSelectOptions(employees, escapeHtml, val, f.employeeFilter || "all")}</select></label>`;
       }
       if (f.type === "textarea") {
-        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}">${escapeHtml(val)}</textarea></label>`;
+        const rows = f.key === "qualityComments" ? 4 : 3;
+        return `<label class="field${cardClass}" style="grid-column:1/-1"><span>${escapeHtml(f.label)}</span><textarea name="${name}" rows="${rows}">${escapeHtml(val)}</textarea></label>`;
       }
       if (f.type === "select" && f.options) {
         const placeholder = f.selectPlaceholder ? '<option value="">— Select —</option>' : "";
@@ -1488,12 +1530,12 @@ window.SalesModule = (function () {
       return `<label class="field${cardClass}"><span>${escapeHtml(f.label)}</span><input name="${name}" type="${inputType}" value="${escapeHtml(val)}" /></label>`;
     }
 
-    const bySection = [...new Set(ticketFields.map((f) => f.section || "general"))];
+    const bySection = sortTicketSections([...new Set(ticketFields.map((f) => f.section || "general"))]);
     const fieldsHtml = bySection
       .map((sec) => {
         const secFields = ticketFields.filter((f) => (f.section || "general") === sec);
         if (!secFields.length) return "";
-        return `<fieldset class="card card-flat" style="grid-column:1/-1"><legend>${escapeHtml(sec)}</legend><div class="field-grid">${secFields.map(qFieldHtml).join("")}</div></fieldset>`;
+        return `<fieldset class="card card-flat${sec === "quality" ? " quality-ticket-quality-section" : ""}" style="grid-column:1/-1"><legend>${escapeHtml(ticketSectionLabel(sec))}</legend><div class="field-grid">${secFields.map(qFieldHtml).join("")}</div></fieldset>`;
       })
       .join("");
 
@@ -1526,7 +1568,7 @@ window.SalesModule = (function () {
         ${customerSummary}
         ${fieldsHtml}
         ${attachBlock}
-        <div class="form-actions"><button type="submit" class="btn btn-primary">Save ticket</button></div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary" id="quality-ticket-save-btn">Save ticket</button></div>
       </form>`,
       true
     );
@@ -1561,19 +1603,31 @@ window.SalesModule = (function () {
 
     document.getElementById("quality-ticket-form").onsubmit = async (e) => {
       e.preventDefault();
+      const saveBtn = document.getElementById("quality-ticket-save-btn");
+      if (saveBtn?.disabled) return;
       const fd = new FormData(e.target);
       const body = { edit: true, qualityTicket: true, formData: {} };
       for (const [k, v] of fd.entries()) {
         if (k === "agentId" || k === "closerId" || k === "unit" || k === "team") body[k] = v;
         else body.formData[k] = v;
       }
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving…";
+      }
       try {
         await api(`/sales/${sale.id}`, { method: "PATCH", body: JSON.stringify(body) });
         await uploadPendingAttachments(e.target, sale.id);
         closeModal();
+        flashSalesMessage("Quality ticket saved.");
         onDone();
       } catch (err) {
         alert(err.message);
+      } finally {
+        if (saveBtn && document.getElementById("quality-ticket-form")) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save ticket";
+        }
       }
     };
   }

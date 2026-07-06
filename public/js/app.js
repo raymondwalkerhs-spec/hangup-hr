@@ -137,6 +137,7 @@ function filterPayrollByZeroNet(rows) {
 function isOutEmployee(emp) {
   if (!emp) return true;
   if (emp.status === "Deleted" || emp.deleted_at) return true;
+  if (isOutEmployeeStatus(emp.status)) return true;
   if (emp.status === "Out") return true;
   if (!emp.status && !emp.american_name && !emp.arabic_name) return true;
   return false;
@@ -327,7 +328,7 @@ function bindPaymentMethodFields() {
 
 function isOutEmployeeStatus(status) {
   const s = String(status || "").trim().toLowerCase();
-  return s === "out" || s.includes("out but still");
+  return s === "out" || s === "out_still_paid" || s.includes("out but still") || s.includes("out still");
 }
 
 function positionSelectHtml(name, value, id = "emp-position") {

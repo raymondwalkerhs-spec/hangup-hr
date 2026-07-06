@@ -23,6 +23,10 @@ const saleSubmitRequired = require("../lib/sales-submit-required");
 
 const router = express.Router();
 
+function salesRedactOpts(req) {
+  return roles.canWorkQualityTicket(req.userRole) ? { mergeQualityFormData: true } : {};
+}
+
 function afterSaleMutation(saleId, opts) {
   if (saleId) airtableSync.scheduleSaleSync(saleId, opts);
 }
@@ -81,6 +85,23 @@ async function validateSaleUnitTeam(unit, team) {
   if (!match) return { ok: false, error: "Invalid unit/team combination" };
   if (match.dialsSales === false) return { ok: false, error: "Only dialing teams can be selected" };
   return { ok: true, unit: u, team: t };
+}
+
+function validateQualityAssignees(formData) {
+  const { isOutStatus } = require("../lib/employee-status");
+  for (const [key, label] of [
+    ["reviewer", "Reviewer"],
+    ["assignVerifier", "Verifier"],
+  ]) {
+    const id = String(formData?.[key] || "").trim();
+    if (!id) continue;
+    const emp = store.getEmployeeById(id);
+    if (!emp) return { ok: false, error: `${label} not found` };
+    if (isOutStatus(emp.status)) {
+      return { ok: false, error: `${label} is out and cannot be assigned` };
+    }
+  }
+  return { ok: true };
 }
 
 function normalizePaymentMethod(method) {
@@ -245,7 +266,7 @@ router.get("/", async (req, res) => {
       sales = salesFilter.applySalesFilter(sales, req.query.filter);
     }
     sales = enrichSalesDisplayNames(sales, store.getEmployees());
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
     const listColumns = await salesListColumns.getVisibleColumnsForUser(req.userRole?.role);
     res.json({ sales, devices: business.SALE_DEVICES, statuses: business.SALE_STATUSES, listColumns });
   } catch (err) {
@@ -273,7 +294,7 @@ router.get("/period-grid", async (req, res) => {
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
 
     const attendanceRecords = [];
     for (const ym of periodGrid.attendanceMonthsInRange(from, to)) {
@@ -310,7 +331,7 @@ router.get("/team-dashboard", async (req, res) => {
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
 
     let teamsMeta = [];
     try {
@@ -362,7 +383,7 @@ router.get("/dashboard", async (req, res) => {
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
     const dashboard = salesScope.buildSalesDashboard(sales, {
       period: req.query.period || "day",
       date: req.query.date,
@@ -605,7 +626,7 @@ router.post("/", async (req, res) => {
     await notifySaleAssignments(sale, {});
     await recalcAgentSalesFromSale(sale, req.username);
     afterSaleMutation(sale.id, { immediate: true });
-    res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole))[0] });
+    res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole, salesRedactOpts(req)))[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -643,6 +664,7 @@ router.patch("/:id", async (req, res) => {
 
     const { action, feedback, callbackVisibleToAgent, effectiveDate } = req.body;
     let patch = {};
+    let responseSurface = "main";
 
     if (action === "approve" && salesScope.canApproveSale(req.userRole)) {
       patch.status = existing.status === "postdated" ? "passed" : "passed";
@@ -664,6 +686,7 @@ router.patch("/:id", async (req, res) => {
       patch.feedback = feedback || existing.feedback;
     } else if (req.body.edit === true || (!action && roles.canEditSale(req.userRole))) {
       const ticketOnly = req.body.qualityTicket === true;
+      if (ticketOnly) responseSurface = "quality";
       if (ticketOnly) {
         if (!roles.canOpenQualityTicketOnSale(req.userRole, existing)) {
           return res.status(403).json({ error: "No permission for quality tickets" });
@@ -678,6 +701,8 @@ router.patch("/:id", async (req, res) => {
       );
       const paymentMethod = normalizePaymentMethod(sanitizedForm.paymentMethod);
       const scrubbedForm = paymentMethod ? scrubPaymentForm(sanitizedForm, paymentMethod) : sanitizedForm;
+      const assignCheck = validateQualityAssignees(scrubbedForm);
+      if (!assignCheck.ok) return res.status(400).json({ error: assignCheck.error });
       const built = salesFieldAccess.buildPayloadFromBody(req.body, scrubbedForm);
       patch = {
         phoneNumber: built.phoneNumber || existing.phoneNumber,
@@ -775,7 +800,9 @@ router.patch("/:id", async (req, res) => {
         []
       );
     }
-    const [redacted] = await salesFieldAccess.redactSalesForRole([sale], req.userRole);
+    const [redacted] = await salesFieldAccess.redactSalesForRole([sale], req.userRole, {
+      surface: responseSurface,
+    });
     await recalcAgentSalesFromSale(sale, req.username);
     if (existing.agentId && existing.agentId !== sale.agentId) {
       await recalcAgentSalesFromSale(existing, req.username);
@@ -827,7 +854,7 @@ router.get("/export", async (req, res) => {
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
     sales = enrichSalesDisplayNames(sales, store.getEmployees());
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
+    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
     if (req.query.saleId) {
       sales = sales.filter((s) => s.id === req.query.saleId);
     }
