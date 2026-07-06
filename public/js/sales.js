@@ -741,7 +741,6 @@ window.SalesModule = (function () {
         ${uploadHtml}
       </div>`;
     }
-    const uploadKinds = viewKinds.filter((k) => k.canEdit);
     const uploadHtml = uploadKinds.length
       ? `<div class="attachment-upload-grid">${uploadKinds
           .map(

@@ -472,6 +472,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.21** | **true** | Sales log load fix (duplicate `uploadKinds` broke `sales.js`) |
 | **1.6.20** | **true** | Sales log time sort, quality ticket save fix, multi-file attachment upload |
 | **1.6.19** | **true** | HS-2 access locked to CEO/Admin/HR (+ Quality in sales); patch release |
 | **1.6.18** | **true** | Airtable upsert (no duplicate rows), attachment sync/clear, faster sync |

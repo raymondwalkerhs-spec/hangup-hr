@@ -2,6 +2,11 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.21] — 2026-07-06
+
+### Fixed
+- **Sales log** — page failed to load (`SyntaxError: duplicate uploadKinds` in `sales.js` prevented `SalesModule` from registering)
+
 ## [1.6.20] — 2026-07-06
 
 ### Fixed
