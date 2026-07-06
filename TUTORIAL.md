@@ -245,6 +245,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
 - **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
 - **View sale (1.6.11):** read-only modal on sales log; enable **View sale** in Access Control; field visibility from **Sales permissions → Edit sale**.
+- **Quality ticket (1.6.11):** fix — **Sales permissions → Quality ticket** grants now apply correctly (was ignoring DB rows); payment card/bank sub-fields show on readonly tickets.
 - **Quality ticket (1.6.10):** quality surface defaults deny non-quality fields unless granted in **Sales permissions → Quality ticket** tab; agent/closer shown in summary only; non-editable fields are display-only; attachments gated by **Attachments** tab.
 - **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).
 

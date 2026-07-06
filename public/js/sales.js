@@ -1298,7 +1298,11 @@ window.SalesModule = (function () {
     }
     const qForm = document.getElementById("quality-ticket-form");
     if (qForm && ticketFields.some((f) => f.key === "paymentMethod" && f.canView)) {
-      wirePaymentToggle(qForm, { initialMethod: inferredPayment });
+      const method = inferredPayment;
+      const isCard = method === "Card";
+      const isBank = method === "Bank account";
+      qForm.querySelectorAll(".sale-card-fields").forEach((el) => el.classList.toggle("hidden", !isCard));
+      qForm.querySelectorAll(".sale-bank-fields").forEach((el) => el.classList.toggle("hidden", !isBank));
     }
 
     document.getElementById("quality-ticket-form").onsubmit = async (e) => {

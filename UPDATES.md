@@ -6,7 +6,7 @@
 4. `git push` then CI or local `.\scripts\publish-github-release.ps1 -Tag v1.6.11`
 5. `node scripts/publish-app-version.js`
 
-**1.6.11 change:** View sale — read-only modal; Access Control **viewSale** permission; fields from Sales permissions Edit sale tab.
+**1.6.11 change:** View sale read-only modal; fix quality ticket ignoring Sales permissions Quality tab (camelCase DB row keys).
 
 ---
 ## v1.6.10 release checklist

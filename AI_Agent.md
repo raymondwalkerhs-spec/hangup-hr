@@ -453,7 +453,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.6.11** | **true** | View sale — read-only modal; Access Control viewSale; fields from Sales permissions Edit sale tab |
+| **1.6.11** | **true** | View sale read-only modal; fix quality ticket Sales permissions (camelCase qualityViewRoles) |
 | **1.6.10** | **true** | Robust sales ACL: unified resolver, tabbed permissions, attachment ACL DB, cross-unit closer names, live user-exception defaults |
 | **1.6.9** | **true** | Sales field ACL surfaces; OP verifier tickets; remove bankAccountChosenBy; payment backfill flags |
 | **1.6.8** | **true** | Audit remediation: ACL/RBAC fixes, sales action permissions wired, web installer version pin, single-patch publish, `npm test` |

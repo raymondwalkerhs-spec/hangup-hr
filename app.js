@@ -27,6 +27,9 @@ function createApp() {
     require("./lib/user-permissions")
       .loadOverrides()
       .catch((err) => console.warn("[startup] user-permissions preload:", err.message || err));
+    require("./lib/sales-action-permissions")
+      .loadMap()
+      .catch((err) => console.warn("[startup] sales-action-permissions preload:", err.message || err));
   } catch {
     /* non-fatal */
   }

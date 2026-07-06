@@ -7,6 +7,9 @@ All notable changes to the Hangup Portal desktop app.
 ### Added
 - **View sale** — read-only sale detail modal on the sales log; button gated by Access Control **View sale**; visible fields from Sales permissions **Edit sale** tab; attachments view/listen only (no upload)
 
+### Fixed
+- **Quality ticket permissions** — resolver now reads camelCase DB rows (`qualityViewRoles`, `mainViewRoles`, `editRoles`) from `business-repo`; Quality tab grants apply correctly on the ticket (was showing only the quality section)
+
 ## [1.6.10] — 2026-07-06
 
 ### Fixed

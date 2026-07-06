@@ -153,4 +153,38 @@ const enriched = enrichSalesDisplayNames(
 )[0];
 assert("closer display enrichment", enriched.closerDisplayName === "Closer Two" && enriched.agentDisplayName === "Agent One");
 
+const camelPermMap = Object.fromEntries(
+  Object.entries(permMap).map(([k, v]) => [
+    k,
+    {
+      fieldKey: k,
+      mainViewRoles: v.main_view_roles,
+      qualityViewRoles: v.quality_view_roles,
+      editRoles: v.edit_roles,
+      viewRoles: v.view_roles,
+    },
+  ])
+);
+// Simulate admin-granted Quality tab access (business-repo camelCase shape)
+["firstName", "lastName", "paymentMethod", "chargeAmount", "notes", "reviewer"].forEach((key) => {
+  if (camelPermMap[key]) {
+    camelPermMap[key] = {
+      ...camelPermMap[key],
+      qualityViewRoles: ["op", "tl", "quality", "admin", "ceo", "rtm"],
+    };
+  }
+});
+const opCamelQuality = catalog.listFieldsForRoleOnSurface("op", camelPermMap, "quality", {
+  user: opVerifier,
+  sale,
+});
+assert(
+  "camelCase business-repo perms: OP assignee sees paymentMethod on quality surface",
+  opCamelQuality.some((f) => f.key === "paymentMethod")
+);
+assert(
+  "camelCase business-repo perms: OP assignee sees multiple sections",
+  new Set(opCamelQuality.map((f) => f.section)).size >= 4
+);
+
 if (!process.exitCode) console.log("\nAll tests passed.");
