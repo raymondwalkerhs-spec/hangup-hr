@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.6.22 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.23 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 

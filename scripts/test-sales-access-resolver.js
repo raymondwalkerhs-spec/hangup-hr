@@ -24,7 +24,7 @@ const sanitized = resolver.sanitizeFormPayload(
   { qualityComments: "Test note" },
   "quality",
   { qualityComments: emptyDbPerm },
-  { create: false, sale: { formData: {} }, surface: "quality", user: { role: "quality" } }
+  { create: false, sale: { formData: {} }, surface: "quality", qualityTicket: true, user: { role: "quality" } }
 );
 assert("sanitize applies qualityComments", sanitized.qualityComments === "Test note");
 

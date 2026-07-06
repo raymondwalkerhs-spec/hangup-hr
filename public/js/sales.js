@@ -390,6 +390,90 @@ window.SalesModule = (function () {
     return state.user?.canDeleteSales === true;
   }
 
+  function saleDeleteConfirmHtml(escapeHtml, label, { visible = false } = {}) {
+    return `<div id="sale-delete-confirm-panel" class="card card-flat sale-delete-confirm${visible ? "" : " hidden"}" style="grid-column:1/-1;border-color:#c62828">
+      <p><strong>Delete sale for ${escapeHtml(label)}?</strong> This removes the sale from the portal and Airtable. This cannot be undone.</p>
+      <label class="field"><span>Type DELETE to confirm</span><input type="text" id="sale-delete-confirm-input" autocomplete="off" placeholder="DELETE" /></label>
+      <div class="btn-row">
+        <button type="button" class="btn" id="sale-delete-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="sale-delete-confirm-btn" disabled>Delete permanently</button>
+      </div>
+    </div>`;
+  }
+
+  function wireSaleDeleteHandlers({ saleId, label, api, escapeHtml, closeModal, onDone, root = document, autoOpen = false }) {
+    const startBtn = root.getElementById?.("sale-delete-btn") || root.querySelector?.("[data-sale-delete-start]");
+    const panel = root.getElementById?.("sale-delete-confirm-panel");
+    const input = root.getElementById?.("sale-delete-confirm-input");
+    const confirmBtn = root.getElementById?.("sale-delete-confirm-btn");
+    const cancelBtn = root.getElementById?.("sale-delete-cancel-btn");
+    if (!panel || !input || !confirmBtn) return;
+
+    const hidePanel = () => {
+      if (!autoOpen) panel.classList.add("hidden");
+      input.value = "";
+      confirmBtn.disabled = true;
+      if (startBtn) startBtn.disabled = false;
+    };
+
+    if (autoOpen) {
+      panel.classList.remove("hidden");
+      input.focus();
+    } else if (startBtn) {
+      startBtn.addEventListener("click", () => {
+        panel.classList.remove("hidden");
+        startBtn.disabled = true;
+        input.focus();
+      });
+    }
+
+    input.addEventListener("input", () => {
+      confirmBtn.disabled = input.value.trim() !== "DELETE";
+    });
+
+    cancelBtn?.addEventListener("click", hidePanel);
+
+    confirmBtn.addEventListener("click", async () => {
+      if (input.value.trim() !== "DELETE") return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Deleting…";
+      try {
+        await api(`/sales/${saleId}`, { method: "DELETE" });
+        if (typeof closeModal === "function") closeModal();
+        flashSalesMessage("Sale deleted.");
+        onDone();
+      } catch (err) {
+        alert(err.message || "Delete failed");
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Delete permanently";
+      }
+    });
+  }
+
+  async function deleteSaleFromList(sale, api, helpers, onDone) {
+    const { escapeHtml, openModal, closeModal } = helpers;
+    const label = sale?.fullName || sale?.phoneNumber || "this sale";
+    openModal(
+      `<div class="modal-header"><h2>Delete sale</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div class="form-grid modal-body-scroll" id="sale-delete-modal-root">
+        ${saleDeleteConfirmHtml(escapeHtml, label, { visible: true })}
+      </div>`,
+      true
+    );
+    const root = document.getElementById("sale-delete-modal-root");
+    wireSaleDeleteHandlers({
+      saleId: sale.id,
+      label,
+      api,
+      escapeHtml,
+      closeModal,
+      onDone,
+      root: root || document,
+      autoOpen: true,
+    });
+    root?.querySelector("#sale-delete-cancel-btn")?.addEventListener("click", closeModal);
+  }
+
   function canReassignSaleLead() {
     return state.user?.canReassignSaleLead === true;
   }
@@ -1213,6 +1297,7 @@ window.SalesModule = (function () {
                 <button class="btn btn-sm btn-danger" data-deny="${s.id}">Deny</button>` : ""}
               ${canApprove() ? `<button class="btn btn-sm" data-callback="${s.id}">Callback</button>` : ""}
               ${canExportSalesList() ? `<button class="btn btn-sm" data-export-sale="${s.id}" title="Export this sale">Export</button>` : ""}
+              ${canDeleteSales() ? `<button class="btn btn-sm btn-danger" data-delete-sale="${s.id}">Delete</button>` : ""}
             </td></tr>`;
           })
           .join("")
@@ -1309,6 +1394,12 @@ window.SalesModule = (function () {
     root.querySelector("#sales-export-btn")?.addEventListener("click", () => runSalesExport());
     root.querySelectorAll("[data-export-sale]").forEach((btn) => {
       btn.onclick = () => runSalesExport({ saleId: btn.dataset.exportSale });
+    });
+    root.querySelectorAll("[data-delete-sale]").forEach((btn) => {
+      btn.onclick = () => {
+        const sale = sales.find((s) => s.id === btn.dataset.deleteSale);
+        if (sale) deleteSaleFromList(sale, api, helpers, rerender);
+      };
     });
     root.querySelectorAll("[data-view-sale]").forEach((btn) => {
       btn.onclick = () => {
@@ -1747,6 +1838,8 @@ window.SalesModule = (function () {
       isEdit && canDeleteSales()
         ? `<button type="button" class="btn btn-danger" id="sale-delete-btn">Delete sale</button>`
         : "";
+    const deleteConfirmHtml =
+      isEdit && canDeleteSales() ? saleDeleteConfirmHtml(escapeHtml, sale?.fullName || sale?.phoneNumber || "this sale") : "";
     const clearBtn = !isEdit
       ? `<button type="button" class="btn" id="sale-clear-all-btn">Clear all fields</button>`
       : "";
@@ -1757,6 +1850,7 @@ window.SalesModule = (function () {
         ${agentCloserHtml}
         ${sectionHtml}
         ${attachHtml}
+        ${deleteConfirmHtml}
         <div class="form-actions">${clearBtn}${deleteBtn}<button type="submit" class="btn btn-primary" id="sale-submit-btn">Save</button></div>
       </form>
     `, true);
@@ -1824,18 +1918,16 @@ window.SalesModule = (function () {
       });
     }
 
-    document.getElementById("sale-delete-btn")?.addEventListener("click", async () => {
-      const label = sale?.fullName || sale?.phoneNumber || "this sale";
-      if (!confirm(`Permanently delete sale for ${label}? This cannot be undone.`)) return;
-      if (prompt('Type DELETE to confirm') !== "DELETE") return;
-      try {
-        await api(`/sales/${sale.id}`, { method: "DELETE" });
-        closeModal();
-        onDone();
-      } catch (err) {
-        alert(err.message);
-      }
-    });
+    document.getElementById("sale-delete-btn") &&
+      wireSaleDeleteHandlers({
+        saleId: sale.id,
+        label: sale?.fullName || sale?.phoneNumber || "this sale",
+        api,
+        escapeHtml,
+        closeModal,
+        onDone,
+        root: document.getElementById("sale-form") || document,
+      });
 
     let submitting = false;
     document.getElementById("sale-form").onsubmit = async (e) => {

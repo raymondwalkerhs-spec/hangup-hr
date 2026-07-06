@@ -2155,8 +2155,8 @@ tr.clickable { cursor: pointer; }
 .sales-flash-banner.visible {
   display: block;
 }
-.quality-ticket-quality-section legend {
-  font-weight: 600;
+.sale-delete-confirm.hidden {
+  display: none;
 }
 
 .attach-upload-status {

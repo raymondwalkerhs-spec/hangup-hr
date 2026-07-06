@@ -27,8 +27,8 @@ function salesRedactOpts(req) {
   return roles.canWorkQualityTicket(req.userRole) ? { mergeQualityFormData: true } : {};
 }
 
-function afterSaleMutation(saleId, opts) {
-  if (saleId) airtableSync.scheduleSaleSync(saleId, opts);
+function afterSaleMutation(saleId, opts = {}) {
+  if (saleId) airtableSync.scheduleSaleSync(saleId, { ...opts, immediate: true });
 }
 
 function scopedEmployees(req, opts = {}) {

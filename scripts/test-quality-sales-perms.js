@@ -207,4 +207,22 @@ assert("quality ticket save keeps unrelated form fields", sanitizedTicket.firstN
 assert("quality ticket save updates qualityComments", sanitizedTicket.qualityComments === "updated comment");
 assert("quality ticket save updates reviewer", sanitizedTicket.reviewer === "QV2");
 
+const restrictivePerm = {
+  qualityComments: {
+    fieldKey: "qualityComments",
+    edit_roles: ["admin", "rtm"],
+    quality_view_roles: ["quality", "rtm", "admin", "ceo"],
+  },
+};
+const restrictedSave = catalog.sanitizeFormPayload(
+  { qualityComments: "saved despite restrictive DB edit_roles" },
+  "quality",
+  restrictivePerm,
+  { create: false, user: qualityUser, sale: fullSale, surface: "quality", qualityTicket: true }
+);
+assert(
+  "restrictive DB edit_roles: quality role still saves qualityComments on ticket",
+  restrictedSave.qualityComments === "saved despite restrictive DB edit_roles"
+);
+
 if (!process.exitCode) console.log("\nAll tests passed.");

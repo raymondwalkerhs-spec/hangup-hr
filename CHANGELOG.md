@@ -2,6 +2,15 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.23] — 2026-07-06
+
+### Fixed
+- **Delete sale** — `window.prompt()` does not work in Electron; replaced with in-modal type-DELETE confirmation. Delete button also added on each sales log row (admin/RTM).
+- **Quality comments save** — stale local sales cache after PATCH made edits look lost; cache now updates on save. Quality-section fields always editable on quality ticket for quality/RTM (catalog roles override restrictive DB `edit_roles`).
+
+### Changed
+- **Airtable sync** — sales mutations sync immediately (default debounce 0ms; `afterSaleMutation` always immediate).
+
 ## [1.6.22] — 2026-07-06
 
 ### Fixed
