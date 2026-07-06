@@ -207,6 +207,48 @@ async function testClientAndSync() {
   assert("debounce coalesces", debounceRuns === 1);
 
   fetchCalls.length = 0;
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts, body: opts?.body ? JSON.parse(opts.body) : null });
+    const method = opts?.method || "GET";
+    const urlStr = String(url);
+    let payload;
+    if (urlStr.includes("/meta/bases/")) {
+      payload = { tables: [{ name: "Sales All Data", fields: [] }] };
+    } else if (method === "GET") {
+      payload = {
+        records: [
+          { id: "recDup1", fields: { "Portal Sale ID": "sale-uuid-1" } },
+          { id: "recDup2", fields: { "Portal Sale ID": "sale-uuid-1" } },
+        ],
+      };
+    } else {
+      payload = { id: "recDup1", fields: {} };
+    }
+    const body = JSON.stringify(payload);
+    return { ok: true, status: 200, json: async () => payload, text: async () => body };
+  };
+  business.getSale = async () => ({ ...sale, airtableRecordId: "" });
+  await sync.syncSaleById("sale-uuid-1");
+  const deleteCalls = fetchCalls.filter((c) => c.opts.method === "DELETE");
+  assert("duplicate Portal Sale ID rows deleted", deleteCalls.length >= 1);
+  assert("duplicate sync PATCH not POST", fetchCalls.some((c) => c.opts.method === "PATCH"));
+
+  fetchCalls.length = 0;
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts, body: opts?.body ? JSON.parse(opts.body) : null });
+    const method = opts?.method || "GET";
+    const urlStr = String(url);
+    let payload;
+    if (urlStr.includes("/meta/bases/")) {
+      payload = { tables: [{ name: "Sales All Data", fields: [] }] };
+    } else if (method === "GET") {
+      payload = { records: [{ id: "recFromLookup", fields: { "Portal Sale ID": "sale-uuid-1" } }] };
+    } else {
+      payload = { id: "recFromLookup", fields: {} };
+    }
+    const body = JSON.stringify(payload);
+    return { ok: true, status: 200, json: async () => payload, text: async () => body };
+  };
   const del = await sync.deleteSaleFromAirtable({ ...sale, airtableRecordId: "" });
   assert("delete uses Portal Sale ID lookup", del.recordId === "recFromLookup");
   assert("deleteRecord DELETE", fetchCalls.some((c) => c.opts.method === "DELETE"));

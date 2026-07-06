@@ -635,23 +635,7 @@ window.HRSalesConfigBreaks = (function () {
     return (employees || []).filter((e) => isDialingEmployee(e));
   }
 
-  function pickClosersForSubmit(user, employees) {
-    if (isBroadSubmitter(user)) {
-      return (employees || []).filter((e) => isCloserCandidate(e));
-    }
-    const role = String(user?.role || "").toLowerCase();
-    if (role === "tl" || role === "op") {
-      const unit = user?.unit;
-      return (employees || []).filter((e) => isCloserCandidate(e) && (!unit || e.unit === unit));
-    }
-    if (role === "agent") {
-      const units = isDualRoleAgent(user) ? unitsForSubmitUser(user) : user?.unit ? [user.unit] : [];
-      if (!units.length) {
-        return (employees || []).filter((e) => e.id === user?.employeeId);
-      }
-      const unitSet = new Set(units);
-      return (employees || []).filter((e) => isCloserCandidate(e) && unitSet.has(e.unit));
-    }
+  function pickClosersForSubmit(_user, employees) {
     return (employees || []).filter((e) => isCloserCandidate(e));
   }
 
@@ -793,6 +777,16 @@ window.HRSalesConfigBreaks = (function () {
       teamSel.value = teamName;
     }
 
+    function syncAssignmentHiddenFields() {
+      const unitVal = unitSel?.value || unitHidden?.value || "";
+      const teamVal = teamSel?.value || teamHidden?.value || "";
+      const agentVal = agentSel?.value || form.querySelector("#sale-agent-hidden")?.value || "";
+      if (unitHidden && unitVal) unitHidden.value = unitVal;
+      if (teamHidden && teamVal) teamHidden.value = teamVal;
+      const agentHidden = form.querySelector("#sale-agent-hidden");
+      if (agentHidden && agentVal) agentHidden.value = agentVal;
+    }
+
     function syncTeamFromAgent(agentId) {
       const agent = scopedAgents.find((e) => e.id === agentId);
       if (!agent) return;
@@ -805,6 +799,7 @@ window.HRSalesConfigBreaks = (function () {
       } else if (agent.unit && unitHidden) {
         unitHidden.value = agent.unit;
       }
+      syncAssignmentHiddenFields();
     }
 
     function refreshCloserOptions() {
@@ -843,15 +838,19 @@ window.HRSalesConfigBreaks = (function () {
         if (unitHidden) unitHidden.value = unitSel.value;
         refreshTeamOptions(unitSel.value, "");
         refreshAgentOptionsForUnit(unitSel.value, "");
+        syncAssignmentHiddenFields();
       });
     }
     if (!lockTeam) {
       teamSel?.addEventListener("change", () => {
+        if (teamHidden) teamHidden.value = teamSel.value;
         refreshAgentOptionsForUnit(unitSel?.value || unitHidden?.value, "");
+        syncAssignmentHiddenFields();
       });
     }
     agentSel?.addEventListener("change", () => {
       syncTeamFromAgent(agentSel.value);
+      syncAssignmentHiddenFields();
     });
 
     if (agentSel && unitSel && teamSel) {
@@ -864,6 +863,8 @@ window.HRSalesConfigBreaks = (function () {
       if (agentSel.value) syncTeamFromAgent(agentSel.value);
     }
     refreshCloserOptions();
+    form._syncAssignmentHiddenFields = syncAssignmentHiddenFields;
+    syncAssignmentHiddenFields();
   }
 
   async function injectUnitTeamPickerBlock(form, sale, employees, api, escapeHtml, mode) {

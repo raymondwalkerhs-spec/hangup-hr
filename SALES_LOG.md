@@ -27,8 +27,9 @@ The Sales log tracks MLA-Ray sales from submission through quality review and cl
 |---------|-----|--------|
 | **Delete sale** | Admin, RTM | Edit modal → Delete; removes DB row, attachments, storage, Airtable |
 | **Reassign agent/closer** | Admin, RTM, CEO | Unit/team/agent/closer pickers on Edit and Quality ticket |
-| **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; **recording not required** on create |
-| **Recording attachments** | Quality, RTM, admin, HR (upload); finance/CEO view | **Hidden from Agent and TL** — no list, upload, or create UI |
+| **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; **no attachments on Add sale form** |
+| **Recording attachments** | Quality, RTM, admin, HR (upload on edit); finance/CEO view | **Hidden from Agent and TL**; not shown on create/submit |
+| **Airtable MLA sync** | All sales (when configured) | Columns match `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv` order; upsert by Portal Sale ID; dedupe on sync; reset: `node scripts/reset-airtable-sales.js --confirm-wipe --provision --backfill` |
 | **Draft** | All on Add sale | Auto-save to browser; resume or discard; Clear all fields |
 | **Double submit** | All | Save disabled while in flight; server 409 on duplicate within 2 min |
 

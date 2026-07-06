@@ -472,6 +472,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.25** | **true** | Add sale no attachments; cross-unit closers; picker/submit fix; Airtable MLA reset + canonical columns |
 | **1.6.24** | **true** | No recording required on submit; Agent/TL hidden from recordings; sale delete confirm button fix |
 | **1.6.23** | **true** | Quality comments cache fix + permission override; sale delete Electron fix; Airtable immediate sync |
 | **1.6.22** | **true** | Quality ticket save/delete fixes, Airtable delete on sale remove, out agents blocked from reviewer/verifier |

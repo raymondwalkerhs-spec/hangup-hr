@@ -2,13 +2,23 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.25] — 2026-07-06
+
+### Fixed
+- **Add sale** — attachments section removed entirely from submit form (no recording/confirmation UI on create).
+- **Agent / closer pickers** — fresh employee list on modal open; hidden unit/team/agent fields stay in sync; submit reads picker DOM reliably.
+- **Closer selection** — closers may be from any unit (global closer list); agents remain unit/team-scoped.
+
+### Changed
+- **Airtable MLA table** — canonical column order from `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv` (template columns first, Portal extras after); `scripts/reset-airtable-sales.js` wipes table and backfills from Supabase; duplicate `Portal Sale ID` rows auto-removed on sync.
+
 ## [1.6.24] — 2026-07-06
 
 ### Fixed
 - **Sale delete confirm** — type-DELETE panel now wires correctly inside modal/form scope (`querySelector` instead of `getElementById` on non-document roots); **Delete permanently** enables after typing DELETE.
 
 ### Changed
-- **Sales submit** — recording attachment no longer required on create (client + server validation removed).
+- **Sales submit** — recording attachment no longer required on create (client + server validation removed); **Attachments block removed entirely from Add sale** (no recording/confirmation UI on submit).
 - **Recording visibility** — Agent and TL cannot view, upload, or see recording UI; recordings are quality/admin/RTM (and finance/CEO view-only per catalog).
 
 ## [1.6.23] — 2026-07-06

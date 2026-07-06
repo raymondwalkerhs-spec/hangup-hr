@@ -522,14 +522,6 @@ window.SalesModule = (function () {
     summary.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
-  function pendingRecordingSelected(form) {
-    if (!form) return false;
-    for (const input of form.querySelectorAll("[data-attach-kind]")) {
-      if ((input.dataset.attachKind || "") === "recording" && input.files?.[0]) return true;
-    }
-    return false;
-  }
-
   function serializeDraftFromForm(form) {
     const fields = {};
     if (!form) return { savedAt: Date.now(), fields };
@@ -605,6 +597,17 @@ window.SalesModule = (function () {
       const fn = body.formData.firstName || fd.get("firstName") || "";
       const ln = body.formData.lastName || fd.get("lastName") || "";
       body.fullName = [fn, ln].filter(Boolean).join(" ").trim();
+    }
+    const formEl = document.getElementById("sale-form");
+    if (formEl) {
+      const pick = (sel, hiddenId) =>
+        formEl.querySelector(sel)?.value || formEl.querySelector(hiddenId)?.value || "";
+      body.agentId = body.agentId || pick("#sale-agent-select", "#sale-agent-hidden");
+      body.closerId = body.closerId || pick("#sale-closer-select", null);
+      body.unit = body.unit || pick("#sale-unit-select", "#sale-unit-hidden");
+      body.team = body.team || pick("#sale-team-select", "#sale-team-hidden");
+      if (body.unit) body.formData.unit = body.unit;
+      if (body.team) body.formData.team = body.team;
     }
     return body;
   }
@@ -801,8 +804,8 @@ window.SalesModule = (function () {
     return (list || []).slice().sort((a, b) => key(b) - key(a));
   }
 
-  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false, allowCreateUpload = false } = {}) {
-    if (!isEdit && !viewOnly && !allowCreateUpload) return "";
+  function buildAttachmentsBlock(attachKinds, isEdit, { forceShow = false, viewOnly = false } = {}) {
+    if (!isEdit && !viewOnly) return "";
     const viewKinds = (attachKinds || []).filter((k) => k.canView);
     if (!viewKinds.length && !forceShow) return "";
     if (viewOnly) {
@@ -812,23 +815,6 @@ window.SalesModule = (function () {
       </div>`;
     }
     const uploadKinds = viewKinds.filter((k) => k.canEdit);
-    if (!isEdit && allowCreateUpload) {
-      if (!uploadKinds.length) return "";
-      const uploadHtml = `<div class="attachment-upload-grid">${uploadKinds
-        .map(
-          (k) =>
-            `<label class="field"><span>${escapeHtml(k.label)} — upload (optional)</span><input type="file" multiple data-attach-kind="${k.key}" accept="audio/*,image/*,.pdf" />
-              <div class="attach-upload-status" data-upload-status="${escapeHtml(k.key)}" hidden>
-                <div class="upload-meter"><div class="upload-meter-fill" style="width:0%"></div></div>
-                <span class="muted upload-meter-label">Uploading…</span>
-              </div></label>`
-        )
-        .join("")}</div>`;
-      return `<div class="card card-flat sale-attachments-block" style="grid-column:1/-1">
-        <h4>Attachments</h4>
-        ${uploadHtml}
-      </div>`;
-    }
     const uploadHtml = uploadKinds.length
       ? `<div class="attachment-upload-grid">${uploadKinds
           .map(
@@ -1730,6 +1716,8 @@ window.SalesModule = (function () {
   async function openSaleModal(api, employees, helpers, sale, onDone) {
     const { escapeHtml, closeModal, openModal } = helpers;
     const isEdit = !!sale;
+    const empRes = await api(`/employees${employeesQuery()}`).catch(() => ({ employees }));
+    employees = empRes.employees || employees || [];
     const catalogQuery =
       isEdit && sale?.id
         ? `?surface=main&saleId=${encodeURIComponent(sale.id)}`
@@ -1837,7 +1825,7 @@ window.SalesModule = (function () {
       .join("");
 
     const attachKinds = (catalog.attachmentKinds || []).filter((k) => k.canView);
-    const attachHtml = buildAttachmentsBlock(attachKinds, isEdit, { allowCreateUpload: !isEdit });
+    const attachHtml = isEdit && attachKinds.length ? buildAttachmentsBlock(attachKinds, true) : "";
     const deleteBtn =
       isEdit && canDeleteSales()
         ? `<button type="button" class="btn btn-danger" id="sale-delete-btn">Delete sale</button>`
@@ -1950,6 +1938,7 @@ window.SalesModule = (function () {
         if (!ok) return;
       }
       const fd = new FormData(e.target);
+      e.target._syncAssignmentHiddenFields?.();
       const body = buildSaleBodyFromForm(fd);
       const hasCatalog = clients.length > 0;
       if (window.HRSaleSubmitRequired && !isEdit) {
@@ -1977,7 +1966,9 @@ window.SalesModule = (function () {
           saleId = res.sale?.id;
           localStorage.removeItem(saleDraftStorageKey());
         }
-        await uploadPendingAttachments(e.target, saleId);
+        if (isEdit) {
+          await uploadPendingAttachments(e.target, saleId);
+        }
         closeModal();
         onDone();
       } catch (err) {

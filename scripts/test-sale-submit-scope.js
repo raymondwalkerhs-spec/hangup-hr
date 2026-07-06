@@ -50,17 +50,17 @@ const tlAgents = scope.employeesForAgentPicker(tlUser, employees).map((e) => e.i
 assert("TL sees unit dialing agents", tlAgents.includes("HS1-10") && !tlAgents.includes("HS3-30"));
 
 const plainClosers = scope.employeesForCloserPicker(plainAgent, employees).map((e) => e.id);
-assert("plain agent closers in home unit", plainClosers.includes("HS1-10") && plainClosers.includes("TL1-01"));
+assert("plain agent closers include cross-unit TL", plainClosers.includes("TL1-01") && plainClosers.includes("TL3-01"));
 
 const dualClosers = scope.employeesForCloserPicker(dualAgent, employees).map((e) => e.id);
-assert("dual agent closers in both units", dualClosers.includes("TL1-01") && dualClosers.includes("TL3-01"));
+assert("dual agent closers are global", dualClosers.includes("TL1-01") && dualClosers.includes("TL3-01"));
 
 const badCloser = scope.validateSaleSubmitAssignment(
   plainAgent,
   { agentId: "HS1-10", closerId: "TL3-01", unit: "HS-1", team: "Phoenix" },
   employees
 );
-assert("plain agent cannot pick closer outside unit", !badCloser.ok);
+assert("plain agent can pick closer from another unit", badCloser.ok === true);
 
 const goodPlain = scope.validateSaleSubmitAssignment(
   plainAgent,

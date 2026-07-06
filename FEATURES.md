@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.6.24 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.6.25 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -211,7 +211,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Sale forms & tickets
 
-- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/agent/closer pickers; team auto from agent; no quality section on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation** (no recording required); optional confirmation/receipt upload when role allows; double-submit prevention
+- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/**agent** pickers; **closer may be any unit**; team auto from agent; no quality section on create; **no attachments section** on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; double-submit prevention
 - **Edit sale** — field visibility and edit rights from Sales permissions; **Delete sale** (Admin/RTM); **reassign unit/team/agent/closer** (Admin/RTM/CEO)
 - **View sale** — read-only detail modal (Access Control **View sale**); fields from Edit sale tab
 - **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted; **reassign unit/team/agent/closer** for Admin/RTM/CEO
@@ -223,7 +223,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 ### Attachments & export
 
 - Recordings and confirmations in **Supabase Storage** (`hr-documents` / `sales-attachments`)
-- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable (upsert by `airtable_record_id` or **Portal Sale ID**; all attachment columns synced; empty arrays clear deleted files); 300ms debounce, immediate on save/attachment ops
+- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable (upsert by **Portal Sale ID**; duplicate rows removed; MLA column order from template CSV); immediate sync on save
 - Inline audio playback, download, signed share links
 - Attachment view/upload gated per role (Sales permissions **Attachments** tab)
 - **Recordings** hidden from Agent and TL (no UI, list, or upload); Quality/RTM/admin manage recordings
