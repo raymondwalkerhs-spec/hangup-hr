@@ -440,7 +440,9 @@ window.HRMSFeatures = (function () {
     }
 
     const teamNames = [...new Set(allTeams.map((t) => t.name).filter(Boolean))].sort();
-    const unitSections = (structure.units || []).map((section) => {
+    const unitSections = (structure.units || [])
+      .filter((section) => section.unit !== "HS-2" || (typeof state !== "undefined" && state.user?.canManageHs2Company))
+      .map((section) => {
       const teams = section.teams || [];
       const unit = section.unit;
       const isBackend = unit === "HS-Back-End" || unit === "HS-MGMT";
@@ -457,7 +459,7 @@ window.HRMSFeatures = (function () {
           : `<span class="muted">OP: ${esc(empName(opId, { nameOnly: true }))}</span>`;
       return `<section class="card org-unit-block org-hierarchy-unit" style="margin-bottom:1rem" data-unit="${esc(unit)}">
         <div class="flex-between" style="margin-bottom:.75rem;align-items:flex-start;gap:1rem;flex-wrap:wrap">
-          <div><h2 style="margin:0">${esc(unit)}${unit === "HS-2" ? ' <span class="badge">HS2 Company</span>' : ""}</h2>${opHeader}</div>
+          <div><h2 style="margin:0">${esc(unit)}${unit === "HS-2" && (typeof state !== "undefined" && state.user?.canManageHs2Company) ? ' <span class="badge">HS2 Company</span>' : ""}</h2>${opHeader}</div>
           ${canManage ? `<button class="btn btn-sm" data-add-team-unit="${esc(unit)}">+ Add team</button>` : ""}
         </div>
         <div class="stack org-team-stack">${teams.map((t) => {

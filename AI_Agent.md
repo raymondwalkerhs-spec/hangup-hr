@@ -138,7 +138,7 @@ See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 |------|----------------|
 | **Unit → Team → Agent** | Organization page; OP per unit, TL per team |
 | **HS-1, HS-3** | Main Hangup; OP manages each unit |
-| **HS-2** | **Separate company**; sidebar toggle; one unit HS-2 for now |
+| **HS-2** | **Separate company** — manage switcher **CEO / Admin / HR only**; Quality sees HS-2 in sales only; hidden everywhere else |
 | **HS-Back-End** | No OP — reports to CEO; teams: HR, Quality, RTM, Finance, Admins |
 | **HR manager** | Phoebe (`HR-Phoebe`) — `node scripts/link-phoebe-hr-manager.js` |
 | **Team names** | `node scripts/normalize-team-names.js` — strip `"Team "`, dedupe per unit |
@@ -192,7 +192,7 @@ Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
 | **Client feedback** | Dropdown; RTM/Admin edit only |
 | **Quality/RTM** | Unit toggles HS-1/2/3 on log |
 | **Attachments** | Supabase Storage `sales-attachments/{saleId}/…`; signed share URLs ~7 days |
-| **Airtable sync** | Optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME=Sales All Data`; async after create/edit/attachment mutations; `sales.airtable_record_id` |
+| **Airtable sync** | Optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME`; upsert via `airtable_record_id` + Portal Sale ID lookup; attachments via signed URLs; immediate sync on mutations |
 | **Export** | CSV / Excel / PDF |
 | **Payroll link** | Sale create/update recalcs agent `sales_count` for working-day month |
 
@@ -455,6 +455,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
+| **1.6.19** | **true** | HS-2 access locked to CEO/Admin/HR (+ Quality in sales); patch release |
+| **1.6.18** | **true** | Airtable upsert (no duplicate rows), attachment sync/clear, faster sync |
 | **1.6.17** | **true** | Org TL display, released ID reuse, org_teams-only team pickers, sale delete → Airtable |
 | **1.6.16** | **true** | Sales form hardening: delete sale, reassignment pickers, validation, draft, double-submit guard |
 | **1.6.13** | **true** | Add sale team auto from agent; hide quality section on submit |

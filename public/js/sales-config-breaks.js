@@ -14,7 +14,12 @@ window.HRSalesConfigBreaks = (function () {
   ];
 
   const ROLE_OPTIONS = ["agent", "tl", "op", "quality", "rtm", "hr", "admin", "ceo", "finance", "office_assistant"];
-  const UNIT_OPTIONS = ["HS1", "HS2", "HS3", "HS4", "HS5", "HS-Back-End", "Management"];
+  const UNIT_OPTIONS_ALL = ["HS1", "HS2", "HS3", "HS4", "HS5", "HS-Back-End", "Management"];
+
+  function visibleBreakUnits(state) {
+    if (state?.user?.canManageHs2Company) return UNIT_OPTIONS_ALL;
+    return UNIT_OPTIONS_ALL.filter((u) => u !== "HS2");
+  }
 
   function calcEndTime(startTime, durationMinutes) {
     const m = String(startTime || "10:00").match(/^(\d{1,2}):(\d{2})/);
@@ -1243,7 +1248,7 @@ window.HRSalesConfigBreaks = (function () {
     function openBreakModal(brk) {
       const b = brk || { active: true, durationMinutes: 15, units: [], roles: [], daysOfWeek: [1, 2, 3, 4, 5, 6, 7], startTime: "10:00" };
       const endPreview = calcEndTime(b.startTime || "10:00", b.durationMinutes || 15);
-      const unitChecks = UNIT_OPTIONS.map(
+      const unitChecks = visibleBreakUnits(state).map(
         (u) => `<label><input type="checkbox" name="units" value="${u}" ${(b.units || []).includes(u) ? "checked" : ""} /> ${u}</label>`
       ).join(" ");
       const roleChecks = ROLE_OPTIONS.map(

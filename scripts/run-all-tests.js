@@ -8,6 +8,7 @@ const scripts = [
   "test-employee-id-reuse.js",
   "test-airtable-sales-sync.js",
   "test-rbac-defaults.js",
+  "test-hs2-access.js",
   "test-fp-import.js",
   "test-training-payroll.js",
 ];

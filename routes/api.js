@@ -147,7 +147,7 @@ function parseHideOut(req) {
 
 function parseCompany(req) {
   const fromBody = req.body?.company;
-  return companyContext.parseCompanyContext(req.query.company || fromBody);
+  return companyContext.resolveCompanyContextForUser(req.query.company || fromBody, req.userRole);
 }
 
 function filterEmployeesForRequest(employees, req) {
@@ -797,6 +797,8 @@ router.get("/status", async (req, res) => {
       canGrantSalesVisibility: roles.canGrantSalesVisibility(req.userRole),
       canManageSalesFieldPermissions: roles.canManageSalesFieldPermissions(req.userRole),
       canViewSalesAdmin: roles.canViewSalesAdmin(req.userRole),
+      canManageHs2Company: roles.canManageHs2Company(req.userRole),
+      canSeeHs2InSales: roles.canSeeHs2InSales(req.userRole),
       canManageAccessControl: roles.canManageAccessControl(req.userRole),
       canViewAgentPayslipNav: agentPayslipAvailable,
     },
@@ -1141,8 +1143,10 @@ router.get("/meta/teams", async (req, res) => {
   }
   const teams = [...new Set(fromOrg.filter(Boolean))].sort();
   res.json({
-    teams,
-    units: store.getUnits(),
+    teams: roles.canManageHs2Company(req.userRole)
+      ? teams
+      : teams.filter((t) => !companyContext.isHs2Team(t)),
+    units: companyContext.filterUnitsListForRole(store.getUnits(), req.userRole),
     cashBranches: CASH_BRANCHES,
     paymentMethods: PAYMENT_METHOD_OPTIONS,
   });
@@ -1602,7 +1606,7 @@ router.get("/attendance", async (req, res) => {
     })),
     workingDays,
     teams,
-    units: store.getUnits(),
+    units: companyContext.filterUnitsListForRole(store.getUnits(), req.userRole),
     statuses: ATTENDANCE_STATUSES,
     canEdit: roles.canEditAttendance(req.userRole),
     hideOutEmployees: hideOut,

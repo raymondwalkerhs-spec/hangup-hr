@@ -90,7 +90,7 @@ let appReady = false;
 
 function buildApiQuery(params = {}) {
   const q = listHideOutQuery();
-  if (state.companyContext === "hs2") q.set("company", "hs2");
+  if (state.companyContext === "hs2" && state.user?.canManageHs2Company) q.set("company", "hs2");
   for (const [k, v] of Object.entries(params)) {
     if (v != null && v !== "") q.set(k, String(v));
   }
@@ -1209,11 +1209,33 @@ async function updateSidebarBrand() {
   wrap.innerHTML = `<img src="/img/hr-team.png" alt="HR Team" class="brand-logo" />`;
 }
 
+function canManageHs2Company() {
+  return state.user?.canManageHs2Company === true;
+}
+
+function canSeeHs2InSales() {
+  return state.user?.canSeeHs2InSales === true;
+}
+
+function resetCompanyContextIfNeeded() {
+  if (!canManageHs2Company() && state.companyContext === "hs2") {
+    state.companyContext = "hangup";
+    sessionStorage.setItem("companyContext", "hangup");
+  }
+}
+
 function applyCompanyBranding() {
+  resetCompanyContextIfNeeded();
   const title = document.getElementById("brand-title");
+  const wrap = document.getElementById("company-toggle-wrap");
+  if (!canManageHs2Company()) {
+    if (title) title.textContent = "Hangup Portal";
+    document.body.classList.remove("company-hs2");
+    if (wrap) wrap.innerHTML = "";
+    return;
+  }
   if (title) title.textContent = state.companyContext === "hs2" ? "Hangup HS-2" : "Hangup Portal";
   document.body.classList.toggle("company-hs2", state.companyContext === "hs2");
-  const wrap = document.getElementById("company-toggle-wrap");
   if (!wrap) return;
   const ctx = state.companyContext === "hs2" ? "hs2" : "hangup";
   wrap.innerHTML = `<div class="company-switcher" role="group" aria-label="Company to manage">
@@ -2106,7 +2128,7 @@ async function renderDashboard(root) {
   const month = state.month;
   const salesPromise =
     state.user?.canViewSales !== false
-      ? api(`/sales/dashboard?period=month&date=${month}-01&groupBy=team${state.companyContext === "hs2" ? "&company=hs2" : ""}`, {}, 10000).catch(() => null)
+      ? api(`/sales/dashboard?period=month&date=${month}-01&groupBy=team${state.companyContext === "hs2" && state.user?.canManageHs2Company ? "&company=hs2" : ""}`, {}, 10000).catch(() => null)
       : Promise.resolve(null);
   const [empData, payData, salesDash] = await Promise.all([
     api(`/employees${apiContextQuery()}`),

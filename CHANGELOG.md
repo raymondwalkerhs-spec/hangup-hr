@@ -2,6 +2,26 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.19] — 2026-07-06
+
+### Security / access
+- **HS-2 company management** — sidebar **Managing: HS-2** switcher, org HS-2 unit, payroll/roster context: **CEO, Admin, HR only**
+- **HS-2 visibility elsewhere** — hidden from all other roles (RTM, TL, agents, finance, etc.); **Quality** still sees **HS-2** in the sales log for their work
+- Server enforces: `company=hs2` ignored without manage permission; HS-2 sales stripped from API for unauthorized roles; org/meta unit lists filtered
+
+### Changed
+- Agent self-registration unit picker no longer offers HS-2 (assigned by Admin/HR after approval)
+
+## [1.6.18] — 2026-07-06
+
+### Fixed
+- **Airtable sync upsert** — edits always PATCH the existing row: uses stored `airtable_record_id`, falls back to **Portal Sale ID** lookup before create (no duplicate rows on edit)
+- **Airtable attachments** — syncs all attachment kinds by default; sends full attachment list per column (empty `[]` clears deleted files in Airtable); uses signed Supabase URLs for Airtable to fetch and host files
+- **Airtable sync speed** — default debounce 300ms; immediate sync after sale create/edit and attachment upload/delete/replace
+
+### Changed
+- Default `AIRTABLE_PORTAL_SALE_ID_FIELD` is **Portal Sale ID** when unset; `AIRTABLE_SKIP_ATTACHMENT_KINDS` unset syncs all kinds
+
 ## [1.6.17] — 2026-07-06
 
 ### Fixed

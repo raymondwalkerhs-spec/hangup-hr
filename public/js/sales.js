@@ -20,6 +20,17 @@ window.SalesModule = (function () {
     "Callback",
   ];
   const SALES_UNITS = ["HS-1", "HS-2", "HS-3"];
+
+  function visibleSalesUnits() {
+    if (state.user?.canSeeHs2InSales) return SALES_UNITS;
+    return SALES_UNITS.filter((u) => u !== "HS-2");
+  }
+
+  function salesUnitFilterOptions() {
+    const base = ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"];
+    if (state.user?.canSeeHs2InSales) return base;
+    return base.filter((u) => u !== "HS-2");
+  }
   const PERIOD_LABELS = { day: "Day", week: "Week", month: "Month" };
 
   function deviceLabel(device) {
@@ -187,7 +198,7 @@ window.SalesModule = (function () {
       { key: "client", label: "Client", valueType: "client" },
       { key: "device", label: "Device", valueType: "select", options: ["bracelet", "necklace", "smartwatch"] },
       { key: "team", label: "Team", valueType: "team" },
-      { key: "unit", label: "Unit", valueType: "select", options: ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"] },
+      { key: "unit", label: "Unit", valueType: "select", options: salesUnitFilterOptions() },
       { key: "status", label: "Status", valueType: "select", options: ["passed", "pending", "postdated", "denied", "callback"] },
       { key: "customer", label: "Customer name", valueType: "text" },
       { key: "phoneNumber", label: "Phone", valueType: "text" },
@@ -1067,7 +1078,7 @@ window.SalesModule = (function () {
     if (state.salesAgentFilter) salesQ.set("agentId", state.salesAgentFilter);
     if (state.salesCloserFilter) salesQ.set("closerId", state.salesCloserFilter);
     if (state.salesClientFilter) salesQ.set("client", state.salesClientFilter);
-    if (state.companyContext === "hs2") salesQ.set("company", "hs2");
+    if (state.companyContext === "hs2" && state.user?.canManageHs2Company) salesQ.set("company", "hs2");
     const advFilterRaw = state.salesAdvancedFilter || loadAdvancedFilter();
     const advFilter = normalizeAdvancedFilter(advFilterRaw);
     if (advFilterRaw && !advFilter) {
@@ -1077,7 +1088,7 @@ window.SalesModule = (function () {
     if (advFilter?.rules?.length) salesQ.set("filter", JSON.stringify(advFilter));
     if (!state.salesHiddenUnits) state.salesHiddenUnits = [];
     const dashQ = new URLSearchParams({ period, date: dashDate, groupBy: "team", dateBasis: "submission" });
-    if (state.companyContext === "hs2") dashQ.set("company", "hs2");
+    if (state.companyContext === "hs2" && state.user?.canManageHs2Company) dashQ.set("company", "hs2");
     const [salesRes, dashRes, empRes, catalogRes, clientsRes] = await Promise.all([
       api(`/sales?${salesQ}`),
       api(`/sales/dashboard?${dashQ}`),
@@ -1126,11 +1137,11 @@ window.SalesModule = (function () {
     const unitToggleHtml = canToggleSalesUnits()
       ? `<div class="sales-unit-toggle card card-flat" style="margin-bottom:1rem;padding:.75rem 1rem">
           <span class="muted" style="margin-right:.75rem">Show units:</span>
-          ${SALES_UNITS.map((u) => {
+          ${visibleSalesUnits().map((u) => {
             const on = !state.salesHiddenUnits.includes(u);
             return `<label class="toggle-label" style="margin-right:1rem"><input type="checkbox" data-sales-unit="${u}" ${on ? "checked" : ""} /> ${u}</label>`;
           }).join("")}
-          <span class="muted" style="margin-left:.5rem;font-size:.85rem">HS-2 = separate company</span>
+          ${state.user?.canManageHs2Company ? '<span class="muted" style="margin-left:.5rem;font-size:.85rem">HS-2 = separate company</span>' : ""}
         </div>`
       : "";
 
@@ -1204,7 +1215,7 @@ window.SalesModule = (function () {
     });
     root.querySelectorAll("[data-sales-unit]").forEach((cb) => {
       cb.addEventListener("change", () => {
-        const hidden = SALES_UNITS.filter((u) => {
+        const hidden = visibleSalesUnits().filter((u) => {
           const el = root.querySelector(`[data-sales-unit="${u}"]`);
           return el && !el.checked;
         });

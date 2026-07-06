@@ -157,7 +157,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 - **Approvers:** Mark, Raymond, Phoebe.  
 - Approved annual leave sets **Day-OFF** with **paid leave** flag (counts for payroll working days).
 
-**HS-2 mode:** Use **Manage HS-2** under the app name in the sidebar to switch company context (HS-2 staff only vs main Hangup roster).
+**HS-2 mode (CEO / Admin / HR only):** Use **Managing → HS-2** in the sidebar to switch company context (HS-2 roster vs main Hangup). Quality agents see HS-2 in the **sales log** unit filter only — not the company switcher.
 
 ---
 

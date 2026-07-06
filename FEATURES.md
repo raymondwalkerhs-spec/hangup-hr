@@ -222,7 +222,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 ### Attachments & export
 
 - Recordings and confirmations in **Supabase Storage** (`hr-documents` / `sales-attachments`)
-- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable **Sales All Data** (all fields + attachments via signed URLs); debounced, non-blocking
+- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable (upsert by `airtable_record_id` or **Portal Sale ID**; all attachment columns synced; empty arrays clear deleted files); 300ms debounce, immediate on save/attachment ops
 - Inline audio playback, download, signed share links
 - Attachment view/upload gated per role (Sales permissions **Attachments** tab)
 - Export filtered list or single sale: **CSV**, **Excel**, or **PDF**
@@ -303,7 +303,8 @@ Per-user exceptions inherit live role defaults from Access Control.
 - Payroll totals (finance / HR / leadership)
 - Document expiry summary
 - Team and company sales dashboards (role-scoped)
-- Unit toggles (HS-1 / HS-2 / HS-3) for permitted roles
+- **HS-2 company** — CEO / Admin / HR only: sidebar company switcher, org, payroll context; Quality sees HS-2 unit in sales log only; all other roles see no HS-2 references
+- Unit toggles (HS-1 / HS-3; HS-2 when permitted) on sales for Quality and management roles
 
 ### Reports
 

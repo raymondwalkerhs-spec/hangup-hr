@@ -126,7 +126,7 @@ window.TeamDashboardModule = (function () {
       q = new URLSearchParams({ period: "day", date: state.teamDashPickDate });
       headerLabel = longDateLabel(state.teamDashPickDate);
     }
-    if (state.companyContext === "hs2") q.set("company", "hs2");
+    if (state.companyContext === "hs2" && state.user?.canManageHs2Company) q.set("company", "hs2");
 
     const data = await api(`/sales/team-dashboard?${q}`);
 

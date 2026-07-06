@@ -23,6 +23,8 @@ const CHECKS = [
   ["viewQualityNotes", (ur) => roles.canViewQualityNotes(ur)],
   ["writeQualityNotes", (ur) => roles.canWriteQualityNotes(ur)],
   ["writeEmployeeNotes", (ur) => roles.canWriteEmployeeNotes(ur)],
+  ["manageHs2Company", (ur) => roles.canManageHs2Company(ur)],
+  ["seeHs2InSales", (ur) => roles.canSeeHs2InSales(ur)],
   ["manageSalesFieldPermissions", (ur) => roles.canManageSalesFieldPermissions(ur)],
 ];
 

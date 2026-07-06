@@ -23,17 +23,22 @@ const saleSubmitRequired = require("../lib/sales-submit-required");
 
 const router = express.Router();
 
-function afterSaleMutation(saleId) {
-  if (saleId) airtableSync.scheduleSaleSync(saleId);
+function afterSaleMutation(saleId, opts) {
+  if (saleId) airtableSync.scheduleSaleSync(saleId, opts);
 }
 
 function scopedEmployees(req, opts = {}) {
   let employees = store.getEmployees({ hideOut: opts.hideOut !== undefined ? opts.hideOut : false });
-  employees = companyContext.filterEmployeesByCompany(employees, req.query.company);
+  const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+  employees = companyContext.filterEmployeesByCompany(employees, company);
   if (req.userRole) {
     employees = roles.filterEmployeesForUser(employees, req.userRole);
   }
   return employees;
+}
+
+function filterSalesForRequest(sales, req) {
+  return companyContext.filterHs2SalesForRole(sales, req.userRole);
 }
 
 function filterSalesByCompany(sales, employees) {
@@ -235,6 +240,7 @@ router.get("/", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
     if (req.query.filter) {
       sales = salesFilter.applySalesFilter(sales, req.query.filter);
     }
@@ -266,6 +272,7 @@ router.get("/period-grid", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
 
     const attendanceRecords = [];
@@ -302,6 +309,7 @@ router.get("/team-dashboard", async (req, res) => {
     let sales = await business.readSales({ from, to });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
 
     let teamsMeta = [];
@@ -353,6 +361,7 @@ router.get("/dashboard", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     const dashboard = salesScope.buildSalesDashboard(sales, {
       period: req.query.period || "day",
@@ -595,7 +604,7 @@ router.post("/", async (req, res) => {
     }
     await notifySaleAssignments(sale, {});
     await recalcAgentSalesFromSale(sale, req.username);
-    afterSaleMutation(sale.id);
+    afterSaleMutation(sale.id, { immediate: true });
     res.json({ ok: true, sale: (await salesFieldAccess.redactSalesForRole([sale], req.userRole))[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -771,7 +780,7 @@ router.patch("/:id", async (req, res) => {
     if (existing.agentId && existing.agentId !== sale.agentId) {
       await recalcAgentSalesFromSale(existing, req.username);
     }
-    afterSaleMutation(sale.id);
+    afterSaleMutation(sale.id, { immediate: true });
     res.json({ ok: true, sale: redacted });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -816,6 +825,7 @@ router.get("/export", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
     sales = enrichSalesDisplayNames(sales, store.getEmployees());
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole);
     if (req.query.saleId) {
@@ -1116,7 +1126,7 @@ router.post("/:id/attachments", async (req, res) => {
       },
       req.username
     );
-    afterSaleMutation(req.params.id);
+    afterSaleMutation(req.params.id, { immediate: true });
     res.status(201).json({ ok: true, attachment: att });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1144,7 +1154,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
     } catch {
       /* optional */
     }
-    afterSaleMutation(att?.saleId);
+    afterSaleMutation(att?.saleId, { immediate: true });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1239,7 +1249,7 @@ router.put("/attachments/:attachmentId/replace", async (req, res) => {
     } catch {
       /* optional */
     }
-    afterSaleMutation(att.saleId);
+    afterSaleMutation(att.saleId, { immediate: true });
     res.json({ ok: true, attachment: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });

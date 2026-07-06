@@ -24,8 +24,12 @@ router.use(requireSupabase);
 router.get("/org-structure", async (req, res) => {
   try {
     const companyCtx = require("../lib/company-context");
-    const company = companyCtx.parseCompanyContext(req.query.company);
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
     let structure = await hrms.getLiveOrgStructure(company);
+    if (!roles.canManageHs2Company(req.userRole)) {
+      structure.units = (structure.units || []).filter((s) => s.unit !== "HS-2");
+      structure.orgUnits = companyCtx.filterOrgUnitsForRole(structure.orgUnits, req.userRole);
+    }
     if (roles.canViewOrgScoped(req.userRole)) {
       structure = hrms.filterOrgStructureForRole(structure, req.userRole);
     }
@@ -41,7 +45,12 @@ router.get("/teams", async (req, res) => {
       return res.status(403).json({ error: "No permission for org team metadata" });
     }
     const teams = await hrms.readOrgTeams();
-    res.json({ teams, orgUnits: hrms.ORG_UNITS });
+    const companyCtx = require("../lib/company-context");
+    const orgUnits = companyCtx.filterOrgUnitsForRole(hrms.ORG_UNITS, req.userRole);
+    const teamList = roles.canManageHs2Company(req.userRole)
+      ? teams
+      : teams.filter((t) => t.unit !== "HS-2");
+    res.json({ teams: teamList, orgUnits });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -85,10 +85,16 @@ async function testClientAndSync() {
   const originalFetch = global.fetch;
   global.fetch = async (url, opts) => {
     fetchCalls.push({ url, opts, body: opts?.body ? JSON.parse(opts.body) : null });
-    const payload =
-      String(url).includes("/meta/bases/")
-        ? { tables: [{ name: process.env.AIRTABLE_TABLE_NAME || "Sales All Data", fields: [] }] }
-        : { id: "recAirtable123", fields: {} };
+    const method = opts?.method || "GET";
+    const urlStr = String(url);
+    let payload;
+    if (urlStr.includes("/meta/bases/")) {
+      payload = { tables: [{ name: process.env.AIRTABLE_TABLE_NAME || "Sales All Data", fields: [] }] };
+    } else if (method === "GET") {
+      payload = { records: [] };
+    } else {
+      payload = { id: "recAirtable123", fields: {} };
+    }
     const body = JSON.stringify(payload);
     return {
       ok: true,
@@ -105,6 +111,7 @@ async function testClientAndSync() {
   const origReadAtt = business.readSaleAttachments;
   const origSetMeta = business.setSaleAirtableMeta;
   const origCreateShare = saleStorage.createShareUrl;
+  const origCreateAirtableSync = saleStorage.createAirtableSyncUrl;
   const origIsPath = saleStorage.isSupabaseStoragePath;
 
   business.getSale = async () => ({
@@ -122,6 +129,7 @@ async function testClientAndSync() {
   business.setSaleAirtableMeta = async () => {};
   saleStorage.isSupabaseStoragePath = () => true;
   saleStorage.createShareUrl = async () => ({ url: "https://signed.example/call.mp3", expiresInSeconds: 3600 });
+  saleStorage.createAirtableSyncUrl = async () => ({ url: "https://signed.example/call.mp3", expiresInSeconds: 3600 });
 
   const supabaseClient = require("../lib/supabase-client");
   const origGetAdmin = supabaseClient.getSupabaseAdmin;
@@ -145,17 +153,46 @@ async function testClientAndSync() {
   );
 
   await sync.syncSaleById("sale-uuid-1");
-  assert("createRecord POST", fetchCalls.length === 1 && fetchCalls[0].opts.method === "POST");
+  const createCall = fetchCalls.find((c) => c.opts.method === "POST");
+  assert("createRecord POST", Boolean(createCall));
   assert(
     "payload has Portal Sale ID",
-    fetchCalls[0].body?.fields?.["Portal Sale ID"] === "sale-uuid-1"
+    createCall?.body?.fields?.["Portal Sale ID"] === "sale-uuid-1"
   );
+
+  fetchCalls.length = 0;
+  global.fetch = async (url, opts) => {
+    fetchCalls.push({ url, opts, body: opts?.body ? JSON.parse(opts.body) : null });
+    const method = opts?.method || "GET";
+    const urlStr = String(url);
+    let payload;
+    if (urlStr.includes("/meta/bases/")) {
+      payload = { tables: [{ name: "Sales All Data", fields: [] }] };
+    } else if (method === "GET") {
+      payload = { records: [{ id: "recFromLookup", fields: { "Portal Sale ID": "sale-uuid-1" } }] };
+    } else {
+      payload = { id: "recFromLookup", fields: {} };
+    }
+    const body = JSON.stringify(payload);
+    return { ok: true, status: 200, json: async () => payload, text: async () => body };
+  };
+  business.getSale = async () => ({ ...sale, airtableRecordId: "" });
+  await sync.syncSaleById("sale-uuid-1");
+  assert("lookup then PATCH not POST", fetchCalls.some((c) => c.opts.method === "PATCH") && !fetchCalls.some((c) => c.opts.method === "POST"));
+
+  const attFieldsEmpty = await sync.buildAirtableFields(
+    await business.getSale("sale-uuid-1"),
+    employees,
+    []
+  );
+  assert("clears attachment column when empty", Array.isArray(attFieldsEmpty.Recordings) && attFieldsEmpty.Recordings.length === 0);
 
   business.getSale = async () => ({ ...sale, airtableRecordId: "recExisting" });
   fetchCalls.length = 0;
   await sync.syncSaleById("sale-uuid-1");
-  assert("updateRecord PATCH", fetchCalls.length === 1 && fetchCalls[0].opts.method === "PATCH");
-  assert("PATCH url has record id", fetchCalls[0].url.includes("recExisting"));
+  const patchCall = fetchCalls.find((c) => c.opts.method === "PATCH");
+  assert("updateRecord PATCH", Boolean(patchCall));
+  assert("PATCH url has record id", patchCall.url.includes("recExisting"));
 
   let debounceRuns = 0;
   business.getSale = async () => {
@@ -173,6 +210,7 @@ async function testClientAndSync() {
   business.readSaleAttachments = origReadAtt;
   business.setSaleAirtableMeta = origSetMeta;
   saleStorage.createShareUrl = origCreateShare;
+  saleStorage.createAirtableSyncUrl = origCreateAirtableSync;
   saleStorage.isSupabaseStoragePath = origIsPath;
   supabaseClient.getSupabaseAdmin = origGetAdmin;
   global.fetch = originalFetch;
