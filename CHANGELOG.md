@@ -2,6 +2,25 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.28] — 2026-07-22
+
+### Added
+- **Rules page** — edit mode with tabs for HS3 / HS2 documents; content stored per section in `rules_content` table
+- **IT Requests** — standalone page with card-based UI, status filter tabs, self-assign (IT), assign (Admin/RTM), resolve/reopen; nav button for IT/Admin/CEO/emp-linked users
+- **Meeting Requests** — standalone page with card UI; anyone with employee ID can submit; Admin/CEO/HR can approve/reject; `participants` stored as JSONB
+- **Managing Units** — Settings card with per-unit manager selectors (OP/HR/Quality); Admin/CEO/HR only
+- **Multiple TL per team / OP per unit** — `team_tls` + `unit_ops` join tables; chip-based add/remove UI on team editor
+- **Annual leave for 180+ day agents** — agents with `employment_date` > 180 days can submit annual leave (backend `request-rules.js` + frontend dropdown eligibility)
+- **Inactivity popup** — 10-min idle timeout now shows "Refresh session" / "Logout" popup with 60s countdown instead of forced logout
+- **Team dashboard 24h share** — "Share 24h" button (OP/Admin/CEO/HR/RTM) grants unit-level sales visibility for 24 hours via `POST /sales/visibility-grants`
+- **HS2/HS3 separation** — position rates filtered by `company` column; `lib/supabase-repo.js` reads/writes company-scoped rates
+- **manageAccessControl permission** — added to permission catalog; `canManageAccessControl` now routes through RBAC `perm()` system for role-override support
+
+### Fixed
+- **Meeting Requests nav hidden** — nav button visibility correctly toggled by `canViewMeetingRequests` permission
+- **Access Control delegation** — `manageAccessControl` moved from hardcoded `ADMIN_ROLES` to `perm()` lookup, enabling role-level and per-user overrides
+- **Company-scoped rules access** — HS2/HS3 rules now stay isolated by company, with nav and edit endpoints blocked unless the user has explicit access to that company’s rules
+
 ## [1.6.26] — 2026-07-07
 
 ### Fixed
@@ -228,6 +247,26 @@ All notable changes to the Hangup Portal desktop app.
 
 ### Added
 - **tests** — `scripts/test-fp-import.js` (9 unit tests for FP parse + shift grouping)
+
+## [1.6.27] — 2026-07-07
+
+### Added
+- **Rules tab** — new sidebar page showing company rules (lateness, fines, quality, two-weeks notice, pausing) from June 2026 policy document; visible to all roles via Access Control (`viewRules` / `editRules`).
+- **Bank info to notes** — on sale submit, bank account details (bank name, address, account number, routing number) are appended to the notes field with a `---` separator; applies to new submissions only (not edit / quality edit); synced to Airtable.
+
+### Changed
+- **Monthly Billing Date** — field type changed from `date` to `text` in submit form, sales log, sale edit/view, quality ticket, and Airtable schema; values are now stored as text strings (e.g. `"3rd"`, `"15th day of each month"`).
+
+### Added
+- **Monthly Billing Date** — enabled by default in sales log columns; visible to quality roles on quality ticket surface with view+edit access; field-level access control available through sales permissions.
+
+## [1.6.26-beta] — 2026-07-07
+
+### Changed
+- **Monthly Billing Date** — field type changed from `date` to `text` in submit form, sales log, sale edit/view, quality ticket, and Airtable schema; values are now stored as text strings (e.g. `"3rd"`, `"15th day of each month"`).
+
+### Added
+- **Monthly Billing Date** — enabled by default in sales log columns; visible to quality roles on quality ticket surface with view+edit access; field-level access control available through sales permissions.
 
 ## [Unreleased]
 

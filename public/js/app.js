@@ -1436,6 +1436,18 @@ function isUserManager() {
 }
 
 function applyChangesButtonVisibility() {
+  const rulesBtn = document.getElementById("nav-rules");
+  if (rulesBtn) {
+    const canAccessRules = state.user?.canViewRules === true || state.user?.canEditRules === true;
+    rulesBtn.classList.toggle("hidden", !canAccessRules);
+  }
+  const itBtn = document.getElementById("nav-it-requests");
+  if (itBtn) itBtn.classList.toggle("hidden", state.user?.canViewItRequests !== true);
+  const mrBtn = document.getElementById("nav-meeting-requests");
+  if (mrBtn) {
+    const canAccessMeetingRequests = state.user?.canViewMeetingRequests === true || state.user?.canSubmitMeetingRequest === true;
+    mrBtn.classList.toggle("hidden", !canAccessMeetingRequests);
+  }
   const btn = document.getElementById("nav-changes");
   if (btn) btn.classList.toggle("hidden", !isChangesViewer());
   const usersBtn = document.getElementById("nav-users");
@@ -2823,7 +2835,7 @@ window.openEmployeeById = openEmployeeById;
 async function openPromoteEmployeeModal(emp) {
   let leadRole = "TL";
   let suggestedId = "";
-  const ratesRes = await api("/position-rates").catch(() => ({ rates: [] }));
+  const ratesRes = await api(`/position-rates${apiContextQuery()}`).catch(() => ({ rates: [] }));
   const positionRates = ratesRes.rates || [];
   const positionOptions = positionRates
     .map((r) => `<option value="${escapeHtml(r.position)}">${escapeHtml(r.position)}</option>`)
@@ -5041,7 +5053,7 @@ async function renderMyPayslip(root) {
 
 async function renderSalaries(root) {
   const [ratesData, adjData, empData] = await Promise.all([
-    api(`/position-rates?month=${state.month}`),
+    api(`/position-rates?month=${state.month}${apiContextQuery()}`),
     api(`/payroll-adjustments?month=${state.month}`),
     api(`/employees${employeesQuery()}`),
   ]);
@@ -5090,7 +5102,12 @@ async function renderSalaries(root) {
       try {
         await api("/position-rates", {
           method: "PUT",
-          body: JSON.stringify({ position: pos, monthlySalary: Number(input.value), yearMonth: state.month }),
+          body: JSON.stringify({
+            position: pos,
+            monthlySalary: Number(input.value),
+            yearMonth: state.month,
+            company: state.companyContext !== "hangup" ? state.companyContext : undefined,
+          }),
         });
         btn.textContent = "Saved";
         setTimeout(() => { btn.textContent = "Save"; }, 1500);
@@ -5106,7 +5123,8 @@ async function renderSalaries(root) {
         title: "Delete position rate",
         message: `Remove position "${position}"?`,
         onConfirm: async () => {
-          await api(`/position-rates/${encodeURIComponent(position)}?month=${state.month}`, { method: "DELETE" });
+          const delQ = state.companyContext === "hs2" ? `&company=hs2` : "";
+          await api(`/position-rates/${encodeURIComponent(position)}?month=${state.month}${delQ}`, { method: "DELETE" });
           renderSalaries(root);
         },
       });
@@ -5128,7 +5146,12 @@ async function renderSalaries(root) {
       const salary = Number(fd.get("monthlySalary"));
       if (!position || !salary) return alert("Enter position name and salary");
       try {
-        await api("/position-rates", { method: "PUT", body: JSON.stringify({ position, monthlySalary: salary, yearMonth: state.month }) });
+        await api("/position-rates", { method: "PUT", body: JSON.stringify({
+          position,
+          monthlySalary: salary,
+          yearMonth: state.month,
+          company: state.companyContext !== "hangup" ? state.companyContext : undefined,
+        })});
         closeModal();
         renderSalaries(root);
       } catch (e) {
@@ -5309,6 +5332,7 @@ async function renderSettings(root) {
   const canSync = status.user?.canViewSettingsSync !== false;
   const canHideOut = status.user?.canViewSettingsHideOut === true;
   const canSession = status.user?.canViewSettingsSession === true;
+  const canManagingUnits = status.user?.canViewSettingsManagingUnits === true;
 
   const changeLogCard = showLogs
     ? `
@@ -5399,6 +5423,68 @@ async function renderSettings(root) {
       </div>`
     : "";
 
+  let managingUnitsCard = "";
+  if (canManagingUnits) {
+    let managersData = null;
+    try {
+      managersData = await api("/org/managers");
+    } catch { /* ignore */ }
+    if (managersData) {
+      const employees = (state.meta?.employees || []).filter((e) => e.status !== "terminated");
+      const empsByUnit = {};
+      employees.forEach((e) => {
+        const key = e.unit || "";
+        if (!empsByUnit[key]) empsByUnit[key] = [];
+        empsByUnit[key].push(e);
+      });
+      const units = managersData.managers || [];
+      const unitRules = managersData.unitRules || {};
+      const orderedNames = Object.keys(unitRules).filter((n) => units.some((u) => u.unit === n));
+      units.forEach((u) => { if (!orderedNames.includes(u.unit)) orderedNames.push(u.unit); });
+
+      const makeEmployeeOptions = (unitName, currentId) => {
+        const pool = empsByUnit[unitName] || [];
+        const sorted = [...pool].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        let opts = '<option value="">— None —</option>';
+        sorted.forEach((e) => {
+          const sel = e.id === currentId ? " selected" : "";
+          opts += `<option value="${escapeHtml(e.id)}"${sel}>${escapeHtml(e.name || e.id)}</option>`;
+        });
+        return opts;
+      };
+
+      const companyLabel = (unitName) => {
+        const rule = unitRules[unitName];
+        const co = rule?.company || "hangup";
+        const mgr = units.find((u) => u.unit === unitName);
+        const actualCo = mgr?.company || co;
+        return actualCo === "hs2"
+          ? '<span class="badge badge-hs2">HS-2</span>'
+          : '<span class="badge badge-hs3">HS-3</span>';
+      };
+
+      const rows = orderedNames.map((name) => {
+        const mgr = units.find((u) => u.unit === name) || {};
+        return `<tr>
+          <td><strong>${escapeHtml(name)}</strong> ${companyLabel(name)}</td>
+          <td><select class="unit-op-select" data-unit="${escapeHtml(name)}">${makeEmployeeOptions(name, mgr.opEmployeeId)}</select></td>
+          <td><select class="unit-hr-select" data-unit="${escapeHtml(name)}">${makeEmployeeOptions(name, mgr.hrManagerId)}</select></td>
+          <td><select class="unit-quality-select" data-unit="${escapeHtml(name)}">${makeEmployeeOptions(name, mgr.qualityManagerId)}</select></td>
+          <td><button class="btn btn-sm btn-primary unit-manager-save" data-unit="${escapeHtml(name)}">Save</button></td>
+        </tr>`;
+      }).join("");
+
+      managingUnitsCard = `<div class="card" style="margin-top:1rem">
+        <h3>Managing Units</h3>
+        <p class="muted">Assign OP, HR manager, and Quality manager to each unit.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Unit</th><th>OP</th><th>HR Manager</th><th>Quality Manager</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+    }
+  }
+
   root.innerHTML = `
     <div class="page-header"><h1>Settings</h1></div>
     <div class="grid-2">
@@ -5425,7 +5511,8 @@ async function renderSettings(root) {
       }
     </div>
     ${impersonateCard ? `<div class="grid-2">${impersonateCard}</div>` : ""}
-    ${changeLogCard}`;
+    ${changeLogCard}
+    ${managingUnitsCard}`;
 
   root.querySelectorAll('input[name="ui-theme"]').forEach((input) => {
     input.addEventListener("change", () => {
@@ -5463,6 +5550,25 @@ async function renderSettings(root) {
     } catch (e) {
       alert(e.message);
     }
+  });
+  root.querySelectorAll(".unit-manager-save").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const unit = btn.dataset.unit;
+      const opSelect = root.querySelector(`.unit-op-select[data-unit="${unit}"]`);
+      const hrSelect = root.querySelector(`.unit-hr-select[data-unit="${unit}"]`);
+      const qltySelect = root.querySelector(`.unit-quality-select[data-unit="${unit}"]`);
+      const body = {
+        opEmployeeId: opSelect?.value || null,
+        hrManagerId: hrSelect?.value || null,
+        qualityManagerId: qltySelect?.value || null,
+      };
+      try {
+        await api(`/org/managers/${encodeURIComponent(unit)}`, { method: "PUT", body: JSON.stringify(body) });
+        showSaveIndicator(`Saved ${unit} managers`, "saved");
+      } catch (e) {
+        alert(e.message);
+      }
+    });
   });
   window.HRMSFeatures?.enhanceSettings(root, api, state, {
     isChangesViewer,
@@ -6085,6 +6191,124 @@ async function renderChanges(root) {
   window.HRMSFeatures?.enhanceChanges(root, api);
 }
 
+async function renderRulesPage(root) {
+  const canEdit = state.user?.canEditRules === true;
+  const isAdminCeo = ["admin", "ceo"].includes(state.user?.role);
+  const isHrWithDualAccess = state.user?.role === "hr" && state.user?.canManageHs2Company === true;
+  const showBothTabs = isAdminCeo || isHrWithDualAccess;
+
+  let activeCompany = state.rulesActiveCompany || "hangup";
+  const userUnit = state.user?.unit || "";
+  const isUserHs2 = userUnit === "HS-2" || userUnit === "HS2-PT";
+
+  const canAccessHs2 = state.user?.canManageHs2Company === true || state.user?.canEditRules === true || state.user?.role === "quality";
+  if (!showBothTabs) {
+    activeCompany = (state.companyContext === "hs2" || isUserHs2) && canAccessHs2 ? "hs2" : "hangup";
+  }
+  if (activeCompany === "hs2" && !canAccessHs2) {
+    activeCompany = "hangup";
+  }
+
+  const data = await api(`/rules-content?company=${activeCompany}`).catch(() => ({ sections: [] }));
+  const sections = data.sections || [];
+
+  function renderSectionCard(section, idx) {
+    const editing = state._rulesEditing === section.sectionKey;
+    const contentHtml = editing
+      ? `<textarea class="rules-edit-textarea" data-section="${escapeHtml(section.sectionKey)}" rows="12">${escapeHtml(section.content)}</textarea>`
+      : section.content;
+    const actions = canEdit
+      ? `<div class="rules-card-actions">${
+          editing
+            ? `<button class="btn btn-sm btn-primary" data-save-section="${escapeHtml(section.sectionKey)}">Save</button><button class="btn btn-sm" data-cancel-section="${escapeHtml(section.sectionKey)}">Cancel</button>`
+            : `<button class="btn btn-sm" data-edit-section="${escapeHtml(section.sectionKey)}">Edit</button>`
+        }</div>`
+      : "";
+    return `<div class="card rules-card" data-section="${escapeHtml(section.sectionKey)}">
+      <div class="rules-card-header">
+        <h2>${escapeHtml(section.title)}</h2>
+        ${actions}
+      </div>
+      <div class="rules-card-body">${contentHtml}</div>
+    </div>`;
+  }
+
+  const tabsHtml = showBothTabs
+    ? `<div class="rules-tabs">
+        <button class="rules-tab ${activeCompany === "hangup" ? "active" : ""}" data-rules-company="hangup">HS3 Rules</button>
+        <button class="rules-tab ${activeCompany === "hs2" ? "active" : ""}" data-rules-company="hs2">HS2 Rules</button>
+      </div>`
+    : "";
+
+  const companyLabel = activeCompany === "hs2" ? "HS2 Company" : "HS3 (Hangup)";
+  root.innerHTML = `
+    <div class="page-header">
+      <div><h1>Company Rules</h1><p class="muted">${escapeHtml(companyLabel)} — Office policy &amp; code of conduct</p></div>
+    </div>
+    ${tabsHtml}
+    <div class="rules-container">
+      ${sections.length ? sections.map(renderSectionCard).join("") : '<p class="muted">No rules content loaded.</p>'}
+    </div>
+    <style>
+      .rules-container { display:flex; flex-direction:column; gap:1rem; padding-bottom:2rem; }
+      .rules-card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:0.5rem; }
+      .rules-card-header h2 { margin:0 0 0.5rem 0; font-size:1.2rem; }
+      .rules-card-actions { flex-shrink:0; display:flex; gap:0.3rem; }
+      .rules-table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+      .rules-table th,.rules-table td { padding:0.4rem 0.6rem; border:1px solid var(--border); text-align:left; }
+      .rules-table th { background:var(--surface2); font-weight:600; }
+      .rules-table tr:nth-child(even) { background:var(--surface1); }
+      .rules-container ul { margin:0; padding-left:1.2rem; }
+      .rules-container li { margin-bottom:0.3rem; line-height:1.4; }
+      .info-note { padding:0.4rem 0.6rem; background:var(--surface2); border-radius:6px; margin-bottom:0.5rem; font-size:0.85rem; color:var(--text-muted); }
+      .rules-edit-textarea { width:100%; font-family:inherit; font-size:0.9rem; padding:0.5rem; border:1px solid var(--border); border-radius:6px; background:var(--surface1); color:var(--text); }
+      .rules-tabs { display:flex; gap:0; margin-bottom:1rem; border-bottom:2px solid var(--border); }
+      .rules-tab { padding:0.5rem 1.2rem; border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:0.95rem; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; }
+      .rules-tab.active { color:var(--text); border-bottom-color:var(--primary); font-weight:600; }
+      .rules-tab:hover { color:var(--text); }
+    </style>`;
+
+  root.querySelectorAll("[data-edit-section]").forEach((btn) => {
+    btn.onclick = () => {
+      state._rulesEditing = btn.dataset.editSection;
+      renderRulesPage(root);
+    };
+  });
+
+  root.querySelectorAll("[data-cancel-section]").forEach((btn) => {
+    btn.onclick = () => {
+      state._rulesEditing = null;
+      renderRulesPage(root);
+    };
+  });
+
+  root.querySelectorAll("[data-save-section]").forEach(async (btn) => {
+    const sectionKey = btn.dataset.saveSection;
+    const textarea = root.querySelector(`textarea[data-section="${sectionKey}"]`);
+    if (!textarea) return;
+    const content = textarea.value;
+    try {
+      await api(`/rules-content/${encodeURIComponent(sectionKey)}`, {
+        method: "PUT",
+        body: JSON.stringify({ company: activeCompany, content }),
+      });
+      state._rulesEditing = null;
+      showSaveIndicator("Rule section saved", "saved");
+      renderRulesPage(root);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  root.querySelectorAll("[data-rules-company]").forEach((btn) => {
+    btn.onclick = () => {
+      state.rulesActiveCompany = btn.dataset.rulesCompany;
+      state._rulesEditing = null;
+      renderRulesPage(root);
+    };
+  });
+}
+
 function navigate(page) {
   const next = ensureNavPageAllowed(navPageAlias(page));
   state.page = next;
@@ -6122,6 +6346,7 @@ async function render() {
     "loan-approvals": "Loading loan approvals…",
     "sales-permissions": "Loading sales permissions…",
     "sales-log-columns": "Loading log columns…",
+    rules: "Loading rules…",
   };
   if (!appReady) {
     root.innerHTML = pageSkeleton(labels[page] || "Loading…");
@@ -6163,6 +6388,13 @@ async function render() {
     else if (page === "payslip") await renderMyPayslip(root);
     else if (page === "changes") await renderChanges(root);
     else if (page === "users") await renderUsers(root);
+    else if (page === "rules") await renderRulesPage(root);
+    else if (page === "it-requests" && window.ItRequestsModule) {
+      await window.ItRequestsModule.renderItRequestsPage(root);
+    }
+    else if (page === "meeting-requests" && window.MeetingRequestsModule) {
+      await window.MeetingRequestsModule.renderMeetingRequestsPage(root);
+    }
     else if (page === "access-control" && window.AccessControlModule) {
       await window.AccessControlModule.renderAccessControlPage(root, api, {
         escapeHtml, openModal, closeModal, refreshStatus, showSaveIndicator,
@@ -6185,7 +6417,9 @@ async function render() {
     } else if (page === "breaks" && window.HRSalesConfigBreaks) {
       await window.HRSalesConfigBreaks.renderBreaksPage(root, api, state, { escapeHtml });
     } else if (page === "team-dashboard" && window.TeamDashboardModule) {
-      await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, { escapeHtml });
+      await window.TeamDashboardModule.renderTeamDashboardPage(root, api, state, {
+        escapeHtml, openModal, closeModal,
+      });
     }     else if (page === "costs" && window.ExpensesModule) {
       await window.ExpensesModule.renderCostsPage(root, api, state, {
         escapeHtml, fmt, openModal, closeModal,
@@ -6244,6 +6478,7 @@ async function performLogout() {
   if (loggingOut) return;
   loggingOut = true;
   clearTimeout(idleTimer);
+  clearInterval(idlePopupTimer);
   if (sessionCheckTimer) {
     clearInterval(sessionCheckTimer);
     sessionCheckTimer = null;
@@ -6262,17 +6497,57 @@ async function performLogout() {
   window.location.href = "/login";
 }
 
+const IDLE_POPUP_MS = 60 * 1000;
+let idlePopupTimer = null;
+
+function showIdlePopup() {
+  if (loggingOut) return;
+  const popupHtml = `
+    <div class="modal-header"><h2>Session Expiring</h2></div>
+    <div class="modal-body" style="text-align:center;padding:2rem">
+      <p>You have been inactive for ${IDLE_LOGOUT_MS / 60000} minutes.</p>
+      <p>Your session will expire in <strong id="idle-countdown">${IDLE_POPUP_MS / 1000}</strong> seconds.</p>
+      <div style="margin-top:1.5rem;display:flex;gap:.75rem;justify-content:center">
+        <button class="btn btn-primary" id="idle-refresh">Refresh session</button>
+        <button class="btn" id="idle-logout">Logout</button>
+      </div>
+    </div>`;
+  closeModal();
+  openModal(popupHtml);
+  let remaining = IDLE_POPUP_MS / 1000;
+  const countdownEl = document.getElementById("idle-countdown");
+  clearInterval(idlePopupTimer);
+  idlePopupTimer = setInterval(() => {
+    remaining--;
+    if (countdownEl) countdownEl.textContent = remaining;
+    if (remaining <= 0) {
+      clearInterval(idlePopupTimer);
+      performLogout();
+    }
+  }, 1000);
+  document.getElementById("idle-refresh").onclick = () => {
+    clearInterval(idlePopupTimer);
+    closeModal();
+    resetIdleTimer();
+  };
+  document.getElementById("idle-logout").onclick = () => {
+    clearInterval(idlePopupTimer);
+    performLogout();
+  };
+}
+
 function resetIdleTimer() {
   if (loggingOut) return;
   lastActivityAt = Date.now();
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(performLogout, IDLE_LOGOUT_MS);
+  clearInterval(idlePopupTimer);
+  idleTimer = setTimeout(showIdlePopup, IDLE_LOGOUT_MS);
 }
 
 function checkIdleOnResume() {
   if (loggingOut) return;
   if (Date.now() - lastActivityAt >= IDLE_LOGOUT_MS) {
-    performLogout();
+    showIdlePopup();
     return;
   }
   resetIdleTimer();
