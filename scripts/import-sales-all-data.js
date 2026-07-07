@@ -35,6 +35,7 @@ const {
   parseSubmissionDate,
 } = require("../lib/sales-import-helpers");
 const { syncAllInternalIdsForAppId } = require("../lib/employee-identity");
+const { CSV_TO_FORM } = require("../lib/airtable-sales-field-map");
 
 const CSV_PATH = path.join(__dirname, "..", "Asset", "Sales All Data.csv");
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -44,47 +45,6 @@ const FORCE_ATTACH = process.argv.includes("--force-attachments");
 const SUBMITTED_BY = "import-sales-all-data";
 const CHUNK = 25;
 const ATTACH_DELAY_MS = 200;
-
-const CSV_TO_FORM = [
-  ["Submission Date", "submissionDate"],
-  ["Lead Type", "leadType"],
-  ["Client", "client"],
-  ["Center Code", "unit"],
-  ["Team", "team"],
-  ["Agent Name", "agentName"],
-  ["Closer Name", "closerName"],
-  ["Device Type", "deviceType"],
-  ["First time getting a device?", "firstTimeDevice"],
-  ["If no, Is the service currently active", "serviceActiveInfo"],
-  ["Phone Number", "phoneNumber"],
-  ["First Name", "firstName"],
-  ["Last Name", "lastName"],
-  ["Date Of Birth", "dateOfBirth"],
-  ["Address ( Street Address )", "streetAddress"],
-  ["Address", "streetAddress"],
-  ["City Name", "cityName"],
-  ["State", "state"],
-  ["Zip code", "zipCode"],
-  ["Emergency contact first name", "emergencyFirstName"],
-  ["Emergency contact last name", "emergencyLastName"],
-  ["Emergency contact phone number", "emergencyPhone"],
-  ["Emergency contact relation", "emergencyRelation"],
-  ["Payment method", "paymentMethod"],
-  ["Card Type", "cardType"],
-  ["Card Exp Date", "cardExpDate"],
-  ["CVV", "cvv"],
-  ["Card Number", "cardNumber"],
-  ["Billing Date", "billingDate"],
-  ["Notes", "notes"],
-  ["Client Feedback", "clientFeedback"],
-  ["Quality Comments", "qualityComments"],
-  ["Payer Name", "payerName"],
-  ["Medical Conditions", "medicalConditions"],
-  ["Charge Amount", "chargeAmount"],
-  ["Monthly Billing Date", "monthlyBillingDate"],
-  ["Alternative Phone", "alternativePhone"],
-  ["Verifier Feedback", "verifierFeedback"],
-];
 
 function parseCsv(text) {
   const rows = [];

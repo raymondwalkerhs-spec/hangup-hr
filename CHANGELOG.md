@@ -2,6 +2,18 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.6.26] — 2026-07-07
+
+### Fixed
+- **Airtable sync** — attachment columns no longer cleared on every sync (`buildAirtableFields` now only sets fields when `urls.length > 0`).
+- **Sale price NaN** — `mapSale` no longer produces `NaN` when `price` is a formatted string (e.g. `"$39.95 (Necklace) Med Guard Alert"`).
+- **Airtable Price field** — parses numeric value from formatted price string; writes full string to new **Price tier** column.
+- **3 sales missing Recordings on Airtable** — `quality_record` kind changed to `recording` for ROBERT PINCKNEY, MARIA BUENO, Paul Kiely; re-synced.
+
+### Added
+- **Price tier** column on Airtable (`singleLineText`) — stores the full formatted price string.
+- **Backup app** — NSIS installer build pipeline (`scripts/build-backup.ps1`); app files added to `package.json` build config.
+
 ## [1.6.25] — 2026-07-06
 
 ### Fixed

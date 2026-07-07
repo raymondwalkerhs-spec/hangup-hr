@@ -1,159 +1,160 @@
 {
-  "name": "hangup-hr",
-  "version": "1.6.25",
-  "description": "Hangup Portal desktop app — Supabase backend",
-  "main": "electron/main.js",
-  "scripts": {
-    "start": "node scripts/ensure-electron.js && electron .",
-    "dev": "node scripts/ensure-electron.js && electron .",
-    "pack": "electron-builder --dir",
-    "dist": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
-    "dist:installer": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 installer",
-    "dist:portable": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 portable",
-    "dist:all": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
-    "dist:mac": "node scripts/ensure-macos.js && electron-builder --mac dmg zip",
-    "dist:mac:script": "bash scripts/build-macos.sh",
-    "dist:mac:dmg": "node scripts/ensure-macos.js && electron-builder --mac dmg",
-    "package:github": "node scripts/package-github-release.js",
-    "verify:update": "node scripts/verify-update-package.js",
-    "publish:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
-    "publish:installer": "powershell -ExecutionPolicy Bypass -File scripts/publish-installer-only.ps1",
-    "dist:bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
-    "dist:web-installer": "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
-    "bootstrap:github": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
-    "push:sheet": "node scripts/push-excel-to-sheet.js",
-    "import:excel": "python ../scripts/import_data.py && node scripts/push-excel-to-sheet.js",
-    "reconcile:june": "node scripts/reconcile-june.js",
-    "migrate:archived": "echo Archived — Excel source removed. Use push:sheet with existing hr-system/data JSON only.",
-    "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3",
-    "fix:electron": "node node_modules/electron/install.js",
-    "test:supabase": "node scripts/test-supabase.js",
-    "test:training-payroll": "node scripts/test-training-payroll.js",
-    "qa:training-payroll": "node scripts/qa-training-payroll-check.js",
-    "cleanup:artifacts": "node scripts/cleanup-github-artifacts.js",
-    "migrate:supabase": "node scripts/migrate-sheets-to-supabase.js",
-    "migrate:sale-attachments": "node scripts/migrate-sale-attachments-to-supabase.js",
-    "apply:github-patch": "node scripts/apply-github-patch-standalone.js",
-    "seed:fp-june": "node scripts/seed-june-fp-mappings.js",
-    "apply:migrations": "node scripts/apply-pending-migrations.js",
-    "sync:airtable": "node scripts/backfill-airtable-sales.js",
-    "provision:airtable": "node scripts/provision-airtable-sales-fields.js",
-    "backfill:confirmations": "node scripts/backfill-confirmation-from-csv.js --csv=\"Asset/cancel MLA-Source.csv\"",
-    "test": "node scripts/run-all-tests.js",
-    "test:access-scope": "node scripts/test-access-scope.js",
-    "test:quality-sales-perms": "node scripts/test-quality-sales-perms.js",
-    "test:rbac-defaults": "node scripts/test-rbac-defaults.js",
-    "backup": "node scripts/ensure-electron.js && electron electron/backup-main.js",
-    "start:backup": "node scripts/ensure-electron.js && electron electron/backup-main.js"
-  },
-  "build": {
-    "appId": "com.hangup.hr",
-    "productName": "Hangup Portal",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      "lib/**/*",
-      "routes/**/*",
-      "scripts/**/*",
-      "public/**/*",
-      "Asset/**/*",
-      "app.js",
-      "package.json",
-      "node_modules/adm-zip/**/*"
-    ],
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "credentials",
-        "to": "credentials",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": ".env",
-        "to": ".env"
-      }
-    ],
-    "win": {
-      "icon": "build/icon.png",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "artifactName": "Hangup-Portal-Setup-${version}.${ext}"
-    },
-    "npmRebuild": true,
-    "forceCodeSigning": false,
-    "afterPack": "scripts/electron-after-pack.js",
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Hangup Portal",
-      "uninstallDisplayName": "Hangup Portal"
-    },
-    "portable": {
-      "artifactName": "Hangup-Portal-Portable-${version}.${ext}"
-    },
-    "mac": {
-      "icon": "build/icon.png",
-      "category": "public.app-category.business",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "artifactName": "Hangup-Portal-${version}-${arch}.${ext}",
-      "identity": null,
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
-    },
-    "dmg": {
-      "title": "Hangup Portal ${version}",
-      "artifactName": "Hangup-Portal-${version}.${ext}"
-    }
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.110.0",
-    "adm-zip": "^0.5.18",
-    "archiver": "^8.0.0",
-    "bcrypt": "^6.0.0",
-    "better-sqlite3": "^12.11.1",
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "express-session": "^1.18.1",
-    "googleapis": "^144.0.0",
-    "pdfkit": "^0.16.0",
-    "ws": "^8.21.0",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@electron/fuses": "^2.1.3",
-    "@electron/rebuild": "^3.7.1",
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
-    "pg": "^8.22.0"
-  }
+    "name":  "hangup-hr",
+    "version":  "1.6.26",
+    "description":  "Hangup Portal desktop app ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Supabase backend",
+    "main":  "electron/main.js",
+    "scripts":  {
+                    "start":  "node scripts/ensure-electron.js \u0026\u0026 electron .",
+                    "dev":  "node scripts/ensure-electron.js \u0026\u0026 electron .",
+                    "pack":  "electron-builder --dir",
+                    "dist":  "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
+                    "dist:installer":  "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 installer",
+                    "dist:portable":  "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 portable",
+                    "dist:all":  "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 all",
+                    "dist:mac":  "node scripts/ensure-macos.js \u0026\u0026 electron-builder --mac dmg zip",
+                    "dist:mac:script":  "bash scripts/build-macos.sh",
+                    "dist:mac:dmg":  "node scripts/ensure-macos.js \u0026\u0026 electron-builder --mac dmg",
+                    "package:github":  "node scripts/package-github-release.js",
+                    "verify:update":  "node scripts/verify-update-package.js",
+                    "publish:github":  "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+                    "publish:installer":  "powershell -ExecutionPolicy Bypass -File scripts/publish-installer-only.ps1",
+                    "dist:bootstrap":  "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
+                    "dist:web-installer":  "powershell -ExecutionPolicy Bypass -File scripts/build-web-installer.ps1",
+                    "bootstrap:github":  "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-github-repo.ps1",
+                    "push:sheet":  "node scripts/push-excel-to-sheet.js",
+                    "import:excel":  "python ../scripts/import_data.py \u0026\u0026 node scripts/push-excel-to-sheet.js",
+                    "reconcile:june":  "node scripts/reconcile-june.js",
+                    "migrate:archived":  "echo Archived ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Excel source removed. Use push:sheet with existing hr-system/data JSON only.",
+                    "rebuild:native":  "npx @electron/rebuild -f -w better-sqlite3",
+                    "fix:electron":  "node node_modules/electron/install.js",
+                    "test:supabase":  "node scripts/test-supabase.js",
+                    "test:training-payroll":  "node scripts/test-training-payroll.js",
+                    "qa:training-payroll":  "node scripts/qa-training-payroll-check.js",
+                    "cleanup:artifacts":  "node scripts/cleanup-github-artifacts.js",
+                    "migrate:supabase":  "node scripts/migrate-sheets-to-supabase.js",
+                    "migrate:sale-attachments":  "node scripts/migrate-sale-attachments-to-supabase.js",
+                    "apply:github-patch":  "node scripts/apply-github-patch-standalone.js",
+                    "seed:fp-june":  "node scripts/seed-june-fp-mappings.js",
+                    "apply:migrations":  "node scripts/apply-pending-migrations.js",
+                    "sync:airtable":  "node scripts/backfill-airtable-sales.js",
+                    "provision:airtable":  "node scripts/provision-airtable-sales-fields.js",
+                    "backfill:confirmations":  "node scripts/backfill-confirmation-from-csv.js --csv=\"Asset/cancel MLA-Source.csv\"",
+                    "test":  "node scripts/run-all-tests.js",
+                    "test:access-scope":  "node scripts/test-access-scope.js",
+                    "test:quality-sales-perms":  "node scripts/test-quality-sales-perms.js",
+                    "test:rbac-defaults":  "node scripts/test-rbac-defaults.js",
+                    "backup":  "node scripts/ensure-electron.js \u0026\u0026 electron electron/backup-main.js",
+                    "start:backup":  "node scripts/ensure-electron.js \u0026\u0026 electron electron/backup-main.js"
+                },
+    "build":  {
+                  "appId":  "com.hangup.hr",
+                  "productName":  "Hangup Portal",
+                  "directories":  {
+                                      "output":  "dist"
+                                  },
+                  "files":  [
+                                "electron/**/*",
+                                "lib/**/*",
+                                "routes/**/*",
+                                "scripts/**/*",
+                                "public/**/*",
+                                "Asset/**/*",
+                                "app.js",
+                                "backup-app.js",
+                                "package.json",
+                                "node_modules/adm-zip/**/*"
+                            ],
+                  "asarUnpack":  [
+                                     "node_modules/better-sqlite3/**/*"
+                                 ],
+                  "extraResources":  [
+                                         {
+                                             "from":  "credentials",
+                                             "to":  "credentials",
+                                             "filter":  [
+                                                            "**/*"
+                                                        ]
+                                         },
+                                         {
+                                             "from":  ".env",
+                                             "to":  ".env"
+                                         }
+                                     ],
+                  "win":  {
+                              "icon":  "build/icon.png",
+                              "target":  [
+                                             {
+                                                 "target":  "nsis",
+                                                 "arch":  [
+                                                              "x64"
+                                                          ]
+                                             }
+                                         ],
+                              "artifactName":  "Hangup-Portal-Setup-${version}.${ext}"
+                          },
+                  "npmRebuild":  true,
+                  "forceCodeSigning":  false,
+                  "afterPack":  "scripts/electron-after-pack.js",
+                  "nsis":  {
+                               "oneClick":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "shortcutName":  "Hangup Portal",
+                               "uninstallDisplayName":  "Hangup Portal"
+                           },
+                  "portable":  {
+                                   "artifactName":  "Hangup-Portal-Portable-${version}.${ext}"
+                               },
+                  "mac":  {
+                              "icon":  "build/icon.png",
+                              "category":  "public.app-category.business",
+                              "target":  [
+                                             {
+                                                 "target":  "dmg",
+                                                 "arch":  [
+                                                              "x64",
+                                                              "arm64"
+                                                          ]
+                                             },
+                                             {
+                                                 "target":  "zip",
+                                                 "arch":  [
+                                                              "x64",
+                                                              "arm64"
+                                                          ]
+                                             }
+                                         ],
+                              "artifactName":  "Hangup-Portal-${version}-${arch}.${ext}",
+                              "identity":  null,
+                              "hardenedRuntime":  false,
+                              "gatekeeperAssess":  false
+                          },
+                  "dmg":  {
+                              "title":  "Hangup Portal ${version}",
+                              "artifactName":  "Hangup-Portal-${version}.${ext}"
+                          }
+              },
+    "dependencies":  {
+                         "@supabase/supabase-js":  "^2.110.0",
+                         "adm-zip":  "^0.5.18",
+                         "archiver":  "^8.0.0",
+                         "bcrypt":  "^6.0.0",
+                         "better-sqlite3":  "^12.11.1",
+                         "cookie-parser":  "^1.4.7",
+                         "dotenv":  "^16.4.7",
+                         "express":  "^4.21.2",
+                         "express-session":  "^1.18.1",
+                         "googleapis":  "^144.0.0",
+                         "pdfkit":  "^0.16.0",
+                         "ws":  "^8.21.0",
+                         "xlsx":  "^0.18.5"
+                     },
+    "devDependencies":  {
+                            "@electron/fuses":  "^2.1.3",
+                            "@electron/rebuild":  "^3.7.1",
+                            "electron":  "^33.2.1",
+                            "electron-builder":  "^25.1.8",
+                            "pg":  "^8.22.0"
+                        }
 }
