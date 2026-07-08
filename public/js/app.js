@@ -2133,15 +2133,20 @@ function queueAttendanceSave(employeeId, date, status, transportOverride) {
 async function flushAttendanceSaves() {
   const records = [...state.pendingAttendance.values()];
   if (!records.length) return;
-  state.pendingAttendance.clear();
+  // Don't clear until save succeeds — keeps records for retry on failure
   try {
     await api("/attendance/batch", {
       method: "POST",
       body: JSON.stringify({ records }),
     });
+    // Only clear after confirmed success
+    for (const r of records) {
+      state.pendingAttendance.delete(`${r.employeeId}|${r.date}`);
+    }
     showSaveIndicator("Saved", "saved");
   } catch (e) {
-    showSaveIndicator(e.message, "error");
+    showSaveIndicator(e.message || "Save failed — will retry", "error");
+    // Leave pendingAttendance intact so next navigate/retry flushes again
   }
 }
 
@@ -6525,6 +6530,11 @@ async function renderRulesPage(root) {
 }
 
 function navigate(page) {
+  // Flush any pending attendance saves before leaving the page
+  if (state.pendingAttendance.size > 0) {
+    clearTimeout(state.saveTimer);
+    flushAttendanceSaves(); // fire-and-forget; records remain if it fails
+  }
   const next = ensureNavPageAllowed(navPageAlias(page));
   state.page = next;
   syncNavActiveState(next);

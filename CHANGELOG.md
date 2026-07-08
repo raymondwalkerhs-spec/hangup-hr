@@ -2,6 +2,12 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.7.1] — 2026-07-08
+
+### Fixed
+- **Leave approval in Access Control** — `approveLeave` added as a proper permission key in the catalog (category: Pages). HR/Admin/CEO have it by default; can now be granted or revoked per-role in the Access Control page. `canApproveLeave` now routes through `perm()` so overrides take effect.
+- **Attendance not saving after edit** — `flushAttendanceSaves` no longer clears the pending map before the API call succeeds; pending records survive a failed save and are retried. `navigate()` now flushes any pending attendance saves immediately before rendering the next page, preventing changes from being lost when switching tabs quickly.
+
 ## [1.7.0] — 2026-07-08 · Stable
 
 ### Added

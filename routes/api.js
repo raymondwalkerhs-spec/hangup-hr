@@ -816,6 +816,8 @@ router.get("/status", async (req, res) => {
       canSubmitMeetingRequest: roles.canSubmitMeetingRequest(req.userRole),
       canReviewMeetingRequest: roles.canReviewMeetingRequest(req.userRole),
       canManageCompanies: roles.canManageCompanies(req.userRole),
+      // Leave approval — routes through Access Control so HR roles can be granted/revoked
+      canApproveLeave: roles.canApproveLeave(req.realUsername || req.username, req.userRole),
       // Annual leave eligibility for the linked employee (used by frontend to show/hide annual option)
       annualLeaveEligible: (() => {
         const requestRulesLib = require("../lib/request-rules");
