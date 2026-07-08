@@ -317,7 +317,8 @@ router.post("/training/:employeeId/promote", async (req, res) => {
       req.params.employeeId,
       {
         promotionDate: req.body?.promotionEffectiveDate || req.body?.promotionDate,
-        passedOnDate: req.body?.passedOnDate,
+        passedOnDate:  req.body?.passedOnDate,
+        exception:     req.body?.exception === true,
       },
       req.username
     );
@@ -528,7 +529,7 @@ router.get("/leave", async (req, res) => {
       employeeId: req.query.employeeId,
       status: req.query.status,
     });
-    res.json({ requests, canApprove: roles.canApproveLeave(req.username) });
+    res.json({ requests, canApprove: roles.canApproveLeave(req.username, req.userRole) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -542,6 +543,8 @@ router.post("/leave", async (req, res) => {
       employeeId: req.body.employeeId,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
+      dayFraction: req.body.dayFraction,
+      halfDay: req.body.halfDay,
       actor: req.username,
       actorRole: req.userRole,
       targetEmp,
@@ -553,6 +556,9 @@ router.post("/leave", async (req, res) => {
       leaveType: validated.requestKind,
       paidLeave: validated.paidLeave,
       lateSubmission: validated.lateSubmission,
+      dayFraction: validated.dayFraction,
+      halfDay: validated.halfDay,
+      quarterDay: validated.quarterDay,
       requestedBy: req.username,
       requestedByRole: req.userRole?.role || "",
     };
@@ -592,10 +598,10 @@ router.post("/leave", async (req, res) => {
 });
 
 router.put("/leave/:id", async (req, res) => {
-  if (req.body.status && req.body.status !== "pending" && !roles.canApproveLeave(req.username)) {
-    return res.status(403).json({ error: "Only Mark, Raymond, or Phoebe may approve leave." });
+  if (req.body.status && req.body.status !== "pending" && !roles.canApproveLeave(req.username, req.userRole)) {
+    return res.status(403).json({ error: "HR, admin, or executive approval required." });
   }
-  const canEdit = roles.canApproveLeave(req.username);
+  const canEdit = roles.canApproveLeave(req.username, req.userRole);
   if (!canEdit && Object.keys(req.body).some((k) => k !== "status")) {
     return res.status(403).json({ error: "Only approvers may edit requests." });
   }
@@ -627,8 +633,8 @@ router.put("/leave/:id", async (req, res) => {
 });
 
 router.delete("/leave/:id", async (req, res) => {
-  if (!roles.canApproveLeave(req.username)) {
-    return res.status(403).json({ error: "Only Mark, Raymond, or Phoebe may delete leave requests." });
+  if (!roles.canApproveLeave(req.username, req.userRole)) {
+    return res.status(403).json({ error: "HR, admin, or executive access required." });
   }
   try {
     const prior = (await hrms.readLeaveRequests({})).find((r) => String(r.id) === String(req.params.id));
@@ -647,6 +653,124 @@ router.delete("/leave/:id", async (req, res) => {
       includeHr: true,
     });
     res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Leave request documents (medical notes, exam schedules) ──────────────────
+// These use the same employee_documents table and storage as HR docs,
+// but are attached to a leave request for quick access on the ticket.
+
+router.get("/leave/:id/documents", async (req, res) => {
+  try {
+    const leaveId = req.params.id;
+    const { getSupabaseAdmin } = require("../lib/supabase-client");
+    const { useSupabase } = require("../lib/backend");
+    if (!useSupabase()) return res.json({ documents: [] });
+    const { data, error } = await getSupabaseAdmin()
+      .from("leave_request_documents")
+      .select("*")
+      .eq("leave_id", leaveId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      // Table may not exist yet (pre-migration) — return empty gracefully
+      if (/does not exist|schema cache/i.test(error.message)) return res.json({ documents: [] });
+      throw new Error(error.message);
+    }
+    res.json({
+      documents: (data || []).map((r) => ({
+        id: r.id,
+        leaveId: r.leave_id,
+        employeeId: r.employee_id,
+        docType: r.doc_type,
+        fileName: r.file_name,
+        storagePath: r.storage_path || "",
+        driveFileId: r.drive_file_id || "",
+        notes: r.notes || "",
+        uploadedBy: r.uploaded_by || "",
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/leave/:id/documents", async (req, res) => {
+  const leaveId = req.params.id;
+  const { fileName, contentBase64, docType, notes } = req.body;
+  if (!fileName || !contentBase64) {
+    return res.status(400).json({ error: "fileName and contentBase64 required" });
+  }
+  try {
+    // Fetch the leave request to get the employeeId
+    const leaves = await hrms.readLeaveRequests({});
+    const leave = leaves.find((r) => String(r.id) === String(leaveId));
+    if (!leave) return res.status(404).json({ error: "Leave request not found" });
+
+    // Gate: the employee themselves, HR, admin, or approved leave approvers
+    const isSelf = req.userRole?.employeeId === leave.employeeId;
+    const isApprover = roles.canApproveLeave(req.username, req.userRole);
+    if (!isSelf && !isApprover) {
+      return res.status(403).json({ error: "No permission to upload documents for this request" });
+    }
+
+    const documents = require("../lib/documents");
+    const fs = require("fs");
+    const os = require("os");
+    const path = require("path");
+    const tmpPath = path.join(os.tmpdir(), `leave-doc-${Date.now()}-${fileName}`);
+    fs.writeFileSync(tmpPath, Buffer.from(contentBase64, "base64"));
+
+    let storagePath = "";
+    let driveFileId = "";
+    try {
+      const uploaded = await documents.uploadEmployeeFile({
+        employeeId: leave.employeeId,
+        docType: docType || "Medical Note",
+        filePath: tmpPath,
+        fileName,
+        notes: notes || `Leave request ${leaveId}`,
+        expiry: null,
+      });
+      // Also save to employee_documents (same place as HR docs)
+      await store.uploadEmployeeDocument(
+        { ...uploaded, noExpiry: true },
+        req.username
+      );
+      storagePath = uploaded.storagePath || "";
+      driveFileId = uploaded.driveFileId || uploaded.fileId || "";
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
+
+    // Also record in leave_request_documents for easy leave-ticket access
+    const { getSupabaseAdmin } = require("../lib/supabase-client");
+    const { useSupabase } = require("../lib/backend");
+    let savedDoc = { id: null, leaveId, fileName, docType, storagePath, driveFileId };
+    if (useSupabase()) {
+      const { data, error } = await getSupabaseAdmin()
+        .from("leave_request_documents")
+        .insert({
+          leave_id: leaveId,
+          employee_id: leave.employeeId,
+          doc_type: docType || "Medical Note",
+          file_name: fileName,
+          storage_path: storagePath || null,
+          drive_file_id: driveFileId || null,
+          notes: notes || null,
+          uploaded_by: req.username,
+        })
+        .select()
+        .single();
+      if (error && !/does not exist|schema cache/i.test(error.message)) {
+        throw new Error(error.message);
+      }
+      if (data) savedDoc = { id: data.id, leaveId, fileName, docType, storagePath, driveFileId };
+    }
+
+    res.json({ ok: true, document: savedDoc });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

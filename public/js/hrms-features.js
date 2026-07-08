@@ -70,32 +70,95 @@ window.HRMSFeatures = (function () {
   function navigateFromNotification(n) {
     if (!n) return;
     const entityType = n.entityType || n.type || "";
-    const entityId = n.entityId || "";
+    const entityId   = n.entityId   || "";
+    const navFn = typeof navigate === "function" ? navigate : (page) => {
+      location.hash = page;
+      if (typeof render === "function") render();
+    };
     if (typeof closeModal === "function") closeModal();
+
+    // ── Sales ────────────────────────────────────────────────
     if (entityType === "sale" && entityId) {
-      location.hash = "sales";
-      if (typeof render === "function") render();
+      navFn("sales");
       return;
     }
-    if (entityType === "leave" || n.type === "leave") {
-      location.hash = "requests";
-      if (typeof render === "function") render();
+
+    // ── Leave / Requests ─────────────────────────────────────
+    if (
+      entityType === "leave" ||
+      entityType === "leave_request" ||
+      n.type === "leave" ||
+      n.actionKey === "leave_submitted"
+    ) {
+      navFn("requests");
       return;
     }
-    if (entityType === "bonus_request") {
-      location.hash = "bonuses";
-      if (typeof render === "function") render();
+
+    // ── Meeting requests ──────────────────────────────────────
+    if (
+      entityType === "meeting_request" ||
+      n.type === "meeting_request_submitted" ||
+      n.type === "meeting_request_reviewed" ||
+      String(n.actionKey || "").includes("meeting_request")
+    ) {
+      navFn("meeting-requests");
       return;
     }
-    if (entityType === "employee_note" || entityType === "quality_note") {
+
+    // ── IT requests ───────────────────────────────────────────
+    if (
+      entityType === "it_request" ||
+      String(n.actionKey || "").includes("it_request") ||
+      String(n.type || "").includes("it_request")
+    ) {
+      navFn("it-requests");
+      return;
+    }
+
+    // ── Quality notes / employee notes ────────────────────────
+    if (entityType === "quality_note" || entityType === "employee_note") {
       const empId = String(entityId).split(":")[0] || entityId;
       if (empId && typeof openEmployeeById === "function") {
-        location.hash = "employees";
-        openEmployeeById(empId, entityType === "quality_note" ? "quality-notes" : "notes");
+        navFn("employees");
+        setTimeout(() => openEmployeeById(empId, entityType === "quality_note" ? "quality-notes" : "notes"), 150);
       } else {
-        location.hash = "employees";
-        if (typeof render === "function") render();
+        navFn("employees");
       }
+      return;
+    }
+
+    // ── Bonus requests ────────────────────────────────────────
+    if (entityType === "bonus_request") {
+      navFn("bonuses");
+      return;
+    }
+
+    // ── Loan requests ─────────────────────────────────────────
+    if (entityType === "loan_request") {
+      navFn("loan-approvals");
+      return;
+    }
+
+    // ── Registration ──────────────────────────────────────────
+    if (entityType === "registration") {
+      navFn("users");
+      return;
+    }
+
+    // ── Sale assignment (reviewer / verifier assigned) ────────
+    if (
+      n.type === "sale_reviewer_assigned" ||
+      n.type === "sale_verifier_assigned" ||
+      n.type === "sale_agent_assigned"
+    ) {
+      navFn("sales");
+      return;
+    }
+
+    // ── HR warning ────────────────────────────────────────────
+    if (entityType === "hr_warning" || n.type === "hr_warning") {
+      navFn("employees");
+      return;
     }
   }
 
@@ -392,6 +455,8 @@ window.HRMSFeatures = (function () {
     const orgUnits = teamsRes.orgUnits || structure.orgUnits || ["HS-1", "HS-2", "HS-3", "HS-Back-End", "HS-MGMT"];
     const allTeams = teamsRes.teams || [];
     const mgrByUnit = new Map((mgrRes.managers || []).map((m) => [m.unit, m]));
+    const teamTlsByTeam = mgrRes.teamTls || {};
+    const unitOpsByUnit = mgrRes.unitOps || {};
     if (typeof state !== "undefined") state.orgTeams = allTeams;
 
     function empName(id, opts = {}) {
@@ -421,7 +486,7 @@ window.HRMSFeatures = (function () {
 
     function isTlEmployee(e) {
       const lead = String(e?.lead_role || e?.role || "").toUpperCase();
-      const tlOnTeam = allTeams.some((t) => t.tlEmployeeId === e?.id);
+      const tlOnTeam = allTeams.some((t) => t.tlEmployeeId === e?.id || (t.tlEmployeeIds || []).includes(e?.id));
       return /^TL/i.test(String(e?.id || "")) || lead === "TL" || tlOnTeam;
     }
 
@@ -447,16 +512,23 @@ window.HRMSFeatures = (function () {
       const unit = section.unit;
       const isBackend = unit === "HS-Back-End" || unit === "HS-MGMT";
       const mgr = mgrByUnit.get(unit) || {};
-      const opId = mgr.opEmployeeId || "";
+      const opIds = [...new Set([
+        mgr.opEmployeeId || "",
+        ...(unitOpsByUnit[unit] || []),
+      ].filter(Boolean))];
+      const opChips = opIds.map((id) =>
+        `<span class="org-chip" data-unit-op="${esc(unit)}" data-op-id="${esc(id)}">${esc(empName(id, { nameOnly: true }))}${canManage ? `<button class="org-chip-remove" data-remove-op="${esc(unit)}" data-op-id="${esc(id)}" title="Remove OP">×</button>` : ""}</span>`
+      ).join(" ");
       const opHeader = isBackend
         ? `<span class="muted">Reports to CEO · HR: ${esc(empName(mgr.hrManagerId || employees.find((e) => /^HR/i.test(e.id) && /phoebe/i.test(e.american_name || ""))?.id))}</span>`
-        : canManage
-          ? `<label class="field org-op-field"><span class="muted">OP Manager</span>
-              <select class="org-op-select" data-unit="${esc(unit)}">
-                <option value="">— Select OP —</option>
-                ${opOptions(unit, opId)}
-              </select></label>`
-          : `<span class="muted">OP: ${esc(empName(opId, { nameOnly: true }))}</span>`;
+        : `<div class="org-ops">
+            <span class="muted">OP${opIds.length !== 1 ? "s" : ""}:</span>
+            ${opChips || '<span class="muted">—</span>'}
+            ${canManage ? `<select class="org-op-add" data-unit="${esc(unit)}">
+              <option value="">+ Add OP</option>
+              ${opOptions(unit, "")}
+            </select>` : ""}
+          </div>`;
       return `<section class="card org-unit-block org-hierarchy-unit" style="margin-bottom:1rem" data-unit="${esc(unit)}">
         <div class="flex-between" style="margin-bottom:.75rem;align-items:flex-start;gap:1rem;flex-wrap:wrap">
           <div><h2 style="margin:0">${esc(unit)}${unit === "HS-2" && (typeof state !== "undefined" && state.user?.canManageHs2Company) ? ' <span class="badge">HS2 Company</span>' : ""}</h2>${opHeader}</div>
@@ -465,15 +537,22 @@ window.HRMSFeatures = (function () {
         <div class="stack org-team-stack">${teams.map((t) => {
           const agents = t.agents || [];
           const meta = allTeams.find((x) => x.name === t.name) || {};
-          const tlId = meta.tlEmployeeId || "";
+          const tlIds = [...new Set([
+            meta.tlEmployeeId || "",
+            ...(teamTlsByTeam[meta.id] || []),
+          ].filter(Boolean))];
           const dialBadge = t.dialsSales === false ? '<span class="badge muted">No dial</span>' : "";
-          const tlHeader = canManage && meta.id
-            ? `<label class="field org-tl-field"><span class="muted">TL</span>
-                <select class="org-tl-select" data-team-id="${esc(meta.id)}">
-                  <option value="">— Select TL —</option>
-                  ${tlOptions(t.name, tlId)}
-                </select></label>`
-            : `<span class="muted">TL: ${esc(empName(tlId, { nameOnly: true }))}</span>`;
+          const tlChips = tlIds.map((id) =>
+            `<span class="org-chip" data-team-tl="${esc(meta.id)}" data-tl-id="${esc(id)}">${esc(empName(id, { nameOnly: true }))}${canManage ? `<button class="org-chip-remove" data-remove-tl="${esc(meta.id)}" data-tl-id="${esc(id)}" title="Remove TL">×</button>` : ""}</span>`
+          ).join(" ");
+          const tlHeader = `<div class="org-tls">
+            <span class="muted">TL${tlIds.length !== 1 ? "s" : ""}:</span>
+            ${tlChips || '<span class="muted">—</span>'}
+            ${canManage && meta.id ? `<select class="org-tl-add" data-team-id="${esc(meta.id)}">
+              <option value="">+ Add TL</option>
+              ${tlOptions(t.name, "")}
+            </select>` : ""}
+          </div>`;
           return `<details class="card card-flat org-team-card" open data-team="${esc(t.name)}">
             <summary class="flex-between" style="align-items:center;gap:.5rem;flex-wrap:wrap">
               <span><strong>${esc(t.name)}</strong> ${dialBadge} <span class="muted">(${agents.length} agents)</span></span>
@@ -542,6 +621,13 @@ window.HRMSFeatures = (function () {
     }
 
     root.innerHTML = `
+      <style>
+        .org-ops, .org-tls { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+        .org-chip { display: inline-flex; align-items: center; gap: .2rem; background: var(--bg2, #eee); padding: .1rem .4rem; border-radius: 3px; font-size: .8rem; }
+        .org-chip-remove { background: none; border: none; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 .1rem; color: var(--text-muted, #888); }
+        .org-chip-remove:hover { color: #c00; }
+        .org-op-add, .org-tl-add { font-size: .8rem; max-width: 8rem; }
+      </style>
       <div class="page-header flex-between">
         <div><h1>Organization</h1><p class="muted">Unit → Team → Agent · OP manages unit · TL manages team · Back-End reports to CEO</p></div>
       </div>
@@ -627,66 +713,100 @@ window.HRMSFeatures = (function () {
 
     root.querySelectorAll("[data-agent-id]").forEach((row) => {
       row.onclick = (e) => {
-        if (e.target.closest(".org-team-select, .org-tl-select, .org-op-select")) return;
+        if (e.target.closest(".org-team-select, .org-tl-select, .org-op-select, .org-tl-add, .org-op-add, .org-chip-remove, .org-chip")) return;
         const emp = employees.find((x) => String(x.id) === String(row.dataset.agentId));
         if (emp && typeof openEmployeeModal === "function") openEmployeeModal(emp);
       };
     });
 
-    root.querySelectorAll(".org-op-select").forEach((sel) => {
-      const prev = sel.value;
+    root.querySelectorAll(".org-op-add").forEach((sel) => {
       sel.addEventListener("change", async () => {
-        const emp = employees.find((x) => String(x.id) === String(sel.value));
-        if (!emp) return;
+        const employeeId = sel.value;
+        if (!employeeId) return;
+        const unit = sel.dataset.unit;
+        const emp = employees.find((x) => String(x.id) === employeeId);
         const isOp =
-          /^OP/i.test(String(emp.id || "")) || String(emp.role || "").toLowerCase() === "op";
+          /^OP/i.test(String(emp?.id || "")) || String(emp?.role || "").toLowerCase() === "op";
         if (!isOp) {
-          const msg = `Assign ${emp.id} as OP for ${sel.dataset.unit}? This is unusual (not an OP role).`;
-          if (!confirm(msg) || !confirm("Please confirm again — OP manager assignment.")) {
-            sel.value = prev;
+          if (!confirm(`Assign ${emp?.id || employeeId} as OP for ${unit}? This is unusual.`) ||
+              !confirm("Please confirm again — OP manager assignment.")) {
+            sel.value = "";
             return;
           }
         }
         try {
-          await api(`/org/managers/${encodeURIComponent(sel.dataset.unit)}`, {
-            method: "PUT",
-            body: JSON.stringify({ opEmployeeId: sel.value }),
+          await api(`/org/unit-ops/${encodeURIComponent(unit)}`, {
+            method: "POST",
+            body: JSON.stringify({ employeeId }),
           });
+          await renderOrgPage(root, api, helpers);
         } catch (e) {
-          sel.value = prev;
+          alert(e.message);
+        }
+        sel.value = "";
+      });
+    });
+
+    root.querySelectorAll(".org-tl-add").forEach((sel) => {
+      sel.addEventListener("change", async () => {
+        const employeeId = sel.value;
+        if (!employeeId) return;
+        const teamId = sel.dataset.teamId;
+        const teamCard = sel.closest(".org-team-card");
+        const teamName = teamCard?.dataset?.team || "";
+        const emp = employees.find((x) => String(x.id) === employeeId);
+        const isAgentPick = !isTlEmployee(emp);
+        const normTeam = (t) => String(t || "").replace(/^team\s+/i, "").trim();
+        const crossTeam = isTlEmployee(emp) && normTeam(emp?.team) !== normTeam(teamName);
+        if (!emp || isAgentPick || crossTeam) {
+          const msg = !emp
+            ? `Assign ${employeeId} as TL for "${teamName}"?`
+            : isAgentPick
+              ? `Assign agent ${employeeId} as TL for team "${teamName}"? This is unusual.`
+              : `Assign TL ${employeeId} from team "${emp?.team || "?"}" to lead "${teamName}"?`;
+          if (!confirm(msg) || !confirm("Please confirm again — this changes team leadership.")) {
+            sel.value = "";
+            return;
+          }
+        }
+        try {
+          await api(`/org/team-tls/${teamId}`, {
+            method: "POST",
+            body: JSON.stringify({ employeeId }),
+          });
+          await renderOrgPage(root, api, helpers);
+        } catch (e) {
+          alert(e.message);
+        }
+        sel.value = "";
+      });
+    });
+
+    root.querySelectorAll("[data-remove-op]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const unit = btn.dataset.removeOp;
+        const employeeId = btn.dataset.opId;
+        if (!confirm(`Remove ${empName(employeeId, { nameOnly: true })} as OP for ${unit}?`)) return;
+        try {
+          await api(`/org/unit-ops/${encodeURIComponent(unit)}/${encodeURIComponent(employeeId)}`, { method: "DELETE" });
+          await renderOrgPage(root, api, helpers);
+        } catch (e) {
           alert(e.message);
         }
       });
     });
 
-    root.querySelectorAll(".org-tl-select").forEach((sel) => {
-      const prev = sel.value;
-      sel.addEventListener("change", async () => {
-        const teamId = sel.dataset.teamId;
-        const teamCard = sel.closest(".org-team-card");
-        const teamName = teamCard?.dataset?.team || "";
-        const emp = employees.find((x) => String(x.id) === String(sel.value));
-        if (!emp) return;
-        const isAgentPick = !isTlEmployee(emp);
-        const normTeam = (t) => String(t || "").replace(/^team\s+/i, "").trim();
-        const crossTeam = isTlEmployee(emp) && normTeam(emp.team) !== normTeam(teamName);
-        if (isAgentPick || crossTeam) {
-          const msg = isAgentPick
-            ? `Assign agent ${emp.id} as TL for team "${teamName}"? This is unusual.`
-            : `Assign TL ${emp.id} from team "${emp.team || "?"}" to lead "${teamName}"?`;
-          if (!confirm(msg) || !confirm("Please confirm again — this changes team leadership.")) {
-            sel.value = prev;
-            return;
-          }
-        }
+    root.querySelectorAll("[data-remove-tl]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const teamId = btn.dataset.removeTl;
+        const employeeId = btn.dataset.tlId;
+        if (!confirm(`Remove ${empName(employeeId, { nameOnly: true })} as TL from this team?`)) return;
         try {
-          await api(`/hrms/teams/${teamId}`, {
-            method: "PATCH",
-            body: JSON.stringify({ tlEmployeeId: sel.value }),
-          });
+          await api(`/org/team-tls/${teamId}/${encodeURIComponent(employeeId)}`, { method: "DELETE" });
           await renderOrgPage(root, api, helpers);
         } catch (e) {
-          sel.value = prev;
           alert(e.message);
         }
       });
@@ -1217,10 +1337,15 @@ window.HRMSFeatures = (function () {
         <input type="date" id="train-passed-date" value="${escapeHtml(program.passedOnDate || "")}" /></label>
       <label class="field" style="grid-column:1/-1"><span>Exit notes</span>
         <input type="text" id="train-exit-notes" value="${escapeHtml(program.exitNotes || "")}" /></label>
+      <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="train-exception-flag" style="width:16px;height:16px;accent-color:var(--primary,#2563eb)" />
+        <span>Exception <span class="muted">(promote without 12-sales requirement — HR/Admin override)</span></span>
+      </label>
     </div>
     <div class="btn-row" style="margin-bottom:.5rem">
       <button type="button" class="btn btn-sm" id="train-save-outcome">Save outcome</button>
       <button type="button" class="btn btn-sm btn-primary" id="train-promote-btn">Promote to Agent</button>
+      <button type="button" class="btn btn-sm btn-danger" id="train-cancel-btn">Cancel / End training</button>
       <button type="button" class="btn btn-sm" id="train-pay-preview-btn">Refresh pay preview</button>
     </div>
     <div id="train-pay-preview" class="muted" style="font-size:.85rem;margin-bottom:.5rem"></div>
@@ -1581,16 +1706,43 @@ window.HRMSFeatures = (function () {
     });
 
     section.querySelector("#train-promote-btn")?.addEventListener("click", async () => {
-      if (!confirm("Promote to Agent and close training program?")) return;
+      const isException = section.querySelector("#train-exception-flag")?.checked === true;
+      const salesEval = program.salesEvaluation || {};
+      const needsConfirm = isException
+        ? `Promote to Agent as EXCEPTION (${salesEval.totalPassed ?? "?"}/12 sales)? This bypasses the sales requirement.`
+        : "Promote to Agent and close training program?";
+      if (!confirm(needsConfirm)) return;
       try {
         await api(`/hrms/training/${emp.id}/promote`, {
           method: "POST",
           body: JSON.stringify({
             promotionEffectiveDate: section.querySelector("#train-promo-date")?.value,
             passedOnDate: section.querySelector("#train-passed-date")?.value,
+            exception: isException,
           }),
         });
-        toast("Promoted to Agent.");
+        toast(isException ? "Promoted to Agent (exception)." : "Promoted to Agent.");
+        await refreshLifecyclePanel(emp, api, helpers);
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+
+    section.querySelector("#train-cancel-btn")?.addEventListener("click", async () => {
+      if (!confirm("Cancel / end training program for this employee? This marks the program as inactive and sets outcome.")) return;
+      try {
+        // Set outcome to voluntary_leave or company_terminated based on exit-notes or just mark inactive
+        const outcome = section.querySelector("#train-outcome")?.value || "voluntary_leave";
+        const exitNotes = section.querySelector("#train-exit-notes")?.value || "Training cancelled by HR";
+        await api(`/hrms/training/${emp.id}/outcome`, {
+          method: "PATCH",
+          body: JSON.stringify({ outcome: ["active", "passed"].includes(outcome) ? "voluntary_leave" : outcome, exitNotes }),
+        });
+        await api(`/hrms/training/${emp.id}/active`, {
+          method: "PUT",
+          body: JSON.stringify({ active: false }),
+        });
+        toast("Training cancelled.");
         await refreshLifecyclePanel(emp, api, helpers);
       } catch (e) {
         alert(e.message);
@@ -1969,6 +2121,250 @@ window.HRMSFeatures = (function () {
       });
     }
 
+    // ── Companies management (Admin/CEO only) ─────────────────────────────
+    const canManageCompanies = ["admin", "ceo"].includes(role);
+    if (canManageCompanies) {
+      grid.insertAdjacentHTML(
+        "beforeend",
+        `<div class="card" id="settings-companies-card">
+          <h3>Companies</h3>
+          <p class="muted">
+            Add separate companies and edit their names. Each company gets its own access control, roles,
+            finance (loans, bonuses, deductions), and org structure.
+            <br><strong>Hang-Up</strong> = HS-1 + HS-3 (merged). <strong>HS-2 Company</strong> = separate.
+          </p>
+          <div id="companies-list" class="muted">Loading…</div>
+          <button class="btn btn-sm btn-primary" id="add-company-btn" style="margin-top:.75rem">+ Add company</button>
+        </div>`
+      );
+
+      async function loadCompaniesList() {
+        const el = root.querySelector("#companies-list");
+        if (!el) return;
+        try {
+          const { companies } = await api("/companies");
+          if (!companies || !companies.length) {
+            el.textContent = "No companies found.";
+            return;
+          }
+          el.innerHTML = `
+            <style>
+              .co-row{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border,#eee);flex-wrap:wrap}
+              .co-row:last-child{border-bottom:none}
+              .co-name-input{flex:1;min-width:8rem;font-size:.9rem;padding:.25rem .4rem;border:1px solid var(--border,#ddd);border-radius:4px}
+              .co-short-input{width:6rem;font-size:.85rem;padding:.25rem .4rem;border:1px solid var(--border,#ddd);border-radius:4px}
+              .co-badge{font-size:.75rem;padding:.1rem .4rem;border-radius:10px;background:var(--surface2,#f0f0f0)}
+            </style>
+            ${companies.map((c) => `
+              <div class="co-row" data-co-slug="${escapeHtml(c.slug)}">
+                <span class="co-badge">${escapeHtml(c.slug)}</span>
+                <input class="co-name-input" placeholder="Display name" value="${escapeHtml(c.name)}" data-co-name />
+                <input class="co-short-input" placeholder="Short name" value="${escapeHtml(c.shortName || c.name)}" data-co-short />
+                ${c.isDefault ? '<span class="badge badge-ok">Default</span>' : ''}
+                ${!c.active ? '<span class="badge badge-out">Inactive</span>' : ''}
+                <button class="btn btn-sm" data-co-save="${escapeHtml(c.slug)}">Save</button>
+                ${!c.isDefault ? `<button class="btn btn-sm" data-co-toggle="${escapeHtml(c.slug)}" data-co-active="${c.active}">${c.active ? "Disable" : "Enable"}</button>` : ""}
+                <button class="btn btn-sm" data-co-perms="${escapeHtml(c.slug)}">Access Control</button>
+              </div>`).join("")}`;
+
+          // Save name
+          el.querySelectorAll("[data-co-save]").forEach((btn) => {
+            btn.onclick = async () => {
+              const slug = btn.dataset.coSave;
+              const row  = el.querySelector(`[data-co-slug="${slug}"]`);
+              const name  = row?.querySelector("[data-co-name]")?.value?.trim();
+              const short = row?.querySelector("[data-co-short]")?.value?.trim();
+              if (!name) return alert("Name cannot be empty");
+              try {
+                await api(`/companies/${slug}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ name, shortName: short || name }),
+                });
+                alert(`"${name}" saved.`);
+                loadCompaniesList();
+              } catch (e) { alert(e.message); }
+            };
+          });
+
+          // Toggle active
+          el.querySelectorAll("[data-co-toggle]").forEach((btn) => {
+            btn.onclick = async () => {
+              const slug   = btn.dataset.coToggle;
+              const active = btn.dataset.coActive !== "false" && btn.dataset.coActive !== false;
+              if (!confirm(`${active ? "Disable" : "Enable"} company "${slug}"?`)) return;
+              try {
+                await api(`/companies/${slug}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ active: !active }),
+                });
+                loadCompaniesList();
+              } catch (e) { alert(e.message); }
+            };
+          });
+
+          // Per-company access control
+          el.querySelectorAll("[data-co-perms]").forEach((btn) => {
+            btn.onclick = () => openCompanyAccessControlModal(btn.dataset.coPerms, api, helpers);
+          });
+        } catch (e) {
+          const el2 = root.querySelector("#companies-list");
+          if (el2) el2.textContent = "Could not load companies: " + (e.message || "unknown error");
+        }
+      }
+
+      loadCompaniesList();
+
+      root.querySelector("#add-company-btn")?.addEventListener("click", () => {
+        openModal(`
+          <div class="modal-header"><h2>Add Company</h2><button class="btn btn-sm" data-close>✕</button></div>
+          <form id="add-company-form" class="modal-body field-grid">
+            <label class="field"><span>Slug <span class="muted">(internal key, e.g. "myco")</span></span>
+              <input name="slug" required placeholder="myco" pattern="[a-z0-9_-]+" title="Lowercase letters, numbers, hyphens only" /></label>
+            <label class="field"><span>Display name</span>
+              <input name="name" required placeholder="My Company" /></label>
+            <label class="field"><span>Short name <span class="muted">(sidebar label)</span></span>
+              <input name="shortName" placeholder="MyCo" /></label>
+            <label class="field"><span>Sort order</span>
+              <input name="sortOrder" type="number" value="99" min="1" /></label>
+          </form>
+          <div class="modal-footer">
+            <button class="btn" data-close>Cancel</button>
+            <button class="btn btn-primary" id="save-new-company">Add</button>
+          </div>`);
+
+        document.getElementById("save-new-company").onclick = async () => {
+          const fd = new FormData(document.getElementById("add-company-form"));
+          const slug = String(fd.get("slug") || "").trim().toLowerCase();
+          const name = String(fd.get("name") || "").trim();
+          if (!slug || !name) return alert("Slug and name are required");
+          try {
+            await api("/companies", {
+              method: "POST",
+              body: JSON.stringify({
+                slug,
+                name,
+                shortName: String(fd.get("shortName") || "").trim() || name,
+                sortOrder: Number(fd.get("sortOrder")) || 99,
+              }),
+            });
+            closeModal();
+            loadCompaniesList();
+          } catch (e) { alert(e.message); }
+        };
+      });
+    }
+
+  }
+
+  // ── Per-company Access Control modal ──────────────────────────────────────
+  async function openCompanyAccessControlModal(companySlug, api, helpers) {
+    const { escapeHtml, openModal, closeModal } = helpers;
+    let data;
+    try {
+      data = await api(`/companies/${companySlug}/permissions`);
+    } catch (e) {
+      return alert("Could not load permissions: " + e.message);
+    }
+    const perms   = data.permissions   || [];
+    const catalog = data.catalog       || [];
+
+    // Group catalog by category
+    const byCategory = {};
+    for (const p of catalog) {
+      if (!byCategory[p.category]) byCategory[p.category] = [];
+      byCategory[p.category].push(p);
+    }
+
+    const ROLES = ["agent","office_assistant","quality","rtm","tl","op","finance","it","hr","admin","ceo"];
+
+    function permState(role, key) {
+      const hit = perms.find((p) => p.role === role && p.permissionKey === key);
+      return hit ? (hit.allowed ? "allow" : "deny") : "inherit";
+    }
+
+    const categorySections = Object.entries(byCategory).map(([cat, items]) => `
+      <div class="co-ac-section">
+        <div class="co-ac-cat">${escapeHtml(cat)}</div>
+        ${items.map((p) => `
+          <div class="co-ac-row">
+            <span class="co-ac-label" title="${escapeHtml(p.description || "")}">${escapeHtml(p.label)}</span>
+            <div class="co-ac-roles">
+              ${ROLES.map((r) => {
+                const st = permState(r, p.key);
+                return `<label class="co-ac-role-cell" title="${escapeHtml(r)}">
+                  <span class="co-ac-role-abbr">${escapeHtml(r.slice(0,3))}</span>
+                  <select data-co-perm-role="${escapeHtml(r)}" data-co-perm-key="${escapeHtml(p.key)}" class="co-ac-sel">
+                    <option value="inherit" ${st==="inherit"?"selected":""}>—</option>
+                    <option value="allow"   ${st==="allow"  ?"selected":""}>✓</option>
+                    <option value="deny"    ${st==="deny"   ?"selected":""}>✕</option>
+                  </select>
+                </label>`;
+              }).join("")}
+            </div>
+          </div>`).join("")}
+      </div>`).join("");
+
+    openModal(`
+      <style>
+        .co-ac-section{margin-bottom:1rem}
+        .co-ac-cat{font-weight:700;font-size:.8rem;text-transform:uppercase;color:var(--text-muted,#888);margin:.5rem 0 .25rem}
+        .co-ac-row{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;flex-wrap:wrap}
+        .co-ac-label{flex:1;min-width:10rem;font-size:.85rem}
+        .co-ac-roles{display:flex;gap:.2rem;flex-wrap:wrap}
+        .co-ac-role-cell{display:flex;flex-direction:column;align-items:center;font-size:.7rem}
+        .co-ac-role-abbr{text-transform:uppercase;margin-bottom:.1rem;opacity:.7}
+        .co-ac-sel{font-size:.75rem;padding:.1rem .15rem;width:2.8rem}
+      </style>
+      <div class="modal-header">
+        <h2>Access Control — ${escapeHtml(companySlug)}</h2>
+        <button class="btn btn-sm" data-close>✕</button>
+      </div>
+      <div class="modal-body modal-body-scroll" id="co-ac-body" style="max-height:65vh;overflow-y:auto">
+        <p class="muted">
+          Override permissions for this company. <strong>—</strong> = use global default.
+          <strong>✓</strong> = always allow. <strong>✕</strong> = always deny.
+        </p>
+        ${categorySections}
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>Close</button>
+        <button class="btn btn-primary" id="co-ac-save-all">Save all changes</button>
+      </div>`);
+
+    // Track pending changes
+    const pending = new Map(); // "role|key" → "allow"|"deny"|"inherit"
+
+    document.getElementById("co-ac-body")?.querySelectorAll(".co-ac-sel").forEach((sel) => {
+      sel.addEventListener("change", () => {
+        const k = `${sel.dataset.coPermRole}|${sel.dataset.coPermKey}`;
+        pending.set(k, sel.value);
+      });
+    });
+
+    document.getElementById("co-ac-save-all").onclick = async () => {
+      if (!pending.size) { closeModal(); return; }
+      let saved = 0;
+      for (const [k, val] of pending.entries()) {
+        const [r, permKey] = k.split("|");
+        try {
+          if (val === "inherit") {
+            await api(`/companies/${companySlug}/permissions`, {
+              method: "DELETE",
+              body: JSON.stringify({ role: r, permissionKey: permKey }),
+            });
+          } else {
+            await api(`/companies/${companySlug}/permissions`, {
+              method: "PUT",
+              body: JSON.stringify({ role: r, permissionKey: permKey, allowed: val === "allow" }),
+            });
+          }
+          saved++;
+        } catch { /* skip single failures */ }
+      }
+      alert(`Saved ${saved} permission override(s) for ${companySlug}.`);
+      pending.clear();
+      closeModal();
+    };
   }
 
   async function enhanceReports(root, api, state, helpers) {

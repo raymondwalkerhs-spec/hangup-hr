@@ -78,6 +78,7 @@ const state = {
   salesWeekDate: new Date().toISOString().slice(0, 10),
   tabSearch: { employees: "", attendance: "", payroll: "" },
   payrollTab: "agent",
+  payrollPositionFilter: "",
   empFilter: { status: "", unit: "", nationality: "", workPermit: "", insuranceStatus: "" },
   changesFilter: { user: "", entity: "" },
   meta: { statuses: [], units: [], positions: [], backendPools: [] },
@@ -2032,6 +2033,13 @@ function updatePayrollTable(root) {
   if (getTabSearch("payroll")) {
     rows = rows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
+  // Position filter
+  if (state.payrollPositionFilter) {
+    rows = rows.filter((r) => {
+      const pos = String(r.position || r.adj?.position || "").toLowerCase();
+      return pos === state.payrollPositionFilter.toLowerCase();
+    });
+  }
   const tab = state.payrollTab || "agent";
   const totals = view.totals || data.totals || {};
   const tbody = root.querySelector("#payroll-tbody");
@@ -3205,7 +3213,12 @@ async function openPayslipModal(employeeId, options = {}) {
         <form id="adj-form" class="field-grid">
           <label class="field"><span>Position</span><input name="position" value="${adj.position || p.position || ""}" /></label>
           <label class="field"><span>Salary raise (EGP)</span><input name="salaryRaise" type="number" min="0" value="${adj.salaryRaise ?? p.salaryRaise ?? 0}" /></label>
-          <label class="field"><span>Salary override</span><input name="monthlySalaryOverride" type="number" min="0" placeholder="optional" value="${adj.monthlySalaryOverride ?? ""}" /></label>
+          <label class="field"><span>Salary override <span class="muted" style="font-size:.75rem">(replaces position rate for this month only)</span></span>
+            <div style="display:flex;gap:.4rem;align-items:center">
+              <input name="monthlySalaryOverride" type="number" min="0" placeholder="leave blank to use position rate" value="${adj.monthlySalaryOverride != null ? adj.monthlySalaryOverride : ""}" style="flex:1" />
+              <button type="button" class="btn btn-sm" id="clear-salary-override-btn" title="Remove override">✕</button>
+            </div>
+          </label>
           <label class="field"><span>Payment method</span><input name="paymentMethod" value="${adj.paymentMethod || p.paymentMethod || ""}" /></label>
           <label class="field"><span>Payroll status</span><select name="payrollStatus">${statusOpts}</select></label>
           <label class="field"><span>Extra days</span><input name="extraDays" type="number" step="0.5" value="${adj.extraDays ?? 0}" /></label>
@@ -3358,6 +3371,11 @@ async function openPayslipModal(employeeId, options = {}) {
     };
   }
 
+  document.getElementById("clear-salary-override-btn")?.addEventListener("click", () => {
+    const inp = document.querySelector("[name=monthlySalaryOverride]");
+    if (inp) inp.value = "";
+  });
+
   document.getElementById("save-adj-btn").onclick = async () => {
     const btn = document.getElementById("save-adj-btn");
     const fd = new FormData(document.getElementById("adj-form"));
@@ -3371,7 +3389,9 @@ async function openPayslipModal(employeeId, options = {}) {
           yearMonth: state.month,
           position: fd.get("position"),
           salaryRaise: Number(fd.get("salaryRaise")) || 0,
-          monthlySalaryOverride: fd.get("monthlySalaryOverride") || null,
+          monthlySalaryOverride: fd.get("monthlySalaryOverride") !== "" && fd.get("monthlySalaryOverride") != null
+            ? Number(fd.get("monthlySalaryOverride"))
+            : null,
           paymentMethod: fd.get("paymentMethod"),
           payrollStatus: fd.get("payrollStatus"),
           extraDays: Number(fd.get("extraDays")) || 0,
@@ -3982,6 +4002,12 @@ async function renderPayroll(root) {
   if (getTabSearch("payroll")) {
     payrollRows = payrollRows.filter((r) => matchesEmployeeSearch(r, getTabSearch("payroll")));
   }
+  if (state.payrollPositionFilter) {
+    payrollRows = payrollRows.filter((r) => {
+      const pos = String(r.position || r.adj?.position || "").toLowerCase();
+      return pos === state.payrollPositionFilter.toLowerCase();
+    });
+  }
   const tab = state.payrollTab || "agent";
   const totals = view.totals || data.totals || {};
   const thDue = tab === "total" ? "Due date" : "Payment";
@@ -4009,7 +4035,18 @@ async function renderPayroll(root) {
       <button type="button" class="btn btn-sm ${tab === "training" ? "btn-primary" : ""}" data-payroll-tab="training">Training payroll</button>
       <button type="button" class="btn btn-sm ${tab === "total" ? "btn-primary" : ""}" data-payroll-tab="total">Total payrolls</button>
     </div>
-    ${monthToolbar(`${pageSearchInputHtml("payroll", "Search name, Arabic name, or ID…")}${hideOutToggle()}
+    ${monthToolbar(`${pageSearchInputHtml("payroll", "Search name, Arabic name, or ID…")}
+    <label class="field field-inline"><span>Position</span>
+      <select id="payroll-position-filter" style="min-width:9rem">
+        <option value="">All positions</option>
+        ${[...new Set(
+          (view.rows || [])
+            .map((r) => r.position || r.adj?.position || "")
+            .filter(Boolean)
+        )].sort().map((pos) => `<option value="${escapeHtml(pos)}" ${state.payrollPositionFilter === pos ? "selected" : ""}>${escapeHtml(pos)}</option>`).join("")}
+      </select>
+    </label>
+    ${hideOutToggle()}
     <label class="toggle-label"><input type="checkbox" id="hide-zero-net" ${state.hideZeroNet ? "checked" : ""} /> Hide zero net pay</label>`)}
     <div class="card" style="margin-bottom:1rem">
       <div class="flex-between" style="margin-bottom:.75rem">
@@ -4052,6 +4089,10 @@ async function renderPayroll(root) {
   });
   root.querySelector("#hide-zero-net")?.addEventListener("change", (e) => {
     state.hideZeroNet = e.target.checked;
+    updatePayrollTable(root);
+  });
+  root.querySelector("#payroll-position-filter")?.addEventListener("change", (e) => {
+    state.payrollPositionFilter = e.target.value;
     updatePayrollTable(root);
   });
   bindTabSearch(root, "payroll", () => updatePayrollTable(root), 180);
@@ -4703,14 +4744,36 @@ async function renderLoanApprovalsPage(root) {
     root.innerHTML = '<p class="muted">Executive approval access only (Mark, Phoebe, Raymond).</p>';
     return;
   }
-  const data = await api("/loan-requests?status=pending");
-  const requests = data.requests || [];
+
+  const [data, empData] = await Promise.all([
+    api("/loan-requests?status=pending"),
+    api(`/employees${employeesQuery()}`).catch(() => ({ employees: [] })),
+  ]);
+  const requests  = data.requests   || [];
+  const employees = empData.employees || [];
+  const empById   = new Map(employees.map((e) => [e.id, e]));
+
+  function empName(id) {
+    const e = empById.get(id);
+    return e ? (e.american_name || e.arabic_name || id) : id;
+  }
+
   root.innerHTML = `
-    <div class="page-header"><div><h1>Loan approvals</h1><p class="muted">${requests.length} pending · visible to executives only</p></div></div>
+    <div class="page-header flex-between">
+      <div>
+        <h1>Loan approvals</h1>
+        <p class="muted">${requests.length} pending · visible to executives only</p>
+      </div>
+      <button class="btn btn-primary" id="add-loan-request-btn">+ Add loan request</button>
+    </div>
     <div class="table-wrap card"><table>
-      <thead><tr><th>Employee</th><th class="text-right">Total</th><th>Installment</th><th>Submitted by</th><th>Notes</th><th></th></tr></thead>
+      <thead><tr>
+        <th>Employee</th><th>Unit</th><th class="text-right">Total</th>
+        <th>Installment</th><th>Submitted by</th><th>Notes</th><th></th>
+      </tr></thead>
       <tbody>${requests.length ? requests.map((r) => `<tr>
-        <td>${escapeHtml(r.employeeId)}</td>
+        <td><strong>${escapeHtml(r.employeeId)}</strong><br><span class="muted">${escapeHtml(empName(r.employeeId))}</span></td>
+        <td class="muted">${escapeHtml(r.unit || "—")}</td>
         <td class="text-right">${fmt(r.totalAmount)}</td>
         <td>${fmt(r.installmentAmount)} × ${r.installmentsCount || "—"}</td>
         <td>${escapeHtml(r.submittedBy)}</td>
@@ -4719,14 +4782,21 @@ async function renderLoanApprovalsPage(root) {
           <button class="btn btn-sm btn-primary" data-loan-approve="${r.id}">Approve</button>
           <button class="btn btn-sm" data-loan-deny="${r.id}">Deny</button>
         </td>
-      </tr>`).join("") : '<tr><td colspan="6" class="muted">No pending loan requests</td></tr>'}
-      </tbody></table></div>`;
+      </tr>`).join("") : '<tr><td colspan="7" class="muted">No pending loan requests</td></tr>'}
+      </tbody>
+    </table></div>`;
+
   root.querySelectorAll("[data-loan-approve]").forEach((btn) => {
     btn.onclick = async () => {
-      await api(`/loan-requests/${btn.dataset.loanApprove}/approve`, { method: "POST" });
-      render();
+      if (!confirm("Approve this loan request? This will create the loan immediately.")) return;
+      try {
+        await api(`/loan-requests/${btn.dataset.loanApprove}/approve`, { method: "POST" });
+        showSaveIndicator("Loan approved", "saved");
+        renderLoanApprovalsPage(root);
+      } catch (e) { alert(e.message); }
     };
   });
+
   root.querySelectorAll("[data-loan-deny]").forEach((btn) => {
     btn.onclick = () => {
       openPromptModal({
@@ -4735,15 +4805,120 @@ async function renderLoanApprovalsPage(root) {
         placeholder: "Reason",
         confirmLabel: "Deny",
         onSubmit: async (reason) => {
-          await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, {
-            method: "POST",
-            body: JSON.stringify({ denyReason: reason }),
-          });
-          render();
+          try {
+            await api(`/loan-requests/${btn.dataset.loanDeny}/deny`, {
+              method: "POST",
+              body: JSON.stringify({ denyReason: reason }),
+            });
+            renderLoanApprovalsPage(root);
+          } catch (e) { alert(e.message); }
         },
       });
     };
   });
+
+  root.querySelector("#add-loan-request-btn")?.addEventListener("click", () => {
+    openAddLoanRequestModal(employees, () => renderLoanApprovalsPage(root));
+  });
+}
+
+function openAddLoanRequestModal(employees, onDone) {
+  const empOpts = employees
+    .filter((e) => e.status !== "Out" && e.status !== "Deleted")
+    .sort((a, b) => (a.american_name || a.id).localeCompare(b.american_name || b.id))
+    .map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.american_name || e.arabic_name || e.id)} (${escapeHtml(e.id)})</option>`)
+    .join("");
+
+  const curMonth = state.month || new Date().toISOString().slice(0, 7);
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Add Loan Request</h2>
+      <button class="btn btn-sm" data-close>✕</button>
+    </div>
+    <form id="add-loan-form" class="modal-body field-grid">
+      <label class="field" style="grid-column:1/-1">
+        <span>Employee</span>
+        <select name="employeeId" required>
+          <option value="">— Select employee —</option>
+          ${empOpts}
+        </select>
+      </label>
+      <label class="field">
+        <span>Total amount (EGP)</span>
+        <input name="totalAmount" type="number" min="1" required placeholder="e.g. 5000" />
+      </label>
+      <label class="field">
+        <span>Installment amount (EGP)</span>
+        <input name="installmentAmount" type="number" min="0" placeholder="e.g. 1000" />
+      </label>
+      <label class="field">
+        <span>Number of installments</span>
+        <input name="installmentsCount" type="number" min="1" placeholder="e.g. 5" />
+      </label>
+      <label class="field">
+        <span>Start month</span>
+        <input name="createdYearMonth" type="month" value="${escapeHtml(curMonth)}" />
+      </label>
+      <label class="field" style="display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" name="skipCurrentMonth" id="loan-skip-month" style="width:16px;height:16px" />
+        <span>Skip current month (start deducting next month)</span>
+      </label>
+      <label class="field" style="grid-column:1/-1">
+        <span>Notes</span>
+        <textarea name="notes" rows="2" placeholder="Reason or context for this loan…"></textarea>
+      </label>
+      <label class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:.5rem">
+        <input type="checkbox" id="loan-auto-approve" checked style="width:16px;height:16px;accent-color:var(--primary,#2563eb)" />
+        <span>Auto-approve immediately <span class="muted">(creates the loan right away)</span></span>
+      </label>
+    </form>
+    <div class="modal-footer">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn btn-primary" id="add-loan-submit-btn">Submit</button>
+    </div>`);
+
+  document.getElementById("add-loan-submit-btn").onclick = async () => {
+    const form = document.getElementById("add-loan-form");
+    const fd   = new FormData(form);
+    const employeeId        = String(fd.get("employeeId")        || "").trim();
+    const totalAmount       = Number(fd.get("totalAmount")        || 0);
+    const installmentAmount = Number(fd.get("installmentAmount")  || 0);
+    const installmentsCount = Number(fd.get("installmentsCount")  || 0);
+    const createdYearMonth  = String(fd.get("createdYearMonth")   || "").trim();
+    const notes             = String(fd.get("notes")              || "").trim();
+    const skipCurrentMonth  = document.getElementById("loan-skip-month")?.checked === true;
+    const autoApprove       = document.getElementById("loan-auto-approve")?.checked === true;
+
+    if (!employeeId) return alert("Select an employee");
+    if (!totalAmount || totalAmount <= 0) return alert("Enter a valid total amount");
+
+    try {
+      const created = await api("/loan-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId,
+          totalAmount,
+          installmentAmount: installmentAmount || 0,
+          installmentsCount: installmentsCount || 0,
+          skipCurrentMonth,
+          notes,
+          createdYearMonth: createdYearMonth || state.month,
+        }),
+      });
+
+      // If auto-approve is checked and user is an executive, immediately approve
+      if (autoApprove && created.request?.id) {
+        await api(`/loan-requests/${created.request.id}/approve`, { method: "POST" });
+        showSaveIndicator("Loan created and approved", "saved");
+      } else {
+        showSaveIndicator("Loan request submitted", "saved");
+      }
+
+      closeModal();
+      onDone();
+    } catch (e) { alert(e.message); }
+  };
 }
 
 async function renderLoansPage(root) {
@@ -5333,6 +5508,7 @@ async function renderSettings(root) {
   const canHideOut = status.user?.canViewSettingsHideOut === true;
   const canSession = status.user?.canViewSettingsSession === true;
   const canManagingUnits = status.user?.canViewSettingsManagingUnits === true;
+  const canManageCompanies = status.user?.canManageCompanies === true;
 
   const changeLogCard = showLogs
     ? `
@@ -5460,7 +5636,7 @@ async function renderSettings(root) {
         const actualCo = mgr?.company || co;
         return actualCo === "hs2"
           ? '<span class="badge badge-hs2">HS-2</span>'
-          : '<span class="badge badge-hs3">HS-3</span>';
+          : '<span class="badge badge-hs3">Hang-Up</span>';
       };
 
       const rows = orderedNames.map((name) => {
@@ -5479,6 +5655,36 @@ async function renderSettings(root) {
         <p class="muted">Assign OP, HR manager, and Quality manager to each unit.</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Unit</th><th>OP</th><th>HR Manager</th><th>Quality Manager</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+    }
+  }
+
+  let companiesCard = "";
+  if (canManageCompanies) {
+    let companiesData = null;
+    try {
+      companiesData = await api("/companies");
+    } catch { /* ignore */ }
+    if (companiesData) {
+      const companies = companiesData.companies || [];
+      const rows = companies.map((c) => {
+        return `<tr>
+          <td><strong>${escapeHtml(c.name)}</strong></td>
+          <td><code>${escapeHtml(c.slug)}</code></td>
+          <td>${c.isDefault ? '<span class="badge badge-ok">Default</span>' : ''}</td>
+          <td>${c.active ? '<span class="badge badge-status">Active</span>' : '<span class="badge badge-out">Inactive</span>'}</td>
+          <td><button class="btn btn-sm" data-edit-company="${escapeHtml(c.slug)}">Edit</button></td>
+        </tr>`;
+      }).join("");
+
+      companiesCard = `<div class="card" style="margin-top:1rem">
+        <h3>Companies</h3>
+        <p class="muted">Manage companies and their access control. Each company has its own set of roles and permissions.</p>
+        <button class="btn btn-sm btn-primary" id="add-company-btn">+ Add Company</button>
+        <div class="table-wrap" style="margin-top:0.5rem"><table>
+          <thead><tr><th>Name</th><th>Slug</th><th>Default</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
       </div>`;
@@ -5512,7 +5718,8 @@ async function renderSettings(root) {
     </div>
     ${impersonateCard ? `<div class="grid-2">${impersonateCard}</div>` : ""}
     ${changeLogCard}
-    ${managingUnitsCard}`;
+    ${managingUnitsCard}
+    ${companiesCard}`;
 
   root.querySelectorAll('input[name="ui-theme"]').forEach((input) => {
     input.addEventListener("change", () => {
@@ -5594,6 +5801,7 @@ function usersTableRowHtml(u) {
   return `<tr>
     <td><strong>${escapeHtml(u.username)}</strong>
       ${u.hasExceptionAccess ? '<br><span class="badge badge-warn" style="font-size:.65rem">Exception access</span>' : ""}
+      ${u.isIt ? '<br><span class="badge badge-status" style="font-size:.65rem">IT Access</span>' : ""}
       ${u.status === "inactive" && u.employeeId ? '<br><span class="badge badge-warn" style="font-size:.65rem">Employee login</span>' : ""}</td>
     <td>${u.employeeId ? escapeHtml(u.employeeId) : '<span class="muted">—</span>'}</td>
     <td class="muted">${u.employeeName ? escapeHtml(u.employeeName) : "—"}</td>
@@ -6021,6 +6229,12 @@ function openUserFormModal({ roles, statuses, user = null }) {
         <span>Status</span>
         <select name="status" required>${statusOpts}</select>
       </label>
+      <label class="field" style="margin-top:.25rem">
+        <span style="display:flex;align-items:center;gap:.6rem">
+          <input type="checkbox" name="isIt" id="user-form-is-it" ${user?.isIt ? "checked" : ""} style="width:16px;height:16px;accent-color:var(--primary,#2563eb)" />
+          <span>IT Access <span class="muted">(can be assigned IT tickets for their unit)</span></span>
+        </span>
+      </label>
       ${isEdit ? `<div id="user-exception-access" class="card card-flat" style="margin-top:1rem;padding:.75rem">
         <h4 style="margin:0 0 .5rem">2. Exception access <span class="muted">(optional)</span></h4>
         <p class="muted small">Override Access Control keys for this user only (e.g. editSales, workQualityTicket). Field-level sales ACL follows the user's role on Sales permissions.</p>
@@ -6099,6 +6313,7 @@ function openUserFormModal({ roles, statuses, user = null }) {
       email: String(fd.get("email") || "").trim(),
       role: fd.get("role"),
       status: fd.get("status"),
+      isIt: document.getElementById("user-form-is-it")?.checked === true,
     };
     const password = String(fd.get("password") || "");
     if (password) payload.password = password;

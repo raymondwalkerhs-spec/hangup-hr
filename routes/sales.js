@@ -596,9 +596,24 @@ router.post("/", async (req, res) => {
         team: unitTeam.team,
         unit: unitTeam.unit,
         formData: catalogResolved.formData || mergedForm,
+        priceTierLabel: catalogResolved.priceTierLabel || "",
       },
       req.username
     );
+    const fd = sale.formData || mergedForm;
+    const bankParts = [];
+    if (fd.bankName) bankParts.push("Bank: " + fd.bankName);
+    if (fd.bankAddress) bankParts.push("Address: " + fd.bankAddress);
+    if (fd.bankAccountNumber) bankParts.push("Account: " + fd.bankAccountNumber);
+    if (fd.routingNumber) bankParts.push("Routing: " + fd.routingNumber);
+    if (bankParts.length > 0) {
+      const existingNotes = fd.notes || "";
+      const bankBlob = bankParts.join(" | ");
+      const updatedNotes = existingNotes ? existingNotes + "\n---\n" + bankBlob : bankBlob;
+      await business.updateSale(sale.id, { formData: { ...fd, notes: updatedNotes } }, req.username);
+      const refreshed = await business.getSale(sale.id);
+      if (refreshed) Object.assign(sale, refreshed);
+    }
     if (sale.status === "pending") {
       const dispatch = require("../lib/notify-dispatch");
       const submitterRole = roles.normalizeRole(req.userRole?.role);

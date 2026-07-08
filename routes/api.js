@@ -37,6 +37,7 @@ const payrollGates = require("../lib/payroll-gates");
 const { dateInActivePeriod } = require("../lib/employment-periods");
 const { useSupabase } = require("../lib/backend");
 const companyContext = require("../lib/company-context");
+const companiesRepo = require("../lib/companies-repo");
 const rulesRepo = require("../lib/rules-repo");
 const teamTlsRepo = require("../lib/team-tls-repo");
 
@@ -735,7 +736,7 @@ router.get("/status", async (req, res) => {
     hideOutEmployees: config.hideOutEmployees !== false,
     taxRules: config.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 },
     canManageSessions: roles.canManageSessions(req.realUsername || req.username),
-    canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
+    canApproveLeave: roles.canApproveLeave(req.realUsername || req.username, req.userRole),
     user: {
       username: req.username,
       role: req.userRole.role,
@@ -745,7 +746,7 @@ router.get("/status", async (req, res) => {
       leadTeams: req.userRole.leadTeams || [],
       canManageUsers: roles.canManageAppUsersPerm(req.userRole, req.realUsername || req.username),
       canImpersonate: roles.canImpersonateUsers(req.realUsername || req.username),
-      canApproveLeave: roles.canApproveLeave(req.realUsername || req.username),
+      canApproveLeave: roles.canApproveLeave(req.realUsername || req.username, req.userRole),
       canManageSessions: roles.canManageSessions(req.realUsername || req.username),
       canViewPayroll: roles.canViewPayroll(req.userRole),
       canViewBonuses: roles.canViewBonusesDeductions(req.userRole),
@@ -809,10 +810,19 @@ router.get("/status", async (req, res) => {
       canViewItRequests: roles.canViewItRequests(req.userRole),
       canSubmitItRequest: roles.canSubmitItRequest(req.userRole),
       canAssignItRequest: roles.canAssignItRequest(req.userRole),
+      canApproveItRequest: roles.canAssignItRequest(req.userRole),  // approve/deny uses same gate
       canResolveItRequest: roles.canResolveItRequest(req.userRole),
       canViewMeetingRequests: roles.canViewMeetingRequests(req.userRole),
       canSubmitMeetingRequest: roles.canSubmitMeetingRequest(req.userRole),
       canReviewMeetingRequest: roles.canReviewMeetingRequest(req.userRole),
+      canManageCompanies: roles.canManageCompanies(req.userRole),
+      // Annual leave eligibility for the linked employee (used by frontend to show/hide annual option)
+      annualLeaveEligible: (() => {
+        const requestRulesLib = require("../lib/request-rules");
+        if (["hr", "admin", "ceo"].includes(req.userRole?.role)) return true;
+        const emp = req.userRole?.employeeId ? store.getEmployeeById(req.userRole.employeeId) : null;
+        return requestRulesLib.isAnnualLeaveEligible(emp);
+      })(),
     },
     impersonation: {
       active: Boolean(req.impersonatingAs),
@@ -1167,15 +1177,46 @@ router.delete("/org/unit-ops/:unit/:employeeId", async (req, res) => {
 
 const itRequestsRepo = require("../lib/it-requests-repo");
 
+// List IT users for assignee dropdown.
+// Scoped to the submitting employee's unit (IT users in same unit first),
+// falls back to all IT users if none found in unit.
+router.get("/it-requests/it-users", async (req, res) => {
+  if (!roles.canAssignItRequest(req.userRole) && !roles.canSubmitItRequest(req.userRole)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  try {
+    // Determine unit: from query param or from the requester's own employee record
+    const unit = req.query.unit || req.userRole?.unit || "";
+    const itUsers = await itRequestsRepo.readItUsers({ unit });
+    const employees = store.getEmployees({ hideOut: false });
+    const empById = new Map(employees.map((e) => [e.id, e]));
+    const enriched = itUsers.map((u) => {
+      const emp = u.employeeId ? empById.get(u.employeeId) : null;
+      return {
+        username: u.username,
+        employeeId: u.employeeId || "",
+        unit: emp?.unit || "",
+        displayName: emp?.american_name || emp?.arabic_name || u.username,
+      };
+    });
+    enriched.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    res.json({ itUsers: enriched });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/it-requests", async (req, res) => {
   if (!roles.canViewItRequests(req.userRole)) return res.status(403).json({ error: "Access denied" });
   try {
     const filters = {};
     if (req.query.status) filters.status = req.query.status.split(",");
     if (req.query.mine === "true" && req.userRole?.employeeId) filters.employeeId = req.userRole.employeeId;
+    // Non-IT roles only see their own requests; IT/Admin see everything (or filter by unit)
     if (!roles.canAssignItRequest(req.userRole) && req.userRole?.employeeId) {
       filters.employeeId = req.userRole.employeeId;
     }
+    if (req.query.unit && roles.canAssignItRequest(req.userRole)) filters.unit = req.query.unit;
     const requests = await itRequestsRepo.readItRequests(filters);
     res.json({ requests });
   } catch (err) {
@@ -1188,6 +1229,8 @@ router.post("/it-requests", async (req, res) => {
   const { employeeId, title, description, category, urgency, scope } = req.body;
   if (!employeeId || !title) return res.status(400).json({ error: "employeeId and title required" });
   try {
+    // Derive unit from the submitting employee
+    const emp = store.getEmployeeById(employeeId);
     const request = await itRequestsRepo.createItRequest({
       employeeId,
       title,
@@ -1196,15 +1239,17 @@ router.post("/it-requests", async (req, res) => {
       urgency: urgency || "normal",
       createdBy: req.username,
       scope: scope || [],
+      unit: emp?.unit || "",
     });
-    const notify = require("../lib/notify-routing");
-    await notify.auditNotify({
-      actor: req.username,
-      action: "it_request_submitted",
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "it_request_submitted",
+      type: "it_request_submitted",
       title: "IT request submitted",
-      body: title,
+      body: `${title} — from ${employeeId}`,
       entityType: "it_request",
       entityId: request.id,
+      actor: req.username,
     }).catch(() => {});
     res.json({ ok: true, request });
   } catch (err) {
@@ -1214,33 +1259,109 @@ router.post("/it-requests", async (req, res) => {
 
 router.patch("/it-requests/:id", async (req, res) => {
   if (!roles.canViewItRequests(req.userRole)) return res.status(403).json({ error: "Access denied" });
-  const { status, assignedTo, resolutionNotes, notesHiddenFromRequester } = req.body;
+  const {
+    status, assignedTo, resolutionNotes, notesHiddenFromRequester,
+    // routing actions
+    action, denialReason,
+  } = req.body;
   try {
     const existing = await itRequestsRepo.readItRequestById(req.params.id);
-    if (assignedTo !== undefined && !roles.canAssignItRequest(req.userRole)) {
-      return res.status(403).json({ error: "Cannot assign requests" });
-    }
-    if ((status === "resolved" || status === "closed") && !roles.canResolveItRequest(req.userRole)) {
-      return res.status(403).json({ error: "Cannot resolve requests" });
-    }
+    if (!existing) return res.status(404).json({ error: "Request not found" });
+
     const patch = {};
-    if (status) patch.status = status;
-    if (assignedTo !== undefined) patch.assignedTo = assignedTo;
-    if (resolutionNotes !== undefined) patch.resolutionNotes = resolutionNotes;
-    if (notesHiddenFromRequester !== undefined) patch.notesHiddenFromRequester = notesHiddenFromRequester;
+    let notifyAction = null;
+
+    // ── Approve ──────────────────────────────────────────────
+    if (action === "approve") {
+      if (!roles.canAssignItRequest(req.userRole)) {
+        return res.status(403).json({ error: "No permission to approve IT requests" });
+      }
+      patch.status = "in_progress";
+      patch.approvedBy = req.username;
+      notifyAction = "it_request_approved";
+    }
+    // ── Deny ─────────────────────────────────────────────────
+    else if (action === "deny") {
+      if (!roles.canAssignItRequest(req.userRole)) {
+        return res.status(403).json({ error: "No permission to deny IT requests" });
+      }
+      patch.status = "closed";
+      patch.deniedBy = req.username;
+      patch.denialReason = denialReason || "";
+      notifyAction = "it_request_denied";
+    }
+    // ── Reassign ──────────────────────────────────────────────
+    else if (action === "reassign") {
+      if (!roles.canAssignItRequest(req.userRole)) {
+        return res.status(403).json({ error: "No permission to reassign IT requests" });
+      }
+      if (assignedTo === undefined) {
+        return res.status(400).json({ error: "assignedTo required for reassign" });
+      }
+      patch.assignedTo = assignedTo;
+      patch.reassignedBy = req.username;
+      notifyAction = "it_request_reassigned";
+    }
+    // ── Assign ────────────────────────────────────────────────
+    else if (assignedTo !== undefined) {
+      if (!roles.canAssignItRequest(req.userRole)) {
+        return res.status(403).json({ error: "No permission to assign IT requests" });
+      }
+      patch.assignedTo = assignedTo;
+      notifyAction = "it_request_assigned";
+    }
+    // ── Resolve / Close ───────────────────────────────────────
+    else if (status === "resolved" || status === "closed") {
+      if (!roles.canResolveItRequest(req.userRole)) {
+        return res.status(403).json({ error: "No permission to resolve IT requests" });
+      }
+      patch.status = status;
+      if (resolutionNotes !== undefined) patch.resolutionNotes = resolutionNotes;
+      notifyAction = "it_request_resolved";
+    }
+    // ── General status / notes ────────────────────────────────
+    else {
+      if (status) {
+        if (!roles.canAssignItRequest(req.userRole)) {
+          return res.status(403).json({ error: "No permission to change status" });
+        }
+        patch.status = status;
+      }
+      if (resolutionNotes !== undefined) patch.resolutionNotes = resolutionNotes;
+      if (notesHiddenFromRequester !== undefined) patch.notesHiddenFromRequester = notesHiddenFromRequester;
+    }
+
     const request = await itRequestsRepo.updateItRequest(req.params.id, patch);
-    const notifyAction = status === "resolved" ? "it_request_resolved" : assignedTo !== undefined ? "it_request_assigned" : null;
+
     if (notifyAction) {
-      const notify = require("../lib/notify-routing");
-      await notify.auditNotify({
-        actor: req.username,
-        action: notifyAction,
-        title: `IT request ${notifyAction === "it_request_resolved" ? "resolved" : "assigned"}`,
+      const dispatch = require("../lib/notify-dispatch");
+      await dispatch.dispatchNotification({
+        actionKey: notifyAction,
+        type: notifyAction,
+        title: `IT request ${notifyAction.replace("it_request_", "").replace(/_/g, " ")}`,
         body: request.title,
         entityType: "it_request",
         entityId: request.id,
+        actor: req.username,
       }).catch(() => {});
+
+      // Also notify the original requester for approve/deny/resolve
+      if (["it_request_approved", "it_request_denied", "it_request_resolved"].includes(notifyAction)) {
+        const notifyRouting = require("../lib/notify-routing");
+        const notifyStore = require("../lib/notify-store");
+        const requesterUsers = await notifyRouting.resolveUsernamesForEmployees([request.employeeId]);
+        if (requesterUsers.length) {
+          await notifyStore.createNotificationsForUsers(requesterUsers, {
+            type: notifyAction,
+            title: `Your IT request was ${notifyAction.replace("it_request_", "")}`,
+            body: request.title,
+            entityType: "it_request",
+            entityId: request.id,
+          }).catch(() => {});
+        }
+      }
     }
+
     res.json({ ok: true, request });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1248,6 +1369,42 @@ router.patch("/it-requests/:id", async (req, res) => {
 });
 
 const meetingRequestsRepo = require("../lib/meeting-requests-repo");
+
+/**
+ * Validate meeting participant scopes against the requester's role.
+ * TL → only their own lead teams.
+ * OP → any team or unit inside their unit.
+ * HR/Admin/CEO → any.
+ * Returns { ok, error } or { ok: true, participants: [...] }
+ */
+function validateMeetingParticipants(participants, userRole) {
+  const role = userRole?.role || "";
+  const isHrAdmin = ["hr", "admin", "ceo"].includes(role);
+  const isOp = role === "op";
+  const isTl = role === "tl";
+
+  for (const p of participants || []) {
+    const ps = String(p || "");
+    if (ps.startsWith("unit:")) {
+      // unit-wide — OP and above only
+      if (!isOp && !isHrAdmin) return { ok: false, error: "Only OP/HR/Admin can select whole unit as participants" };
+    } else if (ps.startsWith("team:")) {
+      if (isTl) {
+        // TL may only choose their own lead teams
+        const raw = ps.slice("team:".length);
+        const [u, t] = raw.split("|");
+        const leadTeams = userRole?.leadTeams || [];
+        const allowed = leadTeams.some(
+          (lt) => (!u || lt.unit === u) && (!t || lt.team === t)
+        );
+        if (!allowed) return { ok: false, error: "TL can only select their own team" };
+      }
+      // OP and above can select any team — no restriction
+    }
+    // employee: prefix — individual; always allowed
+  }
+  return { ok: true };
+}
 
 router.get("/meeting-requests", async (req, res) => {
   const canView = roles.canViewMeetingRequests(req.userRole);
@@ -1273,13 +1430,28 @@ router.post("/meeting-requests", async (req, res) => {
   if (!title || !proposedDate || !proposedTime || !requesterEmployeeId) {
     return res.status(400).json({ error: "title, proposedDate, proposedTime, requesterEmployeeId required" });
   }
+  if (!participants || !Array.isArray(participants) || participants.length === 0) {
+    return res.status(400).json({ error: "At least one participant (employee, team, or unit) is required" });
+  }
+  const pCheck = validateMeetingParticipants(participants, req.userRole);
+  if (!pCheck.ok) return res.status(403).json({ error: pCheck.error });
   try {
     const request = await meetingRequestsRepo.createMeetingRequest({
       title, description, proposedDate, proposedTime,
       durationMinutes: durationMinutes || 30,
       requesterEmployeeId, requesterRole: requesterRole || "",
-      participants: participants || [],
+      participants,
     });
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "meeting_request_submitted",
+      type: "meeting_request_submitted",
+      title: "Meeting request submitted",
+      body: `${title} — ${proposedDate} ${proposedTime}`,
+      entityType: "meeting_request",
+      entityId: request.id,
+      actor: req.username,
+    }).catch(() => {});
     res.json({ ok: true, request });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1293,14 +1465,44 @@ router.patch("/meeting-requests/:id", async (req, res) => {
     if (status && !roles.canReviewMeetingRequest(req.userRole)) {
       return res.status(403).json({ error: "Cannot review meeting requests" });
     }
+    if (participants !== undefined) {
+      const pCheck = validateMeetingParticipants(participants, req.userRole);
+      if (!pCheck.ok) return res.status(403).json({ error: pCheck.error });
+    }
     const patch = {};
-    if (status) patch.status = status;
+    if (status) { patch.status = status; patch.reviewedBy = req.username; }
     if (reviewNotes !== undefined) patch.reviewNotes = reviewNotes;
     if (proposedDate) patch.proposedDate = proposedDate;
     if (proposedTime) patch.proposedTime = proposedTime;
     if (durationMinutes != null) patch.durationMinutes = durationMinutes;
     if (participants !== undefined) patch.participants = participants;
     const request = await meetingRequestsRepo.updateMeetingRequest(req.params.id, patch);
+
+    if (status) {
+      const dispatch = require("../lib/notify-dispatch");
+      await dispatch.dispatchNotification({
+        actionKey: "meeting_request_reviewed",
+        type: "meeting_request_reviewed",
+        title: `Meeting request ${status}`,
+        body: request.title,
+        entityType: "meeting_request",
+        entityId: request.id,
+        actor: req.username,
+      }).catch(() => {});
+      // Notify the requester
+      const notifyRouting = require("../lib/notify-routing");
+      const notifyStore = require("../lib/notify-store");
+      const requesterUsers = await notifyRouting.resolveUsernamesForEmployees([request.requesterEmployeeId]);
+      if (requesterUsers.length) {
+        await notifyStore.createNotificationsForUsers(requesterUsers, {
+          type: "meeting_request_reviewed",
+          title: `Your meeting request was ${status}`,
+          body: request.title,
+          entityType: "meeting_request",
+          entityId: request.id,
+        }).catch(() => {});
+      }
+    }
     res.json({ ok: true, request });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1308,6 +1510,9 @@ router.patch("/meeting-requests/:id", async (req, res) => {
 });
 
 router.use("/auth", require("./auth-routes"));
+
+// ─── Companies (multi-company settings) ──────────────────────────────────────
+// NOTE: companiesRepo is required at top of file (line ~40); routes at bottom of file.
 
 router.post("/sync/refresh", async (req, res) => {
   try {
@@ -3615,6 +3820,111 @@ router.put("/rules-content/:sectionKey", async (req, res) => {
     res.json({ ok: true, section });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Companies management ───────────────────────────────
+router.get("/companies", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const companies = await companiesRepo.readCompanies({ activeOnly: false });
+    res.json({ companies });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/companies", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  const { slug, name, shortName, color, sortOrder } = req.body;
+  if (!slug || !name) {
+    return res.status(400).json({ error: "slug and name required" });
+  }
+  try {
+    const company = await companiesRepo.createCompany({
+      slug,
+      name,
+      shortName,
+      color,
+      sortOrder,
+      createdBy: req.username,
+    });
+    res.json({ ok: true, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/companies/:slug", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  const { slug } = req.params;
+  const { name, shortName, active, color, sortOrder } = req.body;
+  try {
+    const company = await companiesRepo.updateCompany(slug, {
+      name,
+      shortName,
+      active,
+      color,
+      sortOrder,
+    }, req.username);
+    res.json({ ok: true, company });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Per-company access control overrides
+router.get("/companies/:slug/permissions", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const permCatalog = require("../lib/permission-catalog");
+    const perms   = await companiesRepo.readCompanyPermissions(req.params.slug);
+    const catalog  = permCatalog.listPermissions();
+    res.json({ permissions: perms, catalog });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/companies/:slug/permissions", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  const { role, permissionKey, allowed } = req.body;
+  if (!role || !permissionKey || allowed === undefined) {
+    return res.status(400).json({ error: "role, permissionKey, and allowed are required" });
+  }
+  try {
+    const perm = await companiesRepo.upsertCompanyPermission(
+      req.params.slug, role, permissionKey, allowed, req.username
+    );
+    res.json({ ok: true, permission: perm });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/companies/:slug/permissions", async (req, res) => {
+  if (!roles.canManageCompanies(req.userRole)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  const { role, permissionKey } = req.body;
+  if (!role || !permissionKey) {
+    return res.status(400).json({ error: "role and permissionKey required" });
+  }
+  try {
+    await companiesRepo.deleteCompanyPermission(req.params.slug, role, permissionKey);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

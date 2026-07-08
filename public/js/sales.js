@@ -4,6 +4,7 @@
 window.SalesModule = (function () {
   const CLIENT_STATUS_OPTIONS = [
     "Passed",
+    "Postdated",
     "Dropped",
     "Chargeback",
     "Duplicate",
@@ -1574,7 +1575,7 @@ window.SalesModule = (function () {
     const ticketFields = (catalog.fields || []).filter(
       (f) =>
         f.canView !== false &&
-        !["agentName", "closerName", "leadType", "client", "deviceType", "unit", "team", "price"].includes(f.key)
+        !["agentName", "closerName", "leadType", "client", "deviceType", "unit", "team"].includes(f.key)
     );
     const agentEmp = employees.find((e) => e.id === sale?.agentId);
     const inferredPayment = inferPaymentMethod(formData, sale);

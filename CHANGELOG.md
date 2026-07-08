@@ -2,6 +2,58 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.7.0] — 2026-07-08 · Stable
+
+### Added
+- **Billing Date (If Postponed) in General section** — field moved from Payment to General on the sale form and quality ticket; now visible to Quality/RTM/Admin on the quality ticket surface.
+- **"Postdated" in Client status** — added as a selectable option in the Client status (clientFeedback) dropdown across quality tickets, edit sale modal, and sales log filters.
+- **Notification redirect** — clicking a notification now navigates directly to the relevant page: Requests → requests page, Meeting Requests → meeting-requests page, IT Requests → it-requests page, Quality Notes → employee card quality-notes tab, Sale assignment → sales log, Loan request → loan approvals.
+- **Payroll position filter** — dropdown in the payroll toolbar to filter the payroll table by employee position (Agent, Team Leader, Trainee, etc.).
+- **Salary override fix** — entering `0` as a salary override no longer silently clears it; a Clear button lets users explicitly remove an override.
+- **HR leave approval** — HR, Admin, and CEO roles can now approve/reject leave requests (was previously limited to named executives only).
+- **IT ticket agent picker** — TL/OP see a scoped agent dropdown when submitting an IT ticket (their team/unit only).
+- **IT Access flag on app users** — any user can be marked as IT staff (is_it flag) independent of their role; managed via App Users edit modal.
+- **Unit-scoped loan requests** — loan requests carry the employee's unit; list filters by unit.
+- **Medical/exam leave document upload** — 📎 Docs button on medical/same-day leave rows; upload sick note or exam schedule directly from the request (stored in employee documents).
+- **Loan approvals: Add Loan** — executives can create a loan request directly from the Loan Approvals page with optional auto-approve.
+- **Training exception override** — HR/Admin can promote a trainee to Agent regardless of sales count using the Exception checkbox; Cancel/End Training button added.
+- **DB migrations** — `20260723_v129_multi_feature_sprint.sql`, `20260724_v132_it_flag_unit_finance.sql`.
+
+### Fixed
+- **Billing Date** — was hidden in payment section (sensitive=true); now in General section, visible to quality roles on quality ticket.
+- **Client status Postdated** — option missing from clientFeedback dropdown; now consistent with verifierFeedback options.
+
+
+
+### Added
+- **IT Ticket Routing** — approve / deny / reassign actions on IT requests (IT/Admin/RTM gate); denial reason stored; requester notified on approve/deny/resolve via notification center. `GET /it-requests/it-users` returns all active IT users for the assignee dropdown.
+- **IT Ticket unit scoping** — tickets carry `unit` (derived from submitting employee); IT/Admin can filter list by unit.
+- **Price Tier on Quality Ticket** — `priceTier` field added to the sales field catalog; visible on quality ticket surface. `price_tier_label` stored as a dedicated column on `sales`. Removed from `QUALITY_ALWAYS_HIDDEN`.
+- **Half-day / Quarter-day leave** — `dayFraction` (1 / 0.5 / 0.25) on leave requests; validated server-side (single-day only); frontend picker hides automatically on multi-day ranges.
+- **Annual leave gate hardened** — no `employment_date` → annual option hidden (not just the <180-day block). HR/Admin/CEO bypass. `isAnnualLeaveEligible()` exported from `lib/request-rules.js`. `annualLeaveEligible` flag in `/status` response.
+- **Meeting participant picker** — three scopes: individual employee, whole team (`team:unit|name`), whole unit (`unit:HS-1`). TL restricted to lead teams; OP to their unit; HR/Admin/CEO unrestricted. Server-side validation enforced.
+- **Meeting review notifications** — submit and review dispatched via `notify-dispatch`; requester notified when request is reviewed.
+- **Companies registry** — `companies` table with seed rows `hangup` (Hang-Up, default) and `hs2` (HS-2 Company). Admin/CEO can add companies and rename via Settings → Companies card.
+- **Per-company access control** — `company_role_permissions` table; role×permission matrix per company; `GET/PUT/DELETE /companies/:slug/permissions` endpoints.
+- **`canManageCompanies` permission** — new catalog key; defaults Admin/CEO; RBAC-overridable.
+- **Hang-Up rename** — HS-1 and HS-3 display as "Hang-Up (HS-1/HS-3)"; both `company: "hangup"`. HS-2 stays separate.
+- **DB migration** `20260723_v129_multi_feature_sprint.sql` — IT routing columns, leave fractions, `price_tier_label`, `companies`, `company_role_permissions`, `org_unit_managers.company_slug`, notification routing rules.
+
+### Fixed
+- **Duplicate `companiesRepo` require** in `routes/api.js` — duplicate block from earlier session removed; permissions sub-routes merged into canonical block at file bottom.
+- **IT notifications** — switched from `auditNotify` (raymond-only) to `dispatchNotification` so IT actions reach IT/Admin per routing rules.
+
+## [1.6.30] — 2026-07-24
+
+### Added
+- **Finance company scope:** Added `unit` column to finance tables (`employee_loans`, `loan_payments`, `bonus_events`, `deduction_events`, `bonus_requests`, `expense_requests`, `monthly_bills`, `petty_cash_funds`, `petty_cash_ledger`) for per-company separation
+- **Company management UI:** Added Settings page section for managing companies (add/edit companies, view company list)
+- **Company management API:** Added `/companies` endpoints (GET, POST, PATCH) for company CRUD operations
+- **Company permission:** Added `canManageCompanies` role permission for admin/ceo
+
+### Changed
+- **Company label update:** Updated Managing Units card to display "Hang-Up" badge instead of "HS-3" for non-HS2 units
+
 ## [1.6.28] — 2026-07-22
 
 ### Added

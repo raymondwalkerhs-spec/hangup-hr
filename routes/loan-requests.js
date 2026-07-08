@@ -12,13 +12,18 @@ router.get("/", async (req, res) => {
   }
   try {
     const status = req.query.status || "";
-    let items = await loanReq.readLoanRequests({ status: status || undefined });
-    if (roles.canViewLoanRequests(req.username)) {
-      // executives see all requests
-    } else {
-      items = items.filter(
-        (r) => String(r.submittedBy).toLowerCase() === String(req.username).toLowerCase()
-      );
+    const unit   = req.query.unit   || "";
+    const filters = { status: status || undefined };
+    // Executives see all; HR/Admin scoped to unit if provided
+    if (!roles.canViewLoanRequests(req.username) && unit) filters.unit = unit;
+    let items = await loanReq.readLoanRequests(filters);
+    if (!roles.canViewLoanRequests(req.username)) {
+      // HR/Admin see their unit's requests; others see only their own
+      if (!roles.canManageAll(req.userRole)) {
+        items = items.filter(
+          (r) => String(r.submittedBy).toLowerCase() === String(req.username).toLowerCase()
+        );
+      }
     }
     res.json({ requests: items });
   } catch (err) {
@@ -47,6 +52,7 @@ router.post("/", async (req, res) => {
         skipCurrentMonth,
         notes,
         createdYearMonth,
+        unit: emp.unit || "",
       },
       req.username
     );

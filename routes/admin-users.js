@@ -40,6 +40,7 @@ router.get("/", async (_req, res) => {
           employeeName: emp ? emp.american_name || emp.arabic_name || emp.id : "",
           employeeTeam: emp?.team || "",
           employeeUnit: emp?.unit || "",
+          isIt: u.is_it === true,
           hasExceptionAccess: userPermissions.hasAnyOverride(u.username),
           lastLoginAt: u.last_login_at || null,
           createdAt: u.created_at,
