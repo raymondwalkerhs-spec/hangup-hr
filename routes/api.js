@@ -24,6 +24,7 @@ const {
   isLockedDepartDay,
 } = require("../lib/attendance");
 const { buildPayroll, calcPayrollRow, BONUS_TYPES, DEDUCTION_TYPES, bonusTypesForCompany } = require("../lib/payroll");
+const { normalizeAttendanceRecord } = require("../lib/attendance-validation");
 const { PAYROLL_STATUSES: PROFILE_STATUSES } = require("../lib/month-profile");
 const { SPLIT_KINDS, SPLIT_STATUSES, validateSplit, applyPayrollSplits, buildSplitMaps, buildValidationContext, shiftMonth } = require("../lib/payroll-splits");
 const {
@@ -124,11 +125,13 @@ function requireAuth(req, res, next) {
     req.username = effectiveUsername;
     const empLinkId =
       impersonatedUser?.employee_id || store.getAppUserEmployeeId(effectiveUsername) || null;
+    const usersAdmin = require("../lib/users-admin");
+    const appUser = await usersAdmin.getAppUser(effectiveUsername).catch(() => null);
     const orgTeams = await roles.loadOrgTeamsForScope();
     req.userRole = roles.enrichUserRole(
       roles.resolveUserRole(effectiveUsername, valid.role),
       store.getEmployees(),
-      empLinkId ? { employee_id: empLinkId } : null,
+      appUser || (empLinkId ? { employee_id: empLinkId } : null),
       orgTeams
     );
     req.userRole.username = effectiveUsername;
@@ -1208,17 +1211,37 @@ router.get("/it-requests/it-users", async (req, res) => {
   }
 });
 
+// (removed mark-user-it endpoint; marking IT should be done via Users admin page or scripts)
+
 router.get("/it-requests", async (req, res) => {
   if (!roles.canViewItRequests(req.userRole)) return res.status(403).json({ error: "Access denied" });
   try {
     const filters = {};
     if (req.query.status) filters.status = req.query.status.split(",");
     if (req.query.mine === "true" && req.userRole?.employeeId) filters.employeeId = req.userRole.employeeId;
+    // filter by specific agent (employee id) or comma-separated list
+    if (req.query.agent) filters.employeeId = req.query.agent.split(",").map(s => s.trim()).filter(Boolean);
+    if (req.query.employeeId) filters.employeeId = req.query.employeeId.split(",").map(s => s.trim()).filter(Boolean);
     // Non-IT roles only see their own requests; IT/Admin see everything (or filter by unit)
-    if (!roles.canAssignItRequest(req.userRole) && req.userRole?.employeeId) {
-      filters.employeeId = req.userRole.employeeId;
+    if (!roles.canAssignItRequest(req.userRole)) {
+      if (req.userRole?.employeeId) {
+        // Primary: filter by the linked employee ID
+        filters.employeeId = req.userRole.employeeId;
+      } else {
+        // Fallback: no linked employee — filter by created_by username so the
+        // agent still sees their own tickets and nobody else's.
+        filters.createdBy = req.username;
+      }
     }
     if (req.query.unit && roles.canAssignItRequest(req.userRole)) filters.unit = req.query.unit;
+    // team filter -> translate to employee ids
+    if (req.query.team && roles.canAssignItRequest(req.userRole)) {
+      const employees = store.getEmployees({ hideOut: false }).filter(e => e.team === req.query.team);
+      if (employees.length) filters.employeeId = employees.map(e => e.id);
+    }
+    // date range filters (ISO date strings)
+    if (req.query.from) filters.from = req.query.from;
+    if (req.query.to) filters.to = req.query.to;
     const requests = await itRequestsRepo.readItRequests(filters);
     res.json({ requests });
   } catch (err) {
@@ -1229,13 +1252,13 @@ router.get("/it-requests", async (req, res) => {
 router.post("/it-requests", async (req, res) => {
   if (!roles.canSubmitItRequest(req.userRole)) return res.status(403).json({ error: "Access denied" });
   const { employeeId, title, description, category, urgency, scope } = req.body;
-  if (!employeeId || !title) return res.status(400).json({ error: "employeeId and title required" });
+  if (!employeeId || !String(title || "").trim()) return res.status(400).json({ error: "employeeId and title required" });
   try {
     // Derive unit from the submitting employee
     const emp = store.getEmployeeById(employeeId);
     const request = await itRequestsRepo.createItRequest({
       employeeId,
-      title,
+      title: String(title || "").trim(),
       description: description || "",
       category: category || "other",
       urgency: urgency || "normal",
@@ -1253,7 +1276,36 @@ router.post("/it-requests", async (req, res) => {
       entityId: request.id,
       actor: req.username,
     }).catch(() => {});
+    // Also create notification entries for active IT users (notification center)
+    try {
+      const notifyStore = require('../lib/notify-store');
+      const itUsers = await itRequestsRepo.readItUsers({ unit: emp?.unit || '' });
+      const itUsernames = (itUsers || []).map(u => u.username).filter(Boolean);
+      if (itUsernames.length) {
+        await notifyStore.createNotificationsForUsers(itUsernames, {
+          type: 'it_request_submitted',
+          title: `New IT request: ${title}`,
+          body: `${title} — from ${employeeId}`,
+          entityType: 'it_request',
+          entityId: request.id,
+          actor: req.username,
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // non-fatal
+    }
     res.json({ ok: true, request });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Delete IT request (only IT users allowed server-side)
+router.delete('/it-requests/:id', async (req, res) => {
+  if (!roles.hasItAccess(req.userRole)) return res.status(403).json({ error: 'Only IT staff may delete requests' });
+  try {
+    await itRequestsRepo.deleteItRequest(req.params.id);
+    res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -1272,6 +1324,17 @@ router.patch("/it-requests/:id", async (req, res) => {
 
     const patch = {};
     let notifyAction = null;
+
+    // Allow editing title/category/urgency by the requester or assigners
+    if (req.body.title !== undefined || req.body.category !== undefined || req.body.urgency !== undefined) {
+      const isOwner = req.userRole?.employeeId && existing.employeeId === req.userRole.employeeId;
+      if (!isOwner && !roles.canAssignItRequest(req.userRole)) {
+        return res.status(403).json({ error: 'No permission to edit ticket' });
+      }
+      if (req.body.title !== undefined) patch.title = String(req.body.title || '').trim();
+      if (req.body.category !== undefined) patch.category = req.body.category;
+      if (req.body.urgency !== undefined) patch.urgency = req.body.urgency;
+    }
 
     // ── Approve ──────────────────────────────────────────────
     if (action === "approve") {
@@ -1972,7 +2035,7 @@ router.get("/attendance", async (req, res) => {
   );
 
   const config = store.getConfig();
-  let records = store.getAttendanceEvents(month);
+  let records = await store.readAttendanceEventsForMonth(month);
   records = buildMonthSkeleton(employees, month, records);
   records = applyDepartAutoOutForMonth(employees, records, month);
 
@@ -2102,7 +2165,9 @@ router.post("/attendance/batch", async (req, res) => {
     return res.status(400).json({ error: "records array required" });
   }
 
+  console.log("[attendance-debug] batch route received", { user: req.username, records });
   const normalized = [];
+  const existingByMonth = new Map();
   for (const r of records) {
     const emp = store.getEmployeeById(r.employeeId);
     if (!emp) continue;
@@ -2113,7 +2178,16 @@ router.post("/attendance/batch", async (req, res) => {
     } catch {
       continue;
     }
-    normalized.push({
+    const month = String(r.date || "").slice(0, 7);
+    let existingMap = existingByMonth.get(month);
+    if (!existingMap) {
+      const existingRows = (store.getAttendanceEvents(month) || []).filter((row) => row.employeeId === r.employeeId);
+      existingMap = new Map(existingRows.map((row) => [`${row.employeeId}|${row.date}`, row]));
+      existingByMonth.set(month, existingMap);
+    }
+    const existing = existingMap.get(`${r.employeeId}|${r.date}`);
+    const allowBlankClear = Boolean(roles.canManageEmployees(req.userRole)) && !String(r.status || "").trim();
+    const normalizedRecord = {
       employeeId: r.employeeId,
       date: r.date,
       status: r.status || "",
@@ -2125,10 +2199,28 @@ router.post("/attendance/batch", async (req, res) => {
         roles.canViewTransportControls(req.userRole) && r.transportOverride
           ? r.transportOverride
           : "",
-    });
+    };
+    if (!normalizedRecord.status && existing?.status && !allowBlankClear) {
+      normalizedRecord.status = existing.status;
+      if (!normalizedRecord.transportOverride && existing.transportOverride) {
+        normalizedRecord.transportOverride = existing.transportOverride;
+      }
+      if (normalizedRecord.fpLateness == null && existing.fpLateness != null) {
+        normalizedRecord.fpLateness = existing.fpLateness;
+      }
+      if (!normalizedRecord.fpNotes && existing.fpNotes) {
+        normalizedRecord.fpNotes = existing.fpNotes;
+      }
+      if (!normalizedRecord.leaveNote && existing.leaveNote) {
+        normalizedRecord.leaveNote = existing.leaveNote;
+      }
+    }
+    normalized.push({ ...normalizedRecord, __allowBlankClear: allowBlankClear });
   }
 
-  const count = await store.saveAttendanceBatch(normalized, req.username);
+  const normalizedForSave = normalized.map(({ __allowBlankClear, ...record }) => normalizeAttendanceRecord(record, { allowBlankClear: __allowBlankClear }));
+  console.log("[attendance-debug] batch route normalized", { normalizedForSave });
+  const count = await store.saveAttendanceBatch(normalizedForSave, req.username);
   res.json({ ok: true, count });
 });
 
@@ -2172,7 +2264,7 @@ router.post("/attendance/import", async (req, res) => {
     const config = store.getConfig();
     const rules = fpImport.getRulesForMonth(config, month);
     const buffer = Buffer.from(base64, "base64");
-    const existing = store.getAttendanceEvents(month);
+    const existing = await store.readAttendanceEventsForMonth(month);
     const result = fpImport.processImport({
       buffer,
       employees: store.getEmployees(),
@@ -2850,12 +2942,19 @@ router.get("/payroll-adjustments", (req, res) => {
 });
 
 router.put("/payroll-adjustments/:employeeId", async (req, res) => {
+  const startTime = Date.now();
+  const logPrefix = `[PAYROLL-SAVE ${req.params.employeeId} ${req.body.yearMonth}]`;
+  console.log(`${logPrefix} START - body keys:`, Object.keys(req.body));
+  
   if (!roles.canManageAll(req.userRole)) {
     return res.status(403).json({ error: "HR/admin only" });
   }
   const month = req.body.yearMonth || req.query.month || new Date().toISOString().slice(0, 7);
   const emp = store.getEmployeeById(req.params.employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+  
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] Employee loaded`);
+  
   if (req.body.payrollStatus) {
     const gate = await payrollGates.canApprovePayrollStatus(
       req.params.employeeId,
@@ -2865,11 +2964,15 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
     );
     if (!gate.ok) return res.status(400).json({ error: gate.error, blockers: gate.blockers });
   }
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] Gates checked`);
+  
   try {
     await assertMonthNotLocked(month);
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] Month lock checked`);
+  
   const record = {
     employeeId: req.params.employeeId,
     yearMonth: month,
@@ -2884,6 +2987,10 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
       req.body.monthlySalaryOverride != null && req.body.monthlySalaryOverride !== ""
         ? Number(req.body.monthlySalaryOverride)
         : null,
+    netSalaryOverride:
+      req.body.netSalaryOverride != null && req.body.netSalaryOverride !== ""
+        ? Number(req.body.netSalaryOverride)
+        : null,
     paymentMethod: req.body.paymentMethod ?? emp.payment_method,
     bankReference: req.body.bankReference ?? emp.bank_refrence_number,
     bankName: req.body.bankName ?? emp.bank_name_as_bank_sheet,
@@ -2894,8 +3001,15 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
     payslipVisibleToAgent: req.body.payslipVisibleToAgent === true,
     salesCount: Number(req.body.salesCount) || 0,
   };
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] About to upsert:`, {
+    monthlySalaryOverride: record.monthlySalaryOverride,
+    netSalaryOverride: record.netSalaryOverride,
+  });
+  
   const saved = await store.upsertPayrollAdjustment(record, req.username);
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] SAVED - sending response`);
   res.json({ ok: true, adjustment: saved });
+  console.log(`${logPrefix} [${Date.now() - startTime}ms] END`);
 });
 
 router.post("/payroll-adjustments/:employeeId/recalc-sales-count", async (req, res) => {
@@ -3124,14 +3238,17 @@ router.post("/warnings", async (req, res) => {
     { employeeId, date, type, title, content, severity, warningLevel },
     req.username
   );
+  const employee = store.getEmployeeById(employeeId);
+  const displayName =
+    employee?.american_name || employee?.arabic_name || employeeId;
   const dispatch = require("../lib/notify-dispatch");
   await dispatch.dispatchNotification({
     actionKey: "employee_note_created",
     type: "employee_note",
-    title: "Employee note added",
-    body: `${employeeId}: ${title || type || "Note"}`,
+    title: `Employee note added for ${displayName}`,
+    body: `${displayName}: ${title || type || "Note"}`,
     entityType: "employee_note",
-    entityId: String(saved.id || employeeId),
+    entityId: `${employeeId}:${saved.id}`,
     actor: req.username,
     context: { extraUsernames: [] },
   });
@@ -3215,14 +3332,17 @@ router.post("/quality-notes", async (req, res) => {
       },
       req.username
     );
+    const employee = store.getEmployeeById(employeeId);
+    const displayName =
+      employee?.american_name || employee?.arabic_name || employeeId;
     const dispatch = require("../lib/notify-dispatch");
     await dispatch.dispatchNotification({
       actionKey: "quality_note_created",
       type: "quality_note",
-      title: "Quality note on agent",
-      body: `${employeeId}: ${String(body).slice(0, 80)}`,
+      title: `Quality note on ${displayName}`,
+      body: `${displayName}: ${String(body).slice(0, 80)}`,
       entityType: "quality_note",
-      entityId: note.id,
+      entityId: `${employeeId}:${note.id}`,
       actor: req.username,
     });
     res.json({ ok: true, note });

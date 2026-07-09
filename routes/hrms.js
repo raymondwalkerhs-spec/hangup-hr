@@ -562,6 +562,9 @@ router.post("/leave", async (req, res) => {
       requestedBy: req.username,
       requestedByRole: req.userRole?.role || "",
     };
+    // For pause requests the server computes the canonical Mon–Fri week dates
+    if (validated.pauseStartDate) payload.startDate = validated.pauseStartDate;
+    if (validated.pauseEndDate)   payload.endDate   = validated.pauseEndDate;
     const request = await hrms.createLeaveRequest(payload, req.username);
     const dispatch = require("../lib/notify-dispatch");
     await dispatch.dispatchNotification({

@@ -9,6 +9,7 @@ window.RequestsModule = (function () {
     unpaid:   "Unpaid day off",
     medical:  "Medical / sick",
     same_day: "Same-day off",
+    pause:    "Pause request (Mon–Fri week)",
   };
 
   const FRACTION_LABELS = {
@@ -206,12 +207,13 @@ window.RequestsModule = (function () {
             <option value="unpaid"   ${(request?.requestKind || request?.leaveType) === "unpaid"   ? "selected" : ""}>Unpaid day off</option>
             <option value="medical"  ${(request?.requestKind || request?.leaveType) === "medical"  ? "selected" : ""}>Medical / sick</option>
             <option value="same_day" ${(request?.requestKind || request?.leaveType) === "same_day" ? "selected" : ""}>Same-day off</option>
+            <option value="pause"    ${(request?.requestKind || request?.leaveType) === "pause"    ? "selected" : ""}>Pause request (Mon–Fri week off)</option>
           </select>
         </label>
-        <label class="field"><span>Start date</span>
+        <label class="field" id="req-start-wrap"><span>Start date</span>
           <input name="startDate" type="date" required value="${request?.startDate || ""}" id="req-start" />
         </label>
-        <label class="field"><span>End date</span>
+        <label class="field" id="req-end-wrap"><span>End date</span>
           <input name="endDate" type="date" required value="${request?.endDate || ""}" id="req-end" />
         </label>
         <label class="field" id="req-fraction-wrap">
@@ -236,27 +238,90 @@ window.RequestsModule = (function () {
         <button class="btn btn-primary" id="submit-request">${isEdit ? "Save" : "Submit"}</button>
       </div>`, true);
 
-    // Hide fraction picker when multi-day range is selected
+    // Helper: compute Mon–Fri week bounds for a given date (client-side preview)
+    function workWeekBoundsLocal(dateStr) {
+      if (!dateStr) return null;
+      const d = new Date(`${dateStr}T12:00:00`);
+      const day = d.getDay();
+      const diffToMon = day === 0 ? -6 : 1 - day;
+      const mon = new Date(d); mon.setDate(d.getDate() + diffToMon);
+      const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+      const fmt = (x) =>
+        `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+      return { monday: fmt(mon), friday: fmt(fri) };
+    }
+
+    // Show/hide end date & fraction; show week preview for pause
+    function updatePauseUI() {
+      const kind      = document.getElementById("req-kind")?.value;
+      const endWrap   = document.getElementById("req-end-wrap");
+      const fracWrap  = document.getElementById("req-fraction-wrap");
+      const previewEl = document.getElementById("req-pause-preview");
+      const isPause   = kind === "pause";
+
+      if (endWrap)  endWrap.style.display   = isPause ? "none" : "";
+      if (fracWrap) fracWrap.style.display  = isPause ? "none" : "";
+
+      if (isPause && previewEl) {
+        const start = document.getElementById("req-start")?.value;
+        if (start) {
+          const wk = workWeekBoundsLocal(start);
+          previewEl.textContent = wk
+            ? `Week off: ${wk.monday} – ${wk.friday} (Mon–Fri, 5 days)`
+            : "";
+          previewEl.style.display = "";
+        } else {
+          previewEl.textContent = "Pick any day in the week you want to pause.";
+          previewEl.style.display = "";
+        }
+        // Auto-set end to Friday of that week
+        const endEl = document.getElementById("req-end");
+        if (endEl && start) {
+          const wk = workWeekBoundsLocal(start);
+          if (wk) endEl.value = wk.friday;
+        }
+      } else if (previewEl) {
+        previewEl.style.display = "none";
+      }
+    }
+
+    // Inject pause preview element after fraction wrap
+    const fracWrapEl = document.getElementById("req-fraction-wrap");
+    if (fracWrapEl && !document.getElementById("req-pause-preview")) {
+      const preview = document.createElement("p");
+      preview.id = "req-pause-preview";
+      preview.style.cssText = "grid-column:1/-1;color:var(--info,#0066cc);font-size:.87rem;display:none;margin:0";
+      fracWrapEl.after(preview);
+    }
+
+    // Hide fraction picker when multi-day range is selected (non-pause)
     function updateFractionVisibility() {
+      const kind  = document.getElementById("req-kind")?.value;
       const start = document.getElementById("req-start")?.value;
       const end   = document.getElementById("req-end")?.value;
       const wrap  = document.getElementById("req-fraction-wrap");
       if (!wrap) return;
+      if (kind === "pause") return; // already hidden by updatePauseUI
       wrap.style.display = (start && end && start !== end) ? "none" : "";
       if (start && end && start !== end) {
         const sel = document.getElementById("req-fraction");
         if (sel) sel.value = "1";
       }
     }
-    document.getElementById("req-start")?.addEventListener("change", updateFractionVisibility);
-    document.getElementById("req-end")?.addEventListener("change", updateFractionVisibility);
-    // Also sync end date to start for same-day if no end yet
+    document.getElementById("req-kind")?.addEventListener("change", () => {
+      updatePauseUI();
+      updateFractionVisibility();
+    });
     document.getElementById("req-start")?.addEventListener("change", () => {
       const startEl = document.getElementById("req-start");
       const endEl   = document.getElementById("req-end");
-      if (endEl && !endEl.value) endEl.value = startEl.value;
+      const kind    = document.getElementById("req-kind")?.value;
+      if (endEl && !endEl.value && kind !== "pause") endEl.value = startEl.value;
+      updatePauseUI();
       updateFractionVisibility();
     });
+    document.getElementById("req-end")?.addEventListener("change", updateFractionVisibility);
+    updatePauseUI();
     updateFractionVisibility();
 
     document.getElementById("submit-request").onclick = async () => {
@@ -267,6 +332,13 @@ window.RequestsModule = (function () {
       body.dayFraction  = Number(body.dayFraction || 1);
       body.halfDay      = body.dayFraction === 0.5;
       body.quarterDay   = body.dayFraction === 0.25;
+      // For pause: the server computes the canonical Mon–Fri dates;
+      // we still send startDate so the server knows which week.
+      if (body.requestKind === "pause") {
+        body.dayFraction = 1;
+        body.halfDay     = false;
+        body.quarterDay  = false;
+      }
       try {
         if (isEdit) {
           await api(`/hrms/leave/${request.id}`, { method: "PUT",  body: JSON.stringify(body) });

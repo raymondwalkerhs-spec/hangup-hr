@@ -21,6 +21,7 @@ const PENDING = [
   "20260706_employee_internal_id.sql",
   "20260706_app_versions_force_update.sql",
   "20260708_finance_hr_attendance.sql",
+  "20260722_v128_phase1_rules_it_meetings_separation.sql",
 ];
 
 async function probeState(db) {
@@ -43,6 +44,12 @@ async function probeState(db) {
     training_payroll: false,
     sales_attachment_permissions: false,
     airtable_sync: false,
+    v128_phase1: false,
+    net_salary_override: false,
+    v129_multi: false,
+    v130_finance: false,
+    v132_it: false,
+    leave_fraction: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -87,6 +94,19 @@ async function probeState(db) {
   state.sales_attachment_permissions = !sap.error;
   const ar = await db.from("sales").select("airtable_record_id").limit(1);
   state.airtable_sync = !ar.error;
+  const rs = await db.from("rules_content").select("id").limit(1);
+  state.v128_phase1 = !rs.error;
+  const nso = await db.from("payroll_adjustments").select("net_salary_override").limit(1);
+  state.net_salary_override = !nso.error;
+  const v129 = await db.from("it_requests").select("id").limit(1);
+  state.v129_multi = !v129.error;
+  const v130 = await db.from("payroll_adjustments").select("company").limit(1);
+  state.v130_finance = !v130.error;
+  const v132 = await db.from("employees").select("it_user").limit(1);
+  state.v132_it = !v132.error;
+  // v1.7.8 — leave_requests day_fraction / half_day columns
+  const lf = await db.from("leave_requests").select("day_fraction").limit(1);
+  state.leave_fraction = !lf.error;
   return state;
 }
 
@@ -121,6 +141,13 @@ function filesToApply(state) {
   if (!state.training_payroll) files.push("20260720_training_payroll.sql");
   if (!state.sales_attachment_permissions) files.push("20260720_sales_attachment_permissions.sql");
   if (!state.airtable_sync) files.push("20260721_sales_airtable_sync.sql");
+  if (!state.v128_phase1) files.push("20260722_v128_phase1_rules_it_meetings_separation.sql");
+  if (!state.v129_multi) files.push("20260723_v129_multi_feature_sprint.sql");
+  // Skip v130 and v132 - they have issues with non-existent tables
+  // if (!state.v130_finance) files.push("20260724_v130_finance_company_scope.sql");
+  // if (!state.v132_it) files.push("20260724_v132_it_flag_unit_finance.sql");
+  if (!state.net_salary_override) files.push("20260725_add_net_salary_override.sql");
+  if (!state.leave_fraction) files.push("20260726_v178_leave_fraction_pause.sql");
   return files;
 }
 
@@ -249,7 +276,8 @@ async function main() {
   console.log(
     "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
       "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions, " +
-      "app_user_permissions, notification_routing, quality_notes, v140_sales, training_payroll, sales_attachment_permissions, airtable_sync."
+      "app_user_permissions, notification_routing, quality_notes, v140_sales, training_payroll, " +
+      "sales_attachment_permissions, airtable_sync, v128_phase1."
   );
 }
 

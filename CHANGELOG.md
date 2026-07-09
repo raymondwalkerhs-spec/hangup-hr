@@ -377,6 +377,15 @@ All notable changes to the Hangup Portal desktop app.
 - IT requests UI: quick issue types, grab/claim button, Edit ticket (title/category/urgency), Delete ticket (IT-only), and Resolve modal with structured resolution choices and secret/internal notes + optional cost.
 - Notification center entries are created for active IT users when a new IT request is submitted (unit-scoped fallback to global IT users).
 
+## [1.7.8] — 2026-07-09
+
+### Fixed
+- **Leave requests** — agents no longer get a "could not find day_fraction column" database error when submitting any leave type; migration ensures `day_fraction`, `half_day`, and `half_day_part` columns exist on `leave_requests`.
+- **IT tickets** — agents can no longer see other agents' IT tickets; the server now always scopes non-IT/non-admin users to their own requests, with a `created_by` fallback for users without a linked employee ID.
+
+### Added
+- **Pause request** — new leave type in Requests page. Select any day in the target week; the server automatically maps the request to Monday–Friday of that week. On approval, all 5 weekdays are marked Day-OFF in attendance (weekends skipped). Visible to all roles.
+
 ## [Unreleased]
 
 ## [1.6.4] — 2026-07-05
