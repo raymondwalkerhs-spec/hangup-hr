@@ -815,6 +815,7 @@ router.get("/status", async (req, res) => {
       canAssignItRequest: roles.canAssignItRequest(req.userRole),
       canApproveItRequest: roles.canAssignItRequest(req.userRole),  // approve/deny uses same gate
       canResolveItRequest: roles.canResolveItRequest(req.userRole),
+      canDeleteItRequest: roles.canDeleteItRequest(req.userRole),
       canViewMeetingRequests: roles.canViewMeetingRequests(req.userRole),
       canSubmitMeetingRequest: roles.canSubmitMeetingRequest(req.userRole),
       canReviewMeetingRequest: roles.canReviewMeetingRequest(req.userRole),
@@ -1300,9 +1301,11 @@ router.post("/it-requests", async (req, res) => {
   }
 });
 
-// Delete IT request (only IT users allowed server-side)
+// Delete IT request — Admin, CEO, or users with the IT Access (is_it) flag
 router.delete('/it-requests/:id', async (req, res) => {
-  if (!roles.hasItAccess(req.userRole)) return res.status(403).json({ error: 'Only IT staff may delete requests' });
+  if (!roles.canDeleteItRequest(req.userRole)) {
+    return res.status(403).json({ error: 'Only Admin, CEO, or IT-flagged staff may delete requests' });
+  }
   try {
     await itRequestsRepo.deleteItRequest(req.params.id);
     res.json({ ok: true });

@@ -46,6 +46,7 @@
     const canApprove  = state.user?.canApproveItRequest  === true;
     const canResolve  = state.user?.canResolveItRequest  === true;
     const canSubmit   = state.user?.canSubmitItRequest   === true;
+    const canDelete   = state.user?.canDeleteItRequest   === true;
     const myEmpId     = state.user?.employeeId || "";
 
     const statusFilter = new URLSearchParams(window.location.search).get("status") || "";
@@ -89,7 +90,7 @@
       <div class="it-requests-tabs">${statusTabs}</div>
       ${requests.length === 0
         ? '<p class="muted">No IT requests found.</p>'
-        : `<div class="it-grid">${requests.map((r) => renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers, empById })).join("")}</div>`}
+        : `<div class="it-grid">${requests.map((r) => renderItCard(r, { canAssign, canApprove, canResolve, canDelete, myEmpId, itUsers, empById })).join("")}</div>`}
     `;
 
     root.querySelectorAll("[data-it-status]").forEach((btn) => {
@@ -195,7 +196,7 @@
     // removed mark-as-IT action (handled via Users admin page)
   }
 
-  function renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers, empById }) {
+  function renderItCard(r, { canAssign, canApprove, canResolve, canDelete, myEmpId, itUsers, empById }) {
     const isOpen       = r.status === "open";
     const isInProgress = r.status === "in_progress";
     const isDone       = r.status === "resolved" || r.status === "closed";
@@ -231,8 +232,8 @@
       actions.push(`<button class="btn btn-sm" data-it-edit="${r.id}">Edit</button>`);
     }
 
-    // Delete button: shown to assigners (server enforces IT-only deletion)
-    if (canAssign) {
+    // Delete button: Admin / CEO / IT-flagged users only (Access Control: deleteItRequest)
+    if (canDelete) {
       actions.push(`<button class="btn btn-sm btn-danger" data-it-delete="${r.id}">Delete</button>`);
     }
 

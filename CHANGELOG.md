@@ -395,6 +395,13 @@ All notable changes to the Hangup Portal desktop app.
 ### Added
 - **IT ticket timing** — each ticket card now shows opened date+time, resolved date+time, and elapsed time between creation and resolution (e.g. `2h 15m`).
 
+## [1.7.10] — 2026-07-10
+
+### Fixed
+- **IT ticket delete** — Admin and CEO can now delete tickets (previously only `is_it`-flagged users could). New `deleteItRequest` permission in Access Control lets you configure which roles can delete.
+- **IT delete button** — now shown based on `canDeleteItRequest` permission instead of `canAssignItRequest`, so admins see the Delete button without needing assign rights.
+- The `DELETE /it-requests/:id` route now uses `canDeleteItRequest` (Admin/CEO/isIt) instead of the more restrictive `hasItAccess` check.
+
 ## [Unreleased]
 
 ## [1.6.4] — 2026-07-05
