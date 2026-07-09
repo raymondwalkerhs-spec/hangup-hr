@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.6.17` (`package.json` → `version`)
-- **Previous:** `1.6.16` (sales form hardening), `1.6.15` (sale attachments UX)
+- **Current version:** `1.7.7` (`package.json` → `version`)
+- **Previous:** `1.7.6`
 
 ---
 
@@ -472,7 +472,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.6.25** | **true** | Add sale no attachments; cross-unit closers; picker/submit fix; Airtable MLA reset + canonical columns |
+| **1.7.7** | **true** | Payroll netSalaryOverride fix; data-store helper import fix; IT approval is_it flag; IT requests UI (grab/claim, edit, delete, resolve modal); quality note notifications improved |
+| **1.7.6** | false | Payroll salary save netSalaryOverride fix; data-store helper import fix |
 | **1.6.24** | **true** | No recording required on submit; Agent/TL hidden from recordings; sale delete confirm button fix |
 | **1.6.23** | **true** | Quality comments cache fix + permission override; sale delete Electron fix; Airtable immediate sync |
 | **1.6.22** | **true** | Quality ticket save/delete fixes, Airtable delete on sale remove, out agents blocked from reviewer/verifier |
@@ -627,6 +628,32 @@ Priority is rough (P1 = high value for daily HR ops). Adjust with the user.
 3. **ADM-09** — macOS code signing
 
 _When user approves an item: note approval date + version target in this table and remove “Pending” for that row._
+
+---
+
+## Multi-Company Architecture (v1.29+)
+
+**Company Structure:**
+- **Hang-Up**: Merged HS-1 and HS-3 units (default company)
+- **HS-2 Company**: Separate company for HS-2 and HS2-PT units
+- **Dynamic companies**: Admin can add additional companies via Settings
+
+**Database Tables:**
+- `companies`: Company registry with slug, name, display settings
+- `company_role_permissions`: Per-company role permission overrides
+- `org_unit_managers.company_slug`: Links units to companies
+
+**Code References:**
+- `lib/company-context.js`: Company filtering and context resolution
+- `lib/companies-repo.js`: Company CRUD operations
+- `lib/roles.js`: `canManageCompanies()`, `canManageHs2Company()`
+
+**Finance Company Scope (v1.30):**
+- Finance tables now include `unit` column for per-company separation:
+  - `employee_loans`, `loan_payments`
+  - `bonus_events`, `deduction_events`
+  - `bonus_requests`, `expense_requests`
+  - `monthly_bills`, `petty_cash_funds`, `petty_cash_ledger`
 
 ---
 

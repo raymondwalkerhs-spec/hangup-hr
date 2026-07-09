@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.6.25 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 1.7.7 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -433,4 +433,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **1.6.14** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **1.7.7** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

@@ -2,6 +2,44 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.7.6] — 2026-07-09
+
+### Fixed
+- Fixed payroll salary save so `netSalaryOverride` persists correctly and does not crash the backend.
+- Corrected a missing helper import in `lib/data-store.js` that prevented payroll adjustments from saving.
+
+## [1.7.4] — 2026-07-09
+
+- IT approval and assignment now respect `app_users.is_it` in addition to `role='it'`.
+- Quality note notifications now include agent context and route to the agent quality notes page.
+- Employee note and IT request notification metadata improved for redirect handling.
+
+## [1.7.4.B] — 2026-07-09
+
+### Added
+- IT requests UI: quick issue types, grab/claim button, Edit ticket (title/category/urgency), Delete ticket (IT-only), and Resolve modal with structured resolution choices and secret/internal notes + optional cost.
+- Notification center entries are created for active IT users when a new IT request is submitted (unit-scoped fallback to global IT users).
+
+### Changed
+- Frontend: IT Requests cards now show requester display name and team; assignment modal remains unchanged.
+- Backend: `/it-requests` accepts `agent`, `team`, `from`, `to` filters; PATCH supports editing title/category/urgency by requester or assigners; DELETE `/it-requests/:id` restricted to IT staff.
+
+### Notes
+- Marking users as IT should be done via the Users admin page or scripted migrations; the previous quick-mark UI was removed.
+- For structured reporting of resolution type/cost, consider adding dedicated DB columns (future migration).
+
+## [1.7.3] — 2026-07-08
+
+### Fixed
+- **View as user** — improved impersonation UI and allow switching users immediately while already impersonating.
+- **Users page load** — fixed Users admin page loading on legacy installs when `app_users.is_it` is missing.
+- **IT ticket title / view as user** — corrected the View as user UI title and support text.
+
+## [1.7.2] — 2026-07-08
+
+### Fixed
+- **Quality notes deletion** — fixed quality agent delete permissions for quality ticket notes so quality authors can delete their own notes again.
+
 ## [1.7.1] — 2026-07-08
 
 ### Fixed
@@ -325,6 +363,19 @@ All notable changes to the Hangup Portal desktop app.
 
 ### Added
 - **Monthly Billing Date** — enabled by default in sales log columns; visible to quality roles on quality ticket surface with view+edit access; field-level access control available through sales permissions.
+
+## [1.7.7] — 2026-07-09
+
+### Fixed
+- Fixed payroll salary save so `netSalaryOverride` persists correctly and does not crash the backend.
+- Corrected a missing helper import in `lib/data-store.js` that prevented payroll adjustments from saving.
+- IT approval and assignment now respect `app_users.is_it` in addition to `role='it'`.
+- Quality note notifications now include agent context and route to the agent quality notes page.
+- Employee note and IT request notification metadata improved for redirect handling.
+
+### Added
+- IT requests UI: quick issue types, grab/claim button, Edit ticket (title/category/urgency), Delete ticket (IT-only), and Resolve modal with structured resolution choices and secret/internal notes + optional cost.
+- Notification center entries are created for active IT users when a new IT request is submitted (unit-scoped fallback to global IT users).
 
 ## [Unreleased]
 
