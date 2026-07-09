@@ -12,8 +12,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.7.8` (`package.json` → `version`)
-- **Previous:** `1.7.7`
+- **Current version:** `1.7.9` (`package.json` → `version`)
+- **Previous:** `1.7.8`
 
 ---
 
@@ -472,8 +472,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.7.8** | **true** | Leave day_fraction migration fix; IT ticket agent scoping fix; Pause request (Mon–Fri week off) |
-| **1.7.7** | false | Payroll netSalaryOverride fix; IT requests UI (grab/claim, edit, delete, resolve modal); quality note notifications improved |
+| **1.7.9** | **true** | Meeting requests scoped to participant/requester only; IT ticket timing (opened/resolved/elapsed); IT DB unit column fix |
+| **1.7.8** | false | Leave day_fraction migration fix; IT ticket agent scoping fix; Pause request (Mon–Fri week off) |
 | **1.6.24** | **true** | No recording required on submit; Agent/TL hidden from recordings; sale delete confirm button fix |
 | **1.6.23** | **true** | Quality comments cache fix + permission override; sale delete Electron fix; Airtable immediate sync |
 | **1.6.22** | **true** | Quality ticket save/delete fixes, Airtable delete on sale remove, out agents blocked from reviewer/verifier |

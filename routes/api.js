@@ -1478,10 +1478,12 @@ router.get("/meeting-requests", async (req, res) => {
   try {
     const filters = {};
     if (req.query.status) filters.status = req.query.status.split(",");
-    if (req.query.mine === "true" && req.userRole?.employeeId) filters.requesterEmployeeId = req.userRole.employeeId;
+    // Non-reviewers (agents, TL, OP who don't have review permission) only see meetings
+    // where they are the requester OR listed as a participant.
     if (!roles.canReviewMeetingRequest(req.userRole) && req.userRole?.employeeId) {
-      filters.requesterEmployeeId = req.userRole.employeeId;
+      filters.participantEmployeeId = req.userRole.employeeId;
     }
+    if (req.query.mine === "true" && req.userRole?.employeeId) filters.requesterEmployeeId = req.userRole.employeeId;
     const requests = await meetingRequestsRepo.readMeetingRequests(filters);
     res.json({ requests });
   } catch (err) {

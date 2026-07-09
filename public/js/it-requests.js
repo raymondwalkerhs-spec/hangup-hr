@@ -59,6 +59,11 @@
     const requests = data.requests || [];
     const itUsers  = itUsersData.itUsers || [];
 
+    // Load employees for display (american name, team)
+    let employees = [];
+    try { const empResp = await api('/employees').catch(() => ({})); employees = empResp.employees || []; } catch (e) { employees = []; }
+    const empById = new Map((employees || []).map(e => [e.id, e]));
+
     const statusTabs = ["", "open", "in_progress", "resolved", "closed"]
       .map((s) => `<button class="rules-tab${s === statusFilter ? " active" : ""}" data-it-status="${s}">${s ? STATUS_LABELS[s] : "All"}</button>`)
       .join("");
@@ -84,7 +89,7 @@
       <div class="it-requests-tabs">${statusTabs}</div>
       ${requests.length === 0
         ? '<p class="muted">No IT requests found.</p>'
-        : `<div class="it-grid">${requests.map((r) => renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers })).join("")}</div>`}
+        : `<div class="it-grid">${requests.map((r) => renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers, empById })).join("")}</div>`}
     `;
 
     root.querySelectorAll("[data-it-status]").forEach((btn) => {
@@ -107,6 +112,25 @@
         openAssignModal(id, currentUser, itUsers, () => renderItRequestsPage(root));
       });
     });
+
+      // Edit ticket
+      root.querySelectorAll('[data-it-edit]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.itEdit;
+          openEditModal(id, () => renderItRequestsPage(root));
+        });
+      });
+
+      // Delete ticket
+      root.querySelectorAll('[data-it-delete]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Permanently delete this ticket?')) return;
+          try {
+            await api(`/it-requests/${btn.dataset.itDelete}`, { method: 'DELETE' });
+            renderItRequestsPage(root);
+          } catch (e) { alert(e.message || e); }
+        });
+      });
 
     // Approve
     root.querySelectorAll("[data-it-approve]").forEach((btn) => {
@@ -136,17 +160,22 @@
       });
     });
 
-    // Resolve
+    // Resolve (open modal with quick options)
     root.querySelectorAll("[data-it-resolve]").forEach((btn) => {
+      btn.addEventListener("click", () => openResolveModal(btn.dataset.itResolve, () => renderItRequestsPage(root)));
+    });
+
+    // Grab (claim) unassigned tickets
+    root.querySelectorAll("[data-it-grab]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const notes = prompt("Resolution notes (optional):");
+        if (!confirm('Grab this ticket and assign to yourself?')) return;
         try {
-          await api(`/it-requests/${btn.dataset.itResolve}`, {
+          await api(`/it-requests/${btn.dataset.itGrab}`, {
             method: "PATCH",
-            body: JSON.stringify({ status: "resolved", resolutionNotes: notes || "" }),
+            body: JSON.stringify({ assignedTo: state.user?.username || '' }),
           });
           renderItRequestsPage(root);
-        } catch (e) { alert(e.message); }
+        } catch (e) { alert(e.message || e); }
       });
     });
 
@@ -162,9 +191,11 @@
         } catch (e) { alert(e.message); }
       });
     });
+
+    // removed mark-as-IT action (handled via Users admin page)
   }
 
-  function renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers }) {
+  function renderItCard(r, { canAssign, canApprove, canResolve, myEmpId, itUsers, empById }) {
     const isOpen       = r.status === "open";
     const isInProgress = r.status === "in_progress";
     const isDone       = r.status === "resolved" || r.status === "closed";
@@ -186,8 +217,23 @@
       actions.push(`<button class="btn btn-sm" data-it-resolve="${r.id}">Resolve</button>`);
     }
 
+    // Grab button for IT users when unassigned
+    if (canAssign && !r.assignedTo) {
+      actions.push(`<button class="btn btn-sm" data-it-grab="${r.id}">Grab</button>`);
+    }
+
     if (isDone) {
       actions.push(`<button class="btn btn-sm" data-it-reopen="${r.id}">Reopen</button>`);
+    }
+
+    // Edit button: owner or assigners
+    if (canAssign || myEmpId === r.employeeId) {
+      actions.push(`<button class="btn btn-sm" data-it-edit="${r.id}">Edit</button>`);
+    }
+
+    // Delete button: shown to assigners (server enforces IT-only deletion)
+    if (canAssign) {
+      actions.push(`<button class="btn btn-sm btn-danger" data-it-delete="${r.id}">Delete</button>`);
     }
 
     const routingBadges = [];
@@ -209,14 +255,39 @@
       </div>
       ${r.description ? `<div class="it-card-body">${esc(r.description)}</div>` : ""}
       <div class="it-card-meta">
-        From: <strong>${esc(r.employeeId)}</strong> &middot;
-        Assigned: ${r.assignedTo ? `<strong>${esc(r.assignedTo)}</strong>` : '<em>Unassigned</em>'} &middot;
-        ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}
+        From: <strong>${esc((empById && empById.get(r.employeeId)) ? (empById.get(r.employeeId).american_name || empById.get(r.employeeId).arabic_name || empById.get(r.employeeId).id) : r.employeeId)}</strong>
+        ${ (empById && empById.get(r.employeeId) && empById.get(r.employeeId).team) ? ` &middot; Team: ${esc(empById.get(r.employeeId).team)}` : '' } &middot;
+        Assigned: ${r.assignedTo ? `<strong>${esc(r.assignedTo)}</strong>` : '<em>Unassigned</em>'}
+      </div>
+      <div class="it-card-meta" style="margin-top:.2rem">
+        ${(() => {
+          const fmt = (ts) => {
+            if (!ts) return null;
+            const d = new Date(ts);
+            return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+          };
+          const opened = fmt(r.createdAt);
+          const resolved = fmt(r.resolvedAt);
+          let elapsed = '';
+          if (r.createdAt && r.resolvedAt) {
+            const mins = Math.round((new Date(r.resolvedAt) - new Date(r.createdAt)) / 60000);
+            if (mins < 60) elapsed = `<span class="badge badge-ok" title="Time to resolve">${mins}m</span>`;
+            else elapsed = `<span class="badge badge-ok" title="Time to resolve">${Math.floor(mins/60)}h ${mins%60}m</span>`;
+          }
+          const parts = [];
+          if (opened) parts.push(`Opened: ${opened}`);
+          if (resolved) parts.push(`Resolved: ${resolved}`);
+          if (elapsed) parts.push(elapsed);
+          return parts.join(' &middot; ');
+        })()}
       </div>
       ${routingBadges.length ? `<div class="it-badge-routing">${routingBadges.join("")}</div>` : ""}
       ${r.denialReason ? `<div class="it-denial-reason">Denial reason: ${esc(r.denialReason)}</div>` : ""}
       ${r.resolutionNotes ? `<div class="it-card-body" style="color:var(--text-muted,#888);font-size:.85rem">Resolution: ${esc(r.resolutionNotes)}</div>` : ""}
       ${actions.length ? `<div class="it-card-actions">${actions.join("")}</div>` : ""}
+      ${!r.assignedTo && !r.employeeId ? '' : ''}
+      ${/* Add mark-as-IT button for assigners if requester isn't IT */''}
+      
     </div>`;
   }
 
@@ -277,6 +348,79 @@
     };
   }
 
+  function openResolveModal(requestId, onDone) {
+    const quick = [
+      'Fixed',
+      'Pending',
+      'Switched PC',
+      'Switched Headset',
+      'Switched Mouse',
+      'Repositioned Agent',
+      'Other',
+    ];
+    const opts = quick.map((q) => `<option value="${q}">${q}</option>`).join("");
+    const html = `
+      <div class="modal-header"><h2>Resolve IT Request</h2><button class="btn btn-sm" data-close>✕</button></div>
+      <div class="modal-body">
+        <label class="field"><span>Resolution</span><select id="it-resolve-type">${opts}</select></label>
+        <label class="field"><span>Public notes (visible to requester)</span><textarea id="it-resolve-notes" rows="3" style="width:100%" placeholder="Notes shown to requester"></textarea></label>
+        <label class="field"><span>Secret notes (admin / IT only)</span><textarea id="it-resolve-secret" rows="2" style="width:100%" placeholder="Cost, hardware replaced, internal notes"></textarea></label>
+        <label class="field"><span>Cost (optional)</span><input id="it-resolve-cost" type="text" placeholder="e.g. 120" /></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn btn-primary" id="it-resolve-confirm">Close Ticket</button>
+      </div>`;
+
+    window.openModal(html);
+
+    document.getElementById('it-resolve-confirm').onclick = async () => {
+      const type = document.getElementById('it-resolve-type').value;
+      const notes = document.getElementById('it-resolve-notes').value.trim();
+      const secret = document.getElementById('it-resolve-secret').value.trim();
+      const cost = document.getElementById('it-resolve-cost').value.trim();
+      // Pending keeps ticket active (in_progress)
+      const status = type === 'Pending' ? 'in_progress' : 'resolved';
+      // Build secret payload into notesHiddenFromRequester
+      let secretPayload = secret || '';
+      if (cost) secretPayload = `${secretPayload}${secretPayload ? '\n' : ''}COST:${cost}`;
+      try {
+        await api(`/it-requests/${requestId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status, resolutionNotes: `${type}${notes ? ': ' + notes : ''}`, notesHiddenFromRequester: secretPayload || undefined }),
+        });
+        window.closeModal();
+        onDone();
+      } catch (e) { alert(e.message || e); }
+    };
+  }
+
+  function openEditModal(requestId, onDone) {
+    api('/it-requests').then((d) => {
+      const req = (d.requests || []).find(r => r.id === requestId);
+      if (!req) return alert('Request not found');
+      const html = `
+        <div class="modal-header"><h2>Edit IT Request</h2><button class="btn btn-sm" data-close>✕</button></div>
+        <div class="modal-body field-grid">
+          <label class="field"><span>Title</span><input id="it-edit-title" value="${esc(req.title)}" /></label>
+          <label class="field"><span>Category</span><select id="it-edit-category">${Object.entries(IT_CATEGORIES).map(([k,v])=>`<option value="${k}" ${k===req.category? 'selected':''}>${v}</option>`).join('')}</select></label>
+          <label class="field"><span>Urgency</span><select id="it-edit-urgency">${Object.entries(URGENCY_LABELS).map(([k,v])=>`<option value="${k}" ${k===req.urgency? 'selected':''}>${v}</option>`).join('')}</select></label>
+        </div>
+        <div class="modal-footer"><button class="btn" data-close>Cancel</button><button class="btn btn-primary" id="it-edit-save">Save</button></div>`;
+      window.openModal(html);
+      document.getElementById('it-edit-save').onclick = async () => {
+        const title = document.getElementById('it-edit-title').value.trim();
+        const category = document.getElementById('it-edit-category').value;
+        const urgency = document.getElementById('it-edit-urgency').value;
+        try {
+          await api(`/it-requests/${requestId}`, { method: 'PATCH', body: JSON.stringify({ title, category, urgency }) });
+          window.closeModal();
+          onDone();
+        } catch (e) { alert(e.message || e); }
+      };
+    }).catch(() => alert('Failed to load request'));
+  }
+
   function openReassignModal(requestId, itUsers, onDone) {
     // Legacy alias — delegates to the unified assign modal
     openAssignModal(requestId, "", itUsers, onDone);
@@ -310,6 +454,16 @@
       <div class="modal-header"><h2>New IT Request</h2><button class="btn btn-sm" data-close>✕</button></div>
       <form id="it-new-form" class="modal-body field-grid">
         <label class="field"><span>Category</span><select name="category">${catOpts}</select></label>
+        <label class="field"><span>Issue</span><select name="issueType">
+          <option value="">— Select common issue —</option>
+          <option value="Headset issue">Headset issue</option>
+          <option value="Noise cancellation not working">Noise cancellation not working</option>
+          <option value="PC died">PC died</option>
+          <option value="Dialer issue">Dialer issue</option>
+          <option value="Can't hear customers">Can't hear customers</option>
+          <option value="Portal app issue">Portal app issue</option>
+          <option value="Other">Other</option>
+        </select></label>
         <label class="field"><span>Urgency</span><select name="urgency">${urgOpts}</select></label>
         <label class="field" style="grid-column:1/-1"><span>Title</span><input name="title" required placeholder="Brief description of the issue" /></label>
         ${agentPickerHtml}
@@ -359,7 +513,7 @@
         title: String(fd.get("title") || "").trim(),
         category: fd.get("category") || "other",
         urgency: fd.get("urgency") || "normal",
-        description: String(fd.get("description") || "").trim(),
+        description: (fd.get('issueType') ? fd.get('issueType') + '\n' : '') + String(fd.get("description") || "").trim(),
       };
       if (!body.employeeId || !body.title) return alert("Title is required");
       try {

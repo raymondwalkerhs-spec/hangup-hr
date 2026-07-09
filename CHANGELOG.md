@@ -386,6 +386,15 @@ All notable changes to the Hangup Portal desktop app.
 ### Added
 - **Pause request** — new leave type in Requests page. Select any day in the target week; the server automatically maps the request to Monday–Friday of that week. On approval, all 5 weekdays are marked Day-OFF in attendance (weekends skipped). Visible to all roles.
 
+## [1.7.9] — 2026-07-10
+
+### Fixed
+- **Meeting requests** — agents no longer see all meetings after disabling the permission in Access Control. Non-reviewers now only see meetings where they are the requester or listed as a participant (`employee:ID` entry in the participants array).
+- **IT ticket unit error** — applied missing DB migration for `unit`, `approved_by`, `denied_by`, `reassigned_*` columns on `it_requests` table.
+
+### Added
+- **IT ticket timing** — each ticket card now shows opened date+time, resolved date+time, and elapsed time between creation and resolution (e.g. `2h 15m`).
+
 ## [Unreleased]
 
 ## [1.6.4] — 2026-07-05
