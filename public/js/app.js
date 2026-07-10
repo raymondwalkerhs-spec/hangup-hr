@@ -57,7 +57,7 @@ function localYearMonth(date = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function debounce(fn, ms = 200) {
+function debounce(fn, ms = 50) {
   let t;
   return (...args) => {
     clearTimeout(t);
@@ -75,7 +75,7 @@ const state = {
   hideZeroNet: false,
   companyContext: sessionStorage.getItem("companyContext") || "hangup",
   salesPickDate: new Date().toISOString().slice(0, 10),
-  salesWeekDate: new Date().toISOString().slice(0, 10),
+  salesWeekDate: (() => { const d = new Date(); const day = d.getDay(); d.setDate(d.getDate() - ((day + 6) % 7)); return d.toISOString().slice(0, 10); })(),
   tabSearch: { employees: "", attendance: "", payroll: "" },
   payrollTab: "agent",
   payrollPositionFilter: "",
@@ -187,6 +187,14 @@ function initSidebarNav() {
   backdrop?.addEventListener("click", closeSidebarNav);
   window.addEventListener("resize", () => {
     if (window.innerWidth > 900) closeSidebarNav();
+  });
+  window.addEventListener("beforeunload", (e) => {
+    // Flush pending attendance before page unloads (refresh/close)
+    if (state.pendingAttendance.size > 0) {
+      flushAttendanceSaves(true); // use sendBeacon for best-effort delivery
+      e.preventDefault();
+      e.returnValue = "Saving attendance changes…";
+    }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeSidebarNav();
@@ -474,7 +482,8 @@ async function api(path, options = {}, timeoutMs = 120000) {
   // we quietly pull the newest data back so the local view stays current with edits
   // made by other users. Sync calls themselves are excluded to avoid a loop.
   const method = (options.method || "GET").toUpperCase();
-  if (method !== "GET" && !path.startsWith("/sync/")) {
+  const skipSilentRefresh = Boolean(options.skipSilentRefresh);
+  if (method !== "GET" && !path.startsWith("/sync/") && !skipSilentRefresh && !path.startsWith("/attendance")) {
     scheduleSilentRefresh();
   }
   return data;
@@ -484,7 +493,7 @@ let silentRefreshTimer = null;
 
 function scheduleSilentRefresh() {
   clearTimeout(silentRefreshTimer);
-  silentRefreshTimer = setTimeout(runSilentRefresh, 3000);
+  silentRefreshTimer = setTimeout(runSilentRefresh, 50);
 }
 
 function isModalOpen() {
@@ -1314,7 +1323,7 @@ function showRegistrationCredentialsModal(res, note = "") {
   openModal(
     `<div class="modal-header"><h2>Registration approved</h2><button class="btn btn-sm" data-close>✕</button></div>
     <div class="modal-body">
-      <p class="muted" style="margin-top:0">Share these credentials with the new agent. The account stays <strong>inactive</strong> until Mark or Raymond activates it on the Users page.</p>
+      <p class="muted" style="margin-top:0">Share these credentials with the new agent. The account stays <strong>inactive</strong> Raymond activates it on the Users page.</p>
       <div class="cred-box">
         ${copyRow("User ID (login)", res.username)}
         ${copyRow("Temp password", res.tempPassword)}
@@ -1895,34 +1904,36 @@ function bindAttendanceGridEvents(root, ctx) {
 
   function onTransportOverrideChange(e) {
     const el = e.target;
-    const status =
-      el.closest(".att-cell")?.querySelector(".status-select")?.value || "";
+    const cell = el.closest(".att-cell");
+    const statusSel = cell?.querySelector(".status-select");
+    const status = statusSel?.value || "";
     queueAttendanceSave(el.dataset.emp, el.dataset.date, status, el.value);
   }
 
   root.querySelectorAll(".status-select").forEach((sel) => {
     sel.addEventListener("change", (e) => {
       const el = e.target;
-      el.className = `status-select ${statusClass(el.value)}`;
+      const value = String(el.value || "").trim();
+      el.className = `status-select ${statusClass(value)}`;
       const cell = el.closest(".att-cell");
       const ovSel = cell?.querySelector(".transport-ov-select");
       if (ovSel) {
-        if (isTransportOverrideStatus(el.value)) {
+        if (isTransportOverrideStatus(value)) {
           ovSel.classList.remove("hidden");
         } else {
           ovSel.classList.add("hidden");
           ovSel.value = "";
         }
-      } else if (isTransportOverrideStatus(el.value) && cell && canEdit) {
+      } else if (isTransportOverrideStatus(value) && cell && canEdit) {
         cell.insertAdjacentHTML(
           "beforeend",
-          transportOverrideHtml(el.dataset.emp, el.dataset.date, el.value, "", true)
+          transportOverrideHtml(el.dataset.emp, el.dataset.date, value, "", true)
         );
         const newOv = cell.querySelector(".transport-ov-select");
         newOv?.addEventListener("change", onTransportOverrideChange);
       }
       const ov = cell?.querySelector(".transport-ov-select")?.value || "";
-      queueAttendanceSave(el.dataset.emp, el.dataset.date, el.value, ov);
+      queueAttendanceSave(el.dataset.emp, el.dataset.date, value, ov);
     });
   });
 
@@ -2115,6 +2126,7 @@ function attendanceStatusCellHtml(empId, d, displaySt, rec, canEdit, locked) {
 function queueAttendanceSave(employeeId, date, status, transportOverride) {
   const key = `${employeeId}|${date}`;
   const prev = state.pendingAttendance.get(key);
+  console.log("[attendance-debug] queue", { key, employeeId, date, status, transportOverride, prev: prev || null });
   let to = transportOverride;
   if (to === undefined) to = prev?.transportOverride;
   if (!isTransportOverrideStatus(status)) to = "";
@@ -2127,24 +2139,72 @@ function queueAttendanceSave(employeeId, date, status, transportOverride) {
   });
   showSaveIndicator("Saving…", "info");
   clearTimeout(state.saveTimer);
-  state.saveTimer = setTimeout(flushAttendanceSaves, 500);
+  // Flush immediately for instant sync (was 500ms debounce)
+  state.saveTimer = setTimeout(flushAttendanceSaves, 50);
 }
 
-async function flushAttendanceSaves() {
+async function flushAttendanceSaves(useBeacon = false) {
   const records = [...state.pendingAttendance.values()];
+  console.log("[attendance-debug] flush start", { useBeacon, records });
   if (!records.length) return;
-  // Don't clear until save succeeds — keeps records for retry on failure
+  
   try {
-    await api("/attendance/batch", {
-      method: "POST",
-      body: JSON.stringify({ records }),
-    });
-    // Only clear after confirmed success
-    for (const r of records) {
-      state.pendingAttendance.delete(`${r.employeeId}|${r.date}`);
+    if (useBeacon && navigator.sendBeacon) {
+      // Use sendBeacon for page unload (best-effort, doesn't wait for response)
+      const blob = new Blob([JSON.stringify({ records })], { type: "application/json" });
+      navigator.sendBeacon("/api/attendance/batch", blob);
+      // Leave pending entries intact so a later refresh still shows the user's edit until the server confirms it.
+    } else if (useBeacon && !navigator.sendBeacon) {
+      // Fallback: use fetch with keepalive (modern browsers)
+      fetch("/api/attendance/batch", {
+        method: "POST",
+        body: JSON.stringify({ records }),
+        keepalive: true, // Allows request to complete even after page unload
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => {
+        /* ignored */
+      });
+    } else {
+      // Normal fetch with response handling (page not unloading)
+      console.log("[attendance-debug] sending batch", { records });
+      const batchRes = await api("/attendance/batch", {
+        method: "POST",
+        body: JSON.stringify({ records }),
+        skipSilentRefresh: true,
+      });
+      // Use server-confirmed values (`saved`) to update the in-memory ctx so
+      // the UI reflects exactly what was persisted (e.g. a blank status that
+      // the server kept as the prior value because the role lacks clearance).
+      const confirmedRecords = batchRes?.saved || records;
+      const root = document.getElementById("app");
+      const ctx = root?.__attendanceCtx;
+      if (ctx?.recordMap) {
+        for (const r of confirmedRecords) {
+          const key = `${r.employeeId}|${r.date}`;
+          const existing = ctx.recordMap.get(key) || {};
+          ctx.recordMap.set(key, { ...existing, ...r });
+          const dataRecords = ctx.data?.records || [];
+          const recIdx = dataRecords.findIndex((row) => `${row.employeeId}|${row.date}` === key);
+          if (recIdx >= 0 && ctx.data?.records) {
+            ctx.data.records[recIdx] = { ...ctx.data.records[recIdx], ...r };
+          } else if (ctx.data) {
+            ctx.data.records = [...dataRecords, { ...r }];
+          }
+        }
+        if (state.page === "attendance" && root) {
+          updateAttendanceTable(root);
+        }
+      }
+      // Remove successfully-saved entries from the pending map so subsequent
+      // renders don't try to merge stale client data over fresh server data.
+      for (const r of records) {
+        state.pendingAttendance.delete(`${r.employeeId}|${r.date}`);
+      }
+      console.log("[attendance-debug] batch success", { records, confirmed: confirmedRecords });
+      showSaveIndicator("✓ Synced", "saved");
     }
-    showSaveIndicator("Saved", "saved");
   } catch (e) {
+    console.error("[attendance-debug] batch failed", e);
     showSaveIndicator(e.message || "Save failed — will retry", "error");
     // Leave pendingAttendance intact so next navigate/retry flushes again
   }
@@ -3218,10 +3278,16 @@ async function openPayslipModal(employeeId, options = {}) {
         <form id="adj-form" class="field-grid">
           <label class="field"><span>Position</span><input name="position" value="${adj.position || p.position || ""}" /></label>
           <label class="field"><span>Salary raise (EGP)</span><input name="salaryRaise" type="number" min="0" value="${adj.salaryRaise ?? p.salaryRaise ?? 0}" /></label>
-          <label class="field"><span>Salary override <span class="muted" style="font-size:.75rem">(replaces position rate for this month only)</span></span>
+          <label class="field"><span>Position salary override <span class="muted" style="font-size:.75rem">(replaces position rate for this month only)</span></span>
             <div style="display:flex;gap:.4rem;align-items:center">
               <input name="monthlySalaryOverride" type="number" min="0" placeholder="leave blank to use position rate" value="${adj.monthlySalaryOverride != null ? adj.monthlySalaryOverride : ""}" style="flex:1" />
               <button type="button" class="btn btn-sm" id="clear-salary-override-btn" title="Remove override">✕</button>
+            </div>
+          </label>
+          <label class="field"><span>Net salary override <span class="muted" style="font-size:.75rem">(replaces calculated net salary for this month only)</span></span>
+            <div style="display:flex;gap:.4rem;align-items:center">
+              <input name="netSalaryOverride" type="number" min="0" placeholder="leave blank to use calculated net" value="${adj.netSalaryOverride != null ? adj.netSalaryOverride : ""}" style="flex:1" />
+              <button type="button" class="btn btn-sm" id="clear-net-salary-override-btn" title="Remove override">✕</button>
             </div>
           </label>
           <label class="field"><span>Payment method</span><input name="paymentMethod" value="${adj.paymentMethod || p.paymentMethod || ""}" /></label>
@@ -3239,8 +3305,14 @@ async function openPayslipModal(employeeId, options = {}) {
           <label class="field" style="grid-column:1/-1"><span>Bank reference</span><input name="bankReference" value="${adj.bankReference || ""}" /></label>
           <label class="field" style="grid-column:1/-1"><span>Month notes</span><textarea name="monthNotes">${adj.monthNotes || p.monthNotes || ""}</textarea></label>
         </form>
-        <button class="btn btn-primary btn-sm" id="save-adj-btn" style="margin-top:.5rem">Save month profile</button>
-        <button class="btn btn-sm" id="emp-loans-btn" style="margin-top:.5rem;margin-left:.5rem">Loans</button>
+        <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" id="save-salary-btn" title="Save salary overrides only">Save Salary</button>
+          <button class="btn btn-sm" id="save-status-btn" title="Save status, position, payment method">Save Status</button>
+          <button class="btn btn-sm" id="save-allowances-btn" title="Save extra days, hold, transport">Save Allowances</button>
+          <button class="btn btn-sm" id="save-other-btn" title="Save notes and other fields">Save Other</button>
+          <button class="btn btn-success btn-sm" id="save-adj-btn" title="Save everything at once">Save All</button>
+          <button class="btn btn-sm" id="emp-loans-btn">Loans</button>
+        </div>
       </div>
       <div class="card" style="margin-top:1rem">
         <div class="flex-between" style="margin-bottom:.75rem">
@@ -3380,6 +3452,10 @@ async function openPayslipModal(employeeId, options = {}) {
     const inp = document.querySelector("[name=monthlySalaryOverride]");
     if (inp) inp.value = "";
   });
+  document.getElementById("clear-net-salary-override-btn")?.addEventListener("click", () => {
+    const inp = document.querySelector("[name=netSalaryOverride]");
+    if (inp) inp.value = "";
+  });
 
   document.getElementById("save-adj-btn").onclick = async () => {
     const btn = document.getElementById("save-adj-btn");
@@ -3396,6 +3472,9 @@ async function openPayslipModal(employeeId, options = {}) {
           salaryRaise: Number(fd.get("salaryRaise")) || 0,
           monthlySalaryOverride: fd.get("monthlySalaryOverride") !== "" && fd.get("monthlySalaryOverride") != null
             ? Number(fd.get("monthlySalaryOverride"))
+            : null,
+          netSalaryOverride: fd.get("netSalaryOverride") !== "" && fd.get("netSalaryOverride") != null
+            ? Number(fd.get("netSalaryOverride"))
             : null,
           paymentMethod: fd.get("paymentMethod"),
           payrollStatus: fd.get("payrollStatus"),
@@ -3421,6 +3500,119 @@ async function openPayslipModal(employeeId, options = {}) {
   };
 
   document.getElementById("emp-loans-btn").onclick = () => openEmployeeLoansModal(employeeId);
+
+  // Save Salary fields only
+  document.getElementById("save-salary-btn").onclick = async () => {
+    const btn = document.getElementById("save-salary-btn");
+    const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      await api(`/payroll-adjustments/${employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          yearMonth: state.month,
+          monthlySalaryOverride: fd.get("monthlySalaryOverride") !== "" && fd.get("monthlySalaryOverride") != null
+            ? Number(fd.get("monthlySalaryOverride"))
+            : null,
+          netSalaryOverride: fd.get("netSalaryOverride") !== "" && fd.get("netSalaryOverride") != null
+            ? Number(fd.get("netSalaryOverride"))
+            : null,
+        }),
+      });
+      showSaveIndicator("Salary override saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
+    } catch (e) {
+      alert("Salary save failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+
+  // Save Status fields only
+  document.getElementById("save-status-btn").onclick = async () => {
+    const btn = document.getElementById("save-status-btn");
+    const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      await api(`/payroll-adjustments/${employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          yearMonth: state.month,
+          position: fd.get("position"),
+          paymentMethod: fd.get("paymentMethod"),
+          payrollStatus: fd.get("payrollStatus"),
+        }),
+      });
+      showSaveIndicator("Status saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
+    } catch (e) {
+      alert("Status save failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+
+  // Save Allowances fields only
+  document.getElementById("save-allowances-btn").onclick = async () => {
+    const btn = document.getElementById("save-allowances-btn");
+    const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      await api(`/payroll-adjustments/${employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          yearMonth: state.month,
+          extraDays: Number(fd.get("extraDays")) || 0,
+          twoWeekHold: fd.get("twoWeekHold") === "on",
+          transportEligible: fd.get("transportEligible") === "on",
+        }),
+      });
+      showSaveIndicator("Allowances saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
+    } catch (e) {
+      alert("Allowances save failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
+
+  // Save Other fields only
+  document.getElementById("save-other-btn").onclick = async () => {
+    const btn = document.getElementById("save-other-btn");
+    const fd = new FormData(document.getElementById("adj-form"));
+    btn.disabled = true;
+    const prevLabel = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      await api(`/payroll-adjustments/${employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          yearMonth: state.month,
+          bankReference: fd.get("bankReference") || "",
+          monthNotes: fd.get("monthNotes") || "",
+          noPayroll: fd.get("noPayroll") === "on",
+          payslipVisibleToAgent: fd.get("payslipVisibleToAgent") === "on",
+          salesCount: Number(fd.get("salesCount")) || 0,
+        }),
+      });
+      showSaveIndicator("Other fields saved", "saved");
+      refreshPayrollRowAfterSave(employeeId);
+    } catch (e) {
+      alert("Other save failed: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  };
 
   const splitForm = document.getElementById("split-form");
   const splitStatusSel = splitForm?.querySelector("[name=status]");
@@ -3710,9 +3902,37 @@ async function renderEmployees(root) {
 }
 
 async function renderAttendance(root) {
+  // Flush any pending attendance changes before fetching fresh data
+  if (state.pendingAttendance.size > 0) {
+    await flushAttendanceSaves();
+  }
   const q = buildApiQuery({ month: state.month, unit: state.unit || "", team: state.team || "" });
   const data = await api(`/attendance?${q}`);
-  const recordMap = new Map(data.records.map((r) => [`${r.employeeId}|${r.date}`, r]));
+  const pendingItems = [...state.pendingAttendance.values()].filter((r) => String(r.date || "").startsWith(state.month));
+  console.log("[attendance-debug] render attendance", { month: state.month, pendingItems, serverRecords: data.records.slice(0, 3) });
+  const pendingArray = pendingItems.filter((pending) => {
+    const key = `${pending.employeeId}|${pending.date}`;
+    const serverRecord = data.records.find((r) => `${r.employeeId}|${r.date}` === key);
+    if (!serverRecord) return true;
+    return String(serverRecord.status || "") !== String(pending.status || "") || String(serverRecord.transportOverride || "") !== String(pending.transportOverride || "");
+  });
+  for (const pending of pendingItems) {
+    const key = `${pending.employeeId}|${pending.date}`;
+    const serverRecord = data.records.find((r) => `${r.employeeId}|${r.date}` === key);
+    if (serverRecord && String(serverRecord.status || "") === String(pending.status || "") && String(serverRecord.transportOverride || "") === String(pending.transportOverride || "")) {
+      state.pendingAttendance.delete(key);
+    }
+  }
+  const mergedRecords = pendingArray.length
+    ? data.records.map((r) => {
+        const key = `${r.employeeId}|${r.date}`;
+        const pending = pendingArray.find((p) => `${p.employeeId}|${p.date}` === key);
+        return pending ? { ...r, ...pending } : r;
+      }).concat(
+        pendingArray.filter((p) => !data.records.some((r) => `${r.employeeId}|${r.date}` === `${p.employeeId}|${p.date}`))
+      )
+    : data.records;
+  const recordMap = new Map(mergedRecords.map((r) => [`${r.employeeId}|${r.date}`, r]));
   const summaryMap = new Map(data.summaries.map((s) => [s.employeeId, s]));
   const calMap = new Map((data.calendar || []).map((c) => [c.date, c]));
   const ctx = {
@@ -5115,11 +5335,12 @@ async function openEmployeeQualityNotesModal(employeeId) {
   const notes = data.notes || [];
   const canWrite = canWriteQualityNotes();
   const isHrAdmin = canManagePayrollEvents();
+  const userRole = normalizeRole(state.user?.role);
   const list = notes
     .map((n) => {
       const canEdit =
         isHrAdmin ||
-        (state.user?.role === "quality" &&
+        (canWrite &&
           String(n.authorUsername || "").toLowerCase() === String(state.user?.username || "").toLowerCase());
       return `<div class="card card-flat"><div class="flex-between"><strong>${escapeHtml(n.noteDate || "")}</strong><span class="muted">${escapeHtml(n.authorUsername || "")}</span></div>
         <p style="margin:.5rem 0 0">${escapeHtml(n.body)}</p>
@@ -5560,22 +5781,25 @@ async function renderSettings(root) {
     : "";
 
   let impersonateCard = "";
-  if (status.user?.canImpersonate && !status.impersonation?.active) {
+  if (status.user?.canImpersonate) {
     let userOptions = "";
     try {
       const impUsers = await api("/impersonate/users");
       userOptions = (impUsers.users || [])
-        .map(
-          (u) =>
-            `<option value="${escapeHtml(u.username)}">${escapeHtml(u.employeeName || u.username)} — ${escapeHtml(u.username)} (${escapeHtml(u.role || "")}${u.status === "inactive" ? ", inactive" : ""})</option>`
-        )
+        .map((u) => {
+          const selected = status.impersonation?.active && status.impersonation?.as === u.username ? " selected" : "";
+          return `<option value="${escapeHtml(u.username)}"${selected}>${escapeHtml(u.employeeName || u.username)} — ${escapeHtml(u.username)} (${escapeHtml(u.role || "")}${u.status === "inactive" ? ", inactive" : ""})</option>`;
+        })
         .join("");
     } catch {
       userOptions = "";
     }
+    const impersonationHint = status.impersonation?.active
+      ? `<p class="muted">Currently viewing as <strong>${escapeHtml(status.impersonation.as)}</strong>. Choose another user to switch immediately.</p>`
+      : "<p class=\"muted\">Raymond only — see the app exactly as another user, including inactive accounts. Actions are recorded under their username.</p>";
     impersonateCard = `<div class="card">
       <h3>View as user (testing)</h3>
-      <p class="muted">Raymond only — see the app exactly as another user, including inactive accounts. Actions are recorded under their username.</p>
+      ${impersonationHint}
       <label class="field"><span>User</span>
         <select id="impersonate-user-select"><option value="">— Choose user —</option>${userOptions}</select>
       </label>
@@ -6529,11 +6753,17 @@ async function renderRulesPage(root) {
   });
 }
 
-function navigate(page) {
-  // Flush any pending attendance saves before leaving the page
+async function navigate(page) {
+  // Flush any pending attendance saves before leaving the page and wait for
+  // the POST to complete so the subsequent GET /attendance sees fresh data.
   if (state.pendingAttendance.size > 0) {
     clearTimeout(state.saveTimer);
-    flushAttendanceSaves(); // fire-and-forget; records remain if it fails
+    try {
+      await flushAttendanceSaves();
+    } catch {
+      // If flush fails the pending entries are kept intact so the next render
+      // will retry. We still proceed with navigation.
+    }
   }
   const next = ensureNavPageAllowed(navPageAlias(page));
   state.page = next;

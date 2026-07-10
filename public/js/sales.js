@@ -1180,7 +1180,9 @@ window.SalesModule = (function () {
     const period = state.salesPeriod || "month";
     const today = todayIso();
     state.salesPickDate = state.salesPickDate || today;
-    state.salesWeekDate = state.salesWeekDate || mondayOf(today);
+    // Always ensure salesWeekDate is a Monday — it may have been initialised as
+    // today (mid-week) from the app state before the Monday-snap fix was in place.
+    state.salesWeekDate = mondayOf(state.salesWeekDate || today);
     state.salesStatusFilter = state.salesStatusFilter || "";
     state.salesAgentFilter = state.salesAgentFilter || "";
     state.salesCloserFilter = state.salesCloserFilter || "";
@@ -1321,7 +1323,18 @@ window.SalesModule = (function () {
     else bindPeriodNav(root, period, state, rerender);
 
     root.querySelector("#sales-period")?.addEventListener("change", (e) => {
-      state.salesPeriod = e.target.value;
+      const newPeriod = e.target.value;
+      state.salesPeriod = newPeriod;
+      // When switching to weekly, always snap to Monday of the current week so
+      // the date range is correct and rows (+ their action buttons) are visible.
+      if (newPeriod === "week") {
+        state.salesWeekDate = mondayOf(todayIso());
+      }
+      // Clear feedback/status filters on period switch — a filter set for a
+      // narrow daily view would otherwise hide all rows on week/month views,
+      // making Edit and Quality ticket buttons appear to be missing.
+      state.salesClientFeedbackFilter = "";
+      state.salesVerifierFeedbackFilter = "";
       rerender();
     });
     root.querySelector("#sales-client-feedback-filter")?.addEventListener("change", (e) => {

@@ -1,3 +1,36 @@
+## v1.7.11 release checklist
+
+1. Bump `package.json` → `1.7.11`
+2. Update `CHANGELOG.md` with release notes.
+3. Run `npm test`.
+4. `git push` then trigger CI: `gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=v1.7.11`
+5. `gh run watch --repo raymondwalkerhs-spec/hangup-hr`
+6. `gh release edit v1.7.11 --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest`
+7. `node scripts/publish-app-version.js`
+
+**1.7.11 changes:** Attendance revert bug fixed (navigate awaits flush, pendingAttendance cleared on save, batch POST returns confirmed records, cache-first attendance read). Sales log weekly date snaps to Monday; Edit/Quality ticket buttons restored on weekly/monthly by fixing stale date range and clearing period filters on switch.
+
+## v1.7.6 release checklist
+
+1. Bump `package.json` → `1.7.6`
+2. Update `CHANGELOG.md` with the release notes.
+3. Run `npm test`.
+4. Build NSIS installer: `SKIP_NATIVE_REBUILD=1 npm run dist:installer`.
+5. `git push` then locally run `.	ests\publish-installer-only.ps1 -Tag v1.7.6`.
+6. `gh release edit v1.7.6 --latest` + `node scripts/publish-app-version.js`
+
+## v1.7.4.B release checklist
+
+1. Bump `package.json` → `1.7.4.B`
+2. Update `CHANGELOG.md` with the release notes.
+3. Run `npm test`.
+4. Build NSIS installer: `npm run dist:installer`.
+5. `git push` then CI or locally run `.
+routes\publish-github-release.ps1 -IncludeFull -Tag v1.7.4.B`
+6. `gh release edit v1.7.4.B --latest` + `node scripts/publish-app-version.js`
+
+**1.7.4.B change:** IT ticket UX and routing improvements; Edit/Delete tickets; notification center entries for IT users; Resolve modal with structured options.
+
 ## v1.6.13 release checklist
 
 1. Bump `package.json` → `1.6.13`
@@ -29,6 +62,15 @@
 **1.6.11 change:** View sale read-only modal; fix quality ticket ignoring Sales permissions Quality tab (camelCase DB row keys).
 
 ---
+
+Note on macOS builds (Windows): You can produce a raw macOS application zip on Windows using `electron-builder` (no DMG). Run:
+
+```powershell
+npm run dist:mac -- --mac zip
+```
+
+This outputs a mac `.app` bundled as a `.zip` that macOS users can unzip and run (Gatekeeper may warn — code signing not applied).
+
 ## v1.6.10 release checklist
 
 1. Bump `package.json` → `1.6.10`

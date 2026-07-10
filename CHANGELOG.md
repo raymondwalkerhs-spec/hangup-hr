@@ -2,6 +2,23 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.7.11] — 2026-07-10
+
+### Fixed
+
+**Attendance — changes reverting to `--` after refresh or tab switch**
+
+- `navigate()` is now `async` and awaits `flushAttendanceSaves()` before calling `render()`, so the POST to `/api/attendance/batch` completes before the GET `/attendance` fires. Previously the two requests raced and the GET almost always won, returning old data.
+- `flushAttendanceSaves()` now removes successfully-saved entries from `state.pendingAttendance` after the POST succeeds, preventing stale client values from being re-merged on the next render.
+- The batch POST response now includes `saved: normalizedForSave` — the server-confirmed records. The frontend reconciles `ctx.recordMap` against these confirmed values rather than its own optimistic copy, so silently remapped statuses (e.g. blank → prior value for non-admin roles) are reflected immediately.
+- `readAttendanceEventsForMonth` in `lib/data-store.js` now reads the local SQLite cache first instead of going straight to Supabase. `saveAttendanceBatch` already writes every record to the cache immediately after the Supabase upsert, so the cache is always authoritative and the Supabase-replication race window is eliminated. Supabase is only queried on first-ever load when the cache is empty (and the result warms the cache).
+
+**Sales log — Edit / Quality ticket buttons missing on Weekly / Monthly**
+
+- `state.salesWeekDate` was initialised to today (mid-week) in the app state. The weekly date range then started mid-week, causing all Monday–Thursday sales to fall outside the query window → empty results → no action buttons visible. Fixed: initial value is now the Monday of the current week using the same `((day + 6) % 7)` formula as `mondayOf()`.
+- `renderSalesPage` now always passes `state.salesWeekDate` through `mondayOf()` on every render, correcting any stale mid-week value left over from previous sessions.
+- The `#sales-period` change handler now snaps `salesWeekDate` to `mondayOf(today)` when switching to Weekly, and clears `salesClientFeedbackFilter` / `salesVerifierFeedbackFilter` on every period switch. A filter set during a narrow Daily view would silently hide all rows on Week/Month views, making action buttons appear missing.
+
 ## [1.7.6] — 2026-07-09
 
 ### Fixed

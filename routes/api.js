@@ -2226,7 +2226,10 @@ router.post("/attendance/batch", async (req, res) => {
   const normalizedForSave = normalized.map(({ __allowBlankClear, ...record }) => normalizeAttendanceRecord(record, { allowBlankClear: __allowBlankClear }));
   console.log("[attendance-debug] batch route normalized", { normalizedForSave });
   const count = await store.saveAttendanceBatch(normalizedForSave, req.username);
-  res.json({ ok: true, count });
+  // Return the actually-saved records so the client can reconcile its in-memory
+  // state with what the server persisted (e.g. a blank status that was silently
+  // kept as the prior value because the user lacks canManageEmployees).
+  res.json({ ok: true, count, saved: normalizedForSave });
 });
 
 router.get("/attendance/fp-rules/:month", async (req, res) => {
