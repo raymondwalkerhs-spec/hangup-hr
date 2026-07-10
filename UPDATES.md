@@ -1,3 +1,14 @@
+## v1.7.12 release checklist
+
+1. Bump `package.json` → `1.7.12`
+2. Update `CHANGELOG.md` with release notes.
+3. `git push` then trigger CI: `gh workflow run "Release (update packages)" --repo raymondwalkerhs-spec/hangup-hr --ref desktop/1.0.8-beta.1-updates -f tag=v1.7.12`
+4. `gh run watch --repo raymondwalkerhs-spec/hangup-hr`
+5. `gh release edit v1.7.12 --repo raymondwalkerhs-spec/hangup-hr --prerelease=false --latest`
+6. `node scripts/publish-app-version.js`
+
+**1.7.12 fix:** Critical startup crash — four lib files (`attendance-validation.js`, `attendance-sync.js`, `companies-repo.js`, `team-tls-repo.js`) were required by tracked code but never committed, causing `Cannot find module` on every app launch.
+
 ## v1.7.11 release checklist
 
 1. Bump `package.json` → `1.7.11`

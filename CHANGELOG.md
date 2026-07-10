@@ -2,6 +2,11 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [1.7.12] — 2026-07-10
+
+### Fixed
+- **Critical startup crash** — `lib/attendance-validation.js`, `lib/attendance-sync.js`, `lib/companies-repo.js`, and `lib/team-tls-repo.js` were required by tracked code but had never been committed, so the ASAR build omitted them. The app threw `Cannot find module './attendance-validation'` on startup. All four files are now tracked and included in the build.
+
 ## [1.7.11] — 2026-07-10
 
 ### Fixed
