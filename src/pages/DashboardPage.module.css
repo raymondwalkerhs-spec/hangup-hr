@@ -1,0 +1,51 @@
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  cursor: pointer;
+  color: inherit;
+}
+.shortcut:hover {
+  border-color: var(--primary);
+}
+.shortcutIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--primary-light);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.shortcut strong {
+  display: block;
+}
+.shortcut span {
+  font-size: 0.85rem;
+}
+.grid {
+  margin: 0 -0.5rem;
+}
+.grid > div {
+  padding: 0.5rem;
+  height: 100%;
+  overflow: hidden;
+}
+.grid > div > * {
+  height: 100%;
+  overflow: hidden;
+}

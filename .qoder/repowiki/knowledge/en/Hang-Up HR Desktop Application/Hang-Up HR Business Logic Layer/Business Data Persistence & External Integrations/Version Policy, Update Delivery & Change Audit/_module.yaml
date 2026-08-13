@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: business_logic/storage_integrations/version_update
+title: Version Policy, Update Delivery & Change Audit
+scope:
+    - lib/github-updater.js
+    - lib/update-integrity.js
+    - lib/version-sheet.js
+    - lib/app-version.js
+    - lib/changelog.js
+source_files: []
+depends_on: []
+related_to:
+    - path: electron_runtime

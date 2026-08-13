@@ -1,0 +1,42 @@
+.rolePicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+.roleBtn {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.roleActive {
+  background: color-mix(in srgb, var(--primary) 15%, var(--surface));
+  border-color: var(--primary);
+  font-weight: 600;
+}
+.table {
+  width: 100%;
+  font-size: 0.85rem;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+.catRow td {
+  background: var(--bg);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  text-transform: capitalize;
+}

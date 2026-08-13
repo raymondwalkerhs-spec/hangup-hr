@@ -1,0 +1,109 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build NSIS installer",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 all",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build NSIS installer (skip native rebuild)",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:SKIP_NATIVE_REBUILD='1'; .\\scripts\\build.ps1 all\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build NSIS installer (skip native rebuild)",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:SKIP_NATIVE_REBUILD='1'; & { Set-Location 'F:\\download app hr'; .\\scripts\\build.ps1 all }\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Publish app version to Supabase",
+			"type": "shell",
+			"command": "node scripts/publish-app-version.js --version 1.7.7 --notes \"v1.7.7 attendance persistence fix\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Publish GitHub release",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1 -IncludeFull -IncludeInstaller",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build NSIS installer for v1.7.7",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:SKIP_NATIVE_REBUILD='1'; Set-Location 'F:\\download app hr'; .\\scripts\\build.ps1 all\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build NSIS installer via cmd",
+			"type": "shell",
+			"command": "cd /d F:\\download app hr && set SKIP_NATIVE_REBUILD=1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build.ps1 all",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build installer with PowerShell script",
+			"type": "shell",
+			"command": "set SKIP_NATIVE_REBUILD=1 && set CI=true && powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts/build.ps1\" all",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Publish GitHub release from existing build output",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:HR_BUILD_OUTPUT='dist-build2'; Set-Location 'F:\\download app hr'; .\\scripts\\publish-github-release.ps1 -IncludeFull -IncludeInstaller\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run installer build through cmd",
+			"type": "shell",
+			"command": "cmd /d /c \"cd /d F:\\download app hr && set SKIP_NATIVE_REBUILD=1 && set CI=true && powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build.ps1 all\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run documented release build",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts\\\\run-release-build.ps1\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Package GitHub release assets",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"scripts\\\\publish-github-release.ps1\" -IncludeFull -IncludeInstaller",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Verify GitHub release upload",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location 'F:\\download app hr'; gh release view v1.7.7 --repo raymondwalkerhs-spec/hangup-hr --json tagName,name,assets\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

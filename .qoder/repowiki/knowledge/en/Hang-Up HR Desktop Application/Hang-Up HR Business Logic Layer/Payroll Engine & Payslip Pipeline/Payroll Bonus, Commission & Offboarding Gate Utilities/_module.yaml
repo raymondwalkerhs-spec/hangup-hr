@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: business_logic/payroll/bonus_commission_gates
+title: Payroll Bonus, Commission & Offboarding Gate Utilities
+scope:
+    - lib/bonus-guards.js
+    - lib/commission-tiers.js
+    - lib/payroll-gates.js
+    - lib/month-profile.js
+source_files: []
+depends_on: []
+related_to: []

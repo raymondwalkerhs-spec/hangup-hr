@@ -1,0 +1,9 @@
+The module is a flat collection of Node CommonJS modules under `lib/` that sit between the web layer and data access:
+- `auth.js` is a thin re-export shim pointing at `auth-supabase.js`, which implements login (`validateLogin`) and session validation (`checkSession`) by reading `app_users` from Supabase via `supabase-client` and comparing passwords with bcrypt.
+- `session-store.js` maintains an in-memory `Map` of sessions (32-byte hex id, username, password, role, deviceLabel, ip, createdAt) and optionally persists revocation/touch events to Supabase through `hrms-repo` when `useSupabase()` is true; idle expiry is 10 hours.
+- `company-context.js` encodes the two-company split (Hang-Up = HS-1+HS-3, HS-2) with helpers like `parseCompanyContext`, `filterEmployeesByCompany`, and role-gated filters (`filterOrgUnitsForRole`, `filterHs2SalesForRole`) that delegate visibility decisions to `./roles`.
+- `org-hierarchy.js` defines unit-to-company mapping (`UNIT_RULES`), backend-only teams (`BACKEND_TEAMS`), and CRUD over `org_unit_managers` / `org_teams` tables, plus inference helpers for OP/TL/HR candidates.
+- `team-names.js` normalizes team labels (strips leading "Team ") so roster entries match org_teams canonical names; consumed by `team-dashboard.js`.
+- `team-dashboard.js` aggregates sales per agent/team/day using `agentCountsForDay`, attendance records for day-off/weekend logic, and `sales-scope.countSaleForDashboard`; exposes `buildDayDashboard` and `buildWeekDashboard`.
+
+Dependency direction: this leaf depends on `./supabase-client`, `./backend`, `./hrms-repo`, `./employee-ids`, `./roles`, `./leave-attendance`, `./attendance`, `./dialing-agents`, `./sales-scope`, and `./team-names`; nothing in this scope imports back into it.

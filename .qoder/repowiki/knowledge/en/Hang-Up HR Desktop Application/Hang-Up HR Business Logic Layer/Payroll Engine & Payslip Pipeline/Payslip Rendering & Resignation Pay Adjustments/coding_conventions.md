@@ -1,0 +1,3 @@
+- Detail-line builders return arrays of plain objects with a stable shape `{ type/kind, amount, label/text, date }` so both the PDF renderer and any other consumer can iterate them uniformly.
+- Human-facing strings are built by composing fixed labels with `formatLongDate` and `fmt` (2-decimal `toLocaleString('en-EG')`), keeping number/date formatting out of business logic.
+- Cross-references between employees in bonus/deduction reasons are resolved by parsing free-text reason fields (`paid to <id>`, `deducted from <id>`) via regex helpers rather than relying on pre-linked IDs.

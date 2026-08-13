@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: express_server/expenses_loans_routes
+title: Expenses, Loans & Bonus Request Routes
+scope:
+    - routes/expenses.js
+    - routes/loan-requests.js
+    - routes/bonus-requests.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/business_repos
+    - path: business_logic/notifications
+    - path: business_logic/permissions_roles

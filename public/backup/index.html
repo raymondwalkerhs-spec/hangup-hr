@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hangup Backup</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <style>
+    .backup-wrap { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    .backup-card { margin-bottom: 1rem; }
+    .progress-bar { height: 8px; background: var(--border, #ddd); border-radius: 4px; overflow: hidden; margin: .75rem 0; }
+    .progress-fill { height: 100%; width: 0; background: var(--accent, #2563eb); transition: width .2s; }
+    .folder-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .folder-path { flex: 1; min-width: 200px; font-family: monospace; font-size: .85rem; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="backup-wrap">
+    <header class="flex-between" style="margin-bottom:1.5rem">
+      <div>
+        <h1>Hangup Backup</h1>
+        <p class="muted" id="user-line">Loading…</p>
+      </div>
+      <button type="button" class="btn btn-sm" id="logout-btn">Sign out</button>
+    </header>
+
+    <div class="card backup-card">
+      <h2>Destination folder</h2>
+      <p class="muted small">Backups create a dated subfolder inside this location.</p>
+      <div class="folder-row" style="margin-top:.75rem">
+        <span class="folder-path muted" id="folder-path">No folder selected</span>
+        <button type="button" class="btn btn-sm" id="pick-folder-btn">Choose folder…</button>
+      </div>
+    </div>
+
+    <div class="card backup-card">
+      <h2>Full backup</h2>
+      <p class="muted small">Exports every database table (JSON) plus all files in Supabase storage.</p>
+      <button type="button" class="btn btn-primary" id="full-backup-btn" style="margin-top:.75rem">Run full backup</button>
+    </div>
+
+    <div class="card backup-card">
+      <h2>Sales backup</h2>
+      <p class="muted small">Excel export of all sales plus recordings and confirmation/receipt attachments.</p>
+      <div class="field-grid" style="margin:.75rem 0">
+        <label class="field"><span>From (optional)</span><input type="date" id="sales-from" /></label>
+        <label class="field"><span>To (optional)</span><input type="date" id="sales-to" /></label>
+      </div>
+      <button type="button" class="btn btn-primary" id="sales-backup-btn">Run sales backup</button>
+    </div>
+
+    <div class="card backup-card hidden" id="progress-card">
+      <h3 id="progress-title">Running…</h3>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <p class="muted small" id="progress-msg"></p>
+      <p class="small hidden" id="done-path"></p>
+      <button type="button" class="btn btn-sm hidden" id="open-folder-btn">Open backup folder</button>
+    </div>
+  </div>
+  <script src="/js/backup-app.js"></script>
+</body>
+</html>

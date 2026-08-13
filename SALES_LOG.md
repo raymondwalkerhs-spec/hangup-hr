@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 1.7.7 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 2.3.22 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -8,7 +8,20 @@ This document describes the **Sales log**, **filters**, **form fields**, **permi
 
 ## Overview
 
-The Sales log tracks MLA-Ray sales from submission through quality review and client feedback. Data is stored in Supabase (`sales` table + `form_data` jsonb). The list view, filters, and form fields are configurable by Admin / RTM.
+The Sales log tracks **MLA** and **RPM** sales programs from submission through quality review and client feedback. Each program uses **separate Supabase tables** and **separate Supabase Storage roots** (including quality recordings).
+
+| Program | Sales table | Attachments table | Storage root |
+|---------|-------------|-------------------|--------------|
+| **MLA** | `sales` | `sales_attachments` | `mla-sales-attachments/{saleId}/…` (legacy `sales-attachments/…` still works) |
+| **RPM** | `rpm_sales` | `rpm_sales_attachments` | `rpm-sales-attachments/{saleId}/…` |
+
+**Strict isolation (2.3.13):** HS-2 unit sales appear **only** when the active company context is HS-2 (sidebar switcher or native HS-2 user). Main Hangup tab never shows HS-2 sales — even for Quality.
+
+Quality records always land in `{storageRoot}/{saleId}/quality_record/` — never shared between programs.
+
+MLA-Ray form fields live in `sales.form_data` jsonb. RPM has its own field catalog and permissions tables (`rpm_sales_*`). The list view, filters, and form fields are configurable by Admin / RTM per program.
+
+**v2.3.17 — RPM Notes:** Optional **Notes** textarea on RPM submit (all other submit fields remain required). Notes appear on edit, view, and quality modals per `rpm_sales_field_permissions`. Quality recordings upload/play inline in React modals (stream via `/attachments/:id/file`).
 
 | Area | Where in app |
 |------|----------------|
@@ -20,6 +33,12 @@ The Sales log tracks MLA-Ray sales from submission through quality review and cl
 | Which columns appear | **Log columns** (sidebar) — RTM / Admin only |
 | Clients / devices / prices | **Settings → Sales clients & breaks** |
 | App-wide role permissions | **Access Control** (separate from sales field matrix) |
+
+| Team dashboards | **Team dashboards** (sidebar) — daily/weekly roster + approved/postdated/dropped/total sent per agent; matches sale **working day** (v2.3.3+) |
+
+### v2.3.3 — team dashboard date alignment
+
+Team dashboards load sales when **working day**, **submission date**, or **effective date** falls on the selected day. **Pending** and **callback** submissions count in **Total Sent** (Approved stays 0 until passed). Pick the same **working day** shown in Sales log if totals look empty.
 
 ### v1.6.16 — form hardening
 
@@ -46,7 +65,7 @@ Sales submitted **before 1:00 AM Cairo** count on the **previous calendar day** 
 | **Day** | Working day (not always the same as submission calendar date) |
 | **Time** | Submission time (12h AM/PM) |
 
-List queries use **working day** by default (`dateBasis=workingDay`).
+List queries use **submission date** for the month view in the React portal (`dateBasis=submission`). Working-day basis remains available via API for legacy/reporting.
 
 ### Log columns (all fields)
 
@@ -88,6 +107,16 @@ Stat cards show **client status** counts (Passed, Pending bank, Processed, Dropp
 Internal **workflow status** (passed/pending/denied for payroll) is kept in the database but **not shown** in the sales UI as of v1.4.3.
 
 Quality / RTM / Admin can toggle **HS-1 / HS-2 / HS-3** unit visibility on the log. The **Agent** filter lists dialing agents only (not quality or leadership IDs); quality users see agents in their unit only.
+
+**Who sees which rows (field roles unchanged for Quality / RTM / HR / Admin / CEO / Finance / OP):**
+
+| Viewer | Sees |
+|--------|------|
+| **Team TL** | Sales on teams they lead |
+| **Closer** | Sales where they are the **Closer** field |
+| **Agent** | Sales where they are the **Agent** field |
+
+Being assigned as an org closer for a team does **not** by itself show every sale on that team — only rows with their name on Closer (or Agent), unless they are also that team's TL.
 
 ---
 
@@ -134,12 +163,15 @@ All catalog fields are available as filter fields.
 
 | Submitter | Agent | Closer | Unit |
 |-----------|-------|--------|------|
-| **Agent** | Self (locked) | Default self; any closer in home unit | Prefilled, locked |
-| **Agent (dual-role TL)** | Dialing agents in home + led units | Closers in both units | Both units |
-| **TL / OP** | All dialing agents in unit | All closers in unit | Fixed to their unit |
+| **Agent** | Self (locked) | Default self; own team leaders only | Prefilled, locked |
+| **Agent (org closer)** | Active dialing agents on assigned closer team(s) | Default self; any TL / org closer | Closer team unit(s) |
+| **TL** (or agent with `leadTeams`) | Agents on led team(s); agents on closer-assigned teams as **agent** | Own-team agents **or** any TL / org closer; default self | Home unit (unlocks if closer teams span units) |
+| **OP** | Any active dialing agent | Any agent / TL / closer; default self when listed | Any dialing unit |
 | **HR / RTM / Quality / …** | Company dialing pool | Company pool | All units |
 
-Agents default **Closer** to themselves; TL/OP default **Closer** to themselves. **Team** is read-only and follows the selected agent.
+**On behalf (leave / IT):** TL — active agents on led team(s) only. OP — active agents in unit. Closer — IT only (same team scope), not leave. IT staff — active agents in their unit.
+
+Agents default **Closer** to themselves (plain agents: self + their team leaders). Org closers and TLs default **Closer** to themselves and remain in the list even with a dialing ID. **Team** is read-only and follows the selected agent. Out / Deleted / company / program filters still apply.
 
 ### Catalog (required when configured)
 
@@ -156,7 +188,7 @@ On create (scoped per table above):
 1. Pick **unit** (or prefilled/locked per role).  
 2. **Team** list filters to teams in that unit.  
 3. **Agent** list filters to allowed agents on the selected team.  
-4. **Closer** — scoped to role (unit or dual-unit).
+4. **Closer** — scoped by role (see table above); defaults to the submitter when they are in the list.
 
 ### Payment — Bank account
 
@@ -186,7 +218,11 @@ When **Payment method = Card**, bank fields are hidden; card number, expiry, and
 
 ### Quality ticket
 
-Quality / RTM (and assigned OP/TL verifiers) open **Quality ticket** for fields allowed in **Sales permissions** `quality_view_roles`. Card/bank payment fields show based on `paymentMethod`. Summary shows client, device, agent, status.
+**MLA:** Quality / RTM / Admin (and assigned OP/TL **verifiers** for `verifierFeedback` only) open **Quality ticket** for fields allowed in **Sales permissions** `quality_view_roles`. Access uses the **current** Users role (e.g. after transferring HR-2 to Quality), not a stale session role from before the change.
+
+**RPM:** **Quality ticket** (editable workflow) is for **Quality, RTM, and Admin** only (`workQualityTicket` in Access Control). **Agents, TL, and OP** do not get the Quality button — they use **View sale** (read-only; fields from Sales permissions **Edit sale** / main view). RPM has **no verifier workflow** — only a **Reviewer** field (quality team).
+
+Card/bank payment fields show based on `paymentMethod`. Summary shows client, device, agent, status.
 
 ---
 

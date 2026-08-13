@@ -2,6 +2,15 @@
 
 > **Data backend:** Supabase only. **Do not use Google Sheets.** Historical sheet layout: [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
+> **Exception:** `routes/interview.js` + `lib/google-sheets.js` intentionally use Google Sheets for the Interviews module. Treat this module as the sanctioned exception.
+
+## Interviews module notes
+- Frontend: `public/js/interview.js` — renders into `#app` via `InterviewModule.init(root)`. Falls back to `document.getElementById("app")` if no container is passed.
+- Backend: `routes/interview.js` — CRUD at `/api/interview/*` with HR/Admin/CEO access only.
+- Sync: 5s polling from frontend; backend reads/writes Google Sheets directly.
+- Training fields are disabled unless Status == Approved.
+- Nav item ID: `nav-interview`, page key: `interview`, sidebar group: People.
+
 Internal reference for Cursor / coding agents. **Read this at the start of a session** when working on
 Hangup Portal. Keep it updated when architecture, release process, or key decisions change.
 
@@ -12,8 +21,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `1.7.10` (`package.json` → `version`)
-- **Previous:** `1.7.9`
+- **Current version:** `2.3.22` (`package.json` → `version`)
+- **Previous:** `2.3.21`
 
 ---
 
@@ -26,13 +35,35 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 | Auth users | `app_users` (bcrypt passwords, optional `email` column) |
 | Version policy | `app_versions` table (`lib/version-sheet.js`) |
 | Documents | Supabase Storage bucket `hr-documents` |
-| Sale recordings / confirmations | Supabase Storage `hr-documents` → `sales-attachments/{saleId}/…` (signed share URLs, ~7 days) |
-| Airtable sales sync (optional) | `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` → table **Sales All Data**; `lib/airtable-sales-sync.js` hooks `routes/sales.js` after create/edit/attachments |
+| MLA sale attachments | Supabase Storage `hr-documents` → `mla-sales-attachments/{saleId}/{kind}/…` (legacy `sales-attachments/…` still valid; signed URLs ~7 days) |
+| RPM sale attachments | Supabase Storage `hr-documents` → `rpm-sales-attachments/{saleId}/{kind}/…` (quality_record, recording, raw_call) |
+| Announcements | Table `announcements` (`audience_units/teams/roles`, `image_placement`); storage `hr-documents` → `announcements/{company}/{id}/…`; API `/api/announcements` |
+| Coaching tickets | Table `coaching_tickets`; API `/api/coaching`; secret notes stripped unless `viewCoachingSecret` or author |
+| Airtable sales sync (optional, MLA only) | `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` → table **Sales All Data**; `lib/airtable-sales-sync.js` hooks `routes/sales.js` after create/edit/attachments |
 | Local cache | SQLite per PC (`better-sqlite3`) — **keep this**; do not read Postgres on every UI click |
 | Legacy Sheets | **Removed from runtime** — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
 
 **Data flow:** Supabase (source of truth) → sync → SQLite on each machine → fast UI reads. Writes go
 to Supabase via Express, then re-sync.
+
+---
+
+## Security (v2.2.0+)
+
+| Topic | Implementation |
+|-------|----------------|
+| Sessions | No plaintext password in memory; `password_changed_at` snapshot + `app_sessions.revoked_at` |
+| Secrets | Build-time `.env` copied to `resources/.env` in the installer; first launch seeds `userData/HangupHR-data/.env` (not committed to git) |
+| `SESSION_SECRET` | `lib/assert-session-secret.js` — packaged builds throw on default secret |
+| CSP | `app.js` sets Content-Security-Policy; Lucide vendored at `public/vendor/lucide.min.js` |
+| Login | No save-password checkbox; legacy `hr_saved_password` purged on load |
+| PostgREST filters | `lib/postgrest-filter.js` sanitizes usernames in `.or()` strings |
+| Interview feedback | Candidate scope check before create/edit/delete; `company` stamped on insert |
+| Supabase probes | `GET /api/supabase/health` and `/status` require admin/CEO session |
+| Updates | Zip-slip guard (`lib/zip-extract.js`); GitHub host allowlist in `lib/github-updater.js` |
+| Tests | `npm run test:security` |
+
+**Intentionally unchanged:** hardcoded `raymond` / `mark` admin usernames (H2).
 
 ---
 
@@ -57,14 +88,18 @@ to Supabase via Express, then re-sync.
 | Area | Paths |
 |------|--------|
 | UI | `public/index.html`, `public/login.html`, `public/js/app.js`, `public/js/theme.js`, `public/css/app.css` |
+| Interviews UI | `public/js/interview.js`, `public/css/interview.css` |
+| Interviews server | `routes/interview.js`, `lib/google-sheets.js` |
 | Sales UI | `public/js/sales.js`, `public/js/sales-permissions-pages.js`, `public/js/sales-config-breaks.js` |
 | Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js`, `lib/airtable-sales-sync.js`, `lib/airtable-sales-field-map.js`, `lib/airtable-client.js` |
 | Access Control UI | `public/js/access-control.js`, `lib/permission-catalog.js`, `lib/role-permissions.js` |
 | API | `routes/api.js`, `routes/admin-users.js`, `app.js` (Express entry) |
 | Data layer | `lib/data-store.js`, `lib/backend.js`, `lib/supabase-repo.js`, `lib/cache.js` |
-| Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js` |
+| Auth | `lib/auth.js`, `lib/auth-supabase.js`, `lib/session-store.js`, `lib/assert-session-secret.js` |
+| Security helpers | `lib/postgrest-filter.js`, `lib/require-admin-session.js`, `lib/zip-extract.js`, `scripts/test-security.js` |
 | Users CRUD | `lib/users-admin.js`, `lib/roles.js` |
-| Version check | `lib/app-version.js`, `lib/version-sheet.js` |
+| Analytics | `lib/analytics-aggregates.js`, `public/js/analytics.js`, `GET /api/reports/analytics` |
+| TL bonus linking | `lib/tl-bonus-link.js` — paired TL/OP deduction ↔ bonus rows |
 | GitHub in-app updates | `lib/github-updater.js`, `lib/zip-extract.js`, `lib/update-integrity.js`, `UPDATES.md`, `.github/workflows/release.yml` |
 | Org & registration | `lib/org-hierarchy.js`, `lib/registration.js`, `lib/training-phases.js`, `public/js/hrms-features.js` |
 | Electron | `electron/main.js`, `electron/preload.js` |
@@ -127,6 +162,8 @@ Apply all files in `supabase/migrations/` in filename order. Key recent files:
 13. `20260718_notifications_quality_notes.sql` — notifications, quality notes split
 14. `20260719_v140_sales_org_dashboards.sql` — working day, list columns, sales action permissions, team dashboards
 15. `20260720_training_payroll.sql` — program outcomes, phase exit reasons, Trainee position seed
+16. `20260820_training_anchor_override.sql` — `payroll_adjustments.training_payroll_anchor_month` (HR override for training pay anchor)
+17. `20260814_announcements_and_coaching.sql` — `announcements` + `coaching_tickets` (RLS deny-all; app uses service role)
 
 See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 
@@ -136,9 +173,9 @@ See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 
 | Rule | Implementation |
 |------|----------------|
-| **Unit → Team → Agent** | Organization page; OP per unit, TL per team |
+| **Unit → Team → Agent** | Organization page; OP per unit, TL per team, **closers** per team (sales/IT on behalf) |
 | **HS-1, HS-3** | Main Hangup; OP manages each unit |
-| **HS-2** | **Separate company** — manage switcher **CEO / Admin / HR only**; Quality sees HS-2 in sales only; hidden everywhere else |
+| **HS-2** | **Separate company** — `canAccessHs2CompanyContext` (managers + native HS-2 staff); strict isolation — HS-2 data only in HS-2 context; test: `node scripts/test-hs2-isolation.js` |
 | **HS-Back-End** | No OP — reports to CEO; teams: HR, Quality, RTM, Finance, Admins |
 | **HR manager** | Phoebe (`HR-Phoebe`) — `node scripts/link-phoebe-hr-manager.js` |
 | **Team names** | `node scripts/normalize-team-names.js` — strip `"Team "`, dedupe per unit |
@@ -163,6 +200,10 @@ Sales field permissions remain in `sales_field_permissions` — managed on **Sal
 
 **Sales admin pages (1.4.1+, role-first since 1.4.2):** sidebar **Sales permissions** and **Log columns**. Visible when `canViewSalesAdmin` / `canManageSalesFieldPermissions` — **RTM / Admin only** (HR removed in 1.4.3).
 
+**Announcements:** Overview nav `/announcements`. `viewAnnouncements` all roles; `editAnnouncements` HR/RTM/Admin/CEO. Company from request context. Audience: empty unit/team/role arrays = whole company; otherwise AND across selected dimensions (OR within a dimension). Editors see all. Image placement `top` / `middle` / `bottom`. `GET /announcements/options` for pickers. Publish fans out `app_notifications` (`type=announcement`). Unread badge: `announcement_reads` + `GET /announcements/unread-count`; `POST /announcements/:id/read` when opened.
+
+**Coaching:** People nav `/coaching`. `lib/coaching-scope.js` + `/api/coaching` (company column hangup|hs2). Agent picker: TL/Closer team agents only (no other coaches, no Out/HR/Quality/Admin); OP unit agents + TL/Closers; Quality/HR/Admin company agents. Coach: TL/Closer locked to self; Quality = quality team; OP = unit TL/Closer/agents; HR = TL/Closer/Quality; Admin = any. Secret notes: HR/Quality/Admin (+ coach/submitter). Date/time + delete: Admin/CEO. Outcome + extra notes: coach after session. Role checks prefer live `app_users.role` over ID prefixes.
+
 **Notes:** HR/admin read employee warnings; TL/OP/quality/RTM can add notes without reading list.
 
 ---
@@ -186,13 +227,14 @@ Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
 | **List columns** | All catalog fields + Day/Time/Agent/Closer/Customer — admin enables on **Log columns** page; visibility ∩ field view ACL |
 | **Toolbar filters** | Client, Agent, Closer, Status (all periods) |
 | **Advanced filter** | AND/OR/NOT when 2+ rules; employee/client dropdowns for ID fields; persisted in `localStorage` |
-| **Add sale** | Unit → team → agent cascade; closer company-wide; catalog client/device/price when configured |
+| **Add sale** | Unit → agent (team auto-fills from agent). Closer scoped by role (self + team TLs for agents; self default for org closers/TLs). Org closers/TLs see dialing agents on closer/lead teams (e.g. Amy → Tris), not TLs. `employees.sales_agent_picker` SQL override. Catalog client/device/price when configured |
+| **Sales log visibility** | Row visible to team TL, assigned closer (`closerId`), and assigned agent (`agentId`). Not all closer-team sales. |
 | **Bank payment** | routing number, bank name, account number, address, who chose bank account (required fields when Bank account) |
 | **Verifier feedback** | Dropdown; assigned verifier + RTM/Admin override |
 | **Client feedback** | Dropdown; RTM/Admin edit only |
 | **Quality/RTM** | Unit toggles HS-1/2/3 on log |
-| **Attachments** | Supabase Storage `sales-attachments/{saleId}/…`; signed share URLs ~7 days |
-| **Airtable sync** | Optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME`; upsert via `airtable_record_id` + Portal Sale ID lookup; attachments via signed URLs; immediate sync on mutations |
+| **Attachments** | MLA: `mla-sales-attachments/{saleId}/…` (legacy `sales-attachments/…`); RPM: `rpm-sales-attachments/{saleId}/…`; quality records in separate `quality_record/` subfolders per program; signed share URLs ~7 days |
+| **Airtable sync** | MLA only; optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME`; upsert via `airtable_record_id` + Portal Sale ID lookup; attachments via signed URLs; immediate sync on mutations |
 | **Export** | CSV / Excel / PDF |
 | **Payroll link** | Sale create/update recalcs agent `sales_count` for working-day month |
 
@@ -472,7 +514,15 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **1.7.10** | **true** | IT ticket delete fixed for Admin/CEO; deleteItRequest permission in Access Control |
+| **2.3.22** | **true** | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
+| **2.3.21** | false | Announcements + coaching; live role over ID prefix; agent/closer sale submit (Amy Tris closer teams, agent-role closers); HS-2 employee move confirmation. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
+| **2.3.20** | false | Viewport cat loading overlay; payroll cache-first + prefetch; quality tickets use live Users role (HR-2 Eva); hide-zero display net; unified payroll trainees; RPM/MLA closer picker includes org closers as self (Ria). Shipped GitHub Latest + Supabase `is_current` 2026-08-12. |
+| **2.3.19** | false | Closer picker Out/Deleted fix; unified payroll trainees visible; hide-zero = display net; Rose→Rose Brown merge; payroll core month-WD daily rate; HR→Quality transfer uses live `app_users.role` for quality tickets |
+| **2.3.18** | **true** | Quality reviewer picker role enrichment; RPM canEditAttachmentKind; RTM reviewer edit on RPM |
+| **2.3.17** | **true** | RPM optional Notes; quality ticket recordings + reviewer ACL; inline audio in React sales modals |
+| **2.3.16** | **true** | Payroll page TDZ crash fix; PayslipDialog conditional mount; isOutEmployeeStatus dedupe |
+| **2.3.15** | false | Training payroll defer/anchor fix; HR anchor month override; payroll history enrichment; login OTP/DNA UI |
+| **1.7.10** | false | IT ticket delete fixed for Admin/CEO; deleteItRequest permission in Access Control |
 | **1.7.9** | false | Meeting requests participant scoping; IT ticket timing; IT DB unit column fix |
 | **1.6.24** | **true** | No recording required on submit; Agent/TL hidden from recordings; sale delete confirm button fix |
 | **1.6.23** | **true** | Quality comments cache fix + permission override; sale delete Electron fix; Airtable immediate sync |

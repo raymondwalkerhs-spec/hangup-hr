@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: business_logic/storage_integrations/document_export
+title: Document Storage & Export Utilities
+scope:
+    - lib/documents.js
+    - lib/pdf-export.js
+    - lib/export-zip.js
+    - lib/zip-extract.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/storage_integrations/network_transport

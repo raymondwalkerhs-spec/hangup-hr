@@ -1,0 +1,5 @@
+- Scripts use `Set-Location $PSScriptRoot\..` (PowerShell) or `cd "$(dirname "$0")/.."` (bash) to operate relative to the repository root rather than the script's own directory.
+- Environment-driven configuration: scripts read `.env` via `dotenv.config()` and fall back to well-known file paths (e.g. `~/.supabase/access-token`) before erroring out.
+- Migration files are named with an ISO date prefix followed by a feature slug (e.g. `20260702_initial_hr_schema.sql`) so ordering is implicit in filesystem sort order.
+- One-off data operations follow a uniform naming scheme (`backfill-*.js`, `import-*.js`, `seed-*.js`, `fix-*.js`, `test-*.js`) and each script exits non-zero on failure so callers can chain them safely.
+- Build scripts guard against locked output directories by renaming `win-unpacked` to a timestamped backup and falling back to alternate output folders when electron-builder cannot write.

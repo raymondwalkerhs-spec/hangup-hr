@@ -1,0 +1,1 @@
+Computes monthly payroll rows per employee (basic salary, bonuses, deductions, commission, loans, action-plan penalties) and applies split-based payment allocation with due-date scheduling.

@@ -4,7 +4,9 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `1.7.12`
+**Current version:** `2.3.22`
+
+**Latest installer:** GitHub release [v2.3.22](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.22) (`Hangup-Portal-Setup-2.3.22.exe`). In-app updates and Supabase `app_versions` point at this version.
 
 | Document | Purpose |
 |----------|---------|
@@ -36,7 +38,7 @@ Supabase (Postgres + Storage + app_users)
 
 - **Source of truth:** Supabase  
 - **Performance layer:** SQLite cache on each machine  
-- **Auth:** `app_users` table (bcrypt passwords), session token after login  
+- **Auth:** `app_users` table (bcrypt passwords, cost 12), session token after login; `SESSION_SECRET` required in packaged builds  
 - **Documents:** Supabase Storage bucket `hr-documents` (legacy Google Drive file IDs still open until re-uploaded)  
 - **Version policy:** `app_versions` table — old EXEs can be blocked or warned at login  
 
@@ -66,7 +68,7 @@ Schema changes live in `supabase/migrations/`.
 
 **Agents (Cursor):** apply pending migrations via **Supabase MCP** (`apply_migration`) or `npm run apply:migrations` — do not ask users to paste SQL unless both fail.
 
-**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest: `20260721_sales_airtable_sync.sql`).
+**Pending migrations:** run `npm run apply:migrations` or Supabase MCP `apply_migration` for any file in `supabase/migrations/` not yet applied (latest v2.2.0: `20260801_v220_password_changed_at.sql`, `20260801_v220_interview_training_status.sql`, `20260801_v220_expense_category.sql`, optional `20260801_v220_interview_feedbacks_company_backfill.sql`).
 
 ### Access Control (v1.3.6+)
 
@@ -88,9 +90,9 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Payroll control** | Month lock, MoM comparison, tax stub (0% default), finance handoff ZIP |
 | **Assets** | Equipment registry and assignments |
 | **Documents** | Upload, expiry alerts, bulk ZIP export |
-| **Reporting** | Monthly HR report, turnover, attendance rankings |
-| **Sales** | MLA-Ray form, catalog, Supabase attachments, Airtable outbound sync (optional), export CSV/Excel/PDF, approval workflow |
-| **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners |
+| **Reporting** | Monthly HR report, turnover, attendance rankings, **Analytics** dashboard (v2.2.0) |
+| **Sales** | MLA + RPM programs (separate DB tables & storage), MLA-Ray form, catalog per program, Supabase attachments, Airtable MLA sync (optional), export CSV/Excel/PDF, approval workflow |
+| **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners, extra payroll entries with individual PDF export |
 | **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
 | **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab; superadmin purge + release ID |
 | **Notifications** | Top-bar bell, unread badge, sound, routing settings (1.3.13) |
@@ -107,8 +109,9 @@ Full detail: [`FEATURES.md`](FEATURES.md)
 
 - Windows 10/11 x64  
 - Node.js 18+  
-- `.env` with Supabase keys (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, …)  
-- `credentials/service-account.json` only if you still use Drive-backed document IDs  
+- `.env` with Supabase keys (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SESSION_SECRET`, …)  
+- After install, the app seeds `%APPDATA%/Hangup Portal/HangupHR-data/.env` from the installer on first launch (org builds include production keys). Edit that file only if you need to override settings.  
+- `credentials/service-account.json` only if you use Google Sheets interview sync — place under `userData/credentials/` or set `INTERVIEWS_KEY` to an absolute path  
 
 ### Recommended build
 

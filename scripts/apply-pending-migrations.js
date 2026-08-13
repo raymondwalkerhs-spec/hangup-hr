@@ -22,6 +22,9 @@ const PENDING = [
   "20260706_app_versions_force_update.sql",
   "20260708_finance_hr_attendance.sql",
   "20260722_v128_phase1_rules_it_meetings_separation.sql",
+  "20260724_interview_schema.sql",
+  "20260724_interview_unique.sql",
+  "20260725_interview_training_updates.sql",
 ];
 
 async function probeState(db) {
@@ -50,6 +53,7 @@ async function probeState(db) {
     v130_finance: false,
     v132_it: false,
     leave_fraction: false,
+    reg_pins_company: false,
   };
   const i = await db.from("employees").select("internal_id").limit(1);
   state.internal_id = !i.error;
@@ -107,7 +111,145 @@ async function probeState(db) {
   // v1.7.8 — leave_requests day_fraction / half_day columns
   const lf = await db.from("leave_requests").select("day_fraction").limit(1);
   state.leave_fraction = !lf.error;
+  // v1.8.0 — registration_daily_pins company column
+  const rdp = await db.from("registration_daily_pins").select("company").limit(1);
+  state.reg_pins_company = !rdp.error;
+  const tc = await db.from("team_closers").select("team_id").limit(1);
+  state.team_closers = !tc.error;
+  const pcf = await db.from("petty_cash_funds").select("company").limit(1);
+  state.cost_company_isolation = !pcf.error;
+  const lr = await db.from("leave_requests").select("company").limit(1);
+  state.leave_company_isolation = !lr.error;
+  const er = await db.from("expense_requests").select("company").limit(1);
+  state.expense_company_isolation = !er.error;
+  const eq = await db.from("equipment").select("company").limit(1);
+  state.equipment_company_isolation = !eq.error;
+  const ci = await db.from("candidate_applications").select("id").limit(1);
+  state.interview_schema = !ci.error;
+  const uq = await db.from("candidate_applications").select("timestamp, name").limit(1);
+  state.interview_unique = !uq.error;
+  const bn = await db.from("candidate_applications").select("batch_number").limit(1);
+  state.interview_training_updates = !bn.error;
+  const tpo = await db.from("payroll_adjustments").select("training_net_salary_override").limit(1);
+  state.training_portion_overrides = !tpo.error;
+  const rpmProgram = await db.from("rpm_sales").select("id").limit(1);
+  state.rpm_sales_quality_acl = !rpmProgram.error;
+  const rpmfp = await db.from("rpm_sales_field_permissions").select("field_key").limit(1);
+  if (!rpmfp.error) state.rpm_sales_quality_acl = true;
+  const empFlags = await db.from("employees").select("sales_rpm_enabled").limit(1);
+  state.rpm_sales_program = !empFlags.error;
+  const adminUser = await db.from("app_users").select("employee_id").eq("username", "raymond").maybeSingle();
+  if (adminUser.data?.employee_id) {
+    const adminEmp = await db
+      .from("employees")
+      .select("sales_rpm_enabled")
+      .eq("id", adminUser.data.employee_id)
+      .maybeSingle();
+    state.admin_sales_program_flags = adminEmp.data?.sales_rpm_enabled === true;
+  } else {
+    state.admin_sales_program_flags = true;
+  }
+  if (state.rpm_sales_program) {
+    const { data: dialSample } = await db
+      .from("employees")
+      .select("id, sales_mla_enabled, sales_rpm_enabled")
+      .ilike("status", "active")
+      .not("id", "ilike", "TL%")
+      .not("id", "ilike", "CL%")
+      .not("id", "ilike", "OP%")
+      .not("id", "ilike", "MG%")
+      .not("id", "ilike", "HR%")
+      .limit(30);
+    const dialCandidate = (dialSample || []).find((e) => {
+      const id = String(e.id || "").toUpperCase();
+      return !/^(OF|NW|RTM|QA|DEL)/.test(id);
+    });
+    state.sales_program_employee_backfill =
+      !dialCandidate ||
+      (dialCandidate.sales_mla_enabled === false && dialCandidate.sales_rpm_enabled === true);
+  } else {
+    state.sales_program_employee_backfill = false;
+  }
+  if (state.rpm_sales_program) {
+    const rpmClient = await db
+      .from("sales_clients")
+      .select("sale_program")
+      .ilike("name", "rpm1")
+      .maybeSingle();
+    state.sales_client_program_isolation = rpmClient.data?.sale_program === "rpm";
+    state.sales_program_storage_isolation = await probeStorageIsolation();
+    state.rpm_submit_scope_roles = await probeRpmSubmitScopeRoles();
+  } else {
+    state.sales_client_program_isolation = false;
+    state.sales_program_storage_isolation = false;
+    state.rpm_submit_scope_roles = false;
+  }
+  const arpCo = await db.from("app_role_permissions").select("company").limit(1);
+  state.rbac_company_scope = !arpCo.error;
+  const pmlCo = await db.from("payroll_month_locks").select("company").limit(1);
+  state.v235_company_isolation = !pmlCo.error;
+  const regCode = await db.from("companies").select("registration_org_code").limit(1);
+  const holCo = await db.from("public_holiday_company_active").select("company").limit(1);
+  state.v236_registration_rbac_holidays = !regCode.error && !holCo.error;
+  const tpa = await db.from("payroll_adjustments").select("training_payroll_anchor_month").limit(1);
+  state.training_anchor_override = !tpa.error;
+  const p1e = await db.from("payroll_adjustments").select("training_phase1_pay_exception").limit(1);
+  state.training_phase1_pay_exception = !p1e.error;
   return state;
+}
+
+async function probeStorageIsolation() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT obj_description('rpm_sales_attachments'::regclass, 'pg_class') AS c`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    const row = Array.isArray(body) ? body[0] : null;
+    const c = row?.c || "";
+    return String(c).toLowerCase().includes("rpm-sales-attachments");
+  } catch {
+    return false;
+  }
+}
+
+async function probeRpmSubmitScopeRoles() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT allowed_roles FROM rpm_sales_action_permissions WHERE action_key = 'submit_sale' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    const row = Array.isArray(body) ? body[0] : null;
+    const roles = row?.allowed_roles || [];
+    return Array.isArray(roles) && roles.includes("quality") && roles.includes("rtm");
+  } catch {
+    return false;
+  }
 }
 
 async function probeStateWithRetry(db, attempts = 4) {
@@ -148,6 +290,38 @@ function filesToApply(state) {
   // if (!state.v132_it) files.push("20260724_v132_it_flag_unit_finance.sql");
   if (!state.net_salary_override) files.push("20260725_add_net_salary_override.sql");
   if (!state.leave_fraction) files.push("20260726_v178_leave_fraction_pause.sql");
+  if (!state.reg_pins_company) files.push("20260727_v180_company_scoped_clients_registration.sql");
+  if (!state.cost_company_isolation) files.push("20260730_v184_cost_company_isolation.sql");
+  if (!state.leave_company_isolation) files.push("20260731_v185_leave_company_isolation.sql");
+  if (!state.expense_company_isolation) files.push("20260731_v186_expense_company_isolation.sql");
+  if (!state.equipment_company_isolation) files.push("20260731_v187_equipment_company_isolation.sql");
+  if (!state.interview_schema) files.push("20260724_interview_schema.sql");
+  if (!state.interview_unique) files.push("20260724_interview_unique.sql");
+  if (!state.interview_training_updates) files.push("20260725_interview_training_updates.sql");
+  if (!state.team_closers) files.push("20260802_v237_team_closers.sql");
+  if (!state.training_portion_overrides) files.push("20260806_training_agent_portion_overrides.sql");
+  if (!state.rpm_sales_quality_acl) files.push("20260811_rpm_sales_quality_acl.sql");
+  if (!state.rpm_sales_program) files.push("20260812_rpm_sales_program.sql");
+  if (state.rpm_sales_program && !state.admin_sales_program_flags) {
+    files.push("20260813_admin_sales_program_flags.sql");
+  }
+  if (state.rpm_sales_program && !state.sales_program_employee_backfill) {
+    files.push("20260814_sales_program_employee_backfill.sql");
+  }
+  if (state.rpm_sales_program && !state.sales_client_program_isolation) {
+    files.push("20260815_sales_client_program_isolation.sql");
+  }
+  if (state.rpm_sales_program && !state.sales_program_storage_isolation) {
+    files.push("20260816_sales_program_storage_isolation.sql");
+  }
+  if (state.rpm_sales_program && !state.rpm_submit_scope_roles) {
+    files.push("20260817_rpm_submit_scope_roles.sql");
+  }
+  if (!state.rbac_company_scope) files.push("20260728_rbac_company_scope.sql");
+  if (!state.v235_company_isolation) files.push("20260818_v235_company_isolation_remaining.sql");
+  if (!state.v236_registration_rbac_holidays) files.push("20260819_v236_registration_rbac_holidays.sql");
+  if (!state.training_phase1_pay_exception) files.push("20260810_training_phase1_pay_exception.sql");
+  if (!state.training_anchor_override) files.push("20260820_training_anchor_override.sql");
   return files;
 }
 
@@ -277,7 +451,7 @@ async function main() {
     "Verified: internal_id, force_update, finance_hr, v109b5, v110, v112, holidays_country, " +
       "org_registration, training_phases, registration_identity, rbac_payslip, app_role_permissions, " +
       "app_user_permissions, notification_routing, quality_notes, v140_sales, training_payroll, " +
-      "sales_attachment_permissions, airtable_sync, v128_phase1."
+      "sales_attachment_permissions, airtable_sync, v128_phase1, rpm_sales_quality_acl."
   );
 }
 

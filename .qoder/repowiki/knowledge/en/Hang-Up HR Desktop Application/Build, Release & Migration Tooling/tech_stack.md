@@ -1,0 +1,1 @@
+Electron + electron-builder (NSIS installer, DMG, portable zip); PowerShell for Windows orchestration, bash for macOS; Node.js scripts using `dotenv`, `pg`, and the Supabase JS client; C# WinForms (`System.Windows.Forms`, `WebClient`) for the lightweight web installer; GitHub CLI (`gh`) for release asset upload.

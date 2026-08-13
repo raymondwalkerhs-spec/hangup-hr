@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hangup Portal</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <script src="/js/theme.js"></script>
+  <script src="/vendor/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/interview.css" />
+</head>
+<body>
+  <div id="sync-overlay" class="sync-overlay hidden">
+    <div class="sync-card">
+      <div class="loader-orbit" aria-hidden="true">
+        <div class="loader-orbit-ring"></div>
+        <div class="loader-orbit-core"><img src="/img/hr-team.png" alt="" /></div>
+      </div>
+      <strong class="loader-title">Syncing HR data…</strong>
+      <p class="muted loader-sub">All HR data from local cache</p>
+      <div class="loader-dots"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+  <div class="app-shell">
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden" aria-hidden="true"></div>
+    <aside class="sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Open menu" aria-expanded="false"><i data-lucide="menu"></i></button>
+        <div id="brand-logo-wrap" class="brand-logo-wrap">
+          <img src="/img/hr-team.png" alt="HR Team" class="brand-logo" id="brand-logo" />
+        </div>
+        <div class="sidebar-brand-text">
+          <div class="sidebar-brand-title-row">
+            <strong id="brand-title">Hangup Portal</strong>
+            <span id="sidebar-notif-wrap" class="sidebar-notif-wrap"></span>
+          </div>
+          <div id="company-toggle-wrap" class="muted" style="margin-top:.2rem;font-size:.8rem"></div>
+          <span id="sync-badge" class="badge badge-online">Synced</span>
+          <div id="last-sync" class="sync-time muted"></div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-group">
+          <div class="nav-group-label">Overview</div>
+          <button data-page="dashboard" class="nav-btn active"><i data-lucide="layout-dashboard"></i>Dashboard</button>
+          <button data-page="announcements" class="nav-btn" id="nav-announcements"><i data-lucide="megaphone"></i>Announcements</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">People</div>
+          <button data-page="employees" class="nav-btn"><i data-lucide="users"></i>Employees</button>
+          <button data-page="coaching" class="nav-btn" id="nav-coaching"><i data-lucide="clipboard-pen"></i>Coaching</button>
+          <button data-page="org" class="nav-btn"><i data-lucide="building-2"></i>Organization</button>
+          <button data-page="equipment" class="nav-btn" id="nav-equipment"><i data-lucide="laptop"></i>Equipment</button>
+          <button data-page="interview" class="nav-btn hidden" id="nav-interview"><i data-lucide="clipboard-list"></i>Interviews</button>
+          <button data-page="training" class="nav-btn hidden" id="nav-training"><i data-lucide="graduation-cap"></i>Training</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Time &amp; Attendance</div>
+          <button data-page="attendance" class="nav-btn"><i data-lucide="calendar-check"></i>Attendance</button>
+          <button data-page="breaks" class="nav-btn" id="nav-breaks"><i data-lucide="coffee"></i>Breaks</button>
+          <button data-page="requests" class="nav-btn"><i data-lucide="file-text"></i>Requests</button>
+          <button data-page="meeting-requests" class="nav-btn hidden" id="nav-meeting-requests"><i data-lucide="users-round"></i>Meeting Requests</button>
+          <button data-page="it-requests" class="nav-btn hidden" id="nav-it-requests"><i data-lucide="monitor"></i>IT Requests</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Compensation</div>
+          <button data-page="payroll" class="nav-btn"><i data-lucide="wallet"></i>Payroll</button>
+          <button data-page="salaries" class="nav-btn"><i data-lucide="banknote"></i>Salaries</button>
+          <button data-page="bonuses" class="nav-btn"><i data-lucide="gift"></i>Bonuses</button>
+          <button data-page="deductions" class="nav-btn"><i data-lucide="minus-circle"></i>Deductions</button>
+          <button data-page="loans" class="nav-btn"><i data-lucide="hand-coins"></i>Loans</button>
+          <button data-page="loan-approvals" class="nav-btn hidden" id="nav-loan-approvals"><i data-lucide="check-check"></i>Loan approvals</button>
+          <button data-page="payslip" class="nav-btn hidden" id="nav-payslip"><i data-lucide="receipt"></i>My payslip</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Sales</div>
+          <button data-page="sales" class="nav-btn hidden" id="nav-sales"><i data-lucide="line-chart"></i>Sales log</button>
+          <button data-page="team-dashboard" class="nav-btn hidden" id="nav-team-dashboard"><i data-lucide="bar-chart"></i>Team dashboards</button>
+          <button data-page="costs" class="nav-btn hidden" id="nav-costs"><i data-lucide="pie-chart"></i>Costs</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Insights</div>
+          <button data-page="reports" class="nav-btn"><i data-lucide="file-bar-chart"></i>Reports</button>
+          <button data-page="analytics" class="nav-btn"><i data-lucide="activity"></i>Analytics</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-label">Administration</div>
+          <button data-page="users" class="nav-btn hidden" id="nav-users"><i data-lucide="user-cog"></i>Users</button>
+          <button data-page="access-control" class="nav-btn hidden" id="nav-access-control"><i data-lucide="shield"></i>Access Control</button>
+          <button data-page="sales-permissions" class="nav-btn hidden" id="nav-sales-permissions"><i data-lucide="key-round"></i>Sales permissions</button>
+          <button data-page="sales-log-columns" class="nav-btn hidden" id="nav-sales-log-columns"><i data-lucide="columns"></i>Log columns</button>
+          <button data-page="rules" class="nav-btn hidden" id="nav-rules"><i data-lucide="scroll-text"></i>Rules</button>
+          <button data-page="changes" class="nav-btn hidden" id="nav-changes"><i data-lucide="git-compare"></i>Changes</button>
+          <button data-page="settings" class="nav-btn"><i data-lucide="settings"></i>Settings</button>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="refresh-btn" class="btn btn-sm"><i data-lucide="refresh-cw"></i> Refresh</button>
+        <span id="user-info" class="user-chip"></span>
+        <button id="logout-btn" class="btn btn-sm btn-ghost"><i data-lucide="log-out"></i> Logout</button>
+      </div>
+    </aside>
+    <div class="main-column">
+      <div id="impersonation-banner" class="impersonation-banner hidden" role="status"></div>
+      <div class="top-app-bar">
+        <div class="page-crumb" id="top-crumb">
+          <strong id="top-crumb-title">Dashboard</strong>
+          <span id="top-crumb-sub"></span>
+        </div>
+        <div class="top-actions">
+          <div class="search-input-wrap">
+            <i data-lucide="search"></i>
+            <input id="global-search" class="search-input" type="search" placeholder="Search…" aria-label="Search" />
+          </div>
+          <span id="top-notif-wrap" class="top-notif-wrap"></span>
+        </div>
+      </div>
+      <main id="app" class="main-content"></main>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="save-indicator" class="save-indicator hidden"></div>
+  <script src="/js/requests.js"></script>
+  <script src="/js/it-requests.js"></script>
+  <script src="/js/meeting-requests.js"></script>
+  <script src="/js/hrms-features.js"></script>
+  <script src="/js/sales-submit-required.js"></script>
+  <script src="/js/sales-config-breaks.js"></script>
+  <script src="/js/sales.js"></script>
+  <script src="/js/sales-permissions-pages.js"></script>
+  <script src="/js/team-dashboard.js"></script>
+  <script src="/js/analytics.js"></script>
+  <script src="/js/expenses.js"></script>
+  <script src="/js/access-control.js"></script>
+  <script src="/js/interview.js"></script>
+  <script src="/js/training.js"></script>
+  <script src="/js.legacy/announcements-coaching.js"></script>
+  <script src="/js/auth-debug-client.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

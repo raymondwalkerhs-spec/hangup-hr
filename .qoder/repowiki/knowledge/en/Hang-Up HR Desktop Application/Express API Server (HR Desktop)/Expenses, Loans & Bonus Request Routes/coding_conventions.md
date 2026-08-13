@@ -1,0 +1,6 @@
+- Authorization is checked at the top of every handler using `roles.can*` predicates against `req.userRole` / `req.username`, returning `403 { error }` immediately on failure.
+- Business mutations are followed by notification calls (`notify.createNotification` / `createNotificationsForUsers` / `dispatch.dispatchNotification`) addressed to the submitter or approver set, keeping side effects explicit per route.
+- Approval endpoints follow an approve/deny pair pattern: read the entity, assert it is still `pending`, then update status to `approved`/`denied` with `reviewedBy`, `reviewedAt`, and optional `denyReason`.
+- List endpoints accept `status` and other query filters, fetch all matching records from the repo, then apply a second in-process filter scoped to the requester's unit/employee scope before responding.
+- Error handling uses a try/catch around the async business call and responds with `500 { error: err.message }` for unexpected failures and `400 { error }` for validation/business errors returned by the repo.
+- Responses are normalized JSON objects — success payloads use `{ ok: true, <entity> }` while failures return `{ error: string }`, never raw values.

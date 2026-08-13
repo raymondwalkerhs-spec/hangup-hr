@@ -1,0 +1,1 @@
+Provides employee document upload/download, PDF report generation (payroll, monthly summary, payment sheets), and ZIP archive creation/extraction for finance handoff and self-service exports.

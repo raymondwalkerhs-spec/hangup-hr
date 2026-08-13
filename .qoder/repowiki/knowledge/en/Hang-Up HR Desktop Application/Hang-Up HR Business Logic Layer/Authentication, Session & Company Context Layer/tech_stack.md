@@ -1,0 +1,1 @@
+bcrypt for password hashing, Supabase JS client (`getSupabaseAdmin`) for `app_users`, `org_unit_managers`, `org_teams` reads/writes, and crypto.randomBytes(32) for session ids.

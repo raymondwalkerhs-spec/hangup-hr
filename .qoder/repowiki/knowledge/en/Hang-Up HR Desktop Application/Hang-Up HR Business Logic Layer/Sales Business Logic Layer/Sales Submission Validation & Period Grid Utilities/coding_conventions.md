@@ -1,0 +1,4 @@
+- Validation helpers return a uniform `{ ok: boolean, errors: Array<{ key, label, message }> }` shape instead of throwing.
+- String values are normalized through a local `str(val)` helper that coerces `null`/`undefined` to `""` and trims before any truthiness check.
+- Public API is exposed as named exports from plain JS files without classes or IIFE wrappers, keeping modules importable as `require('./x')`.
+- Date arithmetic uses ISO `YYYY-MM-DD` strings parsed via `new Date(\`${d}T12:00:00\`)` to avoid timezone drift.

@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: business_logic/sales/permissions_scope
+title: Sales Field, Attachment & Action Permission Engine
+scope:
+    - lib/sales-access-resolver.js
+    - lib/sales-action-permissions.js
+    - lib/sales-scope.js
+source_files: []
+depends_on: []
+related_to: []

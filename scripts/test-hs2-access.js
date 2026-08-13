@@ -27,27 +27,21 @@ assert("ceo manages HS2", roles.canManageHs2Company(ceo));
 assert("quality cannot manage HS2", !roles.canManageHs2Company(quality));
 assert("rtm cannot manage HS2", !roles.canManageHs2Company(rtm));
 
-assert("quality sees HS2 in sales", roles.canSeeHs2InSales(quality));
-assert("admin sees HS2 in sales", roles.canSeeHs2InSales(admin));
-assert("rtm cannot see HS2 in sales", !roles.canSeeHs2InSales(rtm));
-assert("agent cannot see HS2 in sales", !roles.canSeeHs2InSales(agent));
+assert("admin can access HS2 context", roles.canAccessHs2CompanyContext(admin));
+assert("agent cannot access HS2 context", !roles.canAccessHs2CompanyContext(agent));
 
-assert(
-  "hs2 company query blocked for agent",
-  companyContext.resolveCompanyContextForUser("hs2", agent) === "hangup"
-);
+assert("main hangup agent cannot access hs2 rules", !roles.canAccessRulesCompany(agent, "hs2"));
+assert("main hangup agent can access hangup rules", roles.canAccessRulesCompany(agent, "hangup"));
+assert("hs2 unit user can access hs2 rules", roles.canAccessRulesCompany({ role: "agent", unit: "HS-2" }, "hs2"));
+assert("admin can access hs2 rules", roles.canAccessRulesCompany(admin, "hs2"));
+
 assert(
   "hs2 company query allowed for hr",
   companyContext.resolveCompanyContextForUser("hs2", hr) === "hs2"
 );
-
-const sales = [
-  { id: "s1", unit: "HS-1" },
-  { id: "s2", unit: "HS-2" },
-];
-const filtered = companyContext.filterHs2SalesForRole(sales, rtm);
-assert("rtm sales strip HS-2", filtered.length === 1 && filtered[0].unit === "HS-1");
-const qSales = companyContext.filterHs2SalesForRole(sales, quality);
-assert("quality keeps HS-2 sales", qSales.length === 2);
+assert(
+  "hs2 company query denied for agent",
+  companyContext.resolveCompanyContextForUser("hs2", agent) === "hangup"
+);
 
 if (!process.exitCode) console.log("\nhs2-access tests passed.");

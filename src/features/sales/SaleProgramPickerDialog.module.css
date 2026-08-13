@@ -1,0 +1,33 @@
+.options {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, transparent);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.option:hover {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-hover, rgba(37, 99, 235, 0.06));
+}
+
+.option strong {
+  font-size: 1rem;
+}
+
+.option span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}

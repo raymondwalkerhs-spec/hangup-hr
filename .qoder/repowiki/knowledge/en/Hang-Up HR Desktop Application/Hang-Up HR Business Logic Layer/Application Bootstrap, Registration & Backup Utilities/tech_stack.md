@@ -1,0 +1,1 @@
+Node.js CommonJS modules; dotenv for .env resolution; Supabase JS client (via `./supabase-client`) for database and storage access; Windows child_process spawning for silent uninstall; Intl.DateTimeFormat with explicit `Africa/Cairo` timezone for Egypt-local timestamps.

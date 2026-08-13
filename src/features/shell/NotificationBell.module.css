@@ -1,0 +1,62 @@
+.wrap {
+  position: relative;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btnHasItems {
+  border-color: var(--primary);
+}
+.badge {
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  width: min(360px, 90vw);
+  max-height: 400px;
+  overflow: auto;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  padding: 0.5rem;
+}
+.item {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.item:hover {
+  background: var(--bg);
+}
+.itemUnread {
+  font-weight: 600;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  padding: 0 0.25rem;
+}

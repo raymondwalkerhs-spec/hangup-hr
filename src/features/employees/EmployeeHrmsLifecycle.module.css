@@ -1,0 +1,83 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+.list {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.25rem;
+  text-align: left;
+}
+.badgeOk {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background: color-mix(in srgb, var(--ok, #16a34a) 15%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.clearanceCard {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.equipmentBlock {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.equipmentBlock h5 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+.warnList {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--warn, #b45309);
+}
+.warnBanner {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn, #f59e0b) 12%, transparent);
+  font-size: 0.85rem;
+}
+.inlineLink {
+  font-size: 0.85rem;
+}

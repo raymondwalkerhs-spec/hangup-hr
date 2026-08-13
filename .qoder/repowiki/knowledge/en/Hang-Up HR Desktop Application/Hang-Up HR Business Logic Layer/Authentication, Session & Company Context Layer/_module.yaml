@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: business_logic/auth_supabase
+title: Authentication, Session & Company Context Layer
+scope:
+    - lib/auth.js
+    - lib/auth-supabase.js
+    - lib/session-store.js
+    - lib/company-context.js
+    - lib/team-dashboard.js
+    - lib/team-names.js
+    - lib/org-hierarchy.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/app_bootstrap
+    - path: business_logic/permissions_roles

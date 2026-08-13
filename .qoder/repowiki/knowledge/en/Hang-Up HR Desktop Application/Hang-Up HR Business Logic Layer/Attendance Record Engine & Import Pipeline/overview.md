@@ -1,0 +1,1 @@
+Core attendance record lifecycle: month skeleton generation, fingerprint import, leave/depart auto-assignment, validation, payroll eligibility, and pending-sync merging.

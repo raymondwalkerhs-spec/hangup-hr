@@ -1,0 +1,4 @@
+- Environment-driven toggles use empty-string semantics: an explicitly set empty string disables a feature (e.g. `AIRTABLE_PORTAL_SALE_ID_FIELD=""` disables the portal-id lookup), while unset falls back to a default.
+- Value formatting functions return `null` for unparseable inputs instead of throwing, allowing the rest of the record to sync even when a single date or select choice cannot be resolved.
+- Attachment payloads are always normalized to `{ url, filename }` arrays before being written to Airtable `multipleAttachments` fields, regardless of whether the source is Supabase signed URLs or Dropbox links.
+- Cross-system identifiers (unit codes like HS-1→HS1, device types, team labels) are normalized through dedicated reverse-mapping helpers rather than inline string manipulation.

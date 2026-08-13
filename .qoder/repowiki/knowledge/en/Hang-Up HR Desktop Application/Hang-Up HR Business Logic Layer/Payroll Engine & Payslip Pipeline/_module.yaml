@@ -1,0 +1,21 @@
+schema_version: 1
+module_path: business_logic/payroll
+title: Payroll Engine & Payslip Pipeline
+scope:
+    - lib/payroll.js
+    - lib/payroll-gates.js
+    - lib/payroll-schedule.js
+    - lib/payroll-splits.js
+    - lib/payslip-detail.js
+    - lib/payslip-pdf.js
+    - lib/resignation-payroll.js
+    - lib/training-payroll.js
+    - lib/training-phases.js
+    - lib/training-pay-rules.js
+    - lib/bonus-guards.js
+    - lib/commission-tiers.js
+    - lib/month-profile.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/reports_custom

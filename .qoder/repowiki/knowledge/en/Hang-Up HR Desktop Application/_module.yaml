@@ -1,0 +1,59 @@
+schema_version: 1
+module_path: ""
+title: Hang-Up HR Desktop Application
+scope:
+    - README.md
+    - package.json
+    - .gitignore
+    - FEATURES.md
+    - DB_SCHEMA.md
+    - SHEET_SCHEMA.md
+    - TUTORIAL.md
+    - UPDATES.md
+    - Install-Hangup-HR.cmd
+    - .env.example
+    - .git-diff-it-release.txt
+    - .tmp-backup-dump.txt
+    - .tmp-build-installer.ps1
+    - .tmp-check-app-version.js
+    - AI_Agent.md
+    - CHANGELOG.md
+    - LEGACY_GOOGLE_SHEETS.md
+    - SALES_LOG.md
+    - airtable-backfill-log-2.txt
+    - airtable-backfill-log.txt
+    - alter_column.js
+    - alter_price.js
+    - alter_price2.js
+    - backfill-sales-payment-log.txt
+    - backup-app.js
+    - build-nsis-output.txt
+    - check_attach.js
+    - check_attach2.js
+    - check_attachments.js
+    - check_type.js
+    - dedupe-sales-log.txt
+    - fix_prices.js
+    - js
+    - list_tables.js
+    - migrate-attachments-log.txt
+    - package-lock.json
+    - test_update.js
+    - tmp-apply-it-migration.js
+    - tmp-check-macos-ci.js
+    - tmp-check-run-logs.js
+    - tmp-create-macos-workflow.js
+    - tmp-find-users.js
+    - tmp-fix-macos-workflow.js
+    - tmp-list-it-users.js
+    - tmp-mark-it-users.js
+    - tmp-mark-specific-its.js
+    - tmp-run-sql.js
+    - tmp-set-it-flag.js
+    - tmp-supabase-check.js
+    - tmp-supabase-it-debug.js
+    - tmp-verify-import.js
+    - tmp-verify-it.js
+source_files: []
+depends_on: []
+related_to: []

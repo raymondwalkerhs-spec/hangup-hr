@@ -1,0 +1,7 @@
+The `lib/` directory is a flat collection of Node modules that together implement the sales domain. Cross-cutting concerns are wired through shared entry points:
+- `sales-access-resolver.js` is the single source of truth for per-role field/attachment/action permission resolution; it reads the catalog from `sales-field-catalog.js` and merges DB overrides via `business-repo.readSalesFieldPermissions()` (cached in `sales-field-access.js`).
+- `sales-scope.js` owns row-level visibility (company/unit/team/self) and delegates action-level checks to `sales-action-permissions.js`; it is consumed by list/dashboard endpoints.
+- `submit_validation` children (`sale-submit-scope.js`, `sales-submit-required.js`, `sales-working-day.js`, `sales-period-grid.js`) validate payloads against the MLA Airtable schema before persistence.
+- Attachment handling splits into `sale-attachment-storage.js` (Dropbox), `sale-attachment-cache.js` (local cache), and `sale-attachment-import-config.js` (Airtable import mapping).
+- All data access goes through `supabase-repo.js` / `hrms-repo.js` with camelCase business entities bridging snake_case DB rows via `entity-mappers.js`.
+- Dashboard aggregation (`sales-count.js`, `team-dashboard.js`) reuses `countSaleForDashboard` and `buildSalesDashboard` from `sales-scope.js` so counts and lists stay consistent.

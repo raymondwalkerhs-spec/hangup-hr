@@ -1,0 +1,1 @@
+Provides Supabase-backed authentication, in-memory session management with optional persistence, and company/team scoping rules for Hang-Up vs HS-2.

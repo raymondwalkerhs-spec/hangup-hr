@@ -1,0 +1,5 @@
+- IPC handlers are registered in `electron/main.js` via `ipcMain.handle(name, async (_, ...args) => ...)` and consumed in the renderer through `window.hrDesktop[name](...)` exposed by the preload script.
+- Every renderer-side HTTP call goes through the central `api(path, options)` helper in `public/js/app.js`, which injects `x-session-id`, normalizes 401 redirects to `/login`, and triggers a silent `/sync/refresh` after non-GET writes.
+- Feature modules in `public/js/*.js` are loaded as plain `<script>` tags in `index.html` and register themselves against shared globals (e.g. `window.HRSalesConfigBreaks`, `window.HRItRequests`) rather than importing one another.
+- Permission checks are expressed as small `canXxx()` functions in `app.js` that read flags from `state.user`, keeping UI visibility and action gating in one place.
+- The main process wraps every bootstrap step (env load, cache dir creation, server start) in try/catch blocks that call `showFatalError(title, message)` and `app.quit()`, so startup failures surface as native dialog boxes instead of crashing silently.

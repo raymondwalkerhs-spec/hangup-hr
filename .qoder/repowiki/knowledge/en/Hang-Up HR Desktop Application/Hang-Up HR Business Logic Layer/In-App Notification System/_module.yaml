@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: business_logic/notifications
+title: In-App Notification System
+scope:
+    - lib/notifications.js
+    - lib/notify-dispatch.js
+    - lib/notify-routing.js
+    - lib/notify-store.js
+    - lib/notification-routing-config.js
+source_files: []
+depends_on: []
+related_to:
+    - path: express_server/expenses_loans_routes

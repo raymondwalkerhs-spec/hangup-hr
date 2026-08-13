@@ -1,0 +1,53 @@
+.card {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.15rem;
+  box-shadow: var(--shadow-soft);
+  max-width: 100%;
+  min-width: 0;
+}
+.widget {
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  cursor: default;
+}
+.widget[role="button"] {
+  cursor: pointer;
+}
+.widgetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.widgetHead h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.scope {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+}
+.widgetBody {
+  flex: 1;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: center;
+  padding: 1.25rem;
+}
+.stat strong {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--primary);
+}
+.statAccent strong {
+  color: var(--accent);
+}

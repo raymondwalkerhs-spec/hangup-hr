@@ -1,0 +1,1 @@
+Formats payslip detail lines, renders A4 PDFs via pdfkit, and computes notice-period salary scaling and no-notice deductions for resigning employees.

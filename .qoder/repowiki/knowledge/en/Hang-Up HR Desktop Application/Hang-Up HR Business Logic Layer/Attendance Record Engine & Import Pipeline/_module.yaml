@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: business_logic/attendance
+title: Attendance Record Engine & Import Pipeline
+scope:
+    - lib/attendance.js
+    - lib/attendance-sync.js
+    - lib/attendance-fp-import.js
+    - lib/attendance-validation.js
+    - lib/attendance-employment.js
+    - lib/depart-attendance.js
+    - lib/leave-attendance.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/reports_custom
+    - path: tests

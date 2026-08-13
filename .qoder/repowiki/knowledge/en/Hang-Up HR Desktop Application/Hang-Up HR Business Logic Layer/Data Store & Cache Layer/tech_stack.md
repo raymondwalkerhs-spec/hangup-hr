@@ -1,0 +1,1 @@
+Node.js with `better-sqlite3` (WAL mode, busy_timeout=5000ms) for the local cache; Supabase client used conditionally via `backendMod.useSupabase()`. The native `better-sqlite3` module must be rebuilt if missing (`npm run rebuild:native`).

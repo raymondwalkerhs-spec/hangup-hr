@@ -130,7 +130,7 @@ function findMacAppBundles(dist) {
       if (parent.includes("arm64")) platform = "mac-arm64";
       else if (parent.includes("x64") || parent.includes("intel")) platform = "mac-x64";
       else if (/arm64/i.test(path.basename(resolved))) platform = "mac-arm64";
-      else platform = "mac-x64";
+      else platform = "mac-universal";
     }
 
     results.push({ sourceDir: resolved, platform });

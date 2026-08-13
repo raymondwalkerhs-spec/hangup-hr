@@ -1,0 +1,5 @@
+- Composite record keys are always built as `${employeeId}|${date}` (or `${fpNumber}|${date}` for FP data) and used with `Map` lookups instead of array scans.
+- Date values are normalized to ISO `'YYYY-MM-DD'` strings by slicing the first 10 characters before any comparison or grouping.
+- Allowed attendance statuses are declared once as a `Set` constant and reused across files rather than duplicated inline.
+- Functions are pure and return new arrays/objects instead of mutating inputs; callers spread or copy records before patching fields.
+- Optional configuration is merged against a `DEFAULT_*` constant via spread (`{ ...DEFAULT_FP_RULES, ...(byMonth[month] || {}) }`) so per-month overrides are additive.

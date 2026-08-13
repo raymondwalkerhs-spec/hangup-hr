@@ -1,0 +1,4 @@
+- Monthly context is always threaded as a `yearMonth` string (YYYY-MM) plus a per-employee profile object built via `buildDefaultProfile`/`mergeProfile` from `month-profile.js`.
+- Adjustments/overrides flow through a single `adjustment` argument on `calcPayrollRow` and its callers, with explicit `*OverrideActive`/`*OverrideValue` flags exposed on the output row.
+- Side-effect-free helpers live in sibling files (`commission-tiers`, `bonus-guards`, `payroll-gates`) and are imported inline rather than re-exported, keeping `payroll.js` as the single composition point.
+- Computed amounts are rounded to two decimals via `Math.round(x * 100) / 100` at the row boundary before being handed to payslip/PDF consumers.

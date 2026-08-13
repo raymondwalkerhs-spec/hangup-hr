@@ -1,0 +1,22 @@
+.scrubber {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.input {
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  width: 7rem;
+  color: var(--text);
+}
+.label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 8rem;
+}

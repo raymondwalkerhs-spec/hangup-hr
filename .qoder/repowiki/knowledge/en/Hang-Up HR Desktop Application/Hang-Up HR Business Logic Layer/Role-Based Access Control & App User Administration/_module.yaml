@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: business_logic/permissions_roles
+title: Role-Based Access Control & App User Administration
+scope:
+    - lib/permission-catalog.js
+    - lib/role-permissions.js
+    - lib/roles.js
+    - lib/user-permissions.js
+    - lib/users-admin.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/auth_supabase
+    - path: express_server/expenses_loans_routes

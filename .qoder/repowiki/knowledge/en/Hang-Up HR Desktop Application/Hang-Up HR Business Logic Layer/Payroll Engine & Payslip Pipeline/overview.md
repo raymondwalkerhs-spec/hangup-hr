@@ -1,0 +1,1 @@
+Orchestrates monthly payroll computation, split-based allocation, training dual-pay, resignation adjustments, and payslip rendering into a single end-to-end pipeline.

@@ -1,0 +1,1 @@
+Server-side helpers that validate sales submission payloads against the MLA Airtable form and build team×date sales grids with Cairo working-day rules.

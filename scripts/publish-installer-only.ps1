@@ -31,11 +31,20 @@ if (-not $Tag) { $Tag = "v$version" }
 if ($Tag -notmatch "^v") { $Tag = "v$Tag" }
 
 $dist = if ($env:HR_BUILD_OUTPUT) { $env:HR_BUILD_OUTPUT } else { "dist" }
-$setup = Get-ChildItem $dist -Filter "*Setup-$version.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $setup) {
+ $setup = Get-ChildItem $dist -Filter "*Setup-$version.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+ if (-not $setup) {
   $setup = Get-ChildItem $dist -Filter "Hangup-Portal-Setup-$version.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-}
-if (-not $setup) { throw "No Setup-$version.exe in $dist — run .\scripts\build.ps1 installer" }
+ }
+ if (-not $setup) {
+  # Fallback: use the most recent Setup exe in dist if an exact match isn't present
+  $candidate = Get-ChildItem $dist -Filter "Hangup-Portal-Setup-*.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($candidate) {
+    Write-Host "WARNING: No exact Setup-$version.exe found; using $($candidate.Name) for upload." -ForegroundColor Yellow
+    $setup = $candidate
+  } else {
+    throw "No Setup-$version.exe in $dist - run .\scripts\build.ps1 installer"
+  }
+ }
 
 $webSetup = Join-Path "dist-bootstrap" "Hangup-Portal-Web-Setup.exe"
 if (-not (Test-Path $webSetup)) {
@@ -47,7 +56,7 @@ $manifestDir = Join-Path $dist "update-manifests"
 $winManifest = Join-Path $manifestDir "win-x64-latest.json"
 if (-not (Test-Path $winManifest)) {
   $unpacked = Join-Path $dist "win-unpacked"
-  if (-not (Test-Path $unpacked)) { throw "Need win-unpacked for manifest — run .\scripts\build.ps1 installer" }
+  if (-not (Test-Path $unpacked)) { throw "Need win-unpacked for manifest - run .\scripts\build.ps1 installer" }
   $env:HR_BUILD_OUTPUT = (Resolve-Path $dist).Path
   node scripts/package-github-release.js 2>&1 | Write-Host
 }
@@ -56,7 +65,7 @@ $uploads = @($setup.FullName)
 if (Test-Path $winManifest) { $uploads += (Resolve-Path $winManifest).Path }
 if (Test-Path $webSetup) { $uploads += (Resolve-Path $webSetup).Path }
 
-if (-not $Notes) { $Notes = "Hangup Portal $version — see CHANGELOG.md" }
+if (-not $Notes) { $Notes = "Hangup Portal $version - see CHANGELOG.md" }
 
 $mb = ($uploads | ForEach-Object { (Get-Item $_).Length } | Measure-Object -Sum).Sum / 1MB
 Write-Host "Installer-only upload ($([math]::Round($mb,1)) MB):" -ForegroundColor Cyan
@@ -84,4 +93,4 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Running publish-app-version.js..." -ForegroundColor Cyan
 node scripts/publish-app-version.js
-Write-Host "Done — $Tag is Latest on GitHub." -ForegroundColor Green
+Write-Host "Done - $Tag is Latest on GitHub." -ForegroundColor Green

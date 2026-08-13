@@ -1,0 +1,1 @@
+Express application that wires session middleware, static pages, and mounts per-domain route modules under /api to serve the HR desktop app.

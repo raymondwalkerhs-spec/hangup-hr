@@ -1,0 +1,4 @@
+- Streaming builders (`pdfBuffer`, `archive` in export-zip) collect chunks on a `'data'` event and resolve a Promise on `'end'`, rejecting on `'error'`, so callers always receive a single `Buffer`.
+- Numeric currency values are formatted consistently with `(Math.round(n * 100) / 100).toLocaleString('en-EG', { minimumFractionDigits: 2 })` before rendering in PDFs or CSVs.
+- Archive file names are sanitized by stripping non-word characters and collapsing whitespace into hyphens before being passed to `archive.append(..., { name })`.
+- Public APIs are exported as plain function objects via `module.exports = { ... }` without classes or constructor patterns.

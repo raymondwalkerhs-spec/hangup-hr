@@ -1,0 +1,56 @@
+
+> hangup-hr@1.7.6 dist:installer
+> powershell -ExecutionPolicy Bypass -File scripts/build.ps1 installer
+
+Clearing dist\win-unpacked...
+Installing dependencies...
+
+up to date, audited 603 packages in 3s
+
+82 packages are looking for funding
+  run `npm fund` for details
+
+16 vulnerabilities (4 moderate, 12 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues possible (including breaking changes), run:
+  npm audit fix --force
+
+Some issues need review, and may require choosing
+a different dependency.
+
+Run `npm audit` for details.
+npm warn allow-scripts 3 packages have install scripts not yet covered by allowScripts:
+npm warn allow-scripts   bcrypt@6.0.0 (install: node-gyp rebuild)
+npm warn allow-scripts   better-sqlite3@12.11.1 (install: node-gyp rebuild)
+npm warn allow-scripts   electron@33.4.11 (install: (install scripts present))
+npm warn allow-scripts
+npm warn allow-scripts Run `npm approve-scripts --allow-scripts-pending` to review, or `npm approve-scripts <pkg>` to allow.
+SKIP_NATIVE_REBUILD=1 - skipping electron-rebuild (use prebuilt native modules)
+Code signing: no certificate set (CSC_LINK) - build will be UNSIGNED.
+  To sign: set CSC_LINK to your .pfx path and CSC_KEY_PASSWORD, then rebuild.
+  • electron-builder  version=25.1.8 os=10.0.19045
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=F:\download app hr\package.json
+  • @electron/rebuild already used by electron-builder, please consider to remove excess dependency from devDependencies
+
+To ensure your native dependencies are always matched electron version, simply add script `"postinstall": "electron-builder install-app-deps" to your `package.json`
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=33.4.11 appOutDir=dist\win-unpacked
+  • updating asar integrity executable resource  executablePath=dist\win-unpacked\Hangup Portal.exe
+electron-after-pack: disabled ASAR integrity fuse on F:\download app hr\dist\win-unpacked\Hangup Portal.exe
+  • signing with signtool.exe  path=dist\win-unpacked\Hangup Portal.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building        target=nsis file=dist\Hangup-Portal-Setup-1.7.6.exe archs=x64 oneClick=false perMachine=false
+  • signing with signtool.exe  path=dist\win-unpacked\resources\elevate.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=dist\__uninstaller-nsis-hangup-hr.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=dist\Hangup-Portal-Setup-1.7.6.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building block map  blockMapFile=dist\Hangup-Portal-Setup-1.7.6.exe.blockmap
+
+Build complete. Output in dist\:
+  Hangup-Portal-Setup-1.7.6.exe

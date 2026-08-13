@@ -48,4 +48,18 @@ module.exports = async function afterPack(context) {
       console.warn(`electron-after-pack: fuse flip failed for ${exePath}:`, err.message || err);
     }
   }
+
+  const resourcesDir = path.join(context.appOutDir, "resources");
+  const projectDir = context.packager.projectDir;
+  const envSrc = path.join(projectDir, ".env");
+  if (fs.existsSync(envSrc)) {
+    fs.mkdirSync(resourcesDir, { recursive: true });
+    fs.copyFileSync(envSrc, path.join(resourcesDir, ".env"));
+    console.log("electron-after-pack: bundled build .env into resources for first-run seed");
+  }
+  const envExampleSrc = path.join(projectDir, ".env.example");
+  if (fs.existsSync(envExampleSrc)) {
+    fs.mkdirSync(resourcesDir, { recursive: true });
+    fs.copyFileSync(envExampleSrc, path.join(resourcesDir, ".env.example"));
+  }
 };

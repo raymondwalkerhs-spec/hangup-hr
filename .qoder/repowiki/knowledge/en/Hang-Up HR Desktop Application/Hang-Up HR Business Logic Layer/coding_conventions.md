@@ -1,0 +1,4 @@
+- Every domain exposes a single flat module at `lib/<domain>.js` (or `lib/<domain>-*.js` for sub-components); sibling files never import each other directly — they communicate via the repo layer or notifications.
+- Data access goes exclusively through `backend.getBackend()` (which returns `supabase-repo`), never via raw `supabase-client` calls from business code.
+- Company/team scoping is applied uniformly by reading the current user's company ID from `company-context` / auth session before issuing repo queries.
+- Configuration is read from `process.env` populated by `app-bootstrap.loadEnvironment`; no hard-coded URLs or keys exist in domain modules.

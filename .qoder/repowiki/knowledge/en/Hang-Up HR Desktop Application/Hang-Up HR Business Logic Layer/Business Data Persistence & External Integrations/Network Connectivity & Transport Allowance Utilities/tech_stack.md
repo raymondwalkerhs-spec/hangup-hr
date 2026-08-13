@@ -1,0 +1,1 @@
+Pure Node.js `http`/`https` modules — no external HTTP client library. Supabase access goes through the project's own `./backend` and `./supabase-client` wrappers rather than the official SDK directly.

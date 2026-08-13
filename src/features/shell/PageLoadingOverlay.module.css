@@ -1,0 +1,223 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.overlayVisible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.orbitWrap {
+  position: relative;
+  width: 10.5rem;
+  height: 10.5rem;
+}
+
+.centerCatWrap {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 4.4rem;
+  height: 4.4rem;
+  margin: -2.2rem 0 0 -2.2rem;
+  z-index: 1;
+}
+
+.centerCat {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.16));
+}
+
+.pupils {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.orbitCat {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3.15rem;
+  height: 1.95rem;
+  margin: -0.98rem 0 0 -1.58rem;
+  z-index: 2;
+  will-change: transform;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+}
+
+.orbitCatFace {
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.orbitCatSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.runBody {
+  transform-origin: 44px 30px;
+  animation: runBob 0.32s ease-in-out infinite;
+}
+
+.head {
+  transform-origin: 62px 22px;
+  animation: headBob 0.32s ease-in-out infinite;
+}
+
+.tail {
+  transform-origin: 20px 24px;
+  animation: tailWag 0.32s ease-in-out infinite;
+}
+
+.catShadow {
+  opacity: 0.12;
+  animation: shadowPulse 0.32s ease-in-out infinite;
+}
+
+.legHindA,
+.legHindB,
+.legForeA,
+.legForeB {
+  transform-box: fill-box;
+  transform-origin: 0 0;
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  animation-iteration-count: infinite;
+}
+
+.legHindA {
+  animation-name: strideBack;
+}
+
+.legHindB {
+  animation-name: strideBack;
+  animation-delay: -0.16s;
+}
+
+.legForeA {
+  animation-name: strideFront;
+}
+
+.legForeB {
+  animation-name: strideFront;
+  animation-delay: -0.16s;
+}
+
+.label {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.sub {
+  margin: -0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+@keyframes runBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.4px);
+  }
+}
+
+@keyframes headBob {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes tailWag {
+  0%,
+  100% {
+    transform: rotate(18deg);
+  }
+  50% {
+    transform: rotate(-22deg);
+  }
+}
+
+@keyframes shadowPulse {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.12;
+  }
+  50% {
+    transform: scaleX(0.78);
+    opacity: 0.06;
+  }
+}
+
+@keyframes strideBack {
+  0% {
+    transform: rotate(32deg);
+  }
+  50% {
+    transform: rotate(-28deg);
+  }
+  100% {
+    transform: rotate(32deg);
+  }
+}
+
+@keyframes strideFront {
+  0% {
+    transform: rotate(-30deg);
+  }
+  50% {
+    transform: rotate(34deg);
+  }
+  100% {
+    transform: rotate(-30deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runBody,
+  .head,
+  .tail,
+  .catShadow,
+  .legHindA,
+  .legHindB,
+  .legForeA,
+  .legForeB {
+    animation: none;
+  }
+}

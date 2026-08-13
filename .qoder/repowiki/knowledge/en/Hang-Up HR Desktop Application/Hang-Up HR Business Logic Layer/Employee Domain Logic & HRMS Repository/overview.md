@@ -1,0 +1,1 @@
+Core employee domain layer providing identity lifecycle, compliance sanitization, status/ID helpers, employment-period date math, privacy redaction, export/reporting, and the Supabase-backed HRMS repository.

@@ -1,0 +1,20 @@
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.9rem;
+  background: var(--bg);
+}
+
+.loadingInline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

@@ -1,0 +1,1 @@
+Node.js CommonJS modules; fingerprint import uses `xlsx` to read device-exported spreadsheets (Excel serial times, AM/PM strings, ISO dates).

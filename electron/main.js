@@ -4,17 +4,20 @@ const path = require("path");
 
 const fs = require("fs");
 
+const { assertPathUnderRoot } = require("../lib/path-guard");
+
 const { loadEnvironment, ensureCacheDirectory, assertSupabaseConfigured } = require("../lib/app-bootstrap");
 
 const { createApp } = require("../app");
 
-const { fetchAuthUsers, checkSession } = require("../lib/auth");
+const { fetchAuthUsers, checkSessionByUserRecord } = require("../lib/auth");
 
 const { getSession, destroySession } = require("../lib/session-store");
 
 const { silentUninstall } = require("../lib/uninstall");
 
 const { isOnline } = require("../lib/network");
+const { authDebug, authDebugError, isAuthDebug } = require("../lib/auth-debug");
 
 const PORT = 3847;
 
@@ -89,6 +92,8 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
 
@@ -127,14 +132,18 @@ async function pollSession() {
 
   const session = getSession(currentSessionId);
 
-  if (!session) return;
+  if (!session) {
+    authDebug("electron.pollSession.miss", { sessionId: currentSessionId });
+    return;
+  }
 
   if (!(await isOnline())) return;
 
   try {
     const users = await fetchAuthUsers();
 
-    const check = await checkSession(session.username, session.password, users);
+    const check = checkSessionByUserRecord(session.username, users, session.passwordChangedAtSnapshot);
+    authDebug("electron.pollSession.check", { username: session.username, action: check.action });
 
     if (check.action === "uninstall") {
       await handleTerminated();
@@ -143,6 +152,7 @@ async function pollSession() {
     }
 
     if (check.action === "admin") {
+      authDebug("electron.pollSession.kick", { username: session.username, message: check.message });
       destroySession(currentSessionId);
 
       currentSessionId = null;
@@ -158,8 +168,8 @@ async function pollSession() {
         mainWindow.loadURL(`http://${HOST}:${PORT}/login`);
       }
     }
-  } catch {
-    /* network blip — next poll */
+  } catch (err) {
+    authDebugError("electron.pollSession", err);
   }
 }
 
@@ -185,6 +195,9 @@ async function bootstrap() {
 
   try {
     httpServer = await startServer();
+    if (isAuthDebug()) {
+      console.log("[auth-debug] Auth debug logging is ON (HR_AUTH_DEBUG). Watch this terminal during login.");
+    }
   } catch (err) {
     showFatalError("Hangup Portal — Startup error", err.message || String(err));
     app.quit();
@@ -193,31 +206,55 @@ async function bootstrap() {
 
   createWindow();
 
+let allowedWriteRoot = null;
+
   ipcMain.handle("pick-folder", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory", "createDirectory"],
       title: "Choose folder for payroll export",
     });
-    return result.canceled ? null : result.filePaths[0];
+    if (result.canceled || !result.filePaths?.[0]) {
+      allowedWriteRoot = null;
+      return null;
+    }
+    allowedWriteRoot = path.resolve(result.filePaths[0]);
+    return result.filePaths[0];
   });
 
   ipcMain.handle("write-file-buffer", async (_, filePath, arrayBuffer) => {
-    const dir = path.dirname(filePath);
+    if (!allowedWriteRoot) {
+      throw new Error("Choose an export folder first");
+    }
+    const dest = path.resolve(String(filePath || ""));
+    assertPathUnderRoot(dest, allowedWriteRoot, "Write path must be inside the selected export folder");
+    const dir = path.dirname(dest);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+    fs.writeFileSync(dest, Buffer.from(arrayBuffer));
     return true;
   });
 
   ipcMain.handle("set-session", (_, sessionId) => {
+    authDebug("electron.setSession", { sessionId });
     currentSessionId = sessionId;
   });
 
   ipcMain.handle("clear-session", () => {
+    authDebug("electron.clearSession");
     currentSessionId = null;
   });
 
   ipcMain.handle("trigger-uninstall", async () => {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      title: "Uninstall Hangup Portal",
+      message: "This will remove the application from your computer. Continue?",
+      buttons: ["Cancel", "Uninstall"],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (response !== 1) return false;
     await handleTerminated();
+    return true;
   });
 
   const githubUpdater = require("../lib/github-updater");

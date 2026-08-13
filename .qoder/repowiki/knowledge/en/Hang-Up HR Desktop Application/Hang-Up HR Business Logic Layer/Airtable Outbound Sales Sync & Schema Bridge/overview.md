@@ -1,0 +1,1 @@
+Outbound sync layer that maps Supabase sales rows into Airtable's "Sales All Data" table, handling field normalization, attachment URLs, and schema provisioning.

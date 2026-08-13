@@ -7,6 +7,19 @@ dist-bootstrap/
 dist-bootstrap2/
 dist-beta7/
 dist-release/
+dist-backup/
+dist-backup-build/
+artifact/
+out/
+mac.196/
+mac.196-build/
+mac-push/
+IMG-SUPER-RTM/
+hangup-hr-upstream/
+.build-minimal/
+.tmp-release/
+hr-cache/
+june\ sales/
 cache/
 .cache/
 .env
@@ -15,3 +28,6 @@ credentials/*.json
 !credentials/.gitkeep
 cursor_chat_hr_app_version_management.json
 cursor_hr_app_version_management.md
+# Local release zips (ship via GitHub Releases only)
+hangup-hr-*.zip
+*.dmg

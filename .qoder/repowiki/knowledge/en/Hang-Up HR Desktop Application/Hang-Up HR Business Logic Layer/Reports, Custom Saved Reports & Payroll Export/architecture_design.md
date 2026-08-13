@@ -1,0 +1,8 @@
+Five sibling modules each own a distinct output surface, all pure functions that consume data from the shared `store` (attendance, payroll, id-generator) and optionally Supabase via `supabase-client`:
+- `reports.js`: builds a single-month summary object (`buildMonthlyReport`) aggregating headcount, attendance totals, and payroll by unit, plus a Markdown renderer (`reportToMarkdown`).
+- `reports-extended.js`: higher-level async report builders that call into `payroll.buildPayroll` and `attendance.summarizeEmployeeMonth` through the store — turnover snapshot, attendance rankings, and month-over-month payroll compare with anomaly detection.
+- `custom-reports.js`: persisted report definitions backed by the `saved_reports` table; enforces `DATA_BACKEND=supabase` at runtime, exposes CRUD for saved reports, and a `runReport` dispatcher over three built-in types (`employees`, `attendance`, `payroll`) producing CSV rows via `rowsToCsv`.
+- `bank-export.js`: transforms finalized payroll rows into three payment-channel exports (cash/bank/instapay), applying cash rounding to multiples of `CASH_ROUND_TO=5`, column selection, and a total footer row.
+- `request-rules.js`: pure validation helpers for leave/pause requests — work-week bounds, same-day cutoff, annual-leave eligibility gate (180 days), team-scoped TL/OP restrictions, and day-fraction normalization.
+
+Dependency direction is one-way: this module depends on `./attendance`, `./payroll`, `./id-generator`, `./supabase-client`, and `./backend`; nothing in those modules imports back. Each file is a self-contained CommonJS module exporting named functions only — no class/state.

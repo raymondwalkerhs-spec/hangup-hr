@@ -1,0 +1,12 @@
+.wrap {
+  padding: 2rem;
+  max-width: 480px;
+  margin: 2rem auto;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.wrap h2 {
+  margin: 0 0 0.5rem;
+}

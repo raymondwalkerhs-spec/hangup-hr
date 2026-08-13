@@ -1,0 +1,4 @@
+- Each file is a flat list of pure functions exported via `module.exports = { ... }` with no constructor or module-level state.
+- CSV generation uses a small inline helper (`rowsToCsv` / `toCsv`) that escapes values containing commas or quotes rather than pulling in a third-party library.
+- Supabase-backed operations are gated by a local `requireSupabase()` helper that throws when `useSupabase()` is false, keeping the feature opt-in via `DATA_BACKEND=supabase`.
+- Numeric aggregation results are rounded to two decimals via `Math.round(x * 100) / 100` before being returned, instead of using a currency library.

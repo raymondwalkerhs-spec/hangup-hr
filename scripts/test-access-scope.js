@@ -57,8 +57,60 @@ test("dual-role agent can view led team sale", () => {
     { employee_id: "HS1-05" },
     orgTeams
   );
-  const sale = { agentId: "HS3-20", unit: "HS-3", team: "Ayla", status: "passed" };
+  const sale = { agentId: "HS3-20", closerId: "TL3-01", unit: "HS-3", team: "Ayla", status: "passed" };
   if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("should view led team sale");
+});
+
+test("assigned agent sees own sale", () => {
+  const ur = { role: "agent", employeeId: "HS1-10", unit: "HS-1", team: "Phoenix" };
+  const sale = { agentId: "HS1-10", closerId: "TL1-01", unit: "HS-1", team: "Phoenix", status: "passed" };
+  if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("agent should see own sale");
+});
+
+test("assigned closer sees sale under their closer field", () => {
+  const ur = {
+    role: "agent",
+    employeeId: "HS3-18",
+    unit: "HS-3",
+    team: "Management",
+    closerTeams: [{ unit: "HS-3", team: "Tris" }],
+    leadTeams: [],
+  };
+  const sale = { agentId: "HS3-20", closerId: "HS3-18", unit: "HS-3", team: "Tris", status: "passed" };
+  if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("closer should see assigned sale");
+});
+
+test("org closer does not see team sale unless named closer", () => {
+  const ur = {
+    role: "tl",
+    employeeId: "HS3-18",
+    unit: "HS-3",
+    team: "Management",
+    closerTeams: [{ unit: "HS-3", team: "Tris" }],
+    leadTeams: [],
+  };
+  const sale = { agentId: "HS3-20", closerId: "TL3-01", unit: "HS-3", team: "Tris", status: "passed" };
+  if (salesScope.defaultCanViewSale(sale, ur, employees)) {
+    throw new Error("org closer should not see sale they are not named on");
+  }
+});
+
+test("team TL sees team sale even if not agent/closer", () => {
+  const ur = {
+    role: "tl",
+    employeeId: "TL3-01",
+    unit: "HS-3",
+    team: "Tris",
+    leadTeams: [{ unit: "HS-3", team: "Tris" }],
+  };
+  const sale = { agentId: "HS3-20", closerId: "HS3-18", unit: "HS-3", team: "Tris", status: "passed" };
+  if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("TL should see team sale");
+});
+
+test("plain agent does not see teammate sale", () => {
+  const ur = { role: "agent", employeeId: "HS1-10", unit: "HS-1", team: "Phoenix", leadTeams: [], closerTeams: [] };
+  const sale = { agentId: "HS1-05", closerId: "TL1-01", unit: "HS-1", team: "Phoenix", status: "passed" };
+  if (salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("peer agent should not see teammate sale");
 });
 
 test("exportSales default off for TL/OP/agent", () => {

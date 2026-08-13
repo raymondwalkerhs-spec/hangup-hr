@@ -1,0 +1,6 @@
+- Every write path follows a write-backend → update-local-cache → log-changelog sequence, ensuring the local cache stays authoritative after any mutation.
+- Bulk set operations use `database.transaction((rows) => { ... })` wrapping a DELETE-then-INSERT loop per month/key to atomically replace a partition of the cache.
+- Time-partitioned tables (attendance, bonuses, deductions, payroll_adjustments, commission_tiers, loan_payments, payroll_splits) are queried by prefixing `yearMonth + '-'` on the date column or filtering on `year_month`, with dedicated indexes on those columns.
+- Optional Supabase-only features are guarded by `if (backendMod.useSupabase()) { try { ... } catch { /* optional */ } }` blocks so the module runs in pure-SQLite mode.
+- Employee ID validation goes through `id-generator.validateAppIdForUnit` (which consults `UNIT_ID_RULES` / `BACKEND_POOLS` and `collectReservedAppIds`) rather than ad-hoc string checks.
+- Cache getters return plain objects parsed from JSON text columns; setters accept full objects and persist them via `JSON.stringify`, keeping the schema flat (single `data TEXT` column per entity).

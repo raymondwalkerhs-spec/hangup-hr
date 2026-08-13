@@ -110,10 +110,39 @@ assert("TL cannot view recording attachment", !catalog.canViewAttachmentKind("re
 assert("TL cannot upload recording attachment", !catalog.canEditAttachmentKind("recording", "tl"));
 assert("OP assignee quality surface gets no attachment kinds", catalog.listAttachmentKindsForRole("op", { surface: "quality", user: opVerifier, sale }).length === 0);
 assert("quality can view raw_call", catalog.canViewAttachmentKind("raw_call", "quality"));
+assert("quality can upload recording", catalog.canEditAttachmentKind("recording", "quality"));
+assert("quality can upload raw_call", catalog.canEditAttachmentKind("raw_call", "quality"));
+assert("quality can upload quality_record", catalog.canEditAttachmentKind("quality_record", "quality"));
+const qualityKinds = catalog.listAttachmentKindsForRole("quality", { surface: "quality", user: { role: "quality" } });
+assert(
+  "quality ticket lists recording + raw_call + quality_record as editable",
+  ["recording", "raw_call", "quality_record"].every((key) => {
+    const kind = qualityKinds.find((k) => k.key === key);
+    return kind?.canView === true && kind?.canEdit === true;
+  })
+);
+const restrictiveQualityRecord = {
+  quality_record: { viewRoles: ["admin", "public_relations"], editRoles: ["admin", "public_relations"] },
+  recording: { viewRoles: ["rtm", "admin", "ceo", "quality"], editRoles: ["admin", "quality", "rtm", "ceo"] },
+  raw_call: { viewRoles: ["quality"], editRoles: ["quality"] },
+};
+assert(
+  "quality still uploads quality_record when Access Control omits quality",
+  catalog.canEditAttachmentKind("quality_record", "quality", restrictiveQualityRecord)
+);
+assert(
+  "quality still sees quality_record when Access Control omits quality",
+  catalog.canViewAttachmentKind("quality_record", "quality", restrictiveQualityRecord)
+);
+assert("OP still cannot upload recording after quality floor", !catalog.canEditAttachmentKind("recording", "op", restrictiveQualityRecord));
 
 assert("OP not in default editSales", !roles.canEditSale({ role: "op" }));
 assert("OP can open quality ticket when assignee", roles.canOpenQualityTicketOnSale(opVerifier, sale));
 assert("OP cannot open quality ticket when not assignee", !roles.canOpenQualityTicketOnSale(opOther, sale));
+assert("quality role can work tickets", roles.canWorkQualityTicket({ role: "quality", employeeId: "HR-2", username: "HR-2" }));
+assert("HR role cannot work tickets by default", !roles.canWorkQualityTicket({ role: "hr", employeeId: "HR-2", username: "HR-2" }));
+assert("live app_users.role wins over frozen session role", roles.effectiveLoginRole("hr", { role: "quality" }) === "quality");
+assert("session role used when app user missing", roles.effectiveLoginRole("hr", null) === "hr");
 
 const sanitized = catalog.sanitizeFormPayload(
   { leadType: "Hacked", verifierFeedback: "Sale done" },
@@ -228,5 +257,30 @@ assert(
   "restrictive DB edit_roles: quality role still saves qualityComments on ticket",
   restrictedSave.qualityComments === "saved despite restrictive DB edit_roles"
 );
+
+const qualityAssignees = require("../lib/sales-quality-assignees");
+assert("quality reviewer eligible", qualityAssignees.isEligibleQualityReviewer({ id: "QV1", role: "quality", status: "active" }));
+assert("rtm reviewer eligible", qualityAssignees.isEligibleQualityReviewer({ id: "RTM1", role: "rtm", status: "active" }));
+assert("admin reviewer eligible", qualityAssignees.isEligibleQualityReviewer({ id: "ADM1", role: "admin", status: "active" }));
+assert("agent reviewer rejected", !qualityAssignees.isEligibleQualityReviewer({ id: "AG1", role: "agent", status: "active" }));
+assert("out reviewer rejected", !qualityAssignees.isEligibleQualityReviewer({ id: "QV2", role: "quality", status: "out" }));
+const assignOk = qualityAssignees.validateQualityAssignees(
+  { reviewer: "QV1", assignVerifier: "OP1-01" },
+  (id) => {
+    const map = {
+      QV1: { id: "QV1", role: "quality", status: "active" },
+      "OP1-01": { id: "OP1-01", role: "op", status: "active" },
+    };
+    return map[id] || null;
+  }
+);
+assert("valid reviewer + verifier assignees", assignOk.ok === true);
+const assignBad = qualityAssignees.validateQualityAssignees(
+  { reviewer: "AG1" },
+  (id) => ({ id: "AG1", role: "agent", status: "active" })
+);
+assert("agent as reviewer rejected", assignBad.ok === false);
+const assignMissing = qualityAssignees.validateQualityAssignees({ reviewer: "NOPE" }, () => null);
+assert("unknown reviewer rejected", assignMissing.ok === false);
 
 if (!process.exitCode) console.log("\nAll tests passed.");

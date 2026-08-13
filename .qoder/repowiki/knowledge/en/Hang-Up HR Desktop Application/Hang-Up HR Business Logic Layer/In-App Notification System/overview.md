@@ -1,0 +1,1 @@
+Persistent in-app notification subsystem that dispatches, routes, and collects user-facing alerts for leave, loan, expense, document expiry, audit, and registration events.

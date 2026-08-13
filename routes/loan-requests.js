@@ -3,6 +3,8 @@ const loanReq = require("../lib/loan-requests-repo");
 const roles = require("../lib/roles");
 const store = require("../lib/data-store");
 const notify = require("../lib/notify-store");
+const companyContext = require("../lib/company-context");
+const { parseCompany } = require("../lib/request-company-guard");
 
 const router = express.Router();
 
@@ -16,7 +18,20 @@ router.get("/", async (req, res) => {
     const filters = { status: status || undefined };
     // Executives see all; HR/Admin scoped to unit if provided
     if (!roles.canViewLoanRequests(req.username) && unit) filters.unit = unit;
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    if (company) filters.company = company;
     let items = await loanReq.readLoanRequests(filters);
+    // Apply company context filter (employee fallback for legacy rows)
+    if (company) {
+      const companyEmployees = companyContext.filterEmployeesByCompany(
+        store.getEmployees({ hideOut: false }),
+        company
+      );
+      const companyEmployeeIds = new Set(companyEmployees.map((e) => e.id));
+      items = items.filter(
+        (r) => companyEmployeeIds.has(r.employeeId) || companyEmployeeIds.has(String(r.submittedBy || "").trim())
+      );
+    }
     if (!roles.canViewLoanRequests(req.username)) {
       // HR/Admin see their unit's requests; others see only their own
       if (!roles.canManageAll(req.userRole)) {
@@ -42,6 +57,10 @@ router.post("/", async (req, res) => {
   }
   const emp = store.getEmployeeById(employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const company = companyContext.getCompanyForUnit(emp.unit);
+  if (!companyContext.employeeInCompanyContext(emp, companyContext.resolveCompanyContextForUser(req.query.company || req.body?.company, req.userRole))) {
+    return res.status(403).json({ error: "Employee not in company context" });
+  }
   try {
     const created = await loanReq.createLoanRequest(
       {
@@ -56,13 +75,17 @@ router.post("/", async (req, res) => {
       },
       req.username
     );
-    await notify.createNotificationsForUsers(roles.EXECUTIVE_APPROVERS, {
+    const dispatch = require("../lib/notify-dispatch");
+    await dispatch.dispatchNotification({
+      actionKey: "loan_request_submitted",
       type: "loan_request",
       title: "Loan request pending approval",
       body: `${employeeId}: ${totalAmount} EGP`,
       entityType: "loan_request",
       entityId: created.id,
-    });
+      actor: req.username,
+      context: { company },
+    }).catch(() => {});
     res.json({ ok: true, request: created });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -76,6 +99,11 @@ router.post("/:id/approve", async (req, res) => {
   try {
     const existing = await loanReq.getLoanRequest(req.params.id);
     if (!existing) return res.status(404).json({ error: "Request not found" });
+    const emp = store.getEmployeeById(existing.employeeId);
+    const company = parseCompany(req);
+    if (!emp || !companyContext.employeeInCompanyContext(emp, company)) {
+      return res.status(404).json({ error: "Request not found" });
+    }
     if (existing.status !== "pending") {
       return res.status(400).json({ error: "Request already reviewed" });
     }
@@ -104,6 +132,7 @@ router.post("/:id/approve", async (req, res) => {
       body: `${existing.employeeId}: ${existing.totalAmount} EGP`,
       entityType: "loan_request",
       entityId: existing.id,
+      company,
     });
     res.json({ ok: true, request: updated, loan });
   } catch (err) {
@@ -119,6 +148,11 @@ router.post("/:id/deny", async (req, res) => {
   try {
     const existing = await loanReq.getLoanRequest(req.params.id);
     if (!existing) return res.status(404).json({ error: "Request not found" });
+    const emp = store.getEmployeeById(existing.employeeId);
+    const company = parseCompany(req);
+    if (!emp || !companyContext.employeeInCompanyContext(emp, company)) {
+      return res.status(404).json({ error: "Request not found" });
+    }
     if (existing.status !== "pending") {
       return res.status(400).json({ error: "Request already reviewed" });
     }
@@ -135,6 +169,7 @@ router.post("/:id/deny", async (req, res) => {
       body: `${existing.employeeId}: ${denyReason || "No reason given"}`,
       entityType: "loan_request",
       entityId: existing.id,
+      company,
     });
     res.json({ ok: true, request: updated });
   } catch (err) {

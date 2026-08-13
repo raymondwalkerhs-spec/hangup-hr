@@ -52,7 +52,7 @@ PUBLISH_FLAG=""
 if [[ "${CI:-}" == "true" ]]; then
   PUBLISH_FLAG="--publish never"
 fi
-npx electron-builder --mac dmg zip $PUBLISH_FLAG --config.directories.output="$OUTPUT_DIR"
+npx electron-builder --mac dmg $PUBLISH_FLAG --config.directories.output="$OUTPUT_DIR"
 
 echo ""
 echo "Build complete. Output in ${OUTPUT_DIR}/"

@@ -1,0 +1,31 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.card {
+  position: relative;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.timer {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0.75rem 0;
+  font-variant-numeric: tabular-nums;
+}
+.close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}

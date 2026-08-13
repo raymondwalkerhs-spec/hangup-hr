@@ -1,0 +1,4 @@
+- Each module exports a plain object of named functions via `module.exports = { ... }` rather than default exports, making callers use destructuring like `const { checkForGitHubUpdate } = require('./github-updater')`.
+- Network calls to external services (GitHub API, Supabase) are wrapped in try/catch blocks that log a warning and return a safe fallback (`null`, empty array, or `{ ok: true }`) so startup never crashes if the service is down.
+- Cross-platform shell scripts are generated at runtime as `.bat` (Windows) or `.sh` (macOS) files under `os.tmpdir()` with a unique timestamped name, spawned detached via `spawn(..., { detached: true, stdio: 'ignore' }).unref()` so the parent process can exit immediately.
+- Atomic filesystem swaps go through a staging directory in `tmpdir` plus a JSON manifest (`hangup-hr-atomic-swap.json`) written to the install root, allowing the next launch to complete the move outside the running process's file locks.

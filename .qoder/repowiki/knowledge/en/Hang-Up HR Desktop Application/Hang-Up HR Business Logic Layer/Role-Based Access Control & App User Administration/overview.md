@@ -1,0 +1,1 @@
+Defines the canonical role hierarchy, permission catalog, and runtime evaluation of role/user overrides against a Supabase-backed access-control store.

@@ -1,0 +1,4 @@
+- Child route files export an Express Router and are mounted with `router.use('/prefix', require('./child'))`; they do not create their own Express instances.
+- Authorization is performed by relying on `req.userRole` (enriched by `requireAuth`) rather than re-checking sessions inside individual handlers.
+- Employee scoping uses the shared `parseCompany` + `filterEmployeesForRequest` helpers so every route enforces company-context filtering consistently.
+- Optional backend features (Supabase, Dropbox, training phases) are gated with `useSupabase()` checks and wrapped in try/catch blocks that log warnings but never crash the server.

@@ -1,0 +1,1 @@
+Delivers app updates from GitHub Releases (NSIS installer or full bundle swap), enforces server-driven version policy, and persists an audit trail of business-entity changes.

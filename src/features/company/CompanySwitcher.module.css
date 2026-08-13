@@ -1,0 +1,69 @@
+.switcher,
+.viewing {
+  padding: 0.5rem 0.65rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.label {
+  display: block;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  margin-bottom: 0.35rem;
+}
+.btns {
+  display: flex;
+  gap: 0.3rem;
+}
+.btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.btn.active {
+  background: color-mix(in srgb, var(--sidebar-active) 45%, transparent);
+  border-color: var(--sidebar-active);
+  color: #fff;
+  font-weight: 600;
+}
+.viewing strong {
+  display: block;
+  color: #fff;
+  font-size: 0.8rem;
+}
+.collapsedBadge {
+  margin: 0.35rem auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+.collapsedBtn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.collapsedBtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.collapsedHs2 {
+  background: color-mix(in srgb, var(--sidebar-active) 45%, transparent);
+  border-color: var(--sidebar-active);
+}

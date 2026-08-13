@@ -1,0 +1,1 @@
+Resolves per-role visibility and edit rights for sales fields/attachments, action-level permissions (approve/deny/callback), and row-level sales visibility with dashboard aggregation.

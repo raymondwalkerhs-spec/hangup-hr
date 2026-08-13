@@ -2,6 +2,9 @@
 /**
  * Quick Supabase connectivity check (no secrets printed).
  * Usage: node scripts/test-supabase.js
+ *
+ * Note: GET /api/supabase/health and /status require an admin/CEO session (v2.2.0+).
+ * This script uses env keys directly and does not hit those HTTP routes.
  */
 require("dotenv").config();
 

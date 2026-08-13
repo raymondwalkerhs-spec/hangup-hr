@@ -1,0 +1,8 @@
+The module is organized as a layered pipeline with clear data contracts between children:
+- `month-profile.js` defines the shared profile/adjustment record shape (`buildDefaultProfile`, `mergeProfile`, `resolveEmployeeForMonth`) that every downstream child consumes to resolve salary, position, payment method, transport eligibility, and payroll status for a given year-month.
+- `payroll.js` is the top-level orchestrator: it groups attendance/bonus/deduction events by employee, calls `calcPayrollRow` (which delegates to `commission-tiers`, `loans`, `action-plans`, `transport`, `month-profile`), then hands the row to `payroll-splits` for split allocation and due-date scheduling.
+- `training-phases.js` / `training-pay-rules.js` / `training-payroll.js` sit alongside core payroll; they reuse the same profile shape and call back into `payroll.js`'s `calcPayrollRow` to produce Trainee vs Agent rows for mid-month promotions.
+- `resignation-payroll.js` plugs in notice-period scaling and no-notice penalties via the same adjustment/profile contract.
+- `payslip-detail.js` and `payslip-pdf.js` consume the computed row (including `aipSection`, `payslipGateNotes`, override indicators) to render the detail lines and A4 PDF.
+- `payroll-gates.js` and `bonus-guards.js` are pure gate utilities invoked before approval; blockers feed back into the row's `payslipGateNotes` field so the payslip surface stays consistent.
+- Cross-child wiring happens through plain JS objects passed as arguments — there is no DI container. Children import each other directly (e.g. `payroll.js` → `payroll-splits`, `commission-tiers`, `month-profile`; `training-payroll.js` → `payroll.js`). The only external boundary is `hrms-repo` used by gates/offboarding.

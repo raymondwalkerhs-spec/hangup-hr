@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 1.7.7 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.3.22 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -80,7 +80,7 @@ Supabase (Postgres + Storage)
 ### Profiles & directory
 
 - American and Arabic names, employee ID, unit, team, position
-- Payment method: cash, bank, Instapay / wallet
+- Payment method: **cash**, **instapay**, **bank** (canonical keys; synced to payroll profiles)
 - Profile photo
 - Promotion history (former IDs, effective month)
 - Search and filters (HR/Admin): unit, team, status, nationality, compliance
@@ -119,6 +119,10 @@ Supabase (Postgres + Storage)
 - **Federal holidays** — pink columns, no payroll penalty; bulk day-off for active staff
 - **Bulk actions** — init weekends, mark weekdays attended
 - Transport allowance override on eligible statuses (HR/Admin only)
+- **OUT depart prompt** — marking OUT asks leaving type (with notice / without notice / company decision) and depart date; **Clear depart date** undoes a mistaken depart
+- **Legacy OUT visibility** — leavers 2+ months ago with no pay hidden by default; **Show legacy employees** in Settings
+- **Hide OUT** tab toggle — reveals previous-month leavers only (not legacy)
+- **Pause** — grid `paused` fills Mon–Fri; approved pause requests write `paused` (counts as day off)
 - **Guards** — no edits after depart or outside employment period
 - **Month lock** — payroll-finalized months cannot be edited
 - **Fingerprint import** — upload device export; per-month FP rules
@@ -134,13 +138,15 @@ Agents see their own attendance read-only; HR/Admin edit.
 
 - Position-based basic salary (month-scoped rate snapshots on Salaries page)
 - Attendance-driven days (NSNC, half days, lateness penalties)
+- **Payroll grid (unified list)** — One screen for agents, trainees, and dual (Training + Agent) rows; columns: working days, sales, commission, basic salary, loans, transportation, bonus (excl. commission & transport), deductions, net salary — each row matches the payslip breakdown; stat tiles and footer totals sum the **filtered** visible rows
+- **Net salary column** shows remaining unpaid net (0 when paid/Done); earned amount still visible as subtitle on settled rows
 - Bonuses and deductions (many types, including sales commission tiers)
 - Transport allowance (from configured month)
 - Loan installments
 - Extra days, 2-week hold, per-employee adjustments
 - Tax lines (structure ready; rates default 0%)
 - **No payroll** month toggle for excluded employees
-- Hide zero-net rows on payroll grid
+- **Hide zero net pay** — hides rows with current display net = 0 (paid remaining, deferred, or truly zero)
 
 ### Payslips
 
@@ -150,6 +156,7 @@ Agents see their own attendance read-only; HR/Admin edit.
 - Offboarding / clearance banners with links to complete workflows
 - **Per-split PDF** export and **splits ZIP** for commission breakdowns
 - Sales count auto-recalculated from sales log
+- **Extra payroll entries** — manual additions with custom label, working days, and daily rate; net amount auto-calculates or can be overridden; each entry exportable as a standalone PDF
 
 ### Action Improvement Plan (AIP)
 
@@ -162,13 +169,17 @@ Discipline week (Mon–Fri) with automatic payroll impact:
 
 ### Training payroll
 
-- **Three payroll tabs** — Main (agents), Training (trainees), Total (payments due/received)
+- **Unified payroll list** (since 2.3.8) — agents, trainees, and dual promotion months on **one** payroll screen (not separate Main/Training tabs in the React UI)
 - **Fixed trainee pay** — 12,000 EGP/mo, 20 days, 600 EGP/day, 3,000 EGP/week
 - **4-week program** — Phase 1 unpaid; Phases 2–4 paid when passed
 - **12 passed sales** required (4 per evaluation phase) + HR **Promote to Agent**
-- **Dual payslip** when promotion mid-month: Training + Main tabs; separate PDFs
+- **Dual payslip** when promotion mid-month: Combined / Training / Agent tabs in payslip dialog; separate PDFs
 - Outcomes: failed, agent left, company terminated — each with defined pay rules
-- Resignation: notice-period pay scale (5–10 sales); no-notice 10-day deduction
+- Resignation: notice-period pay scale (5–10 passed sales → 50–100% basic); no-notice 10 working days + transport deduction; company decision full pay
+- **Training phase 1 pay exception** — optional HR override on payslip
+- Cross-month training: monthly breakdown lines + week-1 withheld when sales target not met
+- **HR anchor month override** (v2.3.15) — on training/deferred payslips, set which month training net pays out; pre-anchor accrual months show zero net until anchor
+- **Training enrich warnings** (v2.3.15) — payroll page banner when training rows need HR review
 
 ### Payroll controls
 
@@ -191,10 +202,18 @@ Discipline week (Mon–Fri) with automatic payroll impact:
 
 Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
+### Sales programs (MLA & RPM)
+- **MLA** — legacy MLA-Ray sales in `sales` + `sales_attachments`; storage `mla-sales-attachments/{saleId}/…` (legacy `sales-attachments/…` still supported)
+- **RPM** — separate program in `rpm_sales` + `rpm_sales_attachments`; storage `rpm-sales-attachments/{saleId}/…`
+- **Quality records** — each program uses its own root + `quality_record/` subfolder (never shared)
+- Employee flags `sales_mla_enabled` / `sales_rpm_enabled` (unset = both allowed; closers/TLs bypass); client catalog filtered by `sale_program`; payroll counts split (`sales_count_mla` / `sales_count_rpm`)
+- **+ Add sale** shows MLA/RPM picker when the user can submit both
+
 ### Sales log
 - Sorted by **submission date + time** (newest first)
 
-- Per-sale records with dynamic MLA-Ray form (all fields in `form_data`)
+- **RPM quality ticket** — Editable quality workflow for Quality, RTM, Admin only; agents/TL/OP use View sale (field visibility via Sales permissions)
+- Per-sale records with dynamic MLA-Ray form (all fields in `form_data`) for MLA; RPM has its own form and field catalog
 - Day / week / month dashboards with status filters and stat cards
 - **Working day rule** — sales until 1 AM Cairo count on previous day
 - Toolbar filters: client, agent, closer, client status, reviewer status
@@ -205,16 +224,16 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Organization & registration
 
-- **Organization** — unit → team → agent; TL/OP pickers use `lead_role`, TL-prefixed IDs, and `org_teams.tlEmployeeId`; team lists come from **org_teams** only (deleted teams like Justin/Tris no longer appear)
+- **Organization** — unit → team → agent; **Edit teams, TLs & closers** dialog (HR/Admin); separate **TL** (leave + IT on behalf) and **Closer** (sales + IT on behalf, team dashboard) assignments; inline TL/OP/closer/team pickers; `canManageOrg` permission wired from API
 - **Released IDs** — deleting/releasing an employee frees the app ID (e.g. **TL08**) for reuse
 - **Registration approve** — optional team picker from active org teams per unit; default unassigned
 
 ### Sale forms & tickets
 
-- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/**agent** pickers; **closer may be any unit**; team auto from agent; no quality section on create; **no attachments section** on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; double-submit prevention
+- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/**agent**/**closer** pickers (agents: self + team TLs; org closers: pick closer teams then agents, self default closer; TL: lead + closer teams; OP: any). Non-dialing home teams (e.g. Management) are not locked; sale unit/team follows the selected agent. No quality section on create; **no attachments section** on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; double-submit prevention
 - **Edit sale** — field visibility and edit rights from Sales permissions; **Delete sale** (Admin/RTM); **reassign unit/team/agent/closer** (Admin/RTM/CEO)
 - **View sale** — read-only detail modal (Access Control **View sale**); fields from Edit sale tab
-- **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted; **reassign unit/team/agent/closer** for Admin/RTM/CEO
+- **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted; **reassign unit/team/agent/closer** for Admin/RTM/CEO. Access follows the **current** login role in Users (not a stale session role from before a transfer).
 - **Sales catalog** — clients, devices, price tiers (Settings); TL/OP must use catalog when configured
 - Payment method toggle — card vs bank sub-fields
 - **Reviewer status** / **Client status** (verifier feedback / client feedback)
@@ -222,9 +241,9 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Attachments & export
 
-- Recordings and confirmations in **Supabase Storage** (`hr-documents` / `sales-attachments`)
-- **Airtable sync (optional)** — when configured in `.env`, every sale mutation pushes to Airtable (upsert by **Portal Sale ID**; duplicate rows removed; MLA column order from template CSV); immediate sync on save
-- Inline audio playback, download, signed share links
+- Attachments in **Supabase Storage** (`hr-documents` bucket): MLA → `mla-sales-attachments/…`, RPM → `rpm-sales-attachments/…`; quality recordings under `{root}/{saleId}/quality_record/`
+- **Airtable sync (optional, MLA only)** — when configured in `.env`, MLA sale mutations push to Airtable (upsert by **Portal Sale ID**; duplicate rows removed; MLA column order from template CSV); immediate sync on save
+- Inline audio/video playback (recording, raw call, quality record), download, signed share links
 - Attachment view/upload gated per role (Sales permissions **Attachments** tab)
 - **Recordings** hidden from Agent and TL (no UI, list, or upload); Quality/RTM/admin manage recordings
 - Export filtered list or single sale: **CSV**, **Excel**, or **PDF**
@@ -251,6 +270,34 @@ Per-user exceptions inherit live role defaults from Access Control.
 - Approval queue for Mark, Raymond, Phoebe
 - Approved leave → automatic Day-OFF rows in attendance
 - **Federal holidays** CRUD in Settings (default country USA; 2024–2028 seed data)
+
+---
+
+## Announcements & coaching
+
+### Announcements
+- Sidebar **Announcements** (Overview) — posts for the **current company only** (Hangup vs HS-2); RBAC: `viewAnnouncements` all roles, `editAnnouncements` HR/RTM/Admin/CEO
+- Audience: **whole company**, or targeted by **multiple units**, **multiple teams**, and/or **multiple roles** (AND across filters; editors still see all posts)
+- Picture placement: **above**, **middle of**, or **below** the text
+- New posts also go to the **notification bell** for matching users; sidebar **Announcements** shows an unread count that clears when you open a post
+- Everyone with app access can read matching posts; **HR / RTM / Admin / CEO** create, edit, and delete
+- Title list → open full post: formatted body, picture, optional audio player
+- Access Control: `viewAnnouncements` (all roles) / `editAnnouncements` (HR, RTM, Admin, CEO)
+- Storage: `hr-documents` → `announcements/{company}/{id}/…`
+
+### Coaching
+- Sidebar **Coaching** (People) — tickets with **coach**, **submitted by**, **outcome**, date/time, general notes, and secret notes
+- **Agent (coachee):** active agents only (not Out). Nobody can coach HR / Quality / Admin.
+  - TL → own team agents (not other coaches)
+  - Closer → closer-team agents (not other coaches)
+  - OP → unit agents **and** unit TL / Closers
+  - Quality / HR / Admin → company agents
+- **Coach:** TL / Closer default to themselves (cannot reassign). Quality defaults to self / quality team and may pick **OP**. OP defaults to self and may pick unit TL / Closer / OP / agents. HR defaults to self, may pick TL / Closer / OP / Quality. Admin defaults to self, may pick any coach or agent (including OP).
+- **Outcome:** pending / positive / negative / normal. Coach can update outcome after the session and add extra notes; cannot edit original notes or delete.
+- **Secret notes:** HR / Quality / Admin (plus coach/submitter on their ticket). Agents never see secrets.
+- **Date/time + delete:** Admin / CEO only (HR cannot delete)
+- Filters: date, agent, coach, outcome, agent active/out, team
+- Access Control: `viewCoaching` / `submitCoaching` / `viewCoachingSecret`
 
 ---
 
@@ -305,13 +352,13 @@ Per-user exceptions inherit live role defaults from Access Control.
 - Payroll totals (finance / HR / leadership)
 - Document expiry summary
 - Team and company sales dashboards (role-scoped)
-- **HS-2 company** — CEO / Admin / HR only: sidebar company switcher, org, payroll context; Quality sees HS-2 unit in sales log only; all other roles see no HS-2 references
-- Unit toggles (HS-1 / HS-3; HS-2 when permitted) on sales for Quality and management roles
+- **HS-2 company isolation** — Binary company model (`hangup` vs `hs2`). **Managing** toggle (top-left sidebar) for admin/ceo/hr with `manageHs2Company`; native HS-2 staff locked to **Viewing HS-2**. `?company=hs2` denied without `canAccessHs2Company`. HS-2 sales/data visible **only** in HS-2 company context (strict — not on Main Hangup tab).
 
 ### Reports
 
 | Report | Output |
 |--------|--------|
+| **Analytics** | Leave, costs, sales, and training widgets with company scope (v2.2.0) |
 | Monthly HR report | PDF + Markdown |
 | Headcount & turnover | In-app summary |
 | Attendance rankings | NSNC / lateness CSV |
@@ -350,6 +397,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 ### Settings
 
 - Seven color themes (saved per device)
+- **Page loading overlay** — cat animation centered in the viewport while Payroll/Employees (and other cold pages) load; running cat uses nearby changing paths and faces the way it is going
 - Federal holidays, tax rules, break schedules (timed pop-up reminders)
 - Sales catalog (clients, products, prices)
 - Notification routing
@@ -398,9 +446,10 @@ Separate Electron entry for Admin/RTM:
 
 ## Deployment model
 
-1. Apply pending Supabase migrations (`npm run apply:migrations`)
-2. Build installer on dev machine (`npm run dist:all` or `.\scripts\build.ps1 all`)
-3. Mark version in Supabase `app_versions`
+1. Apply pending Supabase migrations (`npm run apply:migrations`) — v2.2.0: `password_changed_at`, training status v2, expense `category`
+2. Set strong `SESSION_SECRET` in `.env`; copy to `userData/HangupHR-data/.env` on each PC after install
+3. Build installer on dev machine (`npm run dist:all` or `.\scripts\build.ps1 all`; use `HR_RELEASE_BUILD=1` to enforce secret)
+4. Mark version in Supabase `app_versions`
 4. Distribute installer via USB, shared drive, or web bootstrap EXE
 5. Users sign in — first run syncs all data
 6. Optional: publish GitHub release for in-app updates (see [`UPDATES.md`](UPDATES.md))
@@ -415,10 +464,12 @@ Separate Electron entry for Admin/RTM:
 |------|----------------|
 | Dashboard | KPIs, expiry alerts, sales summaries |
 | Employees | Profiles, compliance, documents, lifecycle |
+| Interviews | Candidate interview workflow (1st/2nd interview, training handoff) |
+| Training | Active training candidates, feedback, test-call metrics |
 | Attendance | Monthly grid, FP import, holidays |
 | Payroll | Engine, payslips, lock, MoM, training tabs |
 | Bonuses / Deductions / Loans / Salaries | Payroll inputs |
-| Reports | HR reports, rankings, custom reports |
+| Reports | HR reports, rankings, custom reports, **Analytics** |
 | Costs | Expenses, petty cash, bills |
 | Requests | Leave and time-off approvals |
 | Equipment | Asset registry and assignments |
@@ -433,4 +484,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **1.7.7** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **2.3.22** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

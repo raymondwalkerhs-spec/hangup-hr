@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `1.7.7`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.22`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -14,10 +14,10 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 
 1. Open **Hangup Portal** (installer shortcut or portable EXE).
 2. Enter **username** and **password** (managed by Raymond in **Users**).
-3. Optional: **Remember my username** and/or **Save password on this device** (stored locally on this PC only).
+3. Optional: **Remember my username** (stored locally on this PC only).
 4. Click **Sign in**.
 
-**First login** needs internet. You will see **Syncing HR data…** while employees, attendance, and payroll load into the local cache.
+**First login** needs internet. You will see **Syncing HR data…** while employees, attendance, and payroll load into the local cache. Switching pages (especially **Payroll** and **Employees**) shows a centered cat loading overlay until that page’s data is ready; returning to a page you already opened is usually instant.
 
 | Issue | What to do |
 |-------|------------|
@@ -35,7 +35,9 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | Sidebar | Purpose |
 |---------|---------|
 | **Dashboard** | Headcount, payroll total, document expiry widget |
-| **Employees** | Profiles, nationality, documents, lifecycle |
+| **Announcements** | Company posts (current workspace), or targeted by unit / team / role; picture above, middle, or below text; also notifies matching users; unread count on sidebar until opened; HR/RTM/Admin/CEO can publish |
+| **Employees** | Profiles, nationality, documents, lifecycle. Moving unit to another company needs confirmation and a new team |
+| **Coaching** | Agent coaching tickets (coach, outcome, general + secret notes) |
 | **Attendance** | Monthly grid; **Import FP file** for device exports; per-month FP rules |
 | **Payroll** | Monthly payroll, payslips, month lock, MoM compare |
 | **Bonuses / Deductions / Loans / Salaries** | Payroll inputs; **Loan approvals** (Mark/Phoebe/Raymond only) |
@@ -62,7 +64,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 
 - **Search** by name or ID  
 - **Filters:** status, unit, **nationality**, **work permit**, **insurance status**  
-- **Hide out / inactive** toggle  
+- **Hide OUT (left previous month)** toggle — shows leavers from the prior month only; legacy leavers (2+ months, no pay) stay hidden unless **Settings → Show legacy employees** is on  
 
 ### Add an agent
 
@@ -122,6 +124,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 3. Employee card → **Training program**: phase status, sales counts (4/phase, 12 total), outcome, promotion date.  
 4. **Promote to Agent** when 12+ passed sales — sets dual payslip if promotion is mid-month.  
 5. Payroll payslip modal: **Training** / **Agent** tabs; export PDFs with `Training PDF` / `Agent PDF`.
+6. **Training payroll anchor (HR)** — on training or deferred payslips, override which month pays the training net when the default anchor is wrong (e.g. graduated trainee still accruing before anchor). Pre-anchor months show **—** net until the anchor month.
 
 ---
 
@@ -135,16 +138,14 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 ## 5. Payroll
 
-1. Select **month**.  
-2. Review basic, bonuses, deductions, transport, loans, net pay.  
-3. Open **payslip** per employee for detail, bonuses, deductions, and status.  
-4. **Month lock** — HR can lock a month to prevent further attendance/bonus/deduction edits.  
-5. **MoM compare** — quick month-over-month net pay delta.  
-6. **Finance handoff ZIP** *(Admin/CEO)* — payroll CSV + all payslip PDFs + change log.  
-7. Exports: Cash / Bank / Instapay CSV and PDF, payslip PDF, bulk payslips.
-8. **Payroll approval gates** — cannot mark payslip *received* / *closed* if offboarding, clearance, or equipment return is incomplete; banner links open those workflows.
-9. **No payroll** toggle — exclude an employee from a month’s payroll run when appropriate.
-10. **Per-split PDF** and **splits ZIP** — export commission splits from payslip view.
+1. Open **Payroll** — **one unified list** (agents, trainees, and dual Training+Agent rows).  
+2. Select **month**; filter by unit/team/search. Optional **Hide zero net pay** hides rows whose **current remaining net** is 0.  
+3. Grid columns (working days, sales, commission, basic, loans, transport, bonus, deductions, net) match each payslip; tiles/footer total the **filtered** rows.  
+4. Open **payslip** for detail (Combined / Training / Agent when dual).  
+5. **Month lock**, **MoM compare**, **Finance handoff ZIP** (Admin/CEO), Cash/Bank/Instapay CSV+PDF, bulk payslips.  
+6. Export **PDF** / **XLS** matches the filtered unified list.  
+7. **Payroll approval gates** — cannot mark *received* / *closed* if offboarding, clearance, or equipment return is incomplete.  
+8. **No payroll** toggle; **per-split PDF** / **splits ZIP** from payslip view.
 
 **Action Plan Week** — during an active week, payroll applies stricter rules (e.g. tripled deductions, Lateness A = 75 EGP). Notes appear on the payslip.
 
@@ -153,7 +154,8 @@ Edits outside an employee’s **active employment period** are rejected (after d
 ## 6. Requests
 
 - **Request types:** Annual (paid Day-OFF), unpaid day off, medical/sick, same-day off.  
-- **Rules:** Annual leave is self-only; same-day requests after 12:00 are allowed but flagged late; TL/OP can request for team agents.  
+- **Rules:** Annual leave is self-only; same-day requests after 12:00 are allowed but flagged late; **TL** can request leave for active agents on their team; **OP** for their unit; **closers cannot** submit leave on behalf.
+- **IT requests:** TL, OP, IT, and org **closers** can open tickets for active agents in scope (team or unit).  
 - **Approvers:** Mark, Raymond, Phoebe.  
 - Approved annual leave sets **Day-OFF** with **paid leave** flag (counts for payroll working days).
 
@@ -227,7 +229,7 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 - **New agents** register from the login screen: click **Create your registration →** and follow the 3 steps — **1)** today's PIN (ask OP/HR/Quality), **2)** your details, **3)** confirmation showing the approval pipeline (submitted → approval → activation by Mark/Raymond).
 - **Approvers** (OP/Admin/HR/CEO): approving a registration shows a **credentials card** with the new User ID and temp password — use the **Copy** buttons to hand them to the agent.
 - **HR** adds agents with optional **4-week training program** (Mon–Fri phases, sales count per phase).
-- **Organization** page: assign OP/TL, add/edit teams, approve registrations, view daily PIN.
+- **Organization** page: assign OP/TL/**closers**, add/edit teams, approve registrations, view daily PIN.
 
 ### Sales (1.4.1–1.4.2)
 
@@ -235,7 +237,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 
 - **Toolbar:** filter by **Client**, **Agent**, **Closer**, and **Status** (day/week/month).
 - **Advanced filter:** add rules; pick AND/OR/NOT when you have two or more rules; employee/client dropdowns for ID fields.
-- **Add sale:** catalog client/device/price; unit → team → agent; bank or card payment fields.
+- **Add sale:** catalog client/device/price; unit → agent (team auto-fills from the agent); bank or card payment fields.
 - **Edit sale (1.4.2):** Client, Device, and Price come preselected from the sale — no need to re-choose them.
 - **Bank account:** routing number, bank name, account number, address, who chose bank account.
 - **Edit / Quality ticket:** **Verifier feedback** and **Client feedback** are dropdowns (see SALES_LOG for who may edit).
@@ -243,12 +245,12 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Admin (1.6.10):** **Sales permissions** has tabs — **Edit sale**, **Quality ticket**, **Attachments**, **Actions** — with independent main vs quality view columns. **Log columns** controls which columns appear.
 - **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. Run **Reset defaults** once after upgrade.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
-- **Dual-role TL:** assign TL on Organization (`tl_employee_id`); agent login sees led team attendance/sales, not home-team peers.
+- **Dual-role TL:** assign TL on Organization (`team_tls` / `tl_employee_id`); agent login with `leadTeams` sees led team for leave/IT on behalf, not unit-wide sales unless also assigned as **closer** for that team.
 - **Add sale (1.6.13):** team auto-fills from selected agent; quality section hidden on submit.
-- **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (unit closers allowed).
+- **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (own team leaders allowed). Org closers (e.g. Ria) keep agent login, stay in the closer list, default to themselves, and can submit their own sales. Closers/TLs assigned in Organization (e.g. Amy on Tris) pick that team even if their employee home team is Management.
 - **My docs (1.6.12):** self-upload National ID, Medical Note, Exam Note only; HR/Admin upload Contract and all types.
 - **Requests (1.6.12):** annual leave hidden from agents.
-- **View sale (1.6.11):** read-only modal on sales log; enable **View sale** in Access Control; field visibility from **Sales permissions → Edit sale**.
+- **Sales log (MLA / RPM tabs):** **View** (read-only), **Edit** (if permitted), **Quality** (RPM: Quality/RTM/Admin only; MLA: quality workflow + verifier assignees). **+ Add sale** opens program picker when both MLA and RPM are enabled. Agents see sales where they are the agent; closers see sales where they are the closer; team TLs see their team's sales.
 - **Quality ticket (1.6.11):** fix — **Sales permissions → Quality ticket** grants now apply correctly (was ignoring DB rows); payment card/bank sub-fields show on readonly tickets.
 - **Quality ticket (1.6.10):** quality surface defaults deny non-quality fields unless granted in **Sales permissions → Quality ticket** tab; agent/closer shown in summary only; non-editable fields are display-only; attachments gated by **Attachments** tab.
 - **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).

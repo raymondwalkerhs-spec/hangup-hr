@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: business_logic/sales/submit_validation
+title: Sales Submission Validation & Period Grid Utilities
+scope:
+    - lib/sales-submit-required.js
+    - lib/sales-period-grid.js
+    - lib/sales-working-day.js
+source_files: []
+depends_on: []
+related_to: []

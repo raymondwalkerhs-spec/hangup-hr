@@ -1,0 +1,1 @@
+PDF generation via `pdfkit` (A4, Helvetica, fixed-width column tables); ZIP packaging via `archiver` with zlib level 6; safe extraction via `adm-zip` with custom entry loop to avoid PowerShell `Expand-Archive` and `adm-zip.extractAllTo` chmod bugs on Windows.

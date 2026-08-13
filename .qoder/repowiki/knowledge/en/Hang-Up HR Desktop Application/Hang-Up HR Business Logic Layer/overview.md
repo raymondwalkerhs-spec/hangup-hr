@@ -1,0 +1,1 @@
+Orchestrates Hang-Up HR's domain services (attendance, sales, payroll, employees, permissions, notifications) on top of a Supabase-backed repository facade.

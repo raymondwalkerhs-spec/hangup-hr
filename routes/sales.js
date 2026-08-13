@@ -3,6 +3,8 @@ const business = require("../lib/business-repo");
 const salesScope = require("../lib/sales-scope");
 const periodGrid = require("../lib/sales-period-grid");
 const teamDashboard = require("../lib/team-dashboard");
+const rpmRepo = require("../lib/rpm-sales-repo");
+const usersAdmin = require("../lib/users-admin");
 const hrmsRepo = require("../lib/hrms-repo");
 const roles = require("../lib/roles");
 const store = require("../lib/data-store");
@@ -19,7 +21,7 @@ const salesActionPerms = require("../lib/sales-action-permissions");
 const salesAttachmentPerms = require("../lib/sales-attachment-permissions");
 const workingDayLib = require("../lib/sales-working-day");
 const airtableSync = require("../lib/airtable-sales-sync");
-const saleSubmitRequired = require("../lib/sales-submit-required");
+const saleProgramAccess = require("../lib/sale-program-access");
 
 const router = express.Router();
 
@@ -32,17 +34,22 @@ function afterSaleMutation(saleId, opts = {}) {
 }
 
 function scopedEmployees(req, opts = {}) {
+  const employeeAppRole = require("../lib/employee-app-role");
   let employees = store.getEmployees({ hideOut: opts.hideOut !== undefined ? opts.hideOut : false });
   const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
   employees = companyContext.filterEmployeesByCompany(employees, company);
   if (req.userRole) {
     employees = roles.filterEmployeesForUser(employees, req.userRole);
   }
-  return employees;
+  return employeeAppRole.enrichEmployeesWithAppRole(employees);
 }
 
 function filterSalesForRequest(sales, req) {
-  return companyContext.filterHs2SalesForRole(sales, req.userRole);
+  const company = companyContext.resolveCompanyContextForUser(
+    req.query.company || req.body?.company,
+    req.userRole
+  );
+  return companyContext.filterSalesByCompanyContext(sales, company);
 }
 
 function filterSalesByCompany(sales, employees) {
@@ -77,31 +84,32 @@ function enrichSaleAgent(emp) {
 }
 
 async function validateSaleUnitTeam(unit, team) {
+  const { teamsMatch } = require("../lib/team-names");
   const u = String(unit || "").trim();
   const t = String(team || "").trim();
   if (!u || !t) return { ok: false, error: "Unit and team are required" };
   const orgTeams = await hrmsRepo.readOrgTeams();
-  const match = (orgTeams || []).find((row) => row.name === t && row.unit === u);
+  const match = (orgTeams || []).find((row) => teamsMatch(row.name, t) && String(row.unit || "") === u);
   if (!match) return { ok: false, error: "Invalid unit/team combination" };
   if (match.dialsSales === false) return { ok: false, error: "Only dialing teams can be selected" };
-  return { ok: true, unit: u, team: t };
+  return { ok: true, unit: u, team: match.name || t };
 }
 
-function validateQualityAssignees(formData) {
-  const { isOutStatus } = require("../lib/employee-status");
-  for (const [key, label] of [
-    ["reviewer", "Reviewer"],
-    ["assignVerifier", "Verifier"],
-  ]) {
-    const id = String(formData?.[key] || "").trim();
-    if (!id) continue;
-    const emp = store.getEmployeeById(id);
-    if (!emp) return { ok: false, error: `${label} not found` };
-    if (isOutStatus(emp.status)) {
-      return { ok: false, error: `${label} is out and cannot be assigned` };
-    }
-  }
-  return { ok: true };
+function validateQualityAssignees(formData, getEmployeeById) {
+  const { validateQualityAssignees: validate } = require("../lib/sales-quality-assignees");
+  const lookup =
+    getEmployeeById ||
+    ((id) => {
+      const emp = store.getEmployeeById(id);
+      return emp || null;
+    });
+  return validate(formData, lookup);
+}
+
+function scopedEmployeeLookup(req) {
+  const scoped = scopedEmployees(req, { hideOut: false });
+  const byId = new Map(scoped.map((e) => [e.id, e]));
+  return (id) => byId.get(id) || null;
 }
 
 function normalizePaymentMethod(method) {
@@ -321,23 +329,39 @@ router.get("/team-dashboard", async (req, res) => {
     return res.status(403).json({ error: "No permission for team dashboards" });
   }
   try {
-    const employees = scopedEmployees(req);
+    let employees = store.getEmployees({ hideOut: false });
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    employees = companyContext.filterEmployeesByCompany(employees, company);
+    employees = roles.filterEmployeesForTeamDashboard(employees, req.userRole);
     const grants = await business.readSalesVisibilityGrants(req.username);
     const period = req.query.period || "day";
     const date = req.query.date || new Date().toISOString().slice(0, 10);
     const { from, to } = periodGrid.buildPeriodBounds(period === "week" ? "week" : "day", date);
 
-    let sales = await business.readSales({ from, to });
+    let sales = await business.readSales({ from, to, dateBasis: "either" });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
+
+    let rpmSales = await rpmRepo.readRpmSales({ from, to });
+    rpmSales = salesScope.filterSalesForUser(rpmSales, req.userRole, employees, grants);
+    rpmSales = filterSalesByCompany(rpmSales, employees);
+    rpmSales = filterSalesForRequest(rpmSales, req);
+    sales = [...sales, ...rpmSales];
 
     let teamsMeta = [];
     try {
       teamsMeta = await hrmsRepo.readOrgTeams();
     } catch {
       teamsMeta = [];
+    }
+
+    let appUsers = [];
+    try {
+      appUsers = await usersAdmin.listAppUsers();
+    } catch {
+      appUsers = [];
     }
 
     const attendanceRecords = [];
@@ -354,6 +378,7 @@ router.get("/team-dashboard", async (req, res) => {
         employees,
         attendanceRecords: attendance,
         teamsMeta,
+        appUsers,
       });
       return res.json({ period: "week", ...dashboard });
     }
@@ -364,6 +389,7 @@ router.get("/team-dashboard", async (req, res) => {
       employees,
       attendanceRecords: attendance,
       teamsMeta,
+      appUsers,
     });
     res.json({ period: "day", ...dashboard });
   } catch (err) {
@@ -485,7 +511,16 @@ router.post("/", async (req, res) => {
   }
   const emp = store.getEmployeeById(agentId);
   if (!emp) return res.status(404).json({ error: "Agent not found" });
-  const employees = store.getEmployees({ hideOut: false });
+  const programCheck = saleProgramAccess.assertAgentProgramEnabled(emp, "mla", req.userRole);
+  if (!programCheck.ok) return res.status(403).json({ error: programCheck.error });
+  const employeeAppRole = require("../lib/employee-app-role");
+  const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(
+    companyContext.filterEmployeesByCompany(
+      store.getEmployees({ hideOut: true }),
+      companyContext.resolveCompanyContextForUser(req.body.company || req.query.company, req.userRole)
+    )
+  );
+  const orgTeams = await hrmsRepo.readOrgTeams();
   const assignment = saleSubmitScope.validateSaleSubmitAssignment(
     req.userRole,
     {
@@ -494,7 +529,8 @@ router.post("/", async (req, res) => {
       unit: req.body.unit || req.body.formData?.unit,
       team: req.body.team || req.body.formData?.team,
     },
-    employees
+    employees,
+    { teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams), orgTeams }
   );
   if (!assignment.ok) {
     return res.status(403).json({ error: assignment.error });
@@ -514,18 +550,22 @@ router.post("/", async (req, res) => {
     const paymentCheck = validatePaymentForm(payload.formData || sanitizedForm);
     if (!paymentCheck.ok) return res.status(400).json({ error: paymentCheck.error });
 
-    const unitTeam = await validateSaleUnitTeam(req.body.unit || payload.formData?.unit, req.body.team || payload.formData?.team);
+    const unitTeam = await validateSaleUnitTeam(
+      emp.unit || assignment.unit || req.body.unit || payload.formData?.unit,
+      emp.team || assignment.team || req.body.team || payload.formData?.team
+    );
     if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
 
     const mergedForm = scrubPaymentForm(
       { ...sanitizedForm, ...(payload.formData || {}), unit: unitTeam.unit, team: unitTeam.team },
       paymentCheck.method
     );
+    const saleCompany = companyContext.resolveCompanyContextForUser(req.body.company || req.query.company, req.userRole);
     const catalogResolved = await salesClients.validateAndResolveCatalogSale({
       ...req.body,
       ...payload,
       formData: mergedForm,
-    });
+    }, saleCompany, { saleProgram: "mla" });
     if (!catalogResolved.phoneNumber && !payload.phoneNumber) {
       return res.status(400).json({ error: "phoneNumber required" });
     }
@@ -536,12 +576,12 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "device required" });
     }
     if (!catalogResolved.client && !payload.client) {
-      const hasCatalog = await salesClients.catalogHasActiveProducts().catch(() => false);
+      const hasCatalog = await salesClients.catalogHasActiveProducts(saleCompany, { saleProgram: "mla" }).catch(() => false);
       if (hasCatalog) {
-        return res.status(400).json({ error: "client required — select from Client & device catalog" });
+        return res.status(400).json({ error: "client required — select from MLA client catalog" });
       }
     }
-    const hasCatalog = await salesClients.catalogHasActiveProducts().catch(() => false);
+    const hasCatalog = await salesClients.catalogHasActiveProducts(saleCompany, { saleProgram: "mla" }).catch(() => false);
     const submitValidation = saleSubmitRequired.validateSaleSubmitPayload(
       {
         ...req.body,
@@ -617,6 +657,7 @@ router.post("/", async (req, res) => {
     if (sale.status === "pending") {
       const dispatch = require("../lib/notify-dispatch");
       const submitterRole = roles.normalizeRole(req.userRole?.role);
+      const saleCompany = companyContext.getCompanyForUnit(sale.unit || emp?.unit);
       if (submitterRole === "agent") {
         await dispatch.dispatchNotification({
           actionKey: "sale_agent_submitted",
@@ -626,6 +667,7 @@ router.post("/", async (req, res) => {
           entityType: "sale",
           entityId: sale.id,
           actor: req.username,
+          context: { company: saleCompany },
         });
       }
       await dispatch.dispatchNotification({
@@ -636,6 +678,7 @@ router.post("/", async (req, res) => {
         entityType: "sale",
         entityId: sale.id,
         actor: req.username,
+        context: { company: saleCompany },
       });
     }
     await notifySaleAssignments(sale, {});
@@ -716,7 +759,7 @@ router.patch("/:id", async (req, res) => {
       );
       const paymentMethod = normalizePaymentMethod(sanitizedForm.paymentMethod);
       const scrubbedForm = paymentMethod ? scrubPaymentForm(sanitizedForm, paymentMethod) : sanitizedForm;
-      const assignCheck = validateQualityAssignees(scrubbedForm);
+      const assignCheck = validateQualityAssignees(scrubbedForm, scopedEmployeeLookup(req));
       if (!assignCheck.ok) return res.status(400).json({ error: assignCheck.error });
       const built = salesFieldAccess.buildPayloadFromBody(req.body, scrubbedForm);
       patch = {
@@ -740,6 +783,7 @@ router.patch("/:id", async (req, res) => {
         const canReassign = roles.canReassignSaleLead(req.userRole);
         if (canReassign && (ticketOnly || req.body.edit === true)) {
           const saleSubmitScope = require("../lib/sale-submit-scope");
+          const orgTeams = await hrmsRepo.readOrgTeams();
           const assignment = saleSubmitScope.validateSaleSubmitAssignment(
             req.userRole,
             {
@@ -748,7 +792,8 @@ router.patch("/:id", async (req, res) => {
               unit: req.body.unit || patch.unit || existing.unit,
               team: req.body.team || patch.team || existing.team,
             },
-            employees
+            employees,
+            { orgTeams, teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams) }
           );
           if (!assignment.ok) return res.status(403).json({ error: assignment.error });
           patch.agentId = req.body.agentId;
@@ -829,7 +874,15 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-const saleStorage = require("../lib/sale-attachment-storage");
+const MAX_ATTACHMENT_BYTES = 35 * 1024 * 1024;
+
+function assertAttachmentPayloadSize(contentBase64) {
+  const buf = Buffer.from(String(contentBase64 || ""), "base64");
+  if (buf.length > MAX_ATTACHMENT_BYTES) {
+    return { ok: false, error: `File too large (max ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB)` };
+  }
+  return { ok: true, buffer: buf };
+}
 
 async function canUserManageAttachmentKind(userRole, kind, sale = null) {
   const role = userRole?.role || "agent";
@@ -842,6 +895,7 @@ async function canUserManageAttachmentKind(userRole, kind, sale = null) {
   }
   return false;
 }
+const saleStorage = require("../lib/sale-attachment-storage");
 const saleAttachmentCache = require("../lib/sale-attachment-cache");
 const fs = require("fs");
 
@@ -875,11 +929,23 @@ router.get("/export", async (req, res) => {
     }
     const format = String(req.query.format || "csv").toLowerCase();
     const salesExport = require("../lib/sales-export");
+    // Build columns based on user's field permissions
+    const allFields = salesCatalog.FIELDS || [];
+    const visibleFieldKeys = new Set();
+    for (const f of allFields) {
+      if (!salesCatalog.isSystemHiddenField(f)) {
+        // Map field key to export column key
+        const exportKey = f.key === "deviceType" ? "device" : f.key === "priceTier" ? "priceTierLabel" : f.key;
+        visibleFieldKeys.add(exportKey);
+      }
+    }
+    const exportColumns = salesExport.filterColumnsForUser(salesExport.EXPORT_COLUMNS, visibleFieldKeys);
     const subtitle = [req.query.from, req.query.to].filter(Boolean).join(" → ") || "All visible sales";
     const { buffer, contentType, ext } = await salesExport.buildExport({
       sales,
       employees,
       format,
+      columns: exportColumns,
       meta: {
         title: req.query.saleId ? "Hangup Portal — Sale export" : "Hangup Portal — Sales export",
         subtitle,
@@ -888,6 +954,29 @@ router.get("/export", async (req, res) => {
     const stamp = new Date().toISOString().slice(0, 10);
     const name = req.query.saleId ? `sale-${req.query.saleId}` : `sales-${stamp}`;
     res.type(contentType).attachment(`${name}.${ext}`).send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/submit-scope", async (req, res) => {
+  if (!roles.canSubmitSales(req.userRole)) {
+    return res.status(403).json({ error: "You may not submit new sales" });
+  }
+  try {
+    const saleSubmitScope = require("../lib/sale-submit-scope");
+    const employeeAppRole = require("../lib/employee-app-role");
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(store.getEmployees({ hideOut: true }));
+    const orgTeams = await hrmsRepo.readOrgTeams();
+    const scope = saleSubmitScope.buildSubmitScopePayload(req.userRole, employees, orgTeams, {
+      program: "mla",
+      company,
+    });
+    res.json({
+      ...scope,
+      enabledPrograms: saleProgramAccess.enabledProgramsForSubmitter(req.userRole, employees),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1096,6 +1185,19 @@ router.put("/attachment-permissions/:attachmentKey", async (req, res) => {
   }
 });
 
+router.delete("/attachment-permissions/:attachmentKey", async (req, res) => {
+  if (!roles.canManageSalesFieldPermissions(req.userRole)) {
+    return res.status(403).json({ error: "Admin/RTM only" });
+  }
+  try {
+    const attachmentKey = decodeURIComponent(req.params.attachmentKey);
+    const result = await salesAttachmentPerms.deleteAttachmentPermission(attachmentKey);
+    res.json({ ok: true, deleted: result.deleted });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get("/attachments/:attachmentId/file", async (req, res) => {
   try {
     const access = await assertAttachmentAccess(req, req.params.attachmentId);
@@ -1151,7 +1253,9 @@ router.post("/:id/attachments", async (req, res) => {
     if (!(await canUserManageAttachmentKind(req.userRole, kindKey, existing))) {
       return res.status(403).json({ error: "No permission to upload this attachment type" });
     }
-    const buffer = Buffer.from(contentBase64, "base64");
+    const sizeCheck = assertAttachmentPayloadSize(contentBase64);
+    if (!sizeCheck.ok) return res.status(400).json({ error: sizeCheck.error });
+    const buffer = sizeCheck.buffer;
     const uploaded = await saleStorage.uploadSaleAttachmentBuffer({
       saleId: req.params.id,
       kind: kindKey,

@@ -1,0 +1,4 @@
+- Role values are normalized through a local `normalizeRole` helper that lowercases and trims before any comparison, used consistently across all three files.
+- Database permission columns are accepted in both snake_case and camelCase variants via a `permRoles(dbPerm, snakeKey, camelKey)` shim, so callers may pass raw DB rows or repo-normalized objects interchangeably.
+- Default role sets live as module-level constants (`DEFAULT_VIEW`, `DEFAULT_EDIT`, `QUALITY_ROLES`, `COMPANY_VIEW_ROLES`, `DEFAULT_ACTIONS`) and are consumed via destructuring rather than re-declared at call sites.
+- Optional user/sale context is passed through an `opts = {}` parameter object with named properties (`surface`, `user`, `sale`, `create`, `qualityTicket`) instead of positional arguments, keeping function signatures stable as new surfaces are added.

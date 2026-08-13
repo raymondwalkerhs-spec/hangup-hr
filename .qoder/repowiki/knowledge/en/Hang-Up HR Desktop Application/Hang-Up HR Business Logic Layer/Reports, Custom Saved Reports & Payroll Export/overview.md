@@ -1,0 +1,1 @@
+Generates monthly HR summaries, attendance/payroll comparison reports, CSV-based custom saved reports, bank/cash/instapay payroll export sheets, and request-submission validation rules.

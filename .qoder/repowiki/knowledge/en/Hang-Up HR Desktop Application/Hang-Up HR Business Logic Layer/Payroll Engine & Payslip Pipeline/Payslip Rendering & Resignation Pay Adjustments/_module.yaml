@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: business_logic/payroll/payslips
+title: Payslip Rendering & Resignation Pay Adjustments
+scope:
+    - lib/payslip-detail.js
+    - lib/payslip-pdf.js
+    - lib/resignation-payroll.js
+source_files: []
+depends_on: []
+related_to: []

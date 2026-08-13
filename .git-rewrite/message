@@ -1,0 +1,5 @@
+fix: sales log load failure and ship v1.6.21
+
+Remove duplicate uploadKinds declaration in sales.js that prevented SalesModule from loading.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>

@@ -1,0 +1,1 @@
+PDF generation via `pdfkit` (streaming `data` events concatenated into a Buffer); date formatting uses the `en-US` / `en-EG` locales for ordinal dates and EGP currency.

@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: express_server
+title: Express API Server (HR Desktop)
+scope:
+    - app.js
+    - routes/
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic
+    - path: electron_runtime

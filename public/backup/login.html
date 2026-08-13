@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in - Hangup Backup</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="login-page">
+  <div class="login-card" style="max-width:420px">
+    <img src="/img/hr-team.png" alt="" class="login-logo" style="max-width:72px" />
+    <h1 class="login-title">Hangup Backup</h1>
+    <p class="tagline muted">Admin and RTM only.</p>
+    <form id="login-form">
+      <label class="field"><span>Username</span><input type="text" id="username" required autocomplete="username" /></label>
+      <label class="field"><span>Password</span><input type="password" id="password" required autocomplete="current-password" /></label>
+      <p id="login-error" class="login-error hidden" role="alert"></p>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+  </div>
+  <script>
+    const SESSION_KEY = "hr_backup_session";
+    if (sessionStorage.getItem(SESSION_KEY)) location.href = "/";
+    document.getElementById("login-form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var errEl = document.getElementById("login-error");
+      errEl.classList.add("hidden");
+      var btn = e.target.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        var res = await fetch("/api/backup/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value.trim(),
+            password: document.getElementById("password").value,
+            deviceLabel: "Hangup Backup Desktop"
+          })
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || "Sign in failed");
+        sessionStorage.setItem(SESSION_KEY, data.sessionId);
+        if (window.hrBackup && window.hrBackup.setSession) await window.hrBackup.setSession(data.sessionId);
+        location.href = "/";
+      } catch (err) {
+        errEl.textContent = err.message || "Sign in failed";
+        errEl.classList.remove("hidden");
+      } finally { btn.disabled = false; }
+    });
+  </script>
+</body>
+</html>

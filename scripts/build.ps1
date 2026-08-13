@@ -36,6 +36,19 @@ if (-not (Test-Path ".env")) {
   }
 }
 
+if ($env:HR_RELEASE_BUILD -eq "1") {
+  $sessionSecret = ""
+  if (Test-Path ".env") {
+    $m = Select-String -Path ".env" -Pattern '^\s*SESSION_SECRET\s*=\s*(.+)\s*$' | Select-Object -First 1
+    if ($m) { $sessionSecret = $m.Matches.Groups[1].Value.Trim().Trim('"').Trim("'") }
+  }
+  $weak = @("", "hangup-hr-desktop-secret", "hangup-backup-secret")
+  if ($weak -contains $sessionSecret) {
+    Write-Host "ERROR: SESSION_SECRET must be set to a strong random value in .env for release builds (HR_RELEASE_BUILD=1)." -ForegroundColor Red
+    exit 1
+  }
+}
+
 function Stop-HangupAppProcesses {
   $names = @("Hangup Portal", "Hangup HR", "Hangup HR Beta", "electron")
   $stopped = $false
@@ -88,6 +101,14 @@ function Clear-UnpackedOutput {
   }
 }
 
+function Get-SafeBuilderVersion {
+  param([string]$version)
+  if (-not $version) { return $null }
+  if ($version -match '^[0-9]+\.[0-9]+\.[0-9]+$') { return $version }
+  if ($version -match '^([0-9]+\.[0-9]+\.[0-9]+)(?:[.-].*)$') { return $matches[1] }
+  return $null
+}
+
 Stop-HangupAppProcesses
 
 $betaArgs = @($args | Where-Object { $_ -eq "beta" })
@@ -122,6 +143,25 @@ if ($env:CI -eq "true") {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+$pkgPath = Join-Path $PWD "package.json"
+$packageJson = Get-Content $pkgPath -Raw | ConvertFrom-Json
+$originalVersion = $packageJson.version
+$builderVersion = Get-SafeBuilderVersion $originalVersion
+$tempPackageCreated = $false
+$backupPackagePath = Join-Path $PWD "package.json.build.bak"
+$tempPackagePath = Join-Path $PWD "package.json.build.tmp"
+if ($builderVersion -and $builderVersion -ne $originalVersion) {
+  Write-Host "Using builder-compatible version $builderVersion for packaging. Preserving actual version $originalVersion via build.extraMetadata." -ForegroundColor Yellow
+  Copy-Item -Path $pkgPath -Destination $backupPackagePath -Force
+  $packageJson.version = $builderVersion
+  if (-not $packageJson.build) { $packageJson.build = @{} }
+  if (-not $packageJson.build.extraMetadata) { $packageJson.build.extraMetadata = @{} }
+  $packageJson.build.extraMetadata.version = $originalVersion
+  $packageJson | ConvertTo-Json -Depth 20 | Set-Content -Path $tempPackagePath -Encoding UTF8
+  Copy-Item -Path $tempPackagePath -Destination $pkgPath -Force
+  $tempPackageCreated = $true
+}
+
 # Code signing: electron-builder signs automatically when a certificate is
 # provided via env vars. Set CSC_LINK (path to .pfx/.p12) and CSC_KEY_PASSWORD
 # before running this script to produce a signed executable.
@@ -146,12 +186,21 @@ if ($env:CI -eq "true") {
   $builderArgs += "--publish"
   $builderArgs += "never"
 }
-switch ($target) {
-  "portable"  { npx electron-builder --win portable @builderArgs }
-  default     { npx electron-builder --win nsis @builderArgs }
-}
+try {
+  switch ($target) {
+    "portable"  { npx electron-builder --win portable @builderArgs }
+    default     { npx electron-builder --win nsis @builderArgs }
+  }
 
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+  if ($tempPackageCreated) {
+    Write-Host "Restoring original package.json after packaging..." -ForegroundColor Cyan
+    Copy-Item -Path $backupPackagePath -Destination $pkgPath -Force
+    Remove-Item -Path $backupPackagePath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $tempPackagePath -Force -ErrorAction SilentlyContinue
+  }
+}
 
 # Remove stale EXEs from this output folder so future publishes stay fast.
 Get-ChildItem $buildOutput -Filter "*.exe" -ErrorAction SilentlyContinue |

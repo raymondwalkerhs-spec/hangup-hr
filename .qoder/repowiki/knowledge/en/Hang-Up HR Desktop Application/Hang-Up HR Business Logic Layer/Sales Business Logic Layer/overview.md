@@ -1,0 +1,1 @@
+Orchestrates sales CRUD, field/attachment/action permissions, row-level visibility, submission validation and dashboard aggregation across the MLA-Ray sales pipeline.

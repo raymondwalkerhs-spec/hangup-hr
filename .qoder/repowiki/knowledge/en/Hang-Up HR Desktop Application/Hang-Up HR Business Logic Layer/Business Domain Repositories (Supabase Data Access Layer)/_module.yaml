@@ -1,0 +1,18 @@
+schema_version: 1
+module_path: business_logic/business_repos
+title: Business Domain Repositories (Supabase Data Access Layer)
+scope:
+    - lib/business-repo.js
+    - lib/companies-repo.js
+    - lib/break-schedules-repo.js
+    - lib/it-requests-repo.js
+    - lib/loan-requests-repo.js
+    - lib/meeting-requests-repo.js
+    - lib/quality-notes-repo.js
+    - lib/rules-repo.js
+    - lib/team-tls-repo.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/storage_integrations
+    - path: express_server/expenses_loans_routes

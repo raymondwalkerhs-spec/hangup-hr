@@ -1,0 +1,1 @@
+Electron desktop app that embeds an Express server and SPA, wiring business logic against Supabase with shared build, migration, and release tooling at the repository root.

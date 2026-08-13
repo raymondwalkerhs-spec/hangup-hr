@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: business_logic/sales
+title: Sales Business Logic Layer
+scope:
+    - lib/
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/airtable
+    - path: tests

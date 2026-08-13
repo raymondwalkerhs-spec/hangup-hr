@@ -1,0 +1,1 @@
+Supabase JS client via `./supabase-client` (`getSupabaseAdmin()`) gated by `require("./backend").useSupabase()` so all repo calls throw unless `DATA_BACKEND=supabase`; PDF export uses `pdfkit`.

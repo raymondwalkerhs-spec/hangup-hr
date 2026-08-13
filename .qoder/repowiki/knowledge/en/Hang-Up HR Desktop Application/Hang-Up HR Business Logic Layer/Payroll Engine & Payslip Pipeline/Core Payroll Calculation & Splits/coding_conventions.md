@@ -1,0 +1,5 @@
+- Monetary amounts are rounded to two decimals via `Math.round(x * 100) / 100` at every output boundary rather than using a currency library.
+- String-based enums are declared as top-level arrays (`BONUS_TYPES`, `DEDUCTION_TYPES`, `SPLIT_KINDS`, `SPLIT_STATUSES`) and validated by `includes()` checks instead of TypeScript-style enums.
+- Per-employee lookups use `Map`s keyed by `employeeId` built once from event arrays, then accessed inside the per-employee `.map()` loop to avoid repeated scans.
+- Optional overrides flow through an `adjustment` object whose fields take precedence over computed values, with explicit null/empty-string guards before numeric coercion.
+- Module boundaries expose only pure functions via `module.exports = { ... }` with no side effects on require.

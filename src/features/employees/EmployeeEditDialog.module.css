@@ -1,0 +1,33 @@
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab[data-state="active"] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.panel {
+  padding-top: 0.5rem;
+}
+.warn {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}

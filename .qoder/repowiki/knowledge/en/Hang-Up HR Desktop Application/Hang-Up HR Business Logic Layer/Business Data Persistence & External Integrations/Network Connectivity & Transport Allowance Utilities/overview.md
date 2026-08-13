@@ -1,0 +1,1 @@
+Provides HTTP connectivity probes and a Supabase-backed transport allowance calculator that converts attendance records into daily/monetary transport benefits.

@@ -4,6 +4,8 @@ const roles = require("../lib/roles");
 const notify = require("../lib/notify-store");
 const auditNotify = require("../lib/notify-routing");
 const { uploadBuffer } = require("../lib/storage");
+const companyContext = require("../lib/company-context");
+const store = require("../lib/data-store");
 
 const router = express.Router();
 
@@ -32,6 +34,19 @@ function filterExpensesForUser(expenses, userRole, username) {
   );
 }
 
+function expenseMatchesCompany(expense, req) {
+  const company = companyContext.resolveCompanyContextForUser(req.query.company || req.body?.company, req.userRole);
+  return (expense.company || "hangup") === company;
+}
+
+function denyExpenseCompany(req, res, expense) {
+  if (!expenseMatchesCompany(expense, req)) {
+    res.status(404).json({ error: "Not found" });
+    return true;
+  }
+  return false;
+}
+
 async function afterExpenseMutation() {
   try {
     await business.refreshBusinessCache();
@@ -46,17 +61,21 @@ router.get("/", async (req, res) => {
   }
   try {
     const excludeArchived = req.query.archived !== "true";
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
     let expenses = await business.readExpenseRequests({
       status: req.query.status,
       excludeArchived,
       starred: req.query.starred === "true",
+      company,
     });
     expenses = filterExpensesForUser(expenses, req.userRole, req.username);
     res.json({
       expenses,
       statuses: business.EXPENSE_STATUSES,
       priorities: business.EXPENSE_PRIORITIES,
+      categories: business.EXPENSE_CATEGORIES,
       paymentMethods: business.PAYMENT_METHODS,
+      paidByOptions: business.COST_PAID_BY_OPTIONS,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -67,7 +86,7 @@ router.post("/", async (req, res) => {
   if (!roles.canSubmitExpense(req.userRole, req.username)) {
     return res.status(403).json({ error: "No permission to submit expenses" });
   }
-  const { vendorName, description, amount, priority, dueDate, starred } = req.body;
+  const { vendorName, description, amount, priority, dueDate, starred, category } = req.body;
   if (!vendorName || amount == null) {
     return res.status(400).json({ error: "vendorName and amount required" });
   }
@@ -80,6 +99,7 @@ router.post("/", async (req, res) => {
         priority: priority || "normal",
         dueDate,
         starred,
+        category: category || "other",
         submitterRole: req.userRole.role,
       },
       req.username
@@ -103,6 +123,7 @@ router.post("/", async (req, res) => {
 router.post("/:id/receipt", async (req, res) => {
   const expense = await business.getExpenseRequest(req.params.id);
   if (!expense) return res.status(404).json({ error: "Not found" });
+  if (denyExpenseCompany(req, res, expense)) return;
   const canSee =
     roles.canAccessCostsFull(req.userRole, req.username) ||
     String(expense.submittedBy).toLowerCase() === String(req.username).toLowerCase();
@@ -134,7 +155,8 @@ router.post("/:id/receipt", async (req, res) => {
 
 router.get("/petty-cash/funds", requireFinance, async (req, res) => {
   try {
-    const funds = await business.getPettyCashFunds();
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const funds = await business.getPettyCashFunds(company);
     res.json({ funds });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -143,7 +165,14 @@ router.get("/petty-cash/funds", requireFinance, async (req, res) => {
 
 router.get("/petty-cash/ledger", requireFinance, async (req, res) => {
   try {
-    const ledger = await business.getPettyCashLedger(req.query.fundId);
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const funds = await business.getPettyCashFunds(company);
+    const fundId = req.query.fundId;
+    const companyFundIds = new Set((funds || []).map((f) => f.id));
+    if (fundId && !companyFundIds.has(fundId)) {
+      return res.json({ ledger: [] });
+    }
+    const ledger = await business.getPettyCashLedger(fundId, 100, company);
     res.json({ ledger });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -183,12 +212,10 @@ router.patch("/petty-cash/ledger/:id", requireFinance, async (req, res) => {
   }
 });
 
-router.get("/bills", async (req, res) => {
-  if (!roles.canAccessCostsFull(req.userRole, req.username)) {
-    return res.status(403).json({ error: "Finance access required" });
-  }
+router.get("/bills", requireFinance, async (req, res) => {
   try {
-    const bills = await business.readMonthlyBills();
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const bills = await business.readMonthlyBills({ company });
     res.json({ bills, billTypes: business.BILL_TYPES });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -197,7 +224,8 @@ router.get("/bills", async (req, res) => {
 
 router.post("/bills", requireFinance, async (req, res) => {
   try {
-    const bill = await business.upsertMonthlyBill(req.body, req.username);
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const bill = await business.upsertMonthlyBill({ ...req.body, company }, req.username);
     await afterExpenseMutation();
     res.json({ ok: true, bill });
   } catch (err) {
@@ -219,6 +247,7 @@ router.post("/:id/approve", requireFinance, async (req, res) => {
   try {
     const existing = await business.getExpenseRequest(req.params.id);
     if (!existing) return res.status(404).json({ error: "Not found" });
+    if (denyExpenseCompany(req, res, existing)) return;
     if (existing.status !== "pending_approval") {
       return res.status(400).json({ error: "Expense is not pending approval" });
     }
@@ -247,6 +276,7 @@ router.post("/:id/deny", requireFinance, async (req, res) => {
   try {
     const existing = await business.getExpenseRequest(req.params.id);
     if (!existing) return res.status(404).json({ error: "Not found" });
+    if (denyExpenseCompany(req, res, existing)) return;
     if (existing.status !== "pending_approval") {
       return res.status(400).json({ error: "Expense is not pending approval" });
     }
@@ -273,6 +303,7 @@ router.post("/:id/deny", requireFinance, async (req, res) => {
 router.get("/:id/receipt", async (req, res) => {
   const expense = await business.getExpenseRequest(req.params.id);
   if (!expense?.receiptFileId) return res.status(404).json({ error: "No receipt" });
+  if (denyExpenseCompany(req, res, expense)) return;
   const canSee =
     roles.canAccessCostsFull(req.userRole, req.username) ||
     String(expense.submittedBy).toLowerCase() === String(req.username).toLowerCase();
@@ -292,6 +323,27 @@ router.patch("/:id", requireFinance, async (req, res) => {
   try {
     const patch = { ...req.body };
     const prior = await business.getExpenseRequest(req.params.id);
+    if (!prior) return res.status(404).json({ error: "Not found" });
+    if (denyExpenseCompany(req, res, prior)) return;
+
+    const nextMethod = patch.paymentMethod !== undefined ? patch.paymentMethod : prior.paymentMethod;
+    const nextStatus = patch.status !== undefined ? patch.status : prior.status;
+    if (nextStatus === "paid" && nextMethod === "petty_cash" && !patch.pettyCashFundId && !prior.pettyCashFundId) {
+      const company = prior.company || "hangup";
+      const funds = await business.getPettyCashFunds(company);
+      const petty =
+        funds.find((f) => /petty/i.test(f.fundName || "") && !/main\s*fund/i.test(f.fundName || "")) ||
+        funds.find((f) => !/main\s*fund/i.test(f.fundName || "")) ||
+        funds[0];
+      if (petty) patch.pettyCashFundId = petty.id;
+    }
+    if (nextMethod === "main_fund") {
+      patch.pettyCashFundId = null;
+      patch.paidBy = "Main Fund";
+    } else if (nextMethod === "petty_cash") {
+      patch.paidBy = patch.paidBy || "Petty cash";
+    }
+
     const expense = await business.updateExpenseRequest(req.params.id, patch, req.username);
 
     await business.syncPettyCashForExpense({ prior, expense, patch, actor: req.username });
@@ -320,6 +372,7 @@ router.delete("/:id", requireFinance, async (req, res) => {
   try {
     const prior = await business.getExpenseRequest(req.params.id);
     if (!prior) return res.status(404).json({ error: "Not found" });
+    if (denyExpenseCompany(req, res, prior)) return;
     await business.reversePettyCashForExpense(prior.id);
     await business.deleteExpenseRequest(req.params.id);
     if (shouldAuditExpense(req.username)) {

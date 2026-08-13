@@ -1,0 +1,1 @@
+Electron wrapper that hosts the Hangup Portal Express server and SPA, plus a parallel backup app, exposing native OS capabilities to the browser via IPC.

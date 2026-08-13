@@ -1,0 +1,5 @@
+- All date strings are normalized to ISO `YYYY-MM-DD` via a local `parseDate(s)` helper that slices to 10 chars and validates the format before use.
+- Database column names accept both snake_case and camelCase variants (e.g. `week_start`/`weekStart`, `phase_number`/`phaseNumber`, `promotion_effective_date`/`promotionEffectiveDate`) using `row.field ?? row.snake_field` fallbacks throughout mapping functions.
+- Enum-like inputs are validated against exported constant sets (`PHASE_STATUSES`, `PHASE_EXIT_REASONS`, `PROGRAM_OUTCOMES`) with explicit `Invalid ...` error messages rather than silently accepting unknown values.
+- Each public function guards nullish inputs defensively (`(records || []).filter(...)`, `if (!phases.length) return []`) instead of relying on upstream guarantees.
+- Monetary results are rounded to two decimals via a local `round2(n)` helper applied at aggregation boundaries (`sumPayrollTotals`, combined net/basic fields).

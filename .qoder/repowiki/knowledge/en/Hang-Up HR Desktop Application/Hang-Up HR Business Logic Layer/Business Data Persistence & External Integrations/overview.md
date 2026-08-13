@@ -1,0 +1,1 @@
+Wires the application's data layer around a Supabase-backed repository, with in-memory cache and optional Airtable/Dropbox/Supabase Storage integrations for sales sync and file storage.

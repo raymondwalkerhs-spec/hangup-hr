@@ -1,0 +1,23 @@
+.full {
+  grid-column: 1 / -1;
+}
+.dayGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+.cancelBtn,
+.saveBtn {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.saveBtn {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}

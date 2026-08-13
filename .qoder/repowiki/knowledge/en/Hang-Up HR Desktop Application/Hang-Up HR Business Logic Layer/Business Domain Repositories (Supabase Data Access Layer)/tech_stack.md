@@ -1,0 +1,1 @@
+Supabase JavaScript client via `lib/supabase-client.getSupabaseAdmin()`, with runtime feature gating through `useSupabase()` checking the `DATA_BACKEND` env var; Postgres error-code detection (`42P01`, `column.*not.*exist`, `does not exist`) used to tolerate missing tables during migration.

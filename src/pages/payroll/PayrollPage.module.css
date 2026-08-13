@@ -1,0 +1,41 @@
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding-bottom: 0.35rem;
+}
+.statGridWide {
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+.warnBanner {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--warn, #d97706) 35%, var(--border));
+  background: color-mix(in srgb, var(--warn, #d97706) 10%, var(--surface));
+  font-size: 0.85rem;
+}
+.warnBanner ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+.warnBanner li + li {
+  margin-top: 0.2rem;
+}

@@ -1,0 +1,1 @@
+Requires `AIRTABLE_API_KEY`/`AIRTABLE_PAT` + `AIRTABLE_BASE_ID` + `AIRTABLE_TABLE_NAME` env vars; sync can be disabled entirely with `AIRTABLE_SYNC_ENABLED=false`. The canonical column order is derived at runtime from `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv`, so that file must exist for provisioning helpers to work.

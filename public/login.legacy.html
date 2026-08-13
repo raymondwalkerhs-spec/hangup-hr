@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in — Hangup Portal</title>
+  <link rel="icon" href="/img/hr-team.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <script src="/js/theme.js"></script>
+  <script src="/vendor/lucide.min.js"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+  <script src="/js/auth-debug-client.js"></script>
+</head>
+<body class="login-page">
+  <div class="login-orb login-orb-a" aria-hidden="true"></div>
+  <div class="login-orb login-orb-b" aria-hidden="true"></div>
+  <div class="login-card">
+    <img src="/img/hr-team.png" alt="HR Team Services &amp; Admin" class="login-logo" />
+    <p class="brand-tag">Hangup Solutions</p>
+    <h1 class="login-title">Hangup Portal</h1>
+    <p class="tagline">One portal for agents, QA, and leadership.</p>
+    <p class="made-by muted">Made and maintained by <strong>Mostafa Gomaa</strong></p>
+    <p id="app-version-line" class="muted version-line"></p>
+    <div id="login-update-banner" class="alert alert-warn hidden" style="margin-bottom:1rem;text-align:left">
+      <strong id="login-update-title">Update available</strong>
+      <p id="login-update-msg" class="muted" style="margin:.35rem 0"></p>
+      <button type="button" class="btn btn-sm btn-primary" id="login-update-btn" style="margin-top:.35rem;display:none">Update now</button>
+    </div>
+
+    <!-- ============ Sign in view ============ -->
+    <div id="login-view">
+      <form id="login-form">
+        <label class="field">
+          <span>Username</span>
+          <input type="text" id="username" name="username" required autocomplete="username" placeholder="Your user ID" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <span class="password-wrap">
+            <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+            <button type="button" class="password-toggle" id="password-toggle" aria-label="Show password" tabindex="-1"><i data-lucide="eye"></i></button>
+          </span>
+        </label>
+        <label class="remember-row">
+          <input type="checkbox" id="remember-user" />
+          <span>Remember my username</span>
+        </label>
+        <p id="login-error" class="login-error hidden" role="alert"></p>
+        <div id="version-blocked" class="version-blocked hidden">
+          <strong>App update required</strong>
+          <p id="version-blocked-msg" class="muted"></p>
+          <p class="muted">Contact your Admin to install the latest version.</p>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg btn-dna" id="login-btn">Sign in</button>
+      </form>
+      <p class="login-switch-line muted">New agent? <button type="button" class="login-link" id="show-register">Create your registration →</button></p>
+    </div>
+
+    <!-- ============ Registration view (stepped) ============ -->
+    <div id="register-view" class="hidden">
+      <div class="reg-stepper" aria-hidden="true">
+        <div class="reg-step-dot active" data-step-dot="1"><span>1</span><small>PIN</small></div>
+        <div class="reg-step-line"></div>
+        <div class="reg-step-dot" data-step-dot="2"><span>2</span><small>Details</small></div>
+        <div class="reg-step-line"></div>
+        <div class="reg-step-dot" data-step-dot="3"><span>✓</span><small>Done</small></div>
+      </div>
+
+      <!-- Step 1: PIN (company auto-detected) -->
+      <div id="reg-step-1" class="reg-step">
+        <h2 class="reg-step-title">Enter today's PIN</h2>
+        <p class="muted" style="margin:0 0 .5rem">Ask OP, HR, or Quality for <strong>today's registration code</strong> (e.g. <code>K7H2-1234</code>). Your company will be detected automatically.</p>
+        <div class="otp-wrap" id="reg-pin-wrap" role="group" aria-label="Registration code">
+          <input id="reg-pin" class="otp-overlay" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" aria-label="Registration code" />
+          <div class="otp-row" id="reg-pin-cells" aria-hidden="true"></div>
+        </div>
+        <p id="reg-pin-error" class="login-error hidden" role="alert"></p>
+        <p id="reg-company-display" class="muted" style="margin:.5rem 0 1rem"></p>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn" id="show-login-from-reg">← Back</button>
+          <button type="button" class="btn btn-primary" id="reg-next-1" style="flex:1">Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Details -->
+      <div id="reg-step-2" class="reg-step hidden">
+        <h2 class="reg-step-title">Your details</h2>
+        <p class="muted" style="margin:0 0 1rem">Company: <strong id="reg-company-label"></strong></p>
+        <label class="field"><span>American name</span><input id="reg-american-name" placeholder="First and Last name only (2 words)" /></label>
+        <label class="field"><span>Legal name</span><input id="reg-legal-name" placeholder="Name on your ID (at least 3 words)" /></label>
+        <p class="muted small" style="margin:-.5rem 0 .75rem">Legal name must match the name on your government ID.</p>
+        <label class="field"><span>Email</span><input id="reg-email" type="email" placeholder="you@example.com" /></label>
+        <label class="field"><span>Nationality</span>
+          <select id="reg-nationality">
+            <option value="">— Select —</option>
+            <option value="Egyptian">Egyptian</option>
+            <option value="Sudanese">Sudanese</option>
+            <option value="Ethiopian">Ethiopian</option>
+            <option value="Eritrean">Eritrean</option>
+            <option value="South Sudanese">South Sudanese</option>
+            <option value="__other__">Other…</option>
+          </select>
+          <input id="reg-nationality-other" class="hidden" placeholder="Enter nationality" style="margin-top:.35rem" />
+        </label>
+        <label class="field" id="reg-national-id-wrap"><span>National ID (14 digits)</span><input id="reg-national-id" inputmode="numeric" maxlength="14" placeholder="For Egyptians" /></label>
+        <label class="field hidden" id="reg-passport-wrap"><span>Passport number</span><input id="reg-passport" placeholder="For non-Egyptians" /></label>
+        <label class="field"><span>Phone</span><input id="reg-phone" /></label>
+        <label class="field" id="reg-unit-wrap"><span>Unit</span>
+          <select id="reg-unit"><option value="HS-3">HS-3</option><option value="HS-1">HS-1</option></select>
+        </label>
+        <label class="field"><span>Choose password</span>
+          <input id="reg-password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" />
+        </label>
+        <label class="field"><span>Confirm password</span>
+          <input id="reg-password-confirm" type="password" autocomplete="new-password" minlength="8" placeholder="Re-enter password" />
+        </label>
+        <p class="muted small" style="margin:.25rem 0 .75rem" id="reg-unit-note">Team is assigned later by Admin/HR after approval. You will sign in with your User ID and this password.</p>
+        <p id="reg-msg" class="login-error hidden" role="alert"></p>
+        <div class="btn-row" style="margin-top:.5rem">
+          <button type="button" class="btn" id="reg-back-2">← Back</button>
+          <button type="button" class="btn btn-primary" id="reg-submit" style="flex:1">Submit registration</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Success -->
+      <div id="reg-step-3" class="reg-step hidden">
+        <div class="reg-success-icon" aria-hidden="true">✓</div>
+        <h2 class="reg-step-title">Registration submitted</h2>
+        <p id="reg-success-msg" class="muted" style="margin:0 0 1rem">Your request was sent for review.</p>
+        <div class="reg-pipeline">
+          <div class="reg-pipeline-item done"><strong>1. Submitted</strong><span>Your details and password are with OP / Admin / HR.</span></div>
+          <div class="reg-pipeline-item"><strong>2. Approval</strong><span>They approve your request, assign a team, and create your login (your <strong>User ID</strong>).</span></div>
+          <div class="reg-pipeline-item"><strong>3. Sign in</strong><span>Use your User ID and the password you chose on this form.</span></div>
+        </div>
+        <button type="button" class="btn btn-primary btn-lg" id="reg-done-btn">Back to sign in</button>
+      </div>
+
+      <p class="login-switch-line muted"><button type="button" class="login-link" id="show-login">← Back to sign in</button></p>
+    </div>
+  </div>
+  <script src="/js.legacy/login.js"></script>
+
+</body>
+</html>

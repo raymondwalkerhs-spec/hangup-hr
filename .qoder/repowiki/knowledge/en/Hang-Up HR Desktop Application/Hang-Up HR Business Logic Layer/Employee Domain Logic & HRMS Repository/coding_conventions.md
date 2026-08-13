@@ -1,0 +1,6 @@
+- Every DB-bound function starts with `requireSupabase()` which throws if `useSupabase()` is false, enforcing an opt-in Supabase backend.
+- DB rows are normalized through local `mapXxx(r)` helpers that translate snake_case columns to camelCase DTOs before being returned to callers.
+- Optional cross-module side effects (e.g. cache invalidation, team-tl bookkeeping, user deletion) are wrapped in try/catch blocks so failures do not abort the primary transaction.
+- Date values are consistently parsed via `parseIsoDate` (slice to YYYY-MM-DD, noon timezone) before any comparison or range check.
+- User-facing enums are exposed as both a value map and a `{key,label}` options array plus a `normalize*` helper that tolerates legacy casing.
+- FK references across tables are declared once in a top-level `EMPLOYEE_ID_COLUMNS` array and iterated programmatically instead of hand-written update loops.

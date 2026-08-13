@@ -1,0 +1,1 @@
+Unit and integration tests exercising attendance employment rules, sales working-day logic, data-store mutation locking, and Supabase persistence paths.

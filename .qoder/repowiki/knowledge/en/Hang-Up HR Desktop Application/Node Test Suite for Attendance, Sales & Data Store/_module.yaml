@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: tests
+title: Node Test Suite for Attendance, Sales & Data Store
+scope:
+    - test/
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/attendance
+    - path: business_logic/data_access
+    - path: business_logic/sales

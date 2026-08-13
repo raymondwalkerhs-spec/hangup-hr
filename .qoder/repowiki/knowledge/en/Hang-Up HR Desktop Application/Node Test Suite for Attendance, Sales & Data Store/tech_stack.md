@@ -1,0 +1,1 @@
+Node.js built-in `node:test` runner with `node:assert/strict`; no external test framework or mocking library is used.

@@ -1,0 +1,1 @@
+The SQLite database file lives under `.cache/hr-cache.db` (overridable via `HR_CACHE_DIR`). If `better-sqlite3` is not installed or its native binary is missing, `loadSqlite` throws a message directing to reinstall the app or run `npm run rebuild:native`.

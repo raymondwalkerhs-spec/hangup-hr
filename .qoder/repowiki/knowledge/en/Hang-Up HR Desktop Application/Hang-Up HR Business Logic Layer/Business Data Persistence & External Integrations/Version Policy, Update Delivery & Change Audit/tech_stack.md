@@ -1,0 +1,1 @@
+Node.js built-ins (`https`/`http`, `fs`, `child_process.spawn`, `crypto`) for network I/O, zip extraction, silent NSIS installer invocation (`cmd.exe /c ... /S`), and atomic cross-process bundle replacement; Supabase Admin client for policy and change-log persistence; ASAR header format parsed manually rather than using the `asar` package.

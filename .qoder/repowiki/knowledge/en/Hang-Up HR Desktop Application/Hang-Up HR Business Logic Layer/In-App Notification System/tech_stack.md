@@ -1,0 +1,1 @@
+Supabase Postgres via `supabase-js` admin client (`getSupabaseAdmin`) for persistent storage in `app_notifications` and `notification_routing_rules` tables; runtime feature flag `useSupabase()` gates all DB calls so the module degrades gracefully without a database.

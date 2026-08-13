@@ -1,0 +1,1 @@
+Local SQLite-backed cache and data-store facade that syncs HR/attendance/payroll records from a Supabase backend, validates employee IDs, maps spreadsheet rows, and tracks settings revisions.

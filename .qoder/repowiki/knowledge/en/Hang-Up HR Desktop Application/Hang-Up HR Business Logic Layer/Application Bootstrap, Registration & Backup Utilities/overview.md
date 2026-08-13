@@ -1,0 +1,1 @@
+Startup helpers (env loading, Supabase gate), agent self-registration with daily PIN approval, in-memory backup job tracking, and date/region reference data used across the app.

@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: business_logic/storage_integrations/network_transport
+title: Network Connectivity & Transport Allowance Utilities
+scope:
+    - lib/network.js
+    - lib/connectivity.js
+    - lib/url-fetch.js
+    - lib/transport.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/storage_integrations/document_export

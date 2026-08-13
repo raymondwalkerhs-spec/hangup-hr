@@ -9,10 +9,25 @@ const { mondayOfWeek, fridayOfWeek } = require("../lib/employment-periods");
 const { statusOptions } = require("../lib/employee-status");
 const requestRules = require("../lib/request-rules");
 const leaveAttendance = require("../lib/leave-attendance");
+const leaveRequestAccess = require("../lib/leave-request-access");
 const auditNotify = require("../lib/notify-routing");
 const departureDeductions = require("../lib/departure-deductions");
 
+const companyContext = require("../lib/company-context");
+
 const router = express.Router();
+const {
+  parseCompany,
+  assertEmployeeInCompanyContext,
+  requireEmployeeInContext,
+  unitInCompanyContext,
+  teamInCompanyContext,
+} = require("../lib/request-company-guard");
+
+router.param("employeeId", (req, res, next, employeeId) => {
+  if (!requireEmployeeInContext(req, res, employeeId)) return;
+  next();
+});
 
 function requireSupabase(_req, res, next) {
   if (!useSupabase()) return res.status(503).json({ error: "Requires DATA_BACKEND=supabase" });
@@ -26,8 +41,11 @@ router.get("/org-structure", async (req, res) => {
     const companyCtx = require("../lib/company-context");
     const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
     let structure = await hrms.getLiveOrgStructure(company);
-    if (!roles.canManageHs2Company(req.userRole)) {
-      structure.units = (structure.units || []).filter((s) => s.unit !== "HS-2");
+    if (company === "hs2" && !roles.canManageHs2Company(req.userRole)) {
+      structure.units = (structure.units || []).filter((s) => companyCtx.isHs2Unit(s.unit));
+      structure.orgUnits = (structure.orgUnits || []).filter((u) => companyCtx.isHs2Unit(u.name || u.unit || u));
+    } else if (company !== "hs2") {
+      structure.units = (structure.units || []).filter((s) => !companyCtx.isHs2Unit(s.unit));
       structure.orgUnits = companyCtx.filterOrgUnitsForRole(structure.orgUnits, req.userRole);
     }
     if (roles.canViewOrgScoped(req.userRole)) {
@@ -41,15 +59,21 @@ router.get("/org-structure", async (req, res) => {
 
 router.get("/teams", async (req, res) => {
   try {
-    if (!roles.canViewOrgFull(req.userRole) && !roles.canManageOrgStructure(req.userRole)) {
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const canView = roles.canViewOrgFull(req.userRole) || roles.canManageOrgStructure(req.userRole) ||
+      (roles.canViewOrgScoped(req.userRole) && ["op", "tl"].includes(req.userRole?.role));
+    if (!canView) {
       return res.status(403).json({ error: "No permission for org team metadata" });
     }
     const teams = await hrms.readOrgTeams();
-    const companyCtx = require("../lib/company-context");
     const orgUnits = companyCtx.filterOrgUnitsForRole(hrms.ORG_UNITS, req.userRole);
-    const teamList = roles.canManageHs2Company(req.userRole)
-      ? teams
-      : teams.filter((t) => t.unit !== "HS-2");
+    let teamList = teams;
+    if (company === "hs2" && !roles.canManageHs2Company(req.userRole)) {
+      teamList = teams.filter((t) => companyCtx.isHs2Unit(t.unit));
+    } else if (company !== "hs2" && !roles.canManageHs2Company(req.userRole)) {
+      teamList = teams.filter((t) => !companyCtx.isHs2Unit(t.unit));
+    }
     res.json({ teams: teamList, orgUnits });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -58,6 +82,10 @@ router.get("/teams", async (req, res) => {
 
 router.post("/teams", async (req, res) => {
   if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
+  const unit = String(req.body?.unit || "").trim();
+  if (unit && !unitInCompanyContext(unit, req)) {
+    return res.status(403).json({ error: "Unit not in company context" });
+  }
   try {
     const team = await hrms.createOrgTeam(req.body, req.username);
     res.status(201).json({ ok: true, team });
@@ -69,6 +97,13 @@ router.post("/teams", async (req, res) => {
 router.patch("/teams/:id", async (req, res) => {
   if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
+    if (!(await teamInCompanyContext(req.params.id, req))) {
+      return res.status(403).json({ error: "Team not in company context" });
+    }
+    const nextUnit = req.body?.unit ? String(req.body.unit).trim() : "";
+    if (nextUnit && !unitInCompanyContext(nextUnit, req)) {
+      return res.status(403).json({ error: "Unit not in company context" });
+    }
     const team = await hrms.updateOrgTeam(req.params.id, req.body, req.username);
     res.json({ ok: true, team });
   } catch (e) {
@@ -79,8 +114,14 @@ router.patch("/teams/:id", async (req, res) => {
 router.post("/teams/:id/relocate", async (req, res) => {
   if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
+    if (!(await teamInCompanyContext(req.params.id, req))) {
+      return res.status(403).json({ error: "Team not in company context" });
+    }
     const newUnit = String(req.body?.unit || "").trim();
     if (!newUnit) return res.status(400).json({ error: "unit required" });
+    if (!unitInCompanyContext(newUnit, req)) {
+      return res.status(403).json({ error: "Unit not in company context" });
+    }
     const reassignIds = req.body?.reassignIds !== false;
     const result = await hrms.relocateTeamToUnit(req.params.id, newUnit, {
       reassignIds,
@@ -96,7 +137,24 @@ router.post("/teams/:id/relocate", async (req, res) => {
 router.delete("/teams/:id", async (req, res) => {
   if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
   try {
+    if (!(await teamInCompanyContext(req.params.id, req))) {
+      return res.status(403).json({ error: "Team not in company context" });
+    }
     const result = await hrms.deleteOrgTeam(req.params.id, req.username);
+    await store.refreshCache();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.delete("/units/:unit", async (req, res) => {
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
+  if (!unitInCompanyContext(decodeURIComponent(req.params.unit), req)) {
+    return res.status(403).json({ error: "Unit not in company context" });
+  }
+  try {
+    const result = await hrms.deleteOrgUnit(req.params.unit, req.username);
     await store.refreshCache();
     res.json({ ok: true, ...result });
   } catch (e) {
@@ -141,39 +199,37 @@ router.post("/employment-periods/:employeeId/rehire", async (req, res) => {
   }
 });
 
+router.post("/employment-periods/:employeeId/clear-depart", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const employeeDepart = require("../lib/employee-depart");
+    const result = await employeeDepart.clearEmployeeDepart(req.params.employeeId, {
+      store,
+      username: req.username,
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.post("/employment-periods/:employeeId/depart", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
-    const { departDate, status, notice_type: noticeType } = req.body;
-    if (!departDate) return res.status(400).json({ error: "departDate required" });
-
-    const notice = noticeType === "without_notice" ? "without_notice" : "with_notice";
-    const emp = store.getEmployeeById(req.params.employeeId);
-    if (!emp) return res.status(404).json({ error: "Employee not found" });
-
-    await hrms.closeEmploymentPeriod(req.params.employeeId, departDate, req.username);
-    const statusLabel = status === "out_still_paid" ? "OUT BUT STILL GET PAID" : "Out";
-    await store.updateEmployee(
-      req.params.employeeId,
-      { status: statusLabel, depart_date: departDate, notice_type: notice },
-      req.username
+    const { departDate, status, notice_type: noticeType, skipDepartDate } = req.body;
+    const employeeDepart = require("../lib/employee-depart");
+    const resolvedDate = employeeDepart.resolveDepartDate(
+      skipDepartDate || !departDate ? null : departDate
     );
 
-    let deductions = [];
-    if (notice === "without_notice") {
-      try {
-        deductions = await departureDeductions.createNoNoticeDeductions(
-          { ...emp, depart_date: departDate },
-          departDate,
-          store,
-          req.username
-        );
-      } catch (dedErr) {
-        console.warn("No-notice deductions failed:", dedErr.message);
-      }
-    }
+    const result = await employeeDepart.executeEmployeeDepart(
+      req.params.employeeId,
+      resolvedDate,
+      { status, notice_type: noticeType },
+      { store, username: req.username }
+    );
 
-    res.json({ ok: true, notice_type: notice, deductions });
+    res.json({ ok: true, departDate: result.departDate, ...result });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -196,6 +252,11 @@ router.post("/action-plans", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
     const { employeeId, weekStart, weekEnd, notes } = req.body;
+    if (!employeeId) return res.status(400).json({ error: "employeeId required" });
+    const emp = store.getEmployeeById(employeeId);
+    if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
     const start = weekStart || mondayOfWeek(req.body.anchorDate);
     const end = weekEnd || fridayOfWeek(start);
     const plan = await hrms.createActionPlan({ employeeId, weekStart: start, weekEnd: end, notes }, req.username);
@@ -208,8 +269,14 @@ router.post("/action-plans", async (req, res) => {
 router.post("/action-plans/:id/cancel", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
-    const plan = await hrms.cancelActionPlan(req.params.id, req.username);
-    res.json({ ok: true, plan });
+    const plan = await hrms.getActionPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Action plan not found" });
+    const emp = store.getEmployeeById(plan.employeeId || plan.employee_id);
+    if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+      return res.status(404).json({ error: "Action plan not found" });
+    }
+    const cancelled = await hrms.cancelActionPlan(req.params.id, req.username);
+    res.json({ ok: true, plan: cancelled });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -368,6 +435,35 @@ router.post("/resignation/:employeeId/no-notice-deduction", async (req, res) => 
   }
 });
 
+router.get("/resignation/:employeeId/notice-sales-preview", async (req, res) => {
+  if (!roles.canManageResignationPayRules(req.userRole)) return res.status(403).json({ error: "No permission" });
+  try {
+    const emp = store.getEmployeeById(req.params.employeeId);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    const departDate = req.query.departDate || emp.depart_date;
+    const {
+      countPassedSalesInNoticeWindow,
+      noticePayPercent,
+      calcNoticePeriodBasicScale,
+    } = require("../lib/resignation-payroll");
+    const passedSalesInNotice = await countPassedSalesInNoticeWindow(emp, departDate, store);
+    const payPercent = noticePayPercent(passedSalesInNotice);
+    res.json({
+      ok: true,
+      departDate: String(departDate || "").slice(0, 10),
+      passedSalesInNotice,
+      payPercent,
+      meetsMinimum: passedSalesInNotice >= 5,
+      previewNote:
+        passedSalesInNotice < 5
+          ? "Below 5 passed sales — notice-period basic cancelled"
+          : `${payPercent}% of month basic applies`,
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.post("/resignation/:employeeId/notice-pay-scale", async (req, res) => {
   if (!roles.canManageResignationPayRules(req.userRole)) return res.status(403).json({ error: "No permission" });
   try {
@@ -428,10 +524,12 @@ router.get("/equipment", async (req, res) => {
     return res.status(403).json({ error: "No permission" });
   }
   try {
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
     const store = require("../lib/data-store");
     const [equipment, assignments] = await Promise.all([
-      hrms.readAllEquipment(),
-      hrms.readEquipmentAssignments(),
+      hrms.readAllEquipment(company),
+      hrms.readEquipmentAssignments(null, company),
     ]);
     let scopedAssignments = assignments;
     if (roles.canViewEquipmentUnit(req.userRole) && !roles.canViewEquipmentAll(req.userRole)) {
@@ -441,7 +539,16 @@ router.get("/equipment", async (req, res) => {
       );
       scopedAssignments = assignments.filter((a) => empIds.has(a.employeeId));
     }
-    res.json({ equipment, assignments: scopedAssignments });
+    const employees = companyCtx.filterEmployeesByCompany(
+      store.getEmployees({ hideOut: false }),
+      company
+    );
+    const empById = new Map(employees.map((e) => [e.id, e]));
+    const units = [...new Set(employees.map((e) => e.unit).filter(Boolean))].sort();
+    const teams = [...new Set(employees.map((e) => e.team).filter(Boolean))].sort();
+    const positions = [...new Set(employees.map((e) => e.position).filter(Boolean))].sort();
+    const deviceTypes = [...new Set(equipment.map((e) => e.itemType).filter(Boolean))].sort();
+    res.json({ equipment, assignments: scopedAssignments, employees, empById, units, teams, positions, deviceTypes });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -472,6 +579,17 @@ router.get("/equipment/:employeeId", async (req, res) => {
 router.post("/equipment", async (req, res) => {
   if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to issue equipment" });
   try {
+    if (req.body?.employeeId) {
+      const emp = store.getEmployeeById(req.body.employeeId);
+      if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+        return res.status(403).json({ error: "Employee not in company context" });
+      }
+    } else {
+      const unit = String(req.body?.unit || "").trim();
+      if (unit && !unitInCompanyContext(unit, req)) {
+        return res.status(403).json({ error: "Unit not in company context" });
+      }
+    }
     const equipment = await hrms.createEquipment(req.body, req.username);
     res.json({ ok: true, equipment });
   } catch (e) {
@@ -525,11 +643,35 @@ router.post("/equipment/return/:assignmentId", async (req, res) => {
 
 router.get("/leave", async (req, res) => {
   try {
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    if (company === "hs2" && !roles.canAccessHs2CompanyContext(req.userRole)) {
+      return res.status(403).json({ error: "No access to HS2 leave requests" });
+    }
     const requests = await hrms.readLeaveRequests({
       employeeId: req.query.employeeId,
       status: req.query.status,
+      company,
     });
-    res.json({ requests, canApprove: roles.canApproveLeave(req.username, req.userRole) });
+    const store = require("../lib/data-store");
+    const allEmployees = store.getEmployees({ hideOut: false });
+    const companyEmployees = companyCtx.filterEmployeesByCompany(allEmployees, company);
+    const employees = roles.filterEmployeesForUser(companyEmployees, req.userRole);
+    const visibleIds = new Set(employees.map((e) => e.id));
+    const scopedRequests = requests.filter((r) => visibleIds.has(r.employeeId));
+    const units = [...new Set(employees.map((e) => e.unit).filter(Boolean))].sort();
+    const teams = [...new Set(employees.map((e) => e.team).filter(Boolean))].sort();
+    const leaveTypes = [...new Set(scopedRequests.map((r) => r.requestKind || r.leaveType).filter(Boolean))].sort();
+    const statuses = [...new Set(scopedRequests.map((r) => r.status).filter(Boolean))].sort();
+    res.json({
+      requests: scopedRequests,
+      canApprove: roles.canApproveLeave(req.username, req.userRole),
+      units,
+      teams,
+      leaveTypes,
+      statuses,
+      employees,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -537,7 +679,12 @@ router.get("/leave", async (req, res) => {
 
 router.post("/leave", async (req, res) => {
   try {
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company || req.body?.company, req.userRole);
     const targetEmp = store.getEmployeeById(req.body.employeeId);
+    if (!targetEmp || !companyCtx.employeeInCompanyContext(targetEmp, company)) {
+      return res.status(403).json({ error: "Employee not in company context" });
+    }
     const validated = requestRules.validateRequestSubmit({
       requestKind: req.body.requestKind || req.body.leaveType,
       employeeId: req.body.employeeId,
@@ -575,6 +722,7 @@ router.post("/leave", async (req, res) => {
       entityType: "leave",
       entityId: String(request.id),
       actor: req.username,
+      context: { company },
     });
     if (validated.lateSubmission) {
       await auditNotify.hrWarning({
@@ -601,16 +749,60 @@ router.post("/leave", async (req, res) => {
 });
 
 router.put("/leave/:id", async (req, res) => {
-  if (req.body.status && req.body.status !== "pending" && !roles.canApproveLeave(req.username, req.userRole)) {
-    return res.status(403).json({ error: "HR, admin, or executive approval required." });
-  }
-  const canEdit = roles.canApproveLeave(req.username, req.userRole);
-  if (!canEdit && Object.keys(req.body).some((k) => k !== "status")) {
-    return res.status(403).json({ error: "Only approvers may edit requests." });
-  }
+  const canApprove = roles.canApproveLeave(req.username, req.userRole);
   try {
-    const prior = (await hrms.readLeaveRequests({})).find((r) => String(r.id) === String(req.params.id));
-    const request = await hrms.updateLeaveRequest(req.params.id, req.body, req.username);
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const prior = (await hrms.readLeaveRequests({ company })).find((r) => String(r.id) === String(req.params.id));
+    if (!prior) return res.status(404).json({ error: "Leave request not found" });
+
+    const canOwnerEdit = leaveRequestAccess.canOwnerModifyLeave(req.userRole, req.username, prior);
+    if (!canApprove && !canOwnerEdit) {
+      const isOwner = leaveRequestAccess.isLeaveOwner(req.userRole, req.username, prior);
+      if (isOwner && String(prior.status || "").toLowerCase() !== "pending") {
+        return res.status(403).json({ error: "You can only edit or delete your own requests while they are pending." });
+      }
+      return res.status(403).json({ error: "Only approvers or the submitter may edit a pending request." });
+    }
+    if (req.body.status && req.body.status !== "pending" && !canApprove) {
+      return res.status(403).json({ error: "HR, admin, or executive approval required." });
+    }
+
+    let patch = { ...req.body };
+    if (!canApprove && canOwnerEdit) {
+      if (patch.status && patch.status !== "pending") {
+        return res.status(403).json({ error: "Only approvers may change request status." });
+      }
+      patch.status = "pending";
+      patch.employeeId = prior.employeeId;
+      const targetEmp = store.getEmployeeById(prior.employeeId);
+      const validated = requestRules.validateRequestSubmit({
+        requestKind: patch.requestKind || patch.leaveType || prior.requestKind || prior.leaveType,
+        employeeId: prior.employeeId,
+        startDate: patch.startDate || prior.startDate,
+        endDate: patch.endDate || prior.endDate,
+        dayFraction: patch.dayFraction ?? prior.dayFraction,
+        halfDay: patch.halfDay ?? prior.halfDay,
+        actor: req.username,
+        actorRole: req.userRole,
+        targetEmp,
+        forEmployeeId: prior.employeeId,
+      });
+      patch = {
+        ...patch,
+        requestKind: validated.requestKind,
+        leaveType: validated.requestKind,
+        paidLeave: validated.paidLeave,
+        lateSubmission: validated.lateSubmission,
+        dayFraction: validated.dayFraction,
+        halfDay: validated.halfDay,
+        quarterDay: validated.quarterDay,
+      };
+      if (validated.pauseStartDate) patch.startDate = validated.pauseStartDate;
+      if (validated.pauseEndDate) patch.endDate = validated.pauseEndDate;
+    }
+
+    const request = await hrms.updateLeaveRequest(req.params.id, patch, req.username);
     if (request.status === "approved") {
       const records = leaveAttendance.leaveAttendanceRecords(request);
       if (records.length) await store.saveAttendanceBatch(records, req.username);
@@ -618,7 +810,7 @@ router.put("/leave/:id", async (req, res) => {
       const records = leaveAttendance.clearLeaveAttendanceRecords(prior);
       if (records.length) await store.saveAttendanceBatch(records, req.username);
     }
-    if (canEdit && prior) {
+    if (canApprove && prior) {
       await auditNotify.auditNotify({
         actor: req.username,
         action: "leave_edit",
@@ -636,11 +828,21 @@ router.put("/leave/:id", async (req, res) => {
 });
 
 router.delete("/leave/:id", async (req, res) => {
-  if (!roles.canApproveLeave(req.username, req.userRole)) {
-    return res.status(403).json({ error: "HR, admin, or executive access required." });
-  }
   try {
-    const prior = (await hrms.readLeaveRequests({})).find((r) => String(r.id) === String(req.params.id));
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const prior = (await hrms.readLeaveRequests({ company })).find((r) => String(r.id) === String(req.params.id));
+    if (!prior) return res.status(404).json({ error: "Leave request not found" });
+
+    const canApprove = roles.canApproveLeave(req.username, req.userRole);
+    const canOwnerDelete = leaveRequestAccess.canOwnerModifyLeave(req.userRole, req.username, prior);
+    if (!canApprove && !canOwnerDelete) {
+      const isOwner = leaveRequestAccess.isLeaveOwner(req.userRole, req.username, prior);
+      if (isOwner && String(prior.status || "").toLowerCase() !== "pending") {
+        return res.status(403).json({ error: "You can only edit or delete your own requests while they are pending." });
+      }
+      return res.status(403).json({ error: "Only approvers or the submitter may delete a pending request." });
+    }
     if (prior?.status === "approved") {
       const records = leaveAttendance.clearLeaveAttendanceRecords(prior);
       if (records.length) await store.saveAttendanceBatch(records, req.username);
@@ -668,6 +870,11 @@ router.delete("/leave/:id", async (req, res) => {
 router.get("/leave/:id/documents", async (req, res) => {
   try {
     const leaveId = req.params.id;
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const leaves = await hrms.readLeaveRequests({ company });
+    const leave = leaves.find((r) => String(r.id) === String(leaveId));
+    if (!leave) return res.status(404).json({ error: "Leave request not found" });
     const { getSupabaseAdmin } = require("../lib/supabase-client");
     const { useSupabase } = require("../lib/backend");
     if (!useSupabase()) return res.json({ documents: [] });
@@ -707,8 +914,9 @@ router.post("/leave/:id/documents", async (req, res) => {
     return res.status(400).json({ error: "fileName and contentBase64 required" });
   }
   try {
-    // Fetch the leave request to get the employeeId
-    const leaves = await hrms.readLeaveRequests({});
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company || req.body?.company, req.userRole);
+    const leaves = await hrms.readLeaveRequests({ company });
     const leave = leaves.find((r) => String(r.id) === String(leaveId));
     if (!leave) return res.status(404).json({ error: "Leave request not found" });
 
@@ -784,7 +992,8 @@ router.get("/holidays", async (req, res) => {
     return res.status(403).json({ error: "No permission to view holidays" });
   }
   try {
-    res.json({ holidays: await hrms.readPublicHolidays() });
+    const company = parseCompany(req);
+    res.json({ holidays: await hrms.readPublicHolidays({ company }), company });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -807,7 +1016,8 @@ router.patch("/holidays/:id", async (req, res) => {
     return res.status(403).json({ error: "No permission to manage holidays" });
   }
   try {
-    const existing = (await hrms.readPublicHolidays()).find((h) => h.id === req.params.id);
+    const company = parseCompany(req);
+    const existing = (await hrms.readPublicHolidays({ company })).find((h) => h.id === req.params.id);
     if (!existing) return res.status(404).json({ error: "Holiday not found" });
     if (
       req.body?.active !== undefined &&
@@ -816,7 +1026,7 @@ router.patch("/holidays/:id", async (req, res) => {
     ) {
       return res.status(403).json({ error: "Only Admin can activate Egyptian holidays" });
     }
-    const holiday = await hrms.updatePublicHoliday(req.params.id, req.body);
+    const holiday = await hrms.updatePublicHoliday(req.params.id, req.body, company);
     res.json({ ok: true, holiday });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -830,7 +1040,8 @@ router.post("/holidays/import-federal", async (req, res) => {
   try {
     const { getUsFederalHolidays } = require("../scripts/seed-us-federal-holidays");
     const rows = getUsFederalHolidays();
-    const result = await hrms.seedPublicHolidays(rows, req.username);
+    const company = parseCompany(req);
+    const result = await hrms.seedPublicHolidays(rows, req.username, company);
     await auditNotify.auditNotify({
       actor: req.username,
       action: "holiday_import",
@@ -853,7 +1064,8 @@ router.post("/holidays/import-egyptian", async (req, res) => {
   try {
     const { getEgyptianHolidays } = require("../scripts/seed-egyptian-holidays");
     const rows = getEgyptianHolidays();
-    const result = await hrms.seedPublicHolidays(rows, req.username);
+    const company = parseCompany(req);
+    const result = await hrms.seedPublicHolidays(rows, req.username, company);
     await auditNotify.auditNotify({
       actor: req.username,
       action: "holiday_import",
@@ -883,8 +1095,9 @@ router.delete("/holidays/:id", async (req, res) => {
 
 router.get("/payroll-lock/:month", async (req, res) => {
   try {
-    const lock = await hrms.getPayrollMonthLock(req.params.month);
-    res.json({ lock });
+    const company = parseCompany(req);
+    const lock = await hrms.getPayrollMonthLock(req.params.month, company);
+    res.json({ lock, company });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -893,7 +1106,14 @@ router.get("/payroll-lock/:month", async (req, res) => {
 router.put("/payroll-lock/:month", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
-    const result = await hrms.setPayrollMonthLock(req.params.month, req.body.locked !== false, req.username, req.body.notes);
+    const company = parseCompany(req);
+    const result = await hrms.setPayrollMonthLock(
+      req.params.month,
+      req.body.locked !== false,
+      req.username,
+      req.body.notes,
+      company
+    );
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -913,8 +1133,24 @@ router.get("/payroll-gates/:employeeId", async (req, res) => {
 router.get("/notifications", async (req, res) => {
   try {
     const notifyStore = require("../lib/notify-store");
-    const items = await require("../lib/notifications").collectNotifications(req.username, req.userRole?.role);
-    const unread = await notifyStore.readNotifications(req.username, { unreadOnly: true, limit: 200 });
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const items = await require("../lib/notifications").collectNotifications(
+      req.username,
+      req.userRole?.role,
+      company
+    );
+    const scopedIds = new Set(
+      companyCtx
+        .filterEmployeesByCompany(store.getEmployees({ hideOut: false }), company)
+        .map((e) => e.id)
+    );
+    const { notificationItemInCompany } = require("../lib/notifications");
+    const unreadAll = await notifyStore.readNotifications(req.username, { unreadOnly: true, limit: 200, company });
+    const unread = [];
+    for (const n of unreadAll) {
+      if (await notificationItemInCompany(n, company, scopedIds)) unread.push(n);
+    }
     res.json({
       notifications: items,
       unreadCount: unread.length,
@@ -931,8 +1167,9 @@ router.get("/notification-routing", async (req, res) => {
   }
   try {
     const routingConfig = require("../lib/notification-routing-config");
-    const rules = await routingConfig.listRules();
-    res.json({ rules });
+    const company = parseCompany(req);
+    const rules = await routingConfig.listRules(company);
+    res.json({ rules, company });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -944,13 +1181,14 @@ router.put("/notification-routing/:actionKey", async (req, res) => {
   }
   try {
     const routingConfig = require("../lib/notification-routing-config");
+    const company = parseCompany(req);
     const rule = await routingConfig.upsertRule(decodeURIComponent(req.params.actionKey), {
       recipientRoles: req.body.recipientRoles,
       recipientUsernames: req.body.recipientUsernames,
       enabled: req.body.enabled,
       label: req.body.label,
       description: req.body.description,
-    });
+    }, company);
     res.json({ ok: true, rule });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -963,7 +1201,8 @@ router.post("/notification-routing/seed", async (req, res) => {
   }
   try {
     const routingConfig = require("../lib/notification-routing-config");
-    const result = await routingConfig.seedDefaultRules();
+    const company = parseCompany(req);
+    const result = await routingConfig.seedDefaultRules(company);
     res.json({ ok: true, ...result });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -981,8 +1220,9 @@ router.post("/notifications/:id/read", async (req, res) => {
 
 router.post("/notifications/read-all", async (req, res) => {
   try {
-    await require("../lib/notify-store").markAllRead(req.username);
-    res.json({ ok: true });
+    const company = parseCompany(req);
+    await require("../lib/notify-store").markAllRead(req.username, { company });
+    res.json({ ok: true, company });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -990,7 +1230,9 @@ router.post("/notifications/read-all", async (req, res) => {
 
 router.get("/reports/turnover", async (req, res) => {
   try {
-    const report = await require("../lib/reports-extended").buildTurnoverReport(store.getEmployees());
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const report = await require("../lib/reports-extended").buildTurnoverReport(store.getEmployees(), companyCtx, company);
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1000,7 +1242,9 @@ router.get("/reports/turnover", async (req, res) => {
 router.get("/reports/attendance-rankings", async (req, res) => {
   try {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
-    const report = await require("../lib/reports-extended").buildAttendanceRankings(month, store);
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const report = await require("../lib/reports-extended").buildAttendanceRankings(month, store, companyCtx, company);
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1010,7 +1254,15 @@ router.get("/reports/attendance-rankings", async (req, res) => {
 router.get("/reports/payroll-compare", async (req, res) => {
   try {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
-    const report = await require("../lib/reports-extended").buildPayrollCompare(month, store);
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const report = await require("../lib/reports-extended").buildPayrollCompare(month, store, company, async (ym) => {
+      await store.refreshPayrollAdjustmentsFromSupabase(ym);
+      let employees = store.getEmployeesForMonth(ym, { hideOut: false });
+      employees = companyCtx.filterEmployeesByCompany(employees, company);
+      employees = roles.filterEmployeesForUser(employees, req.userRole);
+      return require("../lib/enriched-payroll").buildForEmployees(ym, employees);
+    });
     res.json(report);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1022,13 +1274,19 @@ router.get("/alerts/employment", async (req, res) => {
     return res.status(403).json({ error: "HR access required" });
   }
   try {
+    const companyCtx = require("../lib/company-context");
+    const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
     const days = Math.min(Number(req.query.days) || 60, 180);
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + days);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
     const alerts = [];
-    for (const e of store.getEmployees()) {
+    let employees = store.getEmployees();
+    if (company) {
+      employees = companyCtx.filterEmployeesByCompany(employees, company);
+    }
+    for (const e of employees) {
       if (e.probation_end_date && e.probation_end_date >= today && e.probation_end_date <= cutoffStr) {
         alerts.push({
           type: "probation",
@@ -1111,7 +1369,8 @@ router.get("/saved-reports/:id/run", async (req, res) => {
     const report = await customReports.getSavedReport(req.params.id);
     if (!report) return res.status(404).json({ error: "Report not found" });
     const month = req.query.month || new Date().toISOString().slice(0, 7);
-    const csv = await customReports.runReport(report, store, month);
+    const company = parseCompany(req);
+    const csv = await customReports.runReport(report, store, month, company);
     res.type("text/csv").attachment(`${report.name.replace(/[^\w-]+/g, "_")}.csv`).send(csv);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -1121,8 +1380,14 @@ router.get("/saved-reports/:id/run", async (req, res) => {
 router.get("/exports/changelog", async (req, res) => {
   if (!roles.canViewLogs(req.userRole)) return res.status(403).json({ error: "Forbidden" });
   try {
+    const company = parseCompany(req);
+    const scoped = companyContext.filterEmployeesByCompany(store.getEmployees(), company);
     const limit = Math.min(Number(req.query.limit) || 500, 2000);
-    const entries = await changelog.readChangeLog({ limit });
+    const entries = await changelog.readChangeLog({
+      limit,
+      employeeIds: new Set(scoped.map((e) => e.id)),
+      company,
+    });
     if (req.query.format === "csv") {
       const { changelogToCsv } = require("../lib/export-zip");
       res.type("text/csv").attachment("change-log.csv").send(changelogToCsv(entries));
@@ -1138,8 +1403,9 @@ router.get("/exports/finance-handoff", async (req, res) => {
   if (!roles.canViewLogs(req.userRole)) return res.status(403).json({ error: "Finance handoff restricted to Admin/CEO." });
   try {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
+    const company = parseCompany(req);
     const { buildFinanceHandoffZip } = require("../lib/export-zip");
-    const zip = await buildFinanceHandoffZip(month, req.userRole);
+    const zip = await buildFinanceHandoffZip(month, req.userRole, company);
     res.type("application/zip").attachment(`finance-handoff-${month}.zip`).send(zip);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1155,16 +1421,20 @@ router.post("/attendance/bulk-dayoff", async (req, res) => {
   if (!date) return res.status(400).json({ error: "date required" });
 
   try {
-    await assertMonthNotLocked(date.slice(0, 7));
-    const holidays = await hrms.readPublicHolidays();
+    await assertMonthNotLocked(date.slice(0, 7), req);
+    const holidays = await hrms.readPublicHolidays({ company: parseCompany(req), activeOnly: true });
     const holiday = holidays.find((h) => String(h.date || h.holidayDate || "").slice(0, 10) === date);
     if (scope === "federal_active" && (!holiday || holiday.country === "EGY")) {
       return res.status(400).json({ error: "Date is not an active US federal holiday." });
     }
 
     const month = date.slice(0, 7);
-    const employees = store
-      .getEmployeesForMonth(month, { hideOut: false })
+    const company = parseCompany(req);
+    const employees = companyContext
+      .filterEmployeesByCompany(
+        store.getEmployeesForMonth(month, { hideOut: false }),
+        company
+      )
       .filter((e) => e.status === "Active" || e.status === "Paused");
     const records = employees.map((emp) => ({
       employeeId: emp.id,
@@ -1181,9 +1451,10 @@ router.post("/attendance/bulk-dayoff", async (req, res) => {
   }
 });
 
-function assertMonthNotLocked(month) {
-  return hrms.getPayrollMonthLock(month).then((lock) => {
-    if (lock?.locked) throw new Error(`Payroll for ${month} is locked.`);
+function assertMonthNotLocked(month, req) {
+  const company = parseCompany(req);
+  return hrms.getPayrollMonthLock(month, company).then((lock) => {
+    if (lock) throw new Error(`Payroll for ${month} is locked.`);
   });
 }
 

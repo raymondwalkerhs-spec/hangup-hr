@@ -1,0 +1,94 @@
+.table {
+  width: 100%;
+  font-size: 0.85rem;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.groupCard {
+  margin-bottom: 1rem;
+}
+.groupTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+.docsPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+}
+.docsTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+.docRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.docsUpload {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.docsUpload label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.pendingDocs {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+.pendingDocs li {
+  padding: 0.25rem 0;
+}
+.removePending {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--err);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.form {
+  display: grid;
+  gap: 0.75rem;
+}
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.form input,
+.form select,
+.form textarea {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}

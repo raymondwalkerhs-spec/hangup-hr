@@ -1,0 +1,5 @@
+- Permission decisions go through `sales-access-resolver.js` helpers (`canViewFieldOnSurface`, `canEditAttachmentKind`, etc.) rather than ad-hoc role checks at call sites.
+- DB rows use snake_case while business-layer functions accept and return camelCase; both forms are accepted via `permRoles(dbPerm, snakeKey, camelKey)`.
+- Role strings are normalized with `normalizeRole(role)` (trimmed, lowercased) before any comparison.
+- Surface-scoped logic uses an explicit `surface` parameter (`main` | `quality` | `edit`) instead of separate function families.
+- Cached lookups (permissions map, team names) are invalidated by setting the cache variable to null rather than rebuilding eagerly.

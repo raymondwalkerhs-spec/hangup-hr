@@ -1,0 +1,205 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.row:hover {
+  border-color: var(--primary);
+}
+
+.rowUnread {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.rowUnread .rowTitle {
+  font-weight: 700;
+}
+
+.unreadDot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.45rem;
+  border-radius: 999px;
+  background: #ef4444;
+  vertical-align: middle;
+}
+
+.rowTitle {
+  font-weight: 600;
+  margin: 0;
+}
+
+.scopeBadge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.rowMeta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.heroImg {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.bodyHtml {
+  line-height: 1.55;
+}
+
+.bodyHtml a {
+  color: var(--primary);
+}
+
+.bodyHtml ul,
+.bodyHtml ol {
+  padding-left: 1.25rem;
+}
+
+.audio {
+  width: 100%;
+}
+
+.form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.form input[type="text"] {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: inherit;
+}
+
+.fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fieldset legend {
+  padding: 0 0.35rem;
+  font-size: 0.85rem;
+}
+
+.radioRow,
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.audienceGrid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.checkGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 0.35rem;
+  padding-right: 0.25rem;
+}
+
+.mediaSlot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.previewImg {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.mediaActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.editorWrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  padding: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.toolbar button {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.editor {
+  min-height: 180px;
+  padding: 0.75rem;
+  outline: none;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

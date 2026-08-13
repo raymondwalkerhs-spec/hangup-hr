@@ -1,0 +1,87 @@
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 900px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+.grid2 h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+.subhead {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+.barLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barTrack {
+  height: 0.55rem;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+}
+.barValue {
+  font-variant-numeric: tabular-nums;
+  min-width: 3rem;
+  text-align: right;
+}
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  font-size: 0.85rem;
+}
+.statusBar {
+  margin-bottom: 0.75rem;
+}
+.statusTitle {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+.statusTrack {
+  display: flex;
+  height: 0.75rem;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.statusLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+.auditTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.auditTable th,
+.auditTable td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}

@@ -1,0 +1,5 @@
+- Every Supabase call is wrapped with `if (!useSupabase()) return ...` early-exit so the module works in non-database environments.
+- Incoming usernames are normalized once via `String(u || '').trim().toLowerCase()` before any comparison or set membership check.
+- Database errors indicating a missing table (code `42P01` or messages containing 'does not exist' / 'schema cache') are treated as 'table not yet created' and fall back to defaults rather than throwing.
+- Recipient lists always exclude the actor themselves and the CEO (`mark`) using a post-resolution filter instead of excluding at query time.
+- Each notification row carries a stable `type` + `entityType` + `entityId` triple so downstream collectors can deduplicate and route items consistently.

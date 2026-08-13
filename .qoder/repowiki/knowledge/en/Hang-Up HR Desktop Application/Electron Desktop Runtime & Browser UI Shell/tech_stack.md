@@ -1,0 +1,1 @@
+Electron with `contextIsolation: true` and `nodeIntegration: false`; Express host serving static files under `public/`; Supabase for auth/session validation; GitHub Releases API used as the update source via `lib/github-updater`.

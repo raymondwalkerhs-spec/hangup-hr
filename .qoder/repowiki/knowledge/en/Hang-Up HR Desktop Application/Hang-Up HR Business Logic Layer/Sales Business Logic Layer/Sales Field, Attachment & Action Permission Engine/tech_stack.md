@@ -1,0 +1,1 @@
+CommonJS Node modules backed by Supabase (`getSupabaseAdmin`, `useSupabase`) for the action-permission store; role metadata comes from the shared `./roles` package.

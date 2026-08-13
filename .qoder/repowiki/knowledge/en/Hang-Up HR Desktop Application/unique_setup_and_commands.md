@@ -1,0 +1,1 @@
+`npm start` / `npm run dev` boot both the Electron UI and the embedded Express server; `npm run dist` triggers the full Windows installer build via `scripts/build.ps1`; `npm run migrate:supabase` and `npm run apply:migrations` drive schema changes; `npm run sync:airtable` / `provision:airtable-sales-fields` backfill legacy data sources.

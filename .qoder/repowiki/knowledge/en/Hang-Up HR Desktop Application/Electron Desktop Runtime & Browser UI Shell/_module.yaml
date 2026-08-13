@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: electron_runtime
+title: Electron Desktop Runtime & Browser UI Shell
+scope:
+    - electron/
+    - public/
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/storage_integrations/version_update
+    - path: express_server

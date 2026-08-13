@@ -8,6 +8,7 @@ const {
   getSupabaseAnon,
 } = require("../lib/supabase-client");
 const { withSupabase } = require("../lib/supabase-express");
+const { requireAdminSession } = require("../lib/require-admin-session");
 
 const router = express.Router();
 
@@ -29,9 +30,10 @@ router.get(
   }
 );
 
-/** Secret-key gate — admin client can bypass RLS. */
+/** Secret-key gate — admin client can bypass RLS. Requires admin/CEO session. */
 router.get(
   "/health",
+  requireAdminSession,
   withSupabase({ auth: "secret" }),
   async (req, res) => {
     let dbOk = null;
@@ -76,8 +78,8 @@ router.get(
   }
 );
 
-/** Direct admin probe without withSupabase (uses env secret key). */
-router.get("/status", async (_req, res) => {
+/** Direct admin probe without withSupabase (uses env secret key). Requires admin/CEO session. */
+router.get("/status", requireAdminSession, async (_req, res) => {
   if (!isSupabaseConfigured()) {
     return res.json({
       configured: false,

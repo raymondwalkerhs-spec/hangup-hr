@@ -1,0 +1,5 @@
+- Every async function starts with `requireSupabase()` (or calls `useSupabase()`) to fail fast when `DATA_BACKEND` is not set to supabase.
+- Database access goes through a local `db()` helper that returns `getSupabaseAdmin()`, keeping the Supabase client acquisition in one place.
+- Error messages thrown to callers wrap raw Supabase errors with a short context prefix (e.g. `${table}: ${error.message}`) before rethrowing.
+- Long-running operations accept an optional `onProgress({progress, message})` callback and report percentage ranges per phase instead of returning intermediate results.
+- Optional configuration values are read from process.env with fallback defaults (e.g. `ACTIVATE_USERNAMES`, `DATA_BACKEND`, `HR_CACHE_DIR`) and normalized to lowercase strings.

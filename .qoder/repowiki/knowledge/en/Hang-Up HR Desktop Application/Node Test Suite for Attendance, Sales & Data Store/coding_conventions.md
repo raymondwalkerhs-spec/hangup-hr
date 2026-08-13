@@ -1,0 +1,3 @@
+- Each test file is a single `node:test` suite that imports its target module via relative `../lib/<feature>` CommonJS require.
+- Assertions use `node:assert/strict` (`assert.equal`, `assert.deepEqual`, `assert.match`) rather than loose equality.
+- Test inputs are constructed as plain inline objects inside the test body instead of being loaded from shared fixtures.

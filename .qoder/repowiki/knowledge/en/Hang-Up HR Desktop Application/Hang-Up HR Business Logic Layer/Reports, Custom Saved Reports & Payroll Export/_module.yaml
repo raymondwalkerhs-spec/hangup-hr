@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: business_logic/reports_custom
+title: Reports, Custom Saved Reports & Payroll Export
+scope:
+    - lib/reports.js
+    - lib/reports-extended.js
+    - lib/custom-reports.js
+    - lib/bank-export.js
+    - lib/request-rules.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/attendance
+    - path: business_logic/payroll

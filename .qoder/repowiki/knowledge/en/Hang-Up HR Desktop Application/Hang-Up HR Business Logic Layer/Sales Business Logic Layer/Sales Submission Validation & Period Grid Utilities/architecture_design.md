@@ -1,0 +1,5 @@
+Three independent, stateless utility modules under `lib/` consumed by route handlers:
+- `sales-submit-required.js` defines two static rule sets (`REQUIRED_ON_SUBMIT`, `TOP_LEVEL_REQUIRED`) plus a single `validateSaleSubmitPayload(body, opts)` that normalizes payment methods, folds `fullName` into first/last name, and returns `{ ok, errors }`. It reads field labels from `./sales-field-catalog`.
+- `sales-period-grid.js` composes date bounds (`buildPeriodBounds` / `resolveBounds`), filters sales by effective or submission date, counts per-cell via `salesScope.countSaleForDashboard`, aggregates a team×date matrix, and merges attendance Day-OFF records — depending on `./sales-scope`, `./leave-attendance`, `./attendance`, and `./calendar`.
+- `sales-working-day.js` implements Cairo-shift logic (00:00–01:59 maps to previous calendar day) using `./egypt-datetime`, exposing `computeWorkingDay`, `computeSubmissionTime`, `formatTimeAmPm`, and `enrichSaleDates`.
+All three are pure function libraries with no Express coupling; they export named functions only and depend inward on shared domain libs rather than each other.

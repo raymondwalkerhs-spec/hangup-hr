@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: business_logic/airtable
+title: Airtable Outbound Sales Sync & Schema Bridge
+scope:
+    - lib/airtable-client.js
+    - lib/airtable-canonical-columns.js
+    - lib/airtable-sales-field-map.js
+    - lib/airtable-sales-sync.js
+    - lib/airtable-attachment-parser.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/sales

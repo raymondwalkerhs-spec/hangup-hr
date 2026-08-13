@@ -1,0 +1,16 @@
+schema_version: 1
+module_path: business_logic/employees
+title: Employee Domain Logic & HRMS Repository
+scope:
+    - lib/employee-compliance.js
+    - lib/employee-export.js
+    - lib/employee-identity.js
+    - lib/employee-ids.js
+    - lib/employee-privacy.js
+    - lib/employee-status.js
+    - lib/employment-periods.js
+    - lib/hrms-repo.js
+    - lib/hr-constants.js
+source_files: []
+depends_on: []
+related_to: []

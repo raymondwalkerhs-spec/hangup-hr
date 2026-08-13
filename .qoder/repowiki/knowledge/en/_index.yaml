@@ -1,0 +1,478 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: desktop/1.0.8-beta.1-updates
+nodes_managed: true
+exported_at: "2026-07-10T21:48:49Z"
+modules:
+    "":
+        dir_name: Hang-Up HR Desktop Application
+        title: Hang-Up HR Desktop Application
+        scope:
+            - README.md
+            - package.json
+            - .gitignore
+            - FEATURES.md
+            - DB_SCHEMA.md
+            - SHEET_SCHEMA.md
+            - TUTORIAL.md
+            - UPDATES.md
+            - Install-Hangup-HR.cmd
+            - .env.example
+            - .git-diff-it-release.txt
+            - .tmp-backup-dump.txt
+            - .tmp-build-installer.ps1
+            - .tmp-check-app-version.js
+            - AI_Agent.md
+            - CHANGELOG.md
+            - LEGACY_GOOGLE_SHEETS.md
+            - SALES_LOG.md
+            - airtable-backfill-log-2.txt
+            - airtable-backfill-log.txt
+            - alter_column.js
+            - alter_price.js
+            - alter_price2.js
+            - backfill-sales-payment-log.txt
+            - backup-app.js
+            - build-nsis-output.txt
+            - check_attach.js
+            - check_attach2.js
+            - check_attachments.js
+            - check_type.js
+            - dedupe-sales-log.txt
+            - fix_prices.js
+            - js
+            - list_tables.js
+            - migrate-attachments-log.txt
+            - package-lock.json
+            - test_update.js
+            - tmp-apply-it-migration.js
+            - tmp-check-macos-ci.js
+            - tmp-check-run-logs.js
+            - tmp-create-macos-workflow.js
+            - tmp-find-users.js
+            - tmp-fix-macos-workflow.js
+            - tmp-list-it-users.js
+            - tmp-mark-it-users.js
+            - tmp-mark-specific-its.js
+            - tmp-run-sql.js
+            - tmp-set-it-flag.js
+            - tmp-supabase-check.js
+            - tmp-supabase-it-debug.js
+            - tmp-verify-import.js
+            - tmp-verify-it.js
+        source_files: []
+        children:
+            - build_and_scripts
+            - business_logic
+            - electron_runtime
+            - express_server
+            - tests
+        depends_on: []
+        related_to: []
+    build_and_scripts:
+        dir_name: Build, Release & Migration Tooling
+        title: Build, Release & Migration Tooling
+        scope:
+            - scripts/
+            - supabase/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic:
+        dir_name: Hang-Up HR Business Logic Layer
+        title: Hang-Up HR Business Logic Layer
+        scope:
+            - lib/
+        source_files: []
+        children:
+            - business_logic/airtable
+            - business_logic/app_bootstrap
+            - business_logic/attendance
+            - business_logic/auth_supabase
+            - business_logic/business_repos
+            - business_logic/data_access
+            - business_logic/employees
+            - business_logic/notifications
+            - business_logic/payroll
+            - business_logic/permissions_roles
+            - business_logic/reports_custom
+            - business_logic/sales
+            - business_logic/storage_integrations
+        depends_on: []
+        related_to:
+            - path: express_server
+    business_logic/airtable:
+        dir_name: Airtable Outbound Sales Sync & Schema Bridge
+        title: Airtable Outbound Sales Sync & Schema Bridge
+        scope:
+            - lib/airtable-client.js
+            - lib/airtable-canonical-columns.js
+            - lib/airtable-sales-field-map.js
+            - lib/airtable-sales-sync.js
+            - lib/airtable-attachment-parser.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/sales
+    business_logic/app_bootstrap:
+        dir_name: Application Bootstrap, Registration & Backup Utilities
+        title: Application Bootstrap, Registration & Backup Utilities
+        scope:
+            - lib/backend.js
+            - lib/app-bootstrap.js
+            - lib/registration.js
+            - lib/uninstall.js
+            - lib/backup-service.js
+            - lib/backup-jobs.js
+            - lib/backup-tables.js
+            - lib/calendar.js
+            - lib/egypt-datetime.js
+            - lib/us-states.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/auth_supabase
+    business_logic/attendance:
+        dir_name: Attendance Record Engine & Import Pipeline
+        title: Attendance Record Engine & Import Pipeline
+        scope:
+            - lib/attendance.js
+            - lib/attendance-sync.js
+            - lib/attendance-fp-import.js
+            - lib/attendance-validation.js
+            - lib/attendance-employment.js
+            - lib/depart-attendance.js
+            - lib/leave-attendance.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/reports_custom
+            - path: tests
+    business_logic/auth_supabase:
+        dir_name: Authentication, Session & Company Context Layer
+        title: Authentication, Session & Company Context Layer
+        scope:
+            - lib/auth.js
+            - lib/auth-supabase.js
+            - lib/session-store.js
+            - lib/company-context.js
+            - lib/team-dashboard.js
+            - lib/team-names.js
+            - lib/org-hierarchy.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/app_bootstrap
+            - path: business_logic/permissions_roles
+    business_logic/business_repos:
+        dir_name: Business Domain Repositories (Supabase Data Access Layer)
+        title: Business Domain Repositories (Supabase Data Access Layer)
+        scope:
+            - lib/business-repo.js
+            - lib/companies-repo.js
+            - lib/break-schedules-repo.js
+            - lib/it-requests-repo.js
+            - lib/loan-requests-repo.js
+            - lib/meeting-requests-repo.js
+            - lib/quality-notes-repo.js
+            - lib/rules-repo.js
+            - lib/team-tls-repo.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/storage_integrations
+            - path: express_server/expenses_loans_routes
+    business_logic/data_access:
+        dir_name: Data Store & Cache Layer
+        title: Data Store & Cache Layer
+        scope:
+            - lib/data-store.js
+            - lib/cache.js
+            - lib/entity-mappers.js
+            - lib/id-generator.js
+            - lib/settings-revision.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/storage_integrations
+            - path: tests
+    business_logic/employees:
+        dir_name: Employee Domain Logic & HRMS Repository
+        title: Employee Domain Logic & HRMS Repository
+        scope:
+            - lib/employee-compliance.js
+            - lib/employee-export.js
+            - lib/employee-identity.js
+            - lib/employee-ids.js
+            - lib/employee-privacy.js
+            - lib/employee-status.js
+            - lib/employment-periods.js
+            - lib/hrms-repo.js
+            - lib/hr-constants.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/notifications:
+        dir_name: In-App Notification System
+        title: In-App Notification System
+        scope:
+            - lib/notifications.js
+            - lib/notify-dispatch.js
+            - lib/notify-routing.js
+            - lib/notify-store.js
+            - lib/notification-routing-config.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: express_server/expenses_loans_routes
+    business_logic/payroll:
+        dir_name: Payroll Engine & Payslip Pipeline
+        title: Payroll Engine & Payslip Pipeline
+        scope:
+            - lib/payroll.js
+            - lib/payroll-gates.js
+            - lib/payroll-schedule.js
+            - lib/payroll-splits.js
+            - lib/payslip-detail.js
+            - lib/payslip-pdf.js
+            - lib/resignation-payroll.js
+            - lib/training-payroll.js
+            - lib/training-phases.js
+            - lib/training-pay-rules.js
+            - lib/bonus-guards.js
+            - lib/commission-tiers.js
+            - lib/month-profile.js
+        source_files: []
+        children:
+            - business_logic/payroll/bonus_commission_gates
+            - business_logic/payroll/core_payroll
+            - business_logic/payroll/payslips
+            - business_logic/payroll/training_pay
+        depends_on: []
+        related_to:
+            - path: business_logic/reports_custom
+    business_logic/payroll/bonus_commission_gates:
+        dir_name: Payroll Bonus, Commission & Offboarding Gate Utilities
+        title: Payroll Bonus, Commission & Offboarding Gate Utilities
+        scope:
+            - lib/bonus-guards.js
+            - lib/commission-tiers.js
+            - lib/payroll-gates.js
+            - lib/month-profile.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/payroll/core_payroll:
+        dir_name: Core Payroll Calculation & Splits
+        title: Core Payroll Calculation & Splits
+        scope:
+            - lib/payroll.js
+            - lib/payroll-schedule.js
+            - lib/payroll-splits.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/payroll/payslips:
+        dir_name: Payslip Rendering & Resignation Pay Adjustments
+        title: Payslip Rendering & Resignation Pay Adjustments
+        scope:
+            - lib/payslip-detail.js
+            - lib/payslip-pdf.js
+            - lib/resignation-payroll.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/payroll/training_pay:
+        dir_name: Agent Training Program & Dual Payroll Calculation
+        title: Agent Training Program & Dual Payroll Calculation
+        scope:
+            - lib/training-payroll.js
+            - lib/training-phases.js
+            - lib/training-pay-rules.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/permissions_roles:
+        dir_name: Role-Based Access Control & App User Administration
+        title: Role-Based Access Control & App User Administration
+        scope:
+            - lib/permission-catalog.js
+            - lib/role-permissions.js
+            - lib/roles.js
+            - lib/user-permissions.js
+            - lib/users-admin.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/auth_supabase
+            - path: express_server/expenses_loans_routes
+    business_logic/reports_custom:
+        dir_name: Reports, Custom Saved Reports & Payroll Export
+        title: Reports, Custom Saved Reports & Payroll Export
+        scope:
+            - lib/reports.js
+            - lib/reports-extended.js
+            - lib/custom-reports.js
+            - lib/bank-export.js
+            - lib/request-rules.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/attendance
+            - path: business_logic/payroll
+    business_logic/sales:
+        dir_name: Sales Business Logic Layer
+        title: Sales Business Logic Layer
+        scope:
+            - lib/
+        source_files: []
+        children:
+            - business_logic/sales/permissions_scope
+            - business_logic/sales/submit_validation
+        depends_on: []
+        related_to:
+            - path: business_logic/airtable
+            - path: tests
+    business_logic/sales/permissions_scope:
+        dir_name: Sales Field, Attachment & Action Permission Engine
+        title: Sales Field, Attachment & Action Permission Engine
+        scope:
+            - lib/sales-access-resolver.js
+            - lib/sales-action-permissions.js
+            - lib/sales-scope.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/sales/submit_validation:
+        dir_name: Sales Submission Validation & Period Grid Utilities
+        title: Sales Submission Validation & Period Grid Utilities
+        scope:
+            - lib/sales-submit-required.js
+            - lib/sales-period-grid.js
+            - lib/sales-working-day.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    business_logic/storage_integrations:
+        dir_name: Business Data Persistence & External Integrations
+        title: Business Data Persistence & External Integrations
+        scope:
+            - lib/
+        source_files: []
+        children:
+            - business_logic/storage_integrations/document_export
+            - business_logic/storage_integrations/network_transport
+            - business_logic/storage_integrations/version_update
+        depends_on: []
+        related_to:
+            - path: business_logic/business_repos
+            - path: business_logic/data_access
+    business_logic/storage_integrations/document_export:
+        dir_name: Document Storage & Export Utilities
+        title: Document Storage & Export Utilities
+        scope:
+            - lib/documents.js
+            - lib/pdf-export.js
+            - lib/export-zip.js
+            - lib/zip-extract.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/storage_integrations/network_transport
+    business_logic/storage_integrations/network_transport:
+        dir_name: Network Connectivity & Transport Allowance Utilities
+        title: Network Connectivity & Transport Allowance Utilities
+        scope:
+            - lib/network.js
+            - lib/connectivity.js
+            - lib/url-fetch.js
+            - lib/transport.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/storage_integrations/document_export
+    business_logic/storage_integrations/version_update:
+        dir_name: Version Policy, Update Delivery & Change Audit
+        title: Version Policy, Update Delivery & Change Audit
+        scope:
+            - lib/github-updater.js
+            - lib/update-integrity.js
+            - lib/version-sheet.js
+            - lib/app-version.js
+            - lib/changelog.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: electron_runtime
+    electron_runtime:
+        dir_name: Electron Desktop Runtime & Browser UI Shell
+        title: Electron Desktop Runtime & Browser UI Shell
+        scope:
+            - electron/
+            - public/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/storage_integrations/version_update
+            - path: express_server
+    express_server:
+        dir_name: Express API Server (HR Desktop)
+        title: Express API Server (HR Desktop)
+        scope:
+            - app.js
+            - routes/
+        source_files: []
+        children:
+            - express_server/expenses_loans_routes
+        depends_on: []
+        related_to:
+            - path: business_logic
+            - path: electron_runtime
+    express_server/expenses_loans_routes:
+        dir_name: Expenses, Loans & Bonus Request Routes
+        title: Expenses, Loans & Bonus Request Routes
+        scope:
+            - routes/expenses.js
+            - routes/loan-requests.js
+            - routes/bonus-requests.js
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/business_repos
+            - path: business_logic/notifications
+            - path: business_logic/permissions_roles
+    tests:
+        dir_name: Node Test Suite for Attendance, Sales & Data Store
+        title: Node Test Suite for Attendance, Sales & Data Store
+        scope:
+            - test/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: business_logic/attendance
+            - path: business_logic/data_access
+            - path: business_logic/sales

@@ -1,0 +1,4 @@
+- Public APIs are exposed as plain function exports from CommonJS modules, with a thin barrel file (`network.js`) used to hide internal helpers like `probeUrl`.
+- HTTP operations use explicit timeouts (`req.setTimeout` / `{ timeout }`) and always call `res.resume()` before resolving/rejecting to prevent memory leaks on large responses.
+- Status classification uses `Set` constants (`TRANSPORT_STATUSES_FULL`, `TRANSPORT_OVERRIDE_STATUSES`) instead of string literals, with deprecated aliases kept for backward compatibility.
+- Monetary values are rounded to two decimals via `Math.round(x * 100) / 100` at each accumulation step rather than only at the end.

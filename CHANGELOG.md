@@ -2,6 +2,508 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [Unreleased]
+
+### Changed
+- **Sales log visibility** — A sale is visible to (1) the TL of that team, (2) the assigned closer on the sale, and (3) the assigned agent on the sale. Org closer-team assignment alone no longer shows every team sale.
+
+## [2.3.22] — 2026-08-13
+
+### Fixed
+- **Sale agent picker** — Agent dropdown listed TLs instead of dialing agents after live `app_users.role` was stamped onto every employee. Picker now uses employees + `org_teams` (`lib/dialing-agents.js`), not login role. Optional `employees.sales_agent_picker` (true/false/NULL) overrides via SQL migration without an app release.
+- **Sale team field** — Team dropdown removed. Team is always the selected agent’s team (1.6.13).
+
+## [2.3.21] — 2026-08-13
+
+### Added
+- **Announcements** — Company-scoped posts (Hangup vs HS-2). Audience can be whole company or targeted by multiple units, teams, and roles. Picture placement: above / middle / below the text. New posts notify matching users; sidebar shows an unread count that clears when a post is opened. Everyone matching the audience can read; HR / RTM / Admin / CEO can create, edit, and delete. Rich-text body, optional picture and inline audio. Access Control: `viewAnnouncements` / `editAnnouncements`.
+- **Coaching tickets** — Scoped agent + coach assignment (TL/Closer self-only; OP unit TL/Closer/agents; Quality quality team; HR TL/Closer/Quality; Admin any). Outcome (pending/positive/negative/normal), submitted-by, datetime. Secret notes: HR/Quality/Admin. Coach may update outcome and extra notes only. Admin-only datetime edit and delete. Filters: date, agent, coach, outcome, active/out, team.
+
+### Fixed
+- **Employee company move** — Switching unit to another company (e.g. HS-3 → HS-2) asks for confirmation, clears the old team, and requires a team in the new unit. API rejects mismatched unit/team.
+- **Live role over ID prefix** — Coaching, quality reviewers/verifiers, sale submit pickers, and app-ID changes prefer `app_users.role` instead of inferring from HS/TL/HR prefixes.
+- **Agent / closer sale submit** — Org closers who keep `app_users.role = agent` (dialing or CL ids) and plain agents can submit again. Submit scope uses live login role only (no CL→TL inference), always includes self on the agent picker, and does not block submit when MLA/RPM flags are unset.
+- **Closer team submit (Amy / Tris)** — TL/closers whose home team is non-dialing (e.g. Management) can pick their closer teams (Tris, Jude, …) and submit for those agents. Sale unit/team is taken from the selected agent, not the closer’s home team.
+- **Quality record playback** — MLA/RPM quality ticket and view-sale modals play `quality_record` (and recording / raw call) inline. Video files use `<video>`; MIME detection covers `.mp4`, `.mov`, `.3gp`, and related formats.
+
+## [2.3.20] — 2026-08-12
+
+### Added
+- **Page loading animation** — Viewport-centered overlay (not mid-scroll on long pages). Center cat watches a running cat that loops nearby paths (circle, oval, rounded square, diamond, figure-8, clover) and flips to face the direction it is going.
+
+### Fixed
+- **RPM/MLA closer picker (Ria)** — Org closers with dialing IDs (e.g. `HS3-35` Ria) were missing from the closer dropdown because self was only injected for plain agents. Closers now always include themselves (default). Role lists: agents = self + own team TLs; org closers = self + any TL/org closer, agents from closer teams; TL = own-team agents as agent or closer, closer-team agents as agent, any TL/closer (default self); OP = any. Out/Deleted/company/program filters unchanged.
+- **Payroll open speed** — Serves the local SQLite cache when the month is already loaded; refreshes Supabase in the background. Independent payroll queries run in parallel. Hovering Payroll/Employees in the sidebar prefetches. Overlay only on cold loads.
+- **Quality tickets after HR→Quality transfer** — Login role is read from `app_users` on every request (not the role frozen at sign-in). `HR-2` Eva (Quality) can open quality tickets; `lead_role` synced to QA.
+- **Hide zero net pay** — Hides rows whose **current display net** is 0 (including paid/Done remaining 0).
+- **Payroll unified list** — Trainees stay on the single payroll grid (do not drop `training` rows).
+
+## [2.3.19] — 2026-08-11
+
+### Fixed
+- **RPM/MLA closer picker** — Out/Deleted employees (e.g. Billie `CL05`) no longer appear as closers. Team leads with dialing IDs (e.g. Ayla `HS1-05`, TL via `app_users.role` / `org_teams.tl_employee_id` / `lead_role`) now appear correctly. Root cause: closer eligibility used ID prefixes only and excluded only status `deleted`, while submit-scope loaded `hideOut: false`.
+- **Payroll unified list** — Trainees again appear on the single payroll grid (do not use agent-only flatten that dropped `training` rows). Matches **Payroll (unified list)** from 2.3.8.
+- **Hide zero net pay** — Hides rows whose **current display net** is 0 (including paid/Done remaining 0). Previously required earned net also 0, so settled paid rows stayed visible.
+- **Duplicate ROSE / Rose Brown** — Live data: merged `HS3-56` (ROSE) into `HS3-59` (Rose Brown) — sales, August adjustment, employment date, Arabic name; deleted ROSE employee + login. Rose Brown now shows on July payroll (training row).
+
+## [2.3.18] — 2026-08-11
+
+### Fixed
+- **Quality reviewer picker empty** — `/employees` now includes `role` from linked `app_users` (with ID-prefix fallback); reviewer filter works in MLA/RPM quality modals.
+- **RPM quality reviewer** — RTM/admin/ceo can edit reviewer on quality tickets (was quality/admin only).
+- **`rpmCatalog.canEditAttachmentKind`** — exported from RPM field catalog (fixes recording upload crash on RPM quality tickets).
+- **Attachment uploads** — 50 MB body limit; client/server size guard; RPM RTM recording upload roles aligned with MLA.
+
+## [2.3.17] — 2026-08-11
+
+### Added
+- **RPM sales — Notes** — Optional `Notes` textarea on RPM submit form; visible on edit, view, and quality modals with catalog permissions (`rpm_sales_field_permissions` seeds on next permission sync).
+- **Sales attachments — inline playback** — React view/quality modals stream audio via `/attachments/:id/file` (MLA + RPM), matching legacy inline `<audio>` behavior.
+
+### Fixed
+- **Quality tickets (MLA/RPM)** — Recording upload panel on quality modals; reviewer picker limited to quality/RTM/admin (company-scoped); Quality button gated like legacy (`canOpenQualityTicketForSale`).
+- **RPM attachments** — Added `GET /rpm-sales/attachments/:id/file` for inline streaming (download endpoint unchanged).
+
+## [2.3.16] — 2026-08-11
+
+### Fixed
+- **Payroll page crash** — `Cannot access 'tt' before initialization` fixed: `trainingAnchorMonth` declared before use in `PayslipDialog`; payslip dialog only mounts when open (defense against similar TDZ bugs).
+- **`isOutEmployeeStatus`** — single implementation in `employeeStatus.ts` (removed duplicate export/import conflict in `employeeSearch.ts`).
+
+## [2.3.15] — 2026-08-11
+
+### Fixed
+- **Training payroll** — Ray-style double pay fixed: pre-anchor months defer to zero net; graduated trainees stay deferred until anchor month; HR anchor month override persists to Supabase and applies across training span.
+- **Payroll history** — Employee history API uses training-enriched rows; bonus types respect company context; training enrich warnings on payroll page.
+- **Payroll export** — Main PDF export uses agent scope (not full double-count).
+- **Login / registration** — OTP-style registration PIN with stroke animation; DNA helix hover on sign-in button; legacy login fallback updated.
+
+### Changed
+- **Payslip** — Training payroll anchor (HR override) field on deferred and training payslips.
+
+## [2.3.14] — 2026-08-11
+
+### Fixed
+- **Notifications** — Bell panel and unread counts scoped by company; leave/loan/expense/doc aggregates filtered; dispatch routing passes `company` so HR/IT/meeting alerts stay in the correct org.
+- **Payroll adjustments** — Hangup context no longer includes HS-2 rows; writes, extra payroll, splits, init-month, and loan payment recording respect company scope.
+- **Expenses** — Approve/deny/edit/delete/receipt by ID checks expense `company` vs active tab.
+- **Leave** — POST and document upload/download gated by company; leave metadata employees/units/teams company-filtered.
+- **IT / meetings** — Create/update/delete validates ticket/requester company; IT user picker scoped.
+- **Frontend** — Notification bell, payslip dialog, payroll/loans/equipment mutations, interviews/training, employee edit/lifecycle APIs pass `?company=hs2` when on HS-2 tab.
+
+## [2.3.13] — 2026-08-11
+
+### Added
+- **`canAccessHs2CompanyContext`** — Central gate for HS-2 company context: `manageHs2Company` (admin/ceo/hr) or native HS-2 staff (unit → hs2). Exposed on `/api/status` as `canAccessHs2Company`.
+- **HS-2 isolation tests** — `node scripts/test-hs2-isolation.js` (context resolution, employee filter, strict sales filter).
+
+### Fixed
+- **HS-2 context leak** — `?company=hs2` no longer grants HS-2 data to users without `canAccessHs2CompanyContext` (agents, quality, rtm, etc. stay on hangup).
+- **Strict sales isolation** — HS-2 unit sales visible only in HS-2 company context (removed `seeHs2InSales` cross-tab visibility on Main Hangup).
+- **Payroll metadata leak** — `units`/`teams` dropdowns derived from company-scoped employees only.
+- **Bonus pending leak** — Approvers see pending requests for active company tab only.
+- **Org managers leak** — `/org/managers` always filtered by company context (including HR/admin).
+- **Registration pending** — Always scoped to active company tab.
+- **Daily registration PIN** — Returns only pins for caller's accessible company(ies).
+- **HS-2 leave access** — Native HS-2 TL/OP/agents can access leave (was 403 for non-managers).
+- **Analytics** — IT request counts and changelog filtered to company-scoped employees.
+- **Interviews** — Candidate list respects sidebar company context (`?company=hs2`).
+- **Quality notes** — POST/PUT/DELETE enforce `employeeInCompanyContext`.
+- **Employee create/update** — Server rejects cross-company employee writes.
+
+### Changed
+- **Company switcher** — Hidden for users with no HS-2 access; managers get toggle, native HS-2 staff get read-only badge.
+- **Frontend scoping** — RPM/MLA sale modals, org pending, bonuses, deductions, costs, attendance mutations pass company context.
+- **Rules page** — HS-2 tab only when `canManageHs2Company` (sidebar switcher).
+
+## [2.3.12] — 2026-08-11
+
+### Added
+- **MLA / RPM program split** — Separate Supabase tables, APIs, routes, and UI per program (`sales` vs `rpm_sales`, matching attachments, field permissions, action permissions, and list columns). Employee flags `sales_mla_enabled` / `sales_rpm_enabled`; payroll counts split (`sales_count_mla` / `sales_count_rpm`).
+- **Program picker** — **+ Add sale** shows MLA/RPM choice when the user can submit both; bottom dock **Sale** quick action uses the same flow.
+- **RPM sales module** — Full submit/edit/view/quality workflow with RPM field catalog, client picker (RPM1/RPM2 seed), separate storage root `rpm-sales-attachments/{saleId}/…`, and quality recordings under `quality_record/`.
+- **Teams dashboard** — MLA + RPM sales combined; excludes TLs and paused agents; **Target %** column.
+- **Edit-sale reassignment** — Admin/RTM/CEO can change unit, team, agent, and closer on MLA/RPM edit sale and quality ticket modals (`reassignSaleLead` permission).
+- **Wide agent/closer picker** — Admin, CEO, HR, Quality, and RTM pick any active agent/closer in company scope on MLA and RPM submit/edit (dialing teams keep scoped flow).
+- **Sales program isolation audit** — `node scripts/test-sales-program-isolation.js`; live probe `node scripts/probe-sales-program-live.js`.
+- **RPM sales backup** — `runRpmSalesBackup()` exports `rpm_sales` rows and `rpm-attachments/` files (including quality records).
+
+### Fixed
+- **RPM attachment download** — On-demand cache accepts RPM storage paths (previously MLA-only prefix blocked quality recordings).
+- **RPM catalog active check** — RPM clients without products (RPM1/RPM2) count as active for submit.
+- **Agent/closer picker** — Missing `isOnBehalfAgentTarget` export broke admin oversight lists; company scope query on picker.
+- **Employee MLA/RPM checkboxes** — `entity-mappers` maps `sales_mla_enabled` / `sales_rpm_enabled` from DB.
+
+### Changed
+- **MLA new uploads** — Attachment paths use `mla-sales-attachments/` prefix (legacy `sales-attachments/` still readable).
+- **RPM quality ticket access** — Quality ticket workflow (editable modal) limited to **Quality, RTM, Admin** (`workQualityTicket`). Agents, TL, and OP use **View sale** only (read-only; field visibility from Sales permissions main view).
+- **MLA quality ticket** — TL/OP verifier assignee path unchanged (assigned verifier sees `verifierFeedback` only). RPM has no verifier workflow — reviewer is quality-only.
+- **Sales UI** — Removed legacy wording; MLA catalog excludes RPM1/RPM2 client names.
+- **Full DB backup** — Includes all `rpm_sales_*` tables and `sales_attachment_permissions`.
+
+## [2.3.11] — 2026-08-10
+
+### Added
+- **Leaving types on OUT** — Three options when marking an employee out: **with notice** (14-day window; basic pay scales 50–100% from 5–10 passed sales), **without notice** (10 working days basic + transport deduction), **company decision** (full pay, no leaving deductions).
+- **Notice-period sales on payslip** — Auto-counts passed sales in the notice window; **Apply notice pay scale** writes the prorated basic to payroll.
+- **Legacy employee visibility** — OUT employees with no pay who left **2+ months ago** are hidden from Employees, Attendance, and Payroll by default; **Settings → Show legacy employees** reveals them.
+- **Training phase 1 pay exception** — HR can mark phase 1 as paid on the payslip when policy allows.
+- **Training cross-month breakdown** — Payslip shows monthly accrual lines; **Week 1 withheld** when sales target not met.
+
+### Fixed
+- **Payroll totals row** — Footer columns align with the grid (Payment column).
+- **Hide OUT filter** — Tab checkbox only reveals leavers from the **previous month** (not all OUT or legacy 2+ month leavers).
+- **Idle OUT on payroll** — Agents who left with no salary no longer appear in the payroll grid unless legacy visibility is enabled.
+- **Deferred training grid** — Trainees in a deferred month show accrued working days, basic salary, and net (with “Pays in {anchor month}”) instead of all zeros.
+
+## [2.3.10] — 2026-08-10
+
+### Added
+- **Training payroll (cross-month)** — Training that spans two months (e.g. start day 20, finish day 14 next month) accrues as **one consolidated training payslip** on the anchor month; earlier months show deferred (0 net) with a note.
+- **Settled payroll display** — Rows marked **paid**, **no payroll**, or **training paid** contribute **0** to payroll grid totals; opening the payslip still shows the earned amount with a **Done** badge (e.g. `12,000 EGP — Done`).
+
+### Fixed
+- **Training half-day pay** — Half-day and fractional training units no longer deduct twice from basic salary (WFH + Lateness A + Half Day mix now pays correct units × 600 EGP).
+- **Bonus requests** — Pending list bypasses month filter; HR/admin see all companies; cache refresh after submit.
+- **Registration approval** — Single approve creates employee + active login; pending list visible across companies for HR.
+
+## [2.3.9] — 2026-08-07
+
+### Added
+- **OUT depart confirmation** — Marking OUT in attendance prompts whether to set that day as the employee depart date; choosing No saves OUT for that day only.
+- **Clear depart date** — HR can undo a mistaken depart from the employee lifecycle panel (reopens employment period, removes auto-OUT days, re-enables login when applicable).
+- **Pause attendance** — Approved pause requests write `paused` Mon–Fri; selecting paused on one grid day fills the whole work week; paused counts as a day off in summaries.
+- **Unified payment methods** — Canonical keys `cash`, `instapay`, `bank` with bidirectional sync between employee record and all payroll month profiles; **No payment method** filter on Employees and Payroll.
+- **Training start date sync** — When training phase 1 starts before `employment_date`, employment date moves to training Monday (not the reverse).
+
+### Fixed
+- **Employees page crash** — Payment filter no longer renders `{value, label}` objects as React children.
+- **Leave requests** — Approve/reject/delete now refreshes the attendance grid.
+
+## [2.3.8] — 2026-08-06
+
+### Added
+- **Quick actions** — IT ticket and **Add sale** (opens submit form directly) in bottom dock and command palette; sale form uses scoped agent/closer picker (`/sales/submit-scope`) matching legacy assignment rules.
+- **Payroll (unified list)** — Single payroll grid with combined net per employee; dual promotion months show **Training + Agent** label; payslip dialog uses **Combined → Training → Agent** tabs.
+- **Training/agent portion overrides** — Per-portion net salary override and **mark training as paid** on training tab; agent tab has separate net override; combined net = sum of both portions. DB: `training_net_salary_override`, `agent_net_salary_override`, `training_payroll_paid`.
+
+### Fixed
+- **Dual payroll calculation** — Hybrid Supabase payroll-core no longer overwrites scoped training (@600/day) + agent (post-promotion) portions with full-month agent basic.
+- **Sales log** — Missing `useQueryClient` import in sale modals.
+- **Quick actions** — Costs hidden for users without expense access; closers IT on-behalf uses `/it-requests/scoped-agents`.
+- **Agent documents** — Self-upload types include Medical Prescription; closers see scoped agents in IT dropdown.
+
+## [2.3.7] — 2026-08-05
+
+### Added
+- **Organization: TL vs Closer** — Team leaders (TL) and closers are separate assignments (`team_tls` vs `team_closers`). TL: leave + IT on behalf for active agents on their team(s). Closer: sales + IT on behalf for active agents on assigned team(s); team dashboard view; no leave on behalf; no org management. A TL can also be a closer for other teams; agents can be closers for any team in their unit.
+- **On-behalf validation** — Server enforces active-agent-only and scope for IT ticket create; supervisors see team/unit IT tickets they filed or for scoped agents.
+
+### Changed
+- **Sales submit (agent closers)** — Agents with closer assignment submit sales only for agents on their closer team(s), not unit-wide dual-TL pool.
+- **In-app updates** — Login and post-sign-in dialogs only show **Update now** when a matching GitHub release installer/package is available for the current platform.
+
+## [2.3.6] — 2026-08-05
+
+### Fixed
+- **Attendance** — Active agents no longer revert to OUT when a stale `depart_date` or closed employment period is on file; grid lock/display and API `lock_after` only apply after HR marks the employee Out.
+- **Payroll** — Training graduation, deferred training months, salary raise in daily rate, notice-period proration, tax rules, AIP lateness, and hybrid dual-DB merge fixes from payroll audit.
+
+## [2.3.5] — 2026-08-05
+
+### Fixed
+- **In-app updates (React)** — Login screen and post-sign-in shell now show **Update now** when a newer GitHub release is available (parity with legacy UI); blocked-version and install-health banners on login.
+
+## [2.3.4] — 2026-08-05
+
+### Fixed
+- **Access control (React)** — Agents/TL no longer see Payroll in nav; leave scope (agent=self, TL=team, OP=unit); IT Requests visible to agents; employee/attendance filters HR-only; half/quarter day on unpaid leave; rules edit HR/Admin only.
+- **Leave requests** — HR team/unit/type filters and daily/weekly/monthly grouping; medical leave document upload; submitters can edit/delete own **pending** requests only.
+- **Company rules** — HS-2 rules tab hidden from Main Hangup users (API + UI); visual table/list editor replaces raw HTML textarea.
+- **Interviews** — Interviewer, 2nd interviewer, and trainer fields use role-scoped dropdowns (HR/Quality/Admin/OP for interviewers; OP/TL for trainers).
+- **hrms.js** — Removed duplicate `requestRules` import that blocked app load.
+
+### Added
+- Tests for leave submitter access, request scope, HS-2 rules access, nav routing.
+
+## [2.3.3] — 2026-08-04
+
+### Fixed
+- **Team dashboard sales** — Loads sales by working day, submission, or effective date (`dateBasis: either`); pending/callback submissions count in **Total Sent** so submitted sales match Sales log.
+- **Attendance manual override** — FP blank cells persist when set to Attended; local merge no longer reverts edits after refresh.
+- **Attendance employment period** — Depart day editable; employees without `employment_date` can edit through `depart_date`; OUT without depart date no longer blocks all edits.
+- **Search after error popup** — Employees and Attendance search works again after dismissing alerts (UI blocker cleanup).
+- **Organization editing** — **Edit teams & TLs** button and inline controls use correct `canManageOrg` / `canManageEmployees` from `/status`; dialog editor for agent teams and TL assignment.
+
+### Added
+- **Org structure editor** — Modal with Agent teams + Team leaders tabs; success toasts on save.
+- **Tests** — `team-dashboard`, `org-access`, attendance manual override / persistence coverage.
+
+## [2.3.2] — 2026-08-04
+
+### Fixed
+- **Payroll OUT filter** — Hide out/inactive employees unless they have real work this month (days, sales, commission, or basic). Transport-only and net-override rows no longer keep departed agents visible.
+- **Payroll zeroes (hybrid DB)** — Stale Supabase payroll-core rows with `working_days: 0` no longer wipe valid in-app attendance calculations.
+- **Payroll grid ↔ payslip parity** — Main/Training tabs show working days, sales, commission, basic, loans, transport, bonus, deductions, and earned net; stat tiles and footer sum filtered rows.
+- **Net salary with payment splits** — List shows earned net (`calculatedNet`), not remaining balance after partial payments.
+- **Dual payroll combined net** — Promotion-month trainees use sum of earned agent + training nets (fixes e.g. -500 vs 9,500 mismatches).
+- **Hybrid DB on dual payslips** — Agent/training sub-rows receive Supabase payroll-core merge.
+- **Total payrolls tab** — Accrual month, due date, scheduled/received columns; payslip opens for correct accrual month.
+- **Payment exports** — `scope=total` uses cash-out rows (was incorrectly exporting agent tab).
+- **MoM compare** — Uses enriched payroll pipeline to match on-screen totals.
+- **Payslip loader** — Single-employee bundle uses same `buildEnrichedPayrollForMonth` path as the grid.
+- **Deferred training months** — Rows visible on Training tab with deferred badge.
+- **Employee depart flow** — Changing status to Out prompts for depart date (React employee edit).
+- **FP import** — ID+Date-only rows preserve **FP date only** notes on apply.
+- **Airtable sync** — Empty attachment columns are cleared on PATCH.
+
+### Changed
+- React payroll UI rebuilt in `public/dist` with full column set and hide-out toggle wired to API.
+
+## [2.3.1] — 2026-08-03
+
+### Fixed
+- **Fresh install Supabase config** — First launch now creates `%AppData%/Hangup Portal/HangupHR-data/.env` by copying the build-time `.env` bundled in `resources/` (or `.env.example` as fallback). Fixes the “Supabase is not configured” error on clean NSIS installs after v2.2.0 stopped shipping secrets in the app folder.
+- **Legacy `.env` migration** — Upgrades from older installs that kept `.env` under `resources/` or portable folders are migrated into `HangupHR-data/.env` automatically.
+
+## [2.3.0] — 2026-08-03
+
+### Added
+- **React SPA parity** — Full payroll payslip UI: salary/net overrides, extra payroll (days × rate), training salary breakdown, dual payslip tabs.
+- **Payroll hide-out toggle** — “Hide out / inactive” on payroll tabs; out employees with salary still show.
+- **Sales log** — Month list filtered by **submission date** (not working day); stat tiles match the table.
+- **Analytics dashboard** — Restored legacy widgets: financials, sales by team/status, training pipeline, equipment, HR audit.
+- **Sales clients catalog** — Settings admin: add/edit clients, devices, price tiers, favor star, import from sales.
+- **Role-based navigation** — Sidebar, command palette, and routes gated by `/status` permissions (legacy parity).
+
+### Changed
+- **Native modules** — `postinstall` / `ensure-electron` rebuild `better-sqlite3` and `bcrypt` for Electron ABI.
+
+## [2.2.0] — 2026-08-01
+
+### Security
+- **Session hardening** — Sessions no longer store plaintext passwords; password changes revoke other devices via `password_changed_at` without mass logout on deploy.
+- **Packaging** — `.env` and `credentials/` are no longer bundled in the installer; secrets load from `userData/HangupHR-data/.env` and `userData/credentials/`.
+- **IPC & updates** — Zip-slip guard, GitHub download host pinning, payslip write-root restriction, and confirmation before uninstall.
+- **Surface hardening** — CSP headers, local Lucide vendor script, removed save-password on login, PostgREST filter sanitization, interview feedback IDOR fixes, admin-gated Supabase health probes, backup login rate limiting, `SESSION_SECRET` gate on packaged builds.
+
+### Added
+- **Analytics dashboard** — Leave, costs, sales, and training widgets with company scope labels.
+- **Interview/training improvements** — HR/Quality edit access, fast-paced 1–5 rating, available-days checkboxes, expanded training status options.
+- **TL/OP bonus transfers** — Paired deduction/bonus linking with read-only recipient display on TL bonus deductions.
+- **Hybrid UI tokens** — `--shell-bg`, `--hairline`, and chart tokens across all seven themes.
+
+### Changed
+- **bcrypt cost** increased to 12; minimum password length 8 characters on change.
+- **Express session** regenerated on login (M1) to reduce session fixation risk.
+
+## [2.1.0] — 2026-07-29
+
+### Added
+- **Team-first employee selection for HR/Admin** — New request modal now requires HR/Admin/CEO users to select a team before choosing an employee, improving scalability in large orgs.
+- **Active-employee filter for HR/Admin** — Employee list in the requests module now shows only active employees for HR and Admin roles, reducing noise from inactive records.
+- **Non-HR workflow preserved** — Agents, TLs, OPs, and other non-HR users continue using the existing direct-employee selection UI without team-first filtering.
+
+### Fixed
+- **companyContext ReferenceError in leave creation** — Fixed missing `companyContext` import in `lib/hrms-repo.js` that caused `ReferenceError: companyContext is not defined` when creating leave requests.
+
+## [2.0.0] — 2026-07-28
+
+### Added
+- **Interviewer/Trainer display enhancement** — Interviewer and Trainer dropdowns now show `employeeId (name)` format (e.g. `HR-2 (Eva)`). Options are filtered to active users within the same company with roles HR/OP/Quality for interviewers and TL/OP for trainers.
+- **Extra Payroll feature** — New manual extra payroll entries in the payslip modal. Users can add custom-labeled entries (e.g. "Extra", "Training", "Part-time") with working days and day rate. Net amount auto-calculates from days × rate, or can be manually overridden. Entries appear in the Bonus section of payslips labeled with the custom name and are included in total net payroll calculations.
+- **Extra Payroll API** — New CRUD endpoints: `GET /payroll-extra/:employeeId/:yearMonth`, `POST /payroll-extra/:employeeId/:yearMonth`, `PATCH /payroll-extra/:id`, `DELETE /payroll-extra/:id`.
+- **Extra Payroll database table** — New `extra_payroll_entries` table with fields for employee, month, label, working days, daily rate, net amount, and audit timestamps.
+- **Extra Payroll PDF export** — Each extra payroll entry can be exported as a standalone payslip-style PDF showing label, working days, daily rate, net amount, and employee details.
+
+### Fixed
+- **Interviewer/Trainer dropdown visibility** — Fixed missing display key mappings for `interviewer`, `trainer`, and `secondInterviewer` in both view and edit modals, ensuring dropdowns render correctly.
+- **Payroll bonus breakdown** — Updated `bonusBreakdown` to preserve custom bonus type labels (e.g. Extra Payroll entries) instead of lumping them into a generic "Other" category.
+
+## [1.9.8] — 2026-07-27
+
+### Added
+- **Interviews enhancements** — Renamed `status` to `First Interview Status` with options `pending` (default), `on hold`, `accepted`, `rejected`. Added conditional `Second Interview` section in edit mode that is hidden unless the first interview status is `accepted`, with status defaulting to `pending` and the same fields as the first interview. Interviewer dropdown is populated dynamically from `app_users` with roles HR, Quality, Admin, TL, or OP.
+- **Training tab** — New **Training** page under the **People** sidebar group. Shows only candidates with `training_status = started`. Includes Trainer and Training Date filters, RBAC for trainers vs HR/Admin/Quality, and batch numbers (`B1`, `B2`, `B3`, ...) grouped by `training_start_date` and saved in Supabase without being synced to Google Sheets.
+- **Training feedback and assessment** — Edit Training modal provides 5-day daily feedback. Day 5 (Test Call Day) includes 1–5 metrics for Active Listening, English, Accent, and Product Knowledge, plus a qualitative feedback textarea.
+- **Interview/Training permissions** — Added `viewInterviews`, `editInterview`, `viewTraining`, and `editTraining` to the permission catalog and RBAC helpers.
+
+### Changed
+- **Interview view is read-only** — View Interview modal no longer shows Save or editable controls; all fields are rendered as disabled dropdowns/inputs.
+- **Interview list columns** — Main Interviews view now shows `1st Int Status` and `2nd Int Status` columns with independent AND filters (e.g., selecting `accepted` for 1st and `rejected` for 2nd returns only rows matching both).
+- **Training status options** — Updated to `waiting`, `started`, `no show no call`, `dropped`, `postponed`.
+- **Google Sheets sync** — Sheet headers and row mapping updated to use `1st Int Status`, `1st Int Feedback`, `1st Interview Date`, `1st Interviewer`, `2nd Int Status`, `2nd Int Feedback`, `2nd Interview Date`, `2nd Interviewer`, `Training Status`, `Training Start Date`, and `Trainer`.
+- **Batch numbering** — Batch numbers are now assigned automatically per `training_start_date` group in format `B1`, `B2`, `B3`, etc. The manual Batch Number input was removed from the Edit Interview modal.
+
+### Fixed
+- **HS2 data isolation in interviews** — Added `company` column filtering to `readCandidateApplications()` so HS2 candidate records are never returned in the main Hangup context and vice versa.
+- **Interviewer/Trainer dropdowns** — Dropdowns now load dynamically from `app_users` by role instead of hardcoded values.
+
+## [1.9.7] — 2026-07-24
+
+### Added
+- **Interviews module** — new HR/Admin-only administrative table backed by Google Sheets (`routes/interview.js`, `lib/google-sheets.js`). Supports CRUD rows, real-time listing, status dropdown, interviewer/training fields, and conditional training columns. Wired into the app shell at the **Interviews** sidebar page.
+
+### Fixed
+- **Interview tab loading failure** — `InterviewModule.init()` now renders into the active page root when no `#interview-module` container exists, preventing blank-page errors.
+- **Interview nav placement** — moved from Administration to People sidebar group.
+- **Interviewer field** — changed from free-text to dropdown with HR, Admin, Quality, OP, TL options.
+- **Conditional training fields** — Training Status, Training Start Date, and Trainer are now enabled only when Status is Approved; hidden in table view for non-Approved rows.
+- **Bi-directional sync** — frontend polls `/api/interview/interviews` every 5 seconds and refreshes only when data changes.
+- **Google Sheets auth** — fixed `getAuth()` to use `google.auth.GoogleAuth` + `credentials` + `getClient()` per official docs. Fixed env loading race by reading `INTERVIEW_SHEET`, `INTERVIEWS_KEY`, and `INTERVIEW_TAB` dynamically at call time instead of module load time. Added debug logging for path resolution and auth creation.
+
+## [1.9.6] — 2026-07-22
+
+### Fixed
+- **Analytics endpoint crash** — `GET /reports/analytics` in `routes/api.js` referenced undefined `cache` variable. Added explicit `require("../lib/cache")` import.
+- **Duplicate variable declaration** — `router.get("/payroll")` in `routes/api.js` declared `employees` twice. Renamed second declaration to `_employees`.
+- **Rate limiter startup crash** — `lib/rate-limiter.js` required a non-existent `./window` module. Removed stale require.
+- **Registration name validation** — Removed duplicate First/Last name fields. American name now enforces exactly 2 words. Legal name enforces minimum 3 words with ID-match note.
+
+### Added
+- **Permission-gated request filters** — New `viewRequestFilters` and `viewItRequestFilters` permissions. Advanced filters on Requests and IT Requests pages are now restricted to authorized roles.
+- **Reporting & Analytics dashboard** — New `/reports/analytics` endpoint and `public/js/analytics.js` module. Provides visual charts for leave volume, financials, sales by team, equipment inventory, training pipeline, attendance/turnover, and HR audit edit counts.
+- **Employee Management filters** — Added Position, Team, Payment Method, and FP Number (Has/No FP) filters to the employees page. Added "No FP" visual badge.
+- **Teams Dashboard 24h share** — Added Share Visibility modal with team/agent selection dropdown.
+- **Payroll filters and sorting** — Added Team, Unit, and Payroll Status filters. Added sortable columns for Sales, Commission, Working Days, Basic, Transport, Loan, and Net.
+- **PDF payslip names** — PDF now displays both American Name and Legal Name when available.
+
+## [1.9.5] — 2026-07-21
+
+### Fixed
+- **Registration notifications leaking across companies** — `notifyRegistrationSubmitted()` in `lib/notify-routing.js` was sending HS2 registration alerts to all users with `op/admin/hr/ceo` roles regardless of company. Now scopes recipients by the registration's company context, with Raymond as the only cross-company exception.
+- **Payroll DB override accepting inflated working days** — The hybrid payroll DB layer in `routes/api.js` could override app-layer calculations with stale DB values when `OUT` attendance records weren't yet persisted. Added a safety check: DB `working_days` must be `<=` app-layer `totalWorkingDays` to be accepted.
+- **Transport calculation in DB migration missing OUT filter** — `calculate_payroll_core` in `supabase/migrations/20260721_v191_hybrid_payroll_architecture.sql` was not excluding `OUT` records in the transport CTE, causing inconsistent transport daily rates for employees with post-departure days.
+
+### Changed
+- **Company isolation for registration notifications** — `resolveUsernamesByRoles()` now accepts an optional `company` parameter. When provided, it resolves each user's company from their linked employee record's unit and filters recipients accordingly.
+
+## [1.9.4] — 2026-07-20
+
+### Fixed
+- **Cost Management HS2 isolation broken** — Fixed cache bypass bugs in `readExpenseRequests()` and `readMonthlyBills()` in `lib/business-repo.js` that were returning all cached expenses/bills regardless of company context. Now filters cached data by company when `company` filter is provided.
+- **Equipment module showing HS3 data in HS2 context** — Added `company` column to `equipment` table via migration `20260731_v187_equipment_company_isolation.sql`. Updated `readAllEquipment()` and `readEquipmentAssignments()` to filter by company. Frontend now sends `?company=hs2` for all equipment operations.
+- **Petty cash ledger using wrong company resolver** — Fixed `parseCompany(req)` reference error in `routes/expenses.js:151` that was breaking the ledger endpoint. Now uses `companyContext.resolveCompanyContextForUser()`.
+- **Requests module missing company context** — `public/js/requests.js` was not sending `?company=hs2` for leave requests, causing HS3 requests to appear in HS2 views. Fixed all API calls.
+
+## [1.9.3] — 2026-07-20
+
+### Fixed
+- **OP users cannot see HS2 org data** — `GET /org-structure` in `routes/hrms.js` was unconditionally stripping HS2 units for all non-managers, including HS2 OPs. Now uses company context: HS2 users see HS2 units, non-HS2 users don't.
+- **OP users cannot see HS2 teams** — `GET /hrms/teams` in `routes/hrms.js` returned 403 for OPs and filtered out HS2 teams for non-managers. Now allows OP/TL roles and scopes teams by company context.
+- **OP users forced back to Main Hangup context** — `resetCompanyContextIfNeeded()` in `public/js/app.js` forced all non-managers back to `"hangup"`. Now auto-detects the user's company from their `unit` field and preserves it.
+- **Company switcher hidden from OPs** — `applyCompanyBranding()` in `public/js/app.js` removed all HS2 branding for non-managers. Now shows HS2 branding for HS2 users while hiding the switcher (managers only).
+- **Frontend API calls missing `company=hs2` for OPs** — `buildApiQuery()`, sales filters, dashboard, team dashboard, and break config were only sending `company=hs2` for managers. Now all HS2 users send the correct company context.
+- **Rules page HS2 access blocked for OPs** — `renderRulesPage()` in `public/js/app.js` forced HS2 users without `canManageHs2Company` back to HS3 rules. Now allows any HS2 user to see HS2 rules.
+- **Cost Management cross-company leakage** — HS3 costs were visible in HS2 Cost Management due to missing company scoping on bills, petty cash funds, and petty cash ledger. Added `company` column migration (`20260730_v184_cost_company_isolation.sql`) and scoped all cost routes (`/expenses`, `/expenses/bills`, `/expenses/petty-cash/funds`, `/expenses/petty-cash/ledger`) by active company context.
+- **Sales Log unit leakage** — `salesUnitFilterOptions()` in `public/js/sales.js` was returning all units (HS-1, HS-2, HS-3, etc.) to every user. Now strictly returns units matching the active company context: HS2 users see only `HS-2`, Hang-Up users see only `HS-1`, `HS-3`, `HS-Back-End`, `HS-MGMT`.
+- **Break schedule unit leakage** — `visibleBreakUnits()` in `public/js/sales-config-breaks.js` similarly returned all units. Now scoped by company context.
+- **Rules page default company** — `renderRulesPage()` in `public/js/app.js` defaulted to `"hangup"` (HS3) for all users. Now respects `state.companyContext` so HS2 users see HS2 rules by default.
+- **Team metadata leaking across companies** — `GET /meta/teams` in `routes/api.js` returned all teams to everyone. Now scopes teams by HS2 company context when the requester is in HS2 mode.
+- **Payroll adjustments leaking across companies** — `GET /payroll-adjustments` in `routes/api.js` returned all adjustments. Now filters by HS2 company when in HS2 context.
+- **Payroll splits leaking across companies** — `GET /payroll-splits` in `routes/api.js` returned all splits. Now filters by company-scoped employees.
+- **Documents expiring leaking across companies** — `GET /documents/expiring` in `routes/api.js` returned all expiring documents. Now filters by company-scoped employees.
+- **Org managers leaking across companies** — `GET /org/managers` in `routes/api.js` returned all managers, TLs, and OPs. Now filters by company for non-admin users.
+- **Registration pending leaking across companies** — `GET /registration/pending` in `routes/api.js` returned all pending registrations. Now filters by active company context.
+- **Dropdown close on outside click** — `closeActivePopover()` in `public/js/app.js` was listening for `mousedown` and `scroll`, causing dropdowns to close incorrectly or fail to close when clicking outside. Changed to `click` only.
+
+### Changed
+- **Strict company isolation for cost tables** — `monthly_bills`, `petty_cash_funds`, and `petty_cash_ledger` now have a `company` column. All cost reads and writes are scoped by the active company context.
+- **Expense creation auto-tags company** — `createExpenseRequest()` in `lib/business-repo.js` now resolves the submitter's company from their employee record and stamps it on the expense.
+- **Bill creation auto-tags company** — `upsertMonthlyBill()` now accepts and persists a `company` field.
+- **Petty cash ledger entries auto-tag company** — `addPettyCashTransaction()` now derives company from the fund and stamps ledger entries.
+
+### Fixed
+- **OP users cannot see HS2 org data** — `GET /org-structure` in `routes/hrms.js` was unconditionally stripping HS2 units for all non-managers, including HS2 OPs. Now uses company context: HS2 users see HS2 units, non-HS2 users don't.
+- **OP users cannot see HS2 teams** — `GET /hrms/teams` in `routes/hrms.js` returned 403 for OPs and filtered out HS2 teams for non-managers. Now allows OP/TL roles and scopes teams by company context.
+- **OP users forced back to Main Hangup context** — `resetCompanyContextIfNeeded()` in `public/js/app.js` forced all non-managers back to `"hangup"`. Now auto-detects the user's company from their `unit` field and preserves it.
+- **Company switcher hidden from OPs** — `applyCompanyBranding()` in `public/js/app.js` removed all HS2 branding for non-managers. Now shows HS2 branding for HS2 users while hiding the switcher (managers only).
+- **Frontend API calls missing `company=hs2` for OPs** — `buildApiQuery()`, sales filters, dashboard, team dashboard, and break config were only sending `company=hs2` for managers. Now all HS2 users send the correct company context.
+- **Rules page HS2 access blocked for OPs** — `renderRulesPage()` in `public/js/app.js` forced HS2 users without `canManageHs2Company` back to HS3 rules. Now allows any HS2 user to see HS2 rules.
+- **Cost Management cross-company leakage** — HS3 costs were visible in HS2 Cost Management due to missing company scoping on bills, petty cash funds, and petty cash ledger. Added `company` column migration (`20260730_v184_cost_company_isolation.sql`) and scoped all cost routes (`/expenses`, `/expenses/bills`, `/expenses/petty-cash/funds`, `/expenses/petty-cash/ledger`) by active company context.
+- **Sales Log unit leakage** — `salesUnitFilterOptions()` in `public/js/sales.js` was returning all units (HS-1, HS-2, HS-3, etc.) to every user. Now strictly returns units matching the active company context: HS2 users see only `HS-2`, Hang-Up users see only `HS-1`, `HS-3`, `HS-Back-End`, `HS-MGMT`.
+- **Break schedule unit leakage** — `visibleBreakUnits()` in `public/js/sales-config-breaks.js` similarly returned all units. Now scoped by company context.
+- **Rules page default company** — `renderRulesPage()` in `public/js/app.js` defaulted to `"hangup"` (HS3) for all users. Now respects `state.companyContext` so HS2 users see HS2 rules by default.
+- **Team metadata leaking across companies** — `GET /meta/teams` in `routes/api.js` returned all teams to everyone. Now scopes teams by HS2 company context when the requester is in HS2 mode.
+- **Payroll adjustments leaking across companies** — `GET /payroll-adjustments` in `routes/api.js` returned all adjustments. Now filters by HS2 company when in HS2 context.
+- **Payroll splits leaking across companies** — `GET /payroll-splits` in `routes/api.js` returned all splits. Now filters by company-scoped employees.
+- **Documents expiring leaking across companies** — `GET /documents/expiring` in `routes/api.js` returned all expiring documents. Now filters by company-scoped employees.
+- **Org managers leaking across companies** — `GET /org/managers` in `routes/api.js` returned all managers, TLs, and OPs. Now filters by company for non-admin users.
+- **Registration pending leaking across companies** — `GET /registration/pending` in `routes/api.js` returned all pending registrations. Now filters by active company context.
+- **Dropdown close on outside click** — `closeActivePopover()` in `public/js/app.js` was listening for `mousedown` and `scroll`, causing dropdowns to close incorrectly or fail to close when clicking outside. Changed to `click` only.
+
+### Changed
+- **Strict company isolation for cost tables** — `monthly_bills`, `petty_cash_funds`, and `petty_cash_ledger` now have a `company` column. All cost reads and writes are scoped by the active company context.
+- **Expense creation auto-tags company** — `createExpenseRequest()` in `lib/business-repo.js` now resolves the submitter's company from their employee record and stamps it on the expense.
+- **Bill creation auto-tags company** — `upsertMonthlyBill()` now accepts and persists a `company` field.
+- **Petty cash ledger entries auto-tag company** — `addPettyCashTransaction()` now derives company from the fund and stamps ledger entries.
+
+## [1.9.1] — 2026-07-18
+
+### Fixed
+- **Company context resolution for scoped users** — `resolveCompanyContextForUser()` in `lib/company-context.js` now falls back to `getCompanyForUser()` for OP/TL/agent users whose unit belongs to HS2. Previously, non-manager HS2 users were always resolved to "hangup", causing HS2 data to be hidden and Main Hangup data to leak into their view.
+- **Rules page showing wrong company rules** — `renderRulesPage()` in `public/js/app.js` now derives `activeCompany` from the user's unit company (`HS-2`/`HS2-PT`) instead of relying on `state.companyContext` (which is only set for managers). HS2 users now see HS2 rules, not HS3/Main Hangup rules.
+- **Rule edits writing to wrong company** — Fixed consequence of the `activeCompany` bug. Rule edits now target the correct company row.
+- **Org page filtering out OP's own unit** — `public/js/hrms-features.js` now allows a scoped user to see their own unit even if it belongs to HS2, preventing OPs from seeing an empty org structure.
+- **Employees route company scoping** — `GET /employees` in `routes/api.js` now uses `parseCompany(req)` instead of `parseCompanyContext(req.query.company)`, ensuring OP/TL users see employees from their own company.
+- **Dropdown closes on scroll/mousedown** — Fixed `openPopover()` in `public/js/app.js` to use `click` instead of `mousedown` for outside-close detection, and removed the `scroll` listener that was closing dropdowns on any background scroll.
+
+### Changed
+- **Strict data isolation** — All major data routes (`/employees`, `/attendance`, `/it-requests`, `/meeting-requests`, `/payroll`, `/bonuses`, `/deductions`) now correctly resolve company context for scoped users via the fixed `parseCompany(req)`.
+
+## [1.9.0] — 2026-07-18
+
+### Fixed
+- **Attendance data reverting after refresh/navigation** — Root cause was Supabase's default 1000-row response cap. `readAttendanceEvents()` and `readAllAttendanceEvents()` in `lib/supabase-repo.js` used `select("*")` without pagination, silently dropping records beyond the first 1000 rows. With 2,412 total attendance rows, edits like NW-18's June 1st and HS1-05's July 1st were truncated from responses and appeared to revert. Fixed by adding cursor-based pagination (`range()` + loop) to both functions.
+- **Supabase read path now fully generalized** — The pagination fix is table-wide and applies to all users and all months, not just specific test cases. Any month with >1000 rows will automatically fetch subsequent pages.
+- **Refresh now pulls from Supabase, not stale local cache** — `readAttendanceEventsForMonth()` in `lib/data-store.js` now always reads from Supabase when online, using the local SQLite cache only as an offline fallback. This ensures the UI reflects the latest server state after every refresh or tab switch.
+- **Organization data leakage between HS2 and Main Hangup** — The org module had multiple hardcoded `"HS-2"` string checks that leaked Main Hangup's unit/team structure into the HS2 view, and vice versa. Replaced all hardcoded checks with dynamic `companyContext.isHs2Unit()` lookups. HS2 now shows only its own units and teams.
+- **Unit deletion missing** — Added `deleteOrgUnit` backend function and `DELETE /hrms/units/:unit` route. Deleting a unit clears the `unit` field on all assigned employees, deletes associated teams, and removes manager records. Employees remain in the system as unassigned.
+- **Dynamic org units table** — Replaced hardcoded `ORG_UNITS` array with a new `org_units` Supabase table. Units are now first-class records with `company_slug`, `display_order`, and `has_op` fields, enabling true multi-company org isolation.
+
+### Changed
+- **Attendance architecture** — Local cache is now write-only for attendance; all reads go to Supabase (single source of truth). This eliminates stale-cache clobber and ensures all users see identical, current data via Supabase Realtime + SSE.
+- **Organization architecture** — Org units are loaded from `org_units` table and filtered by company context at every layer (backend routes, frontend rendering, employee filtering). Each company (Hang-Up, HS2) now has fully independent unit/team hierarchies.
+
+## [1.8.5] — 2026-07-17
+
+### Fixed
+- **Attendance pages rendering blank on startup** — Restored missing `renderDashboard()` function that was accidentally dropped during a previous edit. All pages (dashboard, attendance, employees, payroll, etc.) now render correctly.
+- **Attendance save race condition** — `flushAttendanceSaves()` had a malformed if/else chain with duplicate code paths. Restructured the function to use clean early-return branches for `sendBeacon`, `keepalive`, and normal `fetch` paths. Pending attendance edits are now persisted to `localStorage` and restored on page load, preventing data loss during quick refreshes.
+- **FP import overwriting manual edits** — Fingerprint import now strictly protects any day that has existing data (status, notes, transport override, or paid leave). FP import only touches completely blank days. After import, the system clears `fpNotes` and `fpLateness` metadata so the imported record becomes a plain attendance row that future imports will not touch.
+- **Out-employee attendance disappearing after navigation** — Employees with status "OUT BUT STILL GET PAID" who had fresh Supabase attendance records were being filtered out of the attendance view because `getEmployeesForMonth()` relied on stale local cache data to decide whether to show them. The `/attendance` endpoint now reads fresh attendance from Supabase first and passes those records to `getEmployeesForMonth()`, ensuring out-employees with valid attendance are always visible.
+- **Supabase 1000-row truncation causing attendance loss** — `readAttendanceEvents()` and `readAllAttendanceEvents()` in `lib/supabase-repo.js` used `select("*")` without pagination, silently dropping any records beyond Supabase's default 1000-row limit. With 2412 total attendance rows, records like NW-18's June 1st entry were truncated from the response, causing the UI to show "--" after navigation. Fixed by adding date-range filtering for monthly reads and cursor-based pagination for full exports.
+
+### Changed
+- **Attendance persistence** — Added `localStorage` persistence for pending attendance saves (`PENDING_ATTENDANCE_KEY`). Edits survive page refreshes and are automatically flushed on reload.
+- **Page unload reliability** — `beforeunload` handler now uses both `navigator.sendBeacon` AND synchronous `XMLHttpRequest` as a fallback, ensuring attendance saves complete even during rapid page closes.
+
+## [1.7.14] — 2026-07-11
+
+### Added
+- **HS-2 Company Scoping** — Separate data isolation for Hang-Up (HS-1 + HS-3) vs HS-2 companies across all modules: sales, attendance, quality, rules, IT, meetings, requests, users.
+- **Company switcher** in header for users with HS-2 access (admin/ceo/hr roles).
+- **Separate registration PINs** — Main Hangup and HS-2 each have their own daily PIN for agent registration.
+- **Company-scoped sales clients** — HS-2 and Main Hangup maintain separate client catalogs.
+
+### Changed
+- **Sales export** now includes all formData fields (payment info, notes, price tier) filtered by user's field permissions, not just visible columns.
+- **Price tier display** in sales logs now shows "client / device / price tier" format for full context.
+- **Employee unit picker** filtered by company context — shows only units relevant to the current company.
+- **Settings Managing Units** filtered by company context.
+
+### Fixed
+- **Registration PIN unavailable** — Added error logging; confirmed migrations are applied.
+- **Access control deduplication** — Removed duplicate Access Control button from Settings (kept in sidebar).
+
+### Admin-only
+- **Company dropdown in employee settings** — Only visible to Raymond, allows changing employee's company assignment (Main Hangup vs HS-2), which updates the unit picker accordingly.
+
+## [1.7.13] — 2026-07-10
+
+### Fixed
+- **Sales log — Edit / Quality ticket / View / Delete buttons missing on Weekly and Monthly views** — The `#sales-period` change handler now clears all active toolbar filters (`salesAgentFilter`, `salesCloserFilter`, `salesClientFilter`, `salesClientFeedbackFilter`, `salesVerifierFeedbackFilter`) and the advanced filter (both in-memory state and localStorage) when switching periods. Previously, any filter set during a daily view (e.g. agent filter scoped to one agent, or a saved advanced filter rule) silently returned zero rows on week/month ranges, causing the entire table body to show "No sales in this period" — making all action buttons appear missing.
+
 ## [1.7.12] — 2026-07-10
 
 ### Fixed

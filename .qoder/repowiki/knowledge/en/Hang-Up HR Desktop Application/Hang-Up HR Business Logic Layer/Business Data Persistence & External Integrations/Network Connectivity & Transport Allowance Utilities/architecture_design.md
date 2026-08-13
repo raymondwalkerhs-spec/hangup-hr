@@ -1,0 +1,7 @@
+Two independent concerns co-located under `lib/`:
+
+- Network layer (`connectivity.js`, `url-fetch.js`, re-exported via `network.js`): pure Node built-ins (`http`/`https`) implement a small probe surface — `probeUrl` fires an HTTPS GET with a timeout, `isOnline` tries the configured `SUPABASE_URL` plus Google's `generate_204` endpoints, `verifyBackendAccess` performs a real Supabase admin query (via `./backend` + `./supabase-client`) wrapped in a 12s race to validate credentials, and `requireOnline` combines both checks. `url-fetch.js` is a standalone redirect-aware fetch returning `{ buffer, contentType, statusCode }`. `network.js` is a thin barrel that re-exports only the public connectivity API.
+
+- Business rule layer (`transport.js`): stateless functions over attendance records — `transportUnitsForRecord` maps status/override to 0 / 0.5 / 1 units, `countTransportDays` sums them, and `calcTransportAllowance` derives a per-day rate from `config.transportAllowanceMonthly` and `workingDaysInMonth`, producing a breakdown array capped by the monthly budget. Status sets are exported for reuse elsewhere.
+
+Dependency direction is one-way: `connectivity.js` depends on `./backend` and `./supabase-client`; `network.js` depends only on `connectivity.js`; `transport.js` has no internal dependencies; `url-fetch.js` is self-contained.

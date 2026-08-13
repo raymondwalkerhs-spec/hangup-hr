@@ -1,0 +1,1 @@
+Electron 33 + electron-builder for packaging; Express 4 + express-session for the embedded API; @supabase/supabase-js as the sole persistence client; better-sqlite3 as a native rebuild target; pg for direct DB access in migration/backfill scripts.

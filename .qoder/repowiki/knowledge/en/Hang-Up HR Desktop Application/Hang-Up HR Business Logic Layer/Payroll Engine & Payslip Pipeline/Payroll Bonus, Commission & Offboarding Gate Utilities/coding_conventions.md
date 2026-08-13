@@ -1,0 +1,5 @@
+- Each file exports a small named-object via `module.exports = { ... }` rather than using ES modules, keeping the repo on CommonJS throughout.
+- Date comparisons are normalized by coercing to string and slicing (`String(x || "").slice(0, 10)` for full date, `slice(0, 7)` for year-month) before comparison.
+- Boolean fields accept multiple truthy/falsy representations through a shared `boolVal` helper that normalizes `true/false/"TRUE"/"FALSE"/"yes"/"no"/"1"/"0"`.
+- Monetary totals are rounded to two decimals via `Math.round(total * 100) / 100` before being returned.
+- Guard functions return a `{ ok, error?, blockers?, payslipNotes? }` object instead of throwing, letting callers render user-facing messages.

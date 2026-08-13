@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "dataModelVersion": 1,
+  "id": "sess_01bad313-f764-41f3-bc39-d59dc7f39529",
+  "title": "HRMS Multi-Feature Implementation",
+  "agentMode": "vibe",
+  "workspacePaths": [
+    "f:\\download app hr"
+  ],
+  "createdAt": "2026-07-08T09:59:10.783Z",
+  "lastModifiedAt": "2026-07-08T10:59:57.279Z",
+  "modelId": "auto",
+  "autopilot": true,
+  "semanticReviewEnabled": true,
+  "ftaEnabled": false,
+  "specPlanEnabled": false,
+  "specWorkflow": "quick",
+  "specSkipClarificationEnabled": true,
+  "description": "Implementing Tasks 3-9: IT ticket routing backend+frontend, Quality ticket Price Tier fix, half-day leave, meeting participant improvements, company architecture, and DB_SCHEMA update.",
+  "status": "failed"
+}

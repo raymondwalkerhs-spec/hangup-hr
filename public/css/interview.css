@@ -1,0 +1,253 @@
+.interview-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.interview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.interview-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text);
+}
+.interview-actions {
+  display: flex;
+  gap: 8px;
+}
+.interview-toolbar {
+  display: flex;
+  gap: 8px;
+}
+.interview-toolbar .search {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .9rem;
+}
+.interview-toolbar .search::placeholder {
+  color: var(--muted);
+}
+.interview-toolbar select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .9rem;
+}
+.table-wrap {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-soft) 40%, transparent);
+}
+.interview-main-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+}
+.interview-main-table th,
+.interview-main-table td {
+  border-bottom: 1px solid var(--border);
+  padding: .55rem .7rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.interview-main-table th {
+  background: var(--table-head);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-weight: 600;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.interview-main-table .actions-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: -4px 0 8px color-mix(in srgb, var(--shadow-soft) 35%, transparent);
+  min-width: 11rem;
+}
+.interview-main-table thead .actions-col {
+  z-index: 3;
+  background: var(--table-head);
+}
+.interview-main-table .btn-row {
+  display: flex;
+  gap: .35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.interview-main-table .badge {
+  display: inline-block;
+  padding: .15rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  font-weight: 600;
+  background: var(--tint-muted-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.interview-main-table .badge.status-accepted {
+  background: color-mix(in srgb, var(--ok) 18%, var(--card));
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
+}
+.interview-main-table .badge.status-pending {
+  background: var(--tint-warn-bg);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+.interview-main-table .badge.status-on-hold {
+  background: var(--tint-muted-bg);
+  color: var(--muted);
+  border-color: var(--border);
+}
+.interview-main-table .badge.status-rejected {
+  background: var(--tint-err-bg);
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 35%, var(--border));
+}
+.interview-main-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.interview-main-table tbody tr:hover td {
+  background: var(--table-hover);
+}
+.interview-main-table .table-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 2.25rem 1rem;
+  white-space: normal;
+}
+.sync-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.interview-modal-root .modal-body-scroll {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: .5rem;
+}
+.interview-modal-root .field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.interview-modal-root .form-section {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--primary) 3%, var(--card));
+}
+.interview-modal-root .form-section h3 {
+  margin: 0 0 .75rem;
+  font-size: .85rem;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.interview-modal-root .field {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.interview-modal-root .field span {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.interview-modal-root .field input,
+.interview-modal-root .field select,
+.interview-modal-root .field textarea {
+  padding: .55rem .7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: .9rem;
+  font-family: inherit;
+}
+.interview-modal-root .field textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+.interview-modal-root .field .field-readonly {
+  padding: .55rem .7rem;
+  background: color-mix(in srgb, var(--text) 4%, var(--card));
+  border-radius: var(--radius);
+  color: var(--text);
+  border: 1px solid var(--border);
+  min-height: 2.2rem;
+}
+.interview-modal-root .form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: .5rem;
+  justify-content: flex-end;
+  padding-top: .5rem;
+}
+.interview-modal-root .training-section {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--primary) 4%, var(--card));
+}
+.interview-modal-root .training-section.hidden {
+  display: none;
+}
+.interview-modal-root .training-section h3 {
+  margin: 0 0 .75rem;
+  font-size: .9rem;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.interview-modal-root .feedback-day {
+  display: contents;
+}
+.interview-modal-root .feedback-day label {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.interview-modal-root .feedback-day label span {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+}
+.interview-modal-root .feedback-day textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+@media (max-width: 720px) {
+  .interview-modal-root .field-grid {
+    grid-template-columns: 1fr;
+  }
+  .interview-main-table .actions-col {
+    position: static;
+    box-shadow: none;
+  }
+  .interview-main-table .btn-row {
+    flex-direction: column;
+  }
+}

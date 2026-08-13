@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: business_logic
+title: Hang-Up HR Business Logic Layer
+scope:
+    - lib/
+source_files: []
+depends_on: []
+related_to:
+    - path: express_server

@@ -1,0 +1,18 @@
+schema_version: 1
+module_path: business_logic/app_bootstrap
+title: Application Bootstrap, Registration & Backup Utilities
+scope:
+    - lib/backend.js
+    - lib/app-bootstrap.js
+    - lib/registration.js
+    - lib/uninstall.js
+    - lib/backup-service.js
+    - lib/backup-jobs.js
+    - lib/backup-tables.js
+    - lib/calendar.js
+    - lib/egypt-datetime.js
+    - lib/us-states.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/auth_supabase

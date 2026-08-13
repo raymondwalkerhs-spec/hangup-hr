@@ -26,6 +26,11 @@ const CHECKS = [
   ["manageHs2Company", (ur) => roles.canManageHs2Company(ur)],
   ["seeHs2InSales", (ur) => roles.canSeeHs2InSales(ur)],
   ["manageSalesFieldPermissions", (ur) => roles.canManageSalesFieldPermissions(ur)],
+  ["viewAnnouncements", (ur) => roles.canViewAnnouncements(ur)],
+  ["editAnnouncements", (ur) => roles.canEditAnnouncements(ur)],
+  ["viewCoaching", (ur) => roles.canViewCoaching(ur)],
+  ["submitCoaching", (ur) => roles.canSubmitCoaching(ur)],
+  ["viewCoachingSecret", (ur) => roles.canViewCoachingSecret(ur)],
 ];
 
 function main() {

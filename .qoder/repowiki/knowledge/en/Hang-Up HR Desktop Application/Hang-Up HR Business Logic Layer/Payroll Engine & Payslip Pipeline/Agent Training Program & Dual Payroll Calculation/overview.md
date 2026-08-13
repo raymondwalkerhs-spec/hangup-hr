@@ -1,0 +1,1 @@
+Manages the 4-phase agent training program lifecycle and computes dual Trainee/Agent payroll for mid-month promotions, including eligibility rules, phase sales validation, and split-aware payslip enrichment.

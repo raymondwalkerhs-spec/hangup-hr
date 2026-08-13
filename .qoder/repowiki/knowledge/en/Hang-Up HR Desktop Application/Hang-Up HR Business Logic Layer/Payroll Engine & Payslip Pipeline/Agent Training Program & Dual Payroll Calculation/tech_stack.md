@@ -1,0 +1,1 @@
+Supabase client via `./supabase-client` and `./backend`'s `useSupabase()` runtime gate; sales data pulled through `./business-repo.readSales` with `dateBasis='submission'`; calendar math delegated to `./calendar.isWeekend/getDaysInMonth` and month shifting via `./payroll-splits.shiftMonth`.

@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: business_logic/data_access
+title: Data Store & Cache Layer
+scope:
+    - lib/data-store.js
+    - lib/cache.js
+    - lib/entity-mappers.js
+    - lib/id-generator.js
+    - lib/settings-revision.js
+source_files: []
+depends_on: []
+related_to:
+    - path: business_logic/storage_integrations
+    - path: tests

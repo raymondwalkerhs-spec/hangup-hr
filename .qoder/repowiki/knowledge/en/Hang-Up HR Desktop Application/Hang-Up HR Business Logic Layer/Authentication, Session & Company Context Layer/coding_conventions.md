@@ -1,0 +1,4 @@
+- Each file exports a plain object of named functions via `module.exports = { ... }` rather than a class or default export.
+- Supabase queries are wrapped in a local `db()` helper that calls `getSupabaseAdmin()`, and errors are re-thrown as `new Error(...)` with a short label prefix.
+- Optional Supabase persistence is gated by `useSupabase()` checks before calling `hrms.*` methods, keeping the in-memory store as the source of truth.
+- String inputs are defensively normalized with `String(value || "").trim().toLowerCase()` (or `.toUpperCase()`) before comparison to tolerate casing/formatting drift.

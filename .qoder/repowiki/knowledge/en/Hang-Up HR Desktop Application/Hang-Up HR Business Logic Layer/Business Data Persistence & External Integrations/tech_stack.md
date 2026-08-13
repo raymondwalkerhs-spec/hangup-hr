@@ -1,0 +1,1 @@
+Node.js native `https` + `fetch` for Airtable and Dropbox HTTP clients; Supabase JS Admin SDK (via `supabase-client.js`) for all relational tables and object storage; no ORM or database driver beyond these two.

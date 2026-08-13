@@ -1,0 +1,3 @@
+- Runtime code lives under `electron/`, `lib/`, `routes/`, and `public/`; all cross-cutting automation (build, publish, migration, backfill) is placed in `scripts/` and invoked from root `package.json` scripts.
+- Supabase client configuration is loaded from `.env` (copied into `extraResources` during packaging) and consumed uniformly by both the Express server and the backup app.
+- Native dependencies (better-sqlite3) are rebuilt on install via `@electron/rebuild` and excluded from ASAR via `asarUnpack` to keep C++ binaries loadable at runtime.

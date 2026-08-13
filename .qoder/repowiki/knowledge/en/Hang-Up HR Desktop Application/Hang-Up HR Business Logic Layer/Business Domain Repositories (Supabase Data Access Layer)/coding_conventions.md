@@ -1,0 +1,6 @@
+- Every public function starts with a local `db()` helper returning `getSupabaseAdmin()` and an optional `requireSupabase()` guard that throws when `DATA_BACKEND !== 'supabase'`.
+- Database rows are normalized by a small `mapRow` / `mapXxx` function that converts snake_case columns to camelCase domain fields, keeping callers free of DB naming.
+- Read endpoints accept a flat `filters = {}` object and build queries by chaining `.eq` / `.in` / `.gte` / `.lte` on the base `db().from('...').select('*')` builder.
+- Missing-table errors are treated as empty results rather than failures, using regex checks for `42P01`, `does not exist`, `schema cache`, or `column.*not.*exist`.
+- Write operations pass an `actor` username string and stamp `updated_at` / `created_by` / `reviewed_by` timestamps via `new Date().toISOString()` inside the repo.
+- Each repo module ends with an explicit `module.exports = { ... }` listing only its public API surface.

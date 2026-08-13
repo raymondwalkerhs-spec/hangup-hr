@@ -6,31 +6,46 @@ const cache = require('../lib/cache');
 const store = require('../lib/data-store');
 const supabaseRepo = require('../lib/supabase-repo');
 
-test('readAttendanceEventsForMonth returns cache when populated', async () => {
-  // The cache is now the authoritative source. When the cache has data for the
-  // month, Supabase is not consulted — this eliminates the race between a fresh
-  // write and the subsequent GET /attendance read.
+function isoWithMs(date) {
+  return new Date(date).toISOString();
+}
+
+function isoNoMs(date) {
+  return new Date(date).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+test('readAttendanceEventsForMonth merges Supabase with newer local edits', async () => {
   const originalUseSupabase = backendMod.useSupabase;
   const originalReadAttendanceEvents = supabaseRepo.readAttendanceEvents;
   const originalGetAttendanceForMonth = cache.getAttendanceForMonth;
+  const originalSetAttendanceForMonth = cache.setAttendanceForMonth;
 
-  const cachedRow = { employeeId: 'HS3-34', date: '2026-07-01', status: 'Attended' };
-  backendMod.useSupabase = () => true;
-  let supabaseCalled = false;
-  supabaseRepo.readAttendanceEvents = async () => {
-    supabaseCalled = true;
-    return [{ employeeId: 'HS3-34', date: '2026-07-01', status: 'Day-OFF' }]; // different — should not be used
+  const cachedRow = {
+    employeeId: 'HS3-34',
+    date: '2026-07-01',
+    status: 'Attended',
+    updatedAt: '2026-07-11T12:00:00.500Z',
   };
+  backendMod.useSupabase = () => true;
+  supabaseRepo.readAttendanceEvents = async () => [
+    { employeeId: 'HS3-34', date: '2026-07-01', status: 'Day-OFF', updatedAt: '2026-07-11T12:00:00Z' },
+  ];
   cache.getAttendanceForMonth = () => [cachedRow];
+  let stored = null;
+  cache.setAttendanceForMonth = (_ym, rows) => {
+    stored = rows;
+  };
 
   try {
     const results = await store.readAttendanceEventsForMonth('2026-07');
-    assert.deepStrictEqual(results, [cachedRow]);
-    assert.equal(supabaseCalled, false, 'Supabase should not be called when cache has data');
+    const found = results.find((r) => r.employeeId === 'HS3-34' && r.date === '2026-07-01');
+    assert.equal(found?.status, 'Attended');
+    assert.equal(stored?.find((r) => r.date === '2026-07-01')?.status, 'Attended');
   } finally {
     backendMod.useSupabase = originalUseSupabase;
     supabaseRepo.readAttendanceEvents = originalReadAttendanceEvents;
     cache.getAttendanceForMonth = originalGetAttendanceForMonth;
+    cache.setAttendanceForMonth = originalSetAttendanceForMonth;
   }
 });
 
@@ -52,6 +67,99 @@ test('readAttendanceEventsForMonth falls back to Supabase when cache is empty', 
     const results = await store.readAttendanceEventsForMonth('2026-07');
     assert.deepStrictEqual(results, [supabaseRow]);
     assert.equal(cacheWarmed, true, 'Cache should be warmed after Supabase fallback');
+  } finally {
+    backendMod.useSupabase = originalUseSupabase;
+    supabaseRepo.readAttendanceEvents = originalReadAttendanceEvents;
+    cache.getAttendanceForMonth = originalGetAttendanceForMonth;
+    cache.setAttendanceForMonth = originalSetAttendanceForMonth;
+  }
+});
+
+test('mergeAttendanceMonth keeps local Attended over newer remote blank row', () => {
+  const remote = {
+    employeeId: 'HS1-05',
+    date: '2026-07-16',
+    status: '',
+    fpNotes: 'FP in 09:05',
+    updatedAt: '2026-08-04T20:00:00.000Z',
+  };
+  const local = {
+    employeeId: 'HS1-05',
+    date: '2026-07-16',
+    status: 'Attended',
+    fpNotes: '',
+    updatedAt: '2026-08-04T16:00:00.000Z',
+  };
+
+  const originalGetAttendanceForMonth = cache.getAttendanceForMonth;
+  cache.getAttendanceForMonth = () => [local];
+
+  try {
+    const merged = store.mergeAttendanceMonth([remote], '2026-07');
+    const found = merged.find((r) => r.employeeId === 'HS1-05' && r.date === '2026-07-16');
+    assert.equal(found?.status, 'Attended', 'local Attended must beat newer remote blank row');
+  } finally {
+    cache.getAttendanceForMonth = originalGetAttendanceForMonth;
+  }
+});
+
+test('mergeAttendanceMonth keeps newer local edit despite timestamp format differences', () => {
+  // Supabase may return timestamps without milliseconds (e.g. 2026-07-11T12:00:00Z)
+  // while the local cache stores ISO strings with milliseconds (e.g. 2026-07-11T12:00:00.123Z).
+  // A naive string comparison would incorrectly treat the local edit as older and discard it.
+  const baseTime = new Date('2026-07-11T12:00:00.000Z');
+  const remoteRow = {
+    employeeId: 'HS3-18',
+    date: '2026-06-01',
+    status: '',
+    updatedAt: isoNoMs(baseTime),
+  };
+  const localRow = {
+    employeeId: 'HS3-18',
+    date: '2026-06-01',
+    status: 'Attended',
+    updatedAt: isoWithMs(new Date(baseTime.getTime() + 123)),
+  };
+
+  const originalGetAttendanceForMonth = cache.getAttendanceForMonth;
+  cache.getAttendanceForMonth = () => [localRow];
+
+  try {
+    const merged = store.mergeAttendanceMonth([remoteRow], '2026-06');
+    const found = merged.find((r) => r.employeeId === 'HS3-18' && r.date === '2026-06-01');
+    assert.equal(found?.status, 'Attended', 'local Attended edit should win over stale remote blank row');
+  } finally {
+    cache.getAttendanceForMonth = originalGetAttendanceForMonth;
+  }
+});
+
+test('refreshAttendanceFromSupabase merges remote with newer local edits', async () => {
+  const originalUseSupabase = backendMod.useSupabase;
+  const originalReadAttendanceEvents = supabaseRepo.readAttendanceEvents;
+  const originalGetAttendanceForMonth = cache.getAttendanceForMonth;
+  const originalSetAttendanceForMonth = cache.setAttendanceForMonth;
+
+  const localRow = {
+    employeeId: 'HS1-05',
+    date: '2026-07-09',
+    status: 'Attended',
+    updatedAt: new Date('2026-07-11T12:00:00.123Z').toISOString(),
+  };
+  backendMod.useSupabase = () => true;
+  supabaseRepo.readAttendanceEvents = async () => [
+    { employeeId: 'HS1-05', date: '2026-07-09', status: 'Day-OFF', updatedAt: '2026-07-11T12:00:00Z' },
+  ];
+  cache.getAttendanceForMonth = () => [localRow];
+  let stored = null;
+  cache.setAttendanceForMonth = (_ym, rows) => {
+    stored = rows;
+  };
+
+  try {
+    const results = await store.refreshAttendanceFromSupabase('2026-07');
+    const found = results.find((r) => r.employeeId === 'HS1-05' && r.date === '2026-07-09');
+    assert.equal(found?.status, 'Attended');
+    assert.equal(stored?.find((r) => r.date === '2026-07-09')?.status, 'Attended');
   } finally {
     backendMod.useSupabase = originalUseSupabase;
     supabaseRepo.readAttendanceEvents = originalReadAttendanceEvents;

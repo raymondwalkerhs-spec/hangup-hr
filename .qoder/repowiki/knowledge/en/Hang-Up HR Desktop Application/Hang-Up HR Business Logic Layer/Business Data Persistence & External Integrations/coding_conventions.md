@@ -1,0 +1,3 @@
+- Every persistent entity has a pair of functions in `supabase-repo.js` that map between camelCase business objects and snake_case DB rows using shared mappers from `entity-mappers.js` / `supabase/mappers`.
+- All mutations go through `data-store.js`, which writes to the backend then immediately updates `cache.js` and calls `changelog.log*Change` — callers never hit the repo directly.
+- External integrations expose an `isConfigured()` boolean and gate their API behind environment variables, so missing credentials fail fast rather than silently no-op.

@@ -1,0 +1,1 @@
+Per-domain Supabase repository modules that expose CRUD and query APIs for bonus requests, sales, expenses, petty cash, companies, break schedules, IT/meeting/loan requests, quality notes, and rules.

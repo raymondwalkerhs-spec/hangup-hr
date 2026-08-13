@@ -1,0 +1,46 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 14, 0.45);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+}
+.panel {
+  width: min(560px, calc(100vw - 2rem));
+  background: var(--surface-elevated);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lift);
+  overflow: hidden;
+}
+.panel :global([cmdk-root]) {
+  padding: 0.5rem;
+}
+.panel :global([cmdk-input]) {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font-size: 1rem;
+  outline: none;
+}
+.panel :global([cmdk-group-heading]) {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+.panel :global([cmdk-item]) {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.panel :global([cmdk-item][data-selected="true"]) {
+  background: var(--primary-light);
+  color: var(--primary);
+}

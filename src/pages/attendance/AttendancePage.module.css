@@ -1,0 +1,164 @@
+.card {
+  padding: 0;
+  overflow: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+.scroll {
+  overflow: auto;
+  max-height: min(75vh, 900px);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.75rem;
+  min-width: max-content;
+}
+.grid th,
+.grid td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0.25rem;
+  text-align: center;
+  white-space: nowrap;
+}
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  font-weight: 600;
+}
+.stickyId,
+.stickyName,
+.stickyTeam {
+  position: sticky;
+  z-index: 1;
+  background: var(--surface-elevated);
+  text-align: left;
+}
+.stickyId { left: 0; min-width: 4.5rem; }
+.stickyName { left: 4.5rem; min-width: 8rem; }
+.stickyTeam { left: 12.5rem; min-width: 5rem; }
+.grid thead .stickyId,
+.grid thead .stickyName,
+.grid thead .stickyTeam {
+  z-index: 3;
+}
+.summaryCol {
+  min-width: 2.5rem;
+  background: var(--surface);
+}
+.dayHead {
+  min-width: 3.25rem;
+  max-width: 4.5rem;
+  font-size: 0.65rem;
+  line-height: 1.15;
+  padding: 0.25rem 0.15rem;
+  white-space: normal;
+  vertical-align: bottom;
+}
+.dayHeadLabel {
+  display: block;
+  font-weight: 600;
+}
+.dayHeadHoliday {
+  display: block;
+  font-size: 0.58rem;
+  margin-top: 0.12rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weekend {
+  background: color-mix(in srgb, var(--border) 40%, var(--surface));
+}
+.holiday {
+  color: var(--primary);
+}
+.cell {
+  padding: 0.1rem;
+  vertical-align: middle;
+}
+.statusSelect {
+  width: 100%;
+  max-width: 5.5rem;
+  font-size: 0.65rem;
+  padding: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface-elevated);
+  color: var(--text);
+}
+.statusLabel {
+  font-size: 0.65rem;
+}
+.stAttended { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.stOff { background: color-mix(in srgb, var(--text-muted) 15%, transparent); }
+.stWarn { background: color-mix(in srgb, var(--warn) 15%, transparent); }
+.stOut { background: color-mix(in srgb, var(--err) 10%, transparent); }
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab[data-state="active"] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+  padding: 1rem;
+}
+.calDay {
+  padding: 0.5rem;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.bulkPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  align-items: flex-end;
+}
+.bulkGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.bulkLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  width: 100%;
+}
+.transportSelect {
+  display: block;
+  width: 100%;
+  max-width: 4.5rem;
+  font-size: 0.6rem;
+  margin-top: 0.1rem;
+}

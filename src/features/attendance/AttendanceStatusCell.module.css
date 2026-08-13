@@ -1,0 +1,59 @@
+.wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: center;
+}
+.chip {
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.35rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+  min-width: 2.5rem;
+  font-weight: 600;
+}
+.ok { background: color-mix(in srgb, #22c55e 25%, var(--surface)); }
+.off { background: color-mix(in srgb, var(--muted) 30%, var(--surface)); }
+.lateness { background: color-mix(in srgb, #f59e0b 25%, var(--surface)); }
+.other { background: var(--bg); }
+.readonly { font-size: 0.65rem; }
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.menu {
+  z-index: 50;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 200px;
+  overflow: auto;
+  min-width: 120px;
+}
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.menuItem:hover,
+.menuActive {
+  background: var(--bg);
+}
+.pill {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-pill);
+}
+.transport {
+  width: 100%;
+  max-width: 4.5rem;
+  font-size: 0.6rem;
+}

@@ -1,0 +1,171 @@
+/* Hangup design tokens — 6 themes */
+:root,
+[data-theme="light"] {
+  --bg: #f4f0ec;
+  --surface: #fffaf6;
+  --surface-elevated: #ffffff;
+  --text: #14121a;
+  --text-muted: #6b6570;
+  --primary: #e85d4c;
+  --primary-hover: #d14a3a;
+  --primary-light: #fde8e5;
+  --primary-ring: #f4a99f;
+  --accent: #2b6cb0;
+  --border: #e8e2dc;
+  --sidebar: #121018;
+  --sidebar-text: #c9c4d0;
+  --sidebar-active: #e85d4c;
+  --ok: #0d9f6e;
+  --warn: #d97706;
+  --err: #dc2626;
+  --inspector-bg: #faf7f4;
+  --dock-bg: rgba(18, 16, 24, 0.92);
+  --shadow-soft: 0 4px 24px rgba(20, 18, 26, 0.08);
+  --shadow-lift: 0 12px 40px rgba(20, 18, 26, 0.14);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --font-display: "Outfit", system-ui, sans-serif;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --spring-snappy: cubic-bezier(0.34, 1.2, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 400ms;
+  --chart-passed: #16a34a;
+  --chart-pending: #eab308;
+  --chart-denied: #dc2626;
+  --chart-track: #e8e2dc;
+}
+
+[data-theme="dark"] {
+  --bg: #0e0c12;
+  --surface: #18151f;
+  --surface-elevated: #221e2a;
+  --text: #f0ecf4;
+  --text-muted: #9a94a3;
+  --primary: #ff7a6b;
+  --primary-hover: #ff9589;
+  --primary-light: #3d2220;
+  --primary-ring: #ff7a6b;
+  --accent: #63b3ed;
+  --border: #2e2a38;
+  --sidebar: #0a080e;
+  --sidebar-text: #b8b2c0;
+  --sidebar-active: #ff7a6b;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --inspector-bg: #14111a;
+  --dock-bg: rgba(10, 8, 14, 0.95);
+  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --chart-track: #2e2a38;
+}
+
+/* Interaction states */
+.interactive {
+  transition: transform var(--dur-fast) var(--spring-snappy),
+    box-shadow var(--dur-fast) var(--spring-snappy),
+    background var(--dur-fast) ease;
+}
+.interactive:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+.interactive:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-soft);
+}
+
+[data-theme="violet"] {
+  --bg: #f5f3ff;
+  --surface: #faf8ff;
+  --surface-elevated: #ffffff;
+  --text: #1e1b2e;
+  --text-muted: #6b6580;
+  --primary: #7c3aed;
+  --primary-hover: #6d28d9;
+  --primary-light: #ede9fe;
+  --primary-ring: #a78bfa;
+  --accent: #2563eb;
+  --border: #e4e0f0;
+  --sidebar: #1e1b2e;
+  --sidebar-text: #c4b5fd;
+  --sidebar-active: #a78bfa;
+  --ok: #059669;
+  --warn: #d97706;
+  --err: #dc2626;
+  --inspector-bg: #f3f0ff;
+  --dock-bg: rgba(30, 27, 46, 0.92);
+  --chart-track: #e4e0f0;
+}
+
+[data-theme="pink"] {
+  --bg: #fff1f5;
+  --surface: #fff5f8;
+  --surface-elevated: #ffffff;
+  --text: #6b1133;
+  --text-muted: #9d3a64;
+  --primary: #be185d;
+  --primary-hover: #9d174d;
+  --primary-light: #fce7f3;
+  --primary-ring: #f472b6;
+  --accent: #db2777;
+  --border: #fbcfe8;
+  --sidebar: #9d174d;
+  --sidebar-text: #fce7f3;
+  --sidebar-active: #f472b6;
+  --ok: #059669;
+  --warn: #d97706;
+  --err: #dc2626;
+  --inspector-bg: #fff5f8;
+  --dock-bg: rgba(157, 23, 77, 0.92);
+  --chart-track: #fbcfe8;
+}
+
+[data-theme="red-wine"] {
+  --bg: #1a1214;
+  --surface: #261a1e;
+  --surface-elevated: #321e23;
+  --text: #f5e6e8;
+  --text-muted: #d8b6bd;
+  --primary: #f43f5e;
+  --primary-hover: #e11d48;
+  --primary-light: #3f1d24;
+  --primary-ring: #9f1239;
+  --accent: #fb7185;
+  --border: #4a2c32;
+  --sidebar: #2d1519;
+  --sidebar-text: #f0d4d8;
+  --sidebar-active: #f43f5e;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --inspector-bg: #221418;
+  --dock-bg: rgba(26, 18, 20, 0.95);
+  --chart-track: #4a2c32;
+}
+
+[data-theme="diamond"] {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-elevated: #f1f5f9;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --primary: #64748b;
+  --primary-hover: #475569;
+  --primary-light: #e2e8f0;
+  --primary-ring: #94a3b8;
+  --accent: #0ea5e9;
+  --border: #e2e8f0;
+  --sidebar: #1e293b;
+  --sidebar-text: #cbd5e1;
+  --sidebar-active: #94a3b8;
+  --ok: #10b981;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --inspector-bg: #f1f5f9;
+  --dock-bg: rgba(15, 23, 42, 0.92);
+  --chart-track: #e2e8f0;
+}

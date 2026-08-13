@@ -1,0 +1,1 @@
+Cross-platform build, packaging, release publishing, Supabase migration runner, and data-backfill/test scripts for the Hangup Portal Electron app.

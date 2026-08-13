@@ -1,0 +1,1 @@
+Pure-utility helpers that enforce offboarding gates for payroll approval, guard bonus eligibility against departure dates, compute tiered sales commissions, and build/merge monthly payroll profiles.

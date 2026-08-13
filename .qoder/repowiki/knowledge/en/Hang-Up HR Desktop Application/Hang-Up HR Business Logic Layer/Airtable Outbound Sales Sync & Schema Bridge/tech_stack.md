@@ -1,0 +1,1 @@
+Plain Node.js `fetch` against `api.airtable.com/v0` (no Airtable SDK); authentication via Bearer token from `AIRTABLE_API_KEY` or `AIRTABLE_PAT`; schema fetched through the `/v0/meta` endpoint rather than hard-coded.

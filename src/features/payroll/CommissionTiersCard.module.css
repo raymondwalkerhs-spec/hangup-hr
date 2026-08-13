@@ -1,0 +1,37 @@
+.card {
+  margin-bottom: 1rem;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.actions {
+  display: flex;
+  gap: 0.35rem;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.table th,
+.table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.input {
+  width: 100%;
+  min-width: 4rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}

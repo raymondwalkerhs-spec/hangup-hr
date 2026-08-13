@@ -1,0 +1,86 @@
+.unitHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.unitHeader h2 {
+  margin: 0;
+}
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: var(--border);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+.chipRemove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  color: var(--text-muted);
+}
+.chipRemove:hover {
+  color: var(--err);
+}
+.addSelect,
+.teamSelect {
+  font-size: 0.8rem;
+  max-width: 10rem;
+}
+.teamSelect {
+  max-width: 8rem;
+}
+.teamStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.teamCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+}
+.teamSummary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+}
+.teamSummary::-webkit-details-marker {
+  display: none;
+}
+.agentTable {
+  width: 100%;
+  font-size: 0.85rem;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+.agentTable th,
+.agentTable td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.clickable {
+  cursor: pointer;
+}
+.clickable:hover {
+  background: var(--surface-elevated);
+}

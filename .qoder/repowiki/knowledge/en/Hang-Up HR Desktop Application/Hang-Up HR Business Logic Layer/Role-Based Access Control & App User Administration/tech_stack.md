@@ -1,0 +1,1 @@
+Supabase client (`getSupabaseAdmin`) for `app_users`, `app_role_permissions`, and `app_user_permissions` tables; bcrypt for password hashing; crypto for random salts on auto-created employee logins.

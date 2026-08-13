@@ -1,0 +1,9 @@
+The module is a flat collection of pure-function utilities in `lib/`, each exporting a focused responsibility with no shared state:
+- `attendance.js` — central orchestration: builds the per-month employee skeleton (weekend Day-OFF defaults via `calendar`), summarizes monthly counts into a payroll-ready shape, upserts records by composite key `${employeeId}|${date}`, and re-exports depart helpers for cross-cutting use.
+- `attendance-fp-import.js` — standalone fingerprint XLSX pipeline (`xlsx`): parses workbook rows, groups punches by day, resolves check-in/out windows, derives status through configurable time-threshold rules (`DEFAULT_FP_RULES` + per-month overrides), and returns `{preview, records}` respecting an overwrite policy that protects manually edited rows.
+- `leave-attendance.js` / `depart-attendance.js` — deterministic generators that turn leave requests and depart dates into attendance records (Day-OFF/Half Day/Quarter Day-Off or OUT), including weekend-skip for pause leaves and auto-OUT after depart date.
+- `attendance-validation.js` — canonical whitelist of allowed statuses plus a normalizer that coerces blanks to Attended and clears derived flags like `fpLateness`.
+- `attendance-employment.js` — editability gate using `employment-periods` (with fallback to `employment_date`/`depart_date`).
+- `attendance-sync.js` — client/server pending-record merge/prune keyed by `${employeeId}|${date}`.
+
+Dependency direction is one-way: this module depends on `calendar`, `employee-status`, `employment-periods`, and `action-plans`; nothing inside this scope imports from higher layers. Records are plain objects keyed by a composite string, never by index, which makes every function referential-transparent.

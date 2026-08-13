@@ -1,0 +1,10 @@
+tree ca1336f5ace22f45329ba43943ccb9c42ce8f789
+parent 193ee6bfed8d50c70f0e79876e608d9a0274e9a5
+author raymondwalkerhs-spec <raymondwalkerhs-spec@users.noreply.github.com> 1783355388 +0300
+committer raymondwalkerhs-spec <raymondwalkerhs-spec@users.noreply.github.com> 1783355388 +0300
+
+fix: quality tickets, sale delete, and ship v1.6.22
+
+Quality saves respect catalog defaults when DB edit_roles empty; list keeps quality fields for quality users. Sale delete clears Supabase, cache, and Airtable. Out agents blocked from reviewer/verifier. UX: quality section first, save feedback.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
