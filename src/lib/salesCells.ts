@@ -23,8 +23,17 @@ export function saleCellValue(
   switch (colKey) {
     case "workingDay":
       return String(sale.workingDay || String(sale.submissionDate || "").slice(0, 10) || sale.effectiveDate || "—");
-    case "submissionTime":
-      return String(sale.submissionTime || "—");
+    case "submissionTime": {
+      const raw = String(sale.submissionTime || "");
+      const m = raw.match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return raw || "—";
+      let h = parseInt(m[1], 10);
+      const mi = m[2];
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12;
+      if (h === 0) h = 12;
+      return `${h}:${mi} ${ampm}`;
+    }
     case "client":
       return String(sale.client || fd.client || "—");
     case "customer":

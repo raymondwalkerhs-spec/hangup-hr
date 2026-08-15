@@ -110,7 +110,10 @@ export function AttendancePage() {
       if (team) q.set("team", team);
       return api<AttData>(path(`/attendance?${q}`));
     },
-    refetchOnWindowFocus: false,
+    // Roster data is shared across desktops; pick up team/status moves without
+    // requiring the attendance user to restart or manually refresh.
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   const patchAttendanceRecords = useCallback(

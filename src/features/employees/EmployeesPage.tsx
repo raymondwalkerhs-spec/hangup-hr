@@ -74,9 +74,12 @@ export function EmployeesPage() {
           showLegacy: "false",
         })
       ),
-    staleTime: 60_000,
+    // Team/status changes can be made by another desktop. Do not retain an
+    // obsolete roster for a minute after returning to this screen.
+    staleTime: 0,
     placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   const { user: statusUser } = useAppStatus();

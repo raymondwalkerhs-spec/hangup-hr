@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 2.3.22 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 2.3.23 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -58,7 +58,7 @@ Team dashboards load sales when **working day**, **submission date**, or **effec
 
 ### Working day rule
 
-Sales submitted **before 1:00 AM Cairo** count on the **previous calendar day** for payroll and dashboards. The log shows:
+Sales submitted **before 2:00 AM Cairo** count on the **previous calendar day** for payroll and dashboards (docs historically said 1 AM; code uses hour &lt; 2). The log shows:
 
 | Column | Meaning |
 |--------|---------|
@@ -66,6 +66,19 @@ Sales submitted **before 1:00 AM Cairo** count on the **previous calendar day** 
 | **Time** | Submission time (12h AM/PM) |
 
 List queries use **submission date** for the month view in the React portal (`dateBasis=submission`). Working-day basis remains available via API for legacy/reporting.
+
+Admin / RTM / CEO can correct MLA or RPM **submission date & time** (Cairo) from the Edit modal. Date and time are stored in separate columns and reconstructed for the UI. A sale moved to another month appears under that month after refetch.
+
+### v2.3.23 — RPM controls, search, history, roster freshness
+
+| Feature | Who | Notes |
+|---------|-----|--------|
+| **Roster freshness** | All submitters | Auth + submit-scope refresh local employees (~15s) so team moves show in agent pickers without restart |
+| **Deleted agents** | Dialing picker | Excluded like Out (unless `sales_agent_picker` override) |
+| **RPM sort** | All RPM viewers | Default latest→oldest by submission date/time; option oldest→latest |
+| **RPM filters** | All RPM viewers | Agent, closer, day (working day), team, reviewer feedback, client, client feedback + status/retransfer |
+| **Search** | MLA + RPM | Customer name or phone (primary / alternative), digit-normalized |
+| **Edit history** | Quality, RTM, Admin, CEO | History panel on View / Edit / Quality; portal `sale_edit_history` table |
 
 ### Log columns (all fields)
 

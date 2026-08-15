@@ -720,6 +720,40 @@ router.patch("/:id", async (req, res) => {
     const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
     if (!visible.length) return res.status(403).json({ error: "No access" });
 
+    const saleSubmissionCorrection = require("../lib/sale-submission-correction");
+    if (req.body.submissionDateTime !== undefined) {
+      if (!saleSubmissionCorrection.canCorrectSubmissionDate(req.userRole)) {
+        return res.status(403).json({ error: "Only RTM, Admin, or CEO can correct submission date and time" });
+      }
+      const submissionDate = saleSubmissionCorrection.normalizeSubmissionDateTime(req.body.submissionDateTime);
+      const patch = {
+        submissionDate,
+        submissionTime: workingDayLib.computeSubmissionTime(submissionDate),
+        workingDay: workingDayLib.computeWorkingDay(submissionDate),
+      };
+      const sale = await business.updateSale(req.params.id, patch, req.username);
+      try {
+        const saleEditHistory = require("../lib/sale-edit-history");
+        await saleEditHistory.recordSaleDiff({
+          program: "mla",
+          saleId: req.params.id,
+          before: existing,
+          after: sale,
+          changedBy: req.username,
+          source: "submission_correction",
+          employees: store.getEmployees({ hideOut: false, includeDeleted: true }),
+        });
+      } catch (histErr) {
+        console.warn("sale edit history (mla correction):", histErr.message);
+      }
+      afterSaleMutation(sale.id, { reason: "submission_correction" });
+      await recalcAgentSalesFromSale(sale, req.username);
+      const [redacted] = await salesFieldAccess.redactSalesForRole([sale], req.userRole, {
+        surface: "main",
+      });
+      return res.json({ ok: true, sale: redacted });
+    }
+
     const { action, feedback, callbackVisibleToAgent, effectiveDate } = req.body;
     let patch = {};
     let responseSurface = "main";
@@ -847,6 +881,21 @@ router.patch("/:id", async (req, res) => {
 
     const sale = await business.updateSale(req.params.id, patch, req.username);
 
+    try {
+      const saleEditHistory = require("../lib/sale-edit-history");
+      await saleEditHistory.recordSaleDiff({
+        program: "mla",
+        saleId: req.params.id,
+        before: existing,
+        after: sale,
+        changedBy: req.username,
+        source: responseSurface === "quality" ? "quality_ticket" : "edit",
+        employees: store.getEmployees({ hideOut: false, includeDeleted: true }),
+      });
+    } catch (histErr) {
+      console.warn("sale edit history (mla edit):", histErr.message);
+    }
+
     await notifySaleAssignments(sale, existing);
 
     if (patch.status === "callback") {
@@ -967,6 +1016,7 @@ router.get("/submit-scope", async (req, res) => {
     const saleSubmitScope = require("../lib/sale-submit-scope");
     const employeeAppRole = require("../lib/employee-app-role");
     const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    await store.ensureEmployeesFresh();
     const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(store.getEmployees({ hideOut: true }));
     const orgTeams = await hrmsRepo.readOrgTeams();
     const scope = saleSubmitScope.buildSubmitScopePayload(req.userRole, employees, orgTeams, {
@@ -1207,6 +1257,26 @@ router.get("/attachments/:attachmentId/file", async (req, res) => {
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.fileName)}"`);
     res.setHeader("X-Cache-Hit", file.fromCache ? "1" : "0");
     fs.createReadStream(file.filePath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/:id/history", async (req, res) => {
+  try {
+    const existing = await business.getSale(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Sale not found" });
+    const employees = store.getEmployees();
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    const visible = salesScope.filterSalesForUser([existing], req.userRole, employees, grants);
+    if (!visible.length) return res.status(403).json({ error: "No access" });
+    const saleEditHistory = require("../lib/sale-edit-history");
+    if (!saleEditHistory.canViewSaleHistory(req.userRole)) {
+      return res.status(403).json({ error: "No permission to view sale history" });
+    }
+    let entries = await saleEditHistory.listSaleHistory("mla", req.params.id);
+    entries = await saleEditHistory.redactHistoryForRole(entries, req.userRole, "mla");
+    res.json({ history: entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

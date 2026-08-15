@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.3.22 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.3.23 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -210,12 +210,17 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 - **+ Add sale** shows MLA/RPM picker when the user can submit both
 
 ### Sales log
+- **Search** — Customer name or phone (primary / alternative), digit-normalized
+- **RPM filters & sort** — Agent, closer, working day, team, reviewer/client feedback; latest→oldest by default
+- **Edit history** — Quality / RTM / Admin / CEO History panel on View / Edit / Quality (portal-owned, not Airtable)
+- **Submission correction** — Admin / RTM / CEO can correct MLA and RPM Cairo date+time (working day uses 2 AM grace)
+- **Roster freshness** — Submit-scope / auth refresh employee teams so dialing pickers stay current
 - Sorted by **submission date + time** (newest first)
 
 - **RPM quality ticket** — Editable quality workflow for Quality, RTM, Admin only; agents/TL/OP use View sale (field visibility via Sales permissions)
 - Per-sale records with dynamic MLA-Ray form (all fields in `form_data`) for MLA; RPM has its own form and field catalog
 - Day / week / month dashboards with status filters and stat cards
-- **Working day rule** — sales until 1 AM Cairo count on previous day
+- **Working day rule** — sales until 2 AM Cairo count on previous day
 - Toolbar filters: client, agent, closer, client status, reviewer status
 - **Advanced filter** — AND / OR / NOT rules with dropdown values
 - **Log columns** — admin enables catalog fields + standard columns; intersected with role view ACL
@@ -484,4 +489,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **2.3.22** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **2.3.23** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

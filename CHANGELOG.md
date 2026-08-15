@@ -4,7 +4,18 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
-### Changed
+## [2.3.23] — 2026-08-14
+
+### Added
+- **Sale edit history** — Portal-owned `sale_edit_history` for MLA and RPM. Quality / RTM / Admin / CEO see History on View, Edit, and Quality modals (old → new field lines). Not synced from Airtable.
+- **RPM sales log controls** — Sort latest→oldest (default) or oldest→latest; filters for agent, closer, working day, team, reviewer feedback, client, client feedback (plus existing status/retransfer).
+- **Sales search** — Search customer name or phone (primary and alternative), digit-normalized across MLA and RPM within access-scoped rows.
+- **MLA submission date/time correction** — Same Admin / RTM / CEO path as RPM (`PATCH` `submissionDateTime`).
+
+### Fixed
+- **Employee roster freshness** — Auth and MLA/RPM submit-scope refresh the local employee cache (~15s TTL) so team moves (e.g. Julia `HS3-54` Daemon→Justin) appear in agent pickers without restart.
+- **RPM/MLA submission timestamp** — Store date-only in `submission_date` and time in `submission_time`; APIs reconstruct a full Cairo `submissionDate` so correction hydrates View/Edit/list Time correctly. Working-day grace remains **2 AM** Cairo.
+- **Deleted agents** — Excluded from dialing agent picker (same as Out), unless `sales_agent_picker` override is true.
 - **Sales log visibility** — A sale is visible to (1) the TL of that team, (2) the assigned closer on the sale, and (3) the assigned agent on the sale. Org closer-team assignment alone no longer shows every team sale.
 
 ## [2.3.22] — 2026-08-13

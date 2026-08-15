@@ -189,6 +189,7 @@ function requireAuth(req, res, next) {
     req.realUsername = realUsername;
     req.impersonatingAs = impersonatingAs;
     req.username = effectiveUsername;
+    await store.ensureEmployeesFresh();
     const empLinkId =
       impersonatedUser?.employee_id || store.getAppUserEmployeeId(effectiveUsername) || null;
     const usersAdmin = require("../lib/users-admin");
@@ -1341,6 +1342,7 @@ router.post("/org/team-tls/:teamId", async (req, res) => {
   }
   try {
     await teamTlsRepo.addTeamTl(req.params.teamId, employeeId);
+    roles.invalidateOrgTeamsCache();
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });

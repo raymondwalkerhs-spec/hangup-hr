@@ -20,6 +20,7 @@ const saleProgramAccess = require("../lib/sale-program-access");
 const rpmSubmitRequired = require("../lib/sales-rpm-submit-required");
 const salesClients = require("../lib/sales-clients-repo");
 const rpmActionPerms = require("../lib/sales-rpm-action-permissions");
+const rpmSubmissionCorrection = require("../lib/rpm-sales-submission-correction");
 const companyContext = require("../lib/company-context");
 
 const router = express.Router();
@@ -148,6 +149,7 @@ router.get("/submit-scope", async (req, res) => {
   try {
     const employeeAppRole = require("../lib/employee-app-role");
     const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+    await store.ensureEmployeesFresh();
     const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(store.getEmployees({ hideOut: true }));
     const orgTeams = await hrmsRepo.readOrgTeams();
     const scope = saleSubmitScope.buildSubmitScopePayload(req.userRole, employees, orgTeams, {
@@ -285,6 +287,11 @@ router.get("/", async (req, res) => {
       unit: req.query.unit,
       status: req.query.status,
       retransfer: req.query.retransfer,
+      day: req.query.day,
+      client: req.query.client,
+      reviewerFeedback: req.query.reviewerFeedback,
+      clientFeedback: req.query.clientFeedback,
+      sort: req.query.sort,
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterRpmForRequest(sales, req);
@@ -590,6 +597,40 @@ router.patch("/:id", async (req, res) => {
     const access = await assertRpmSaleAccess(req, req.params.id);
     if (access.error) return res.status(access.status).json({ error: access.error });
     const existing = access.sale;
+
+    // This deliberately bypasses the configurable general edit permission:
+    // only Admin/RTM can correct a historic RPM submission timestamp.
+    if (req.body.submissionDateTime !== undefined) {
+      if (!rpmSubmissionCorrection.canCorrectSubmissionDate(req.userRole)) {
+        return res.status(403).json({ error: "Only RTM, Admin, or CEO can correct RPM submission date and time" });
+      }
+      const submissionDate = rpmSubmissionCorrection.normalizeSubmissionDateTime(req.body.submissionDateTime);
+      const patch = {
+        submissionDate,
+        submissionTime: workingDayLib.computeSubmissionTime(submissionDate),
+        workingDay: workingDayLib.computeWorkingDay(submissionDate),
+      };
+      const before = existing;
+      const sale = await rpmRepo.updateRpmSale(req.params.id, patch, req.username);
+      try {
+        const saleEditHistory = require("../lib/sale-edit-history");
+        await saleEditHistory.recordSaleDiff({
+          program: "rpm",
+          saleId: req.params.id,
+          before,
+          after: sale,
+          changedBy: req.username,
+          source: "submission_correction",
+          employees: store.getEmployees({ hideOut: false, includeDeleted: true }),
+        });
+      } catch (histErr) {
+        console.warn("sale edit history (rpm correction):", histErr.message);
+      }
+      await recalcAgentSalesFromRpmSale(sale, req.username);
+      const [redacted] = await rpmFieldAccess.redactSalesForRole([sale], req.userRole, rpmRedactOpts(req));
+      return res.json({ ok: true, sale: redacted });
+    }
+
     let responseSurface = "main";
 
     const canEditRpm =
@@ -628,16 +669,16 @@ router.patch("/:id", async (req, res) => {
 
       const built = rpmFieldAccess.buildPayloadFromBody(req.body, synced.formData);
 
+      const { submissionDate: _ignoredSubmissionDate, ...safeForm } = synced.formData || {};
       const patch = {
         phoneNumber: built.phoneNumber || existing.phoneNumber,
         fullName: built.fullName || existing.fullName,
         client: built.client != null ? built.client : existing.client,
         memberId: built.memberId || existing.memberId,
         effectiveDate: built.effectiveDate || existing.effectiveDate,
-        submissionDate: built.submissionDate || existing.submissionDate,
         status: ticketOnly ? synced.status : built.status || existing.status,
         feedback: built.feedback != null ? built.feedback : existing.feedback,
-        formData: synced.formData,
+        formData: safeForm,
         reviewedBy: ticketOnly ? req.username : existing.reviewedBy,
       };
 
@@ -697,6 +738,20 @@ router.patch("/:id", async (req, res) => {
       }
 
       const sale = await rpmRepo.updateRpmSale(req.params.id, patch, req.username);
+      try {
+        const saleEditHistory = require("../lib/sale-edit-history");
+        await saleEditHistory.recordSaleDiff({
+          program: "rpm",
+          saleId: req.params.id,
+          before: existing,
+          after: sale,
+          changedBy: req.username,
+          source: ticketOnly ? "quality_ticket" : "edit",
+          employees: store.getEmployees({ hideOut: false, includeDeleted: true }),
+        });
+      } catch (histErr) {
+        console.warn("sale edit history (rpm edit):", histErr.message);
+      }
       await recalcAgentSalesFromRpmSale(sale, req.username);
       if (existing.agentId && existing.agentId !== sale.agentId) {
         await recalcAgentSalesFromRpmSale(existing, req.username);
@@ -711,6 +766,22 @@ router.patch("/:id", async (req, res) => {
     return res.status(400).json({ error: "Invalid action" });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/:id/history", async (req, res) => {
+  try {
+    const access = await assertRpmSaleAccess(req, req.params.id);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    const saleEditHistory = require("../lib/sale-edit-history");
+    if (!saleEditHistory.canViewSaleHistory(req.userRole)) {
+      return res.status(403).json({ error: "No permission to view sale history" });
+    }
+    let entries = await saleEditHistory.listSaleHistory("rpm", req.params.id);
+    entries = await saleEditHistory.redactHistoryForRole(entries, req.userRole, "rpm");
+    res.json({ history: entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

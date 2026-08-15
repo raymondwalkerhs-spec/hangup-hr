@@ -1,6 +1,18 @@
+## v2.3.23 release checklist
+
+**Pending ship:** bump, push, Release workflow, promote Latest, `node scripts/publish-app-version.js`.
+
+1. Bump `package.json` → `2.3.23`
+2. Docs: `CHANGELOG.md`, `FEATURES.md`, `SALES_LOG.md`, `AI_Agent.md`, `UPDATES.md`, `TUTORIAL.md`, `README.md`
+3. Apply migration `20260822_sale_edit_history.sql`
+4. `git push` then `gh workflow run "Release (update packages)" … -f tag=v2.3.23`
+5. Promote Latest + publish app version to Supabase `is_current`
+
+**2.3.23 changes:** Employee roster freshness on auth/submit-scope; MLA+RPM Admin/RTM/CEO submission date/time correction with reconstructed timestamps; Deleted excluded from dialing picker; RPM sort/filters; customer name/phone search; sale edit history UI.
+
 ## v2.3.22 release checklist
 
-**Shipped 2026-08-13:** GitHub [v2.3.22](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.22) is **Latest**. Supabase `app_versions` `2.3.22` is `is_current`. Assets: `Hangup-Portal-Setup-2.3.22.exe`, `Hangup-Portal-Web-Setup.exe` (pinned 2.3.22), `win-x64-latest.json`.
+**Shipped 2026-08-13:** GitHub [v2.3.22](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.22). Supabase `app_versions` `2.3.22` was `is_current`. Assets: `Hangup-Portal-Setup-2.3.22.exe`, `Hangup-Portal-Web-Setup.exe` (pinned 2.3.22), `win-x64-latest.json`.
 
 1. Bump `package.json` → `2.3.22`
 2. `npm run dist:installer` then `npm run dist:web-installer`

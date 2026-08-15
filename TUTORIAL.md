@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.22`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.23`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).

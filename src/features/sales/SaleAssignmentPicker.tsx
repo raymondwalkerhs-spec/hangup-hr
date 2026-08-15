@@ -26,7 +26,19 @@ export type SubmitScope = {
 function agentsForUnit(agents: Employee[], unit: string) {
   return agents
     .filter((e) => !unit || e.unit === unit)
-    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    .sort((a, b) => {
+      const byName = String(a.american_name || "").localeCompare(String(b.american_name || ""), undefined, {
+        sensitivity: "base",
+      });
+      if (byName) return byName;
+      return String(a.id).localeCompare(String(b.id));
+    });
+}
+
+function agentOptionLabel(e: Employee) {
+  const name = e.american_name || e.id;
+  const team = e.team ? ` · ${e.team}` : "";
+  return `${name} (${e.id})${team}`;
 }
 
 export function useSaleSubmitScope(enabled: boolean) {
@@ -35,6 +47,8 @@ export function useSaleSubmitScope(enabled: boolean) {
     queryKey: ["sales-submit-scope", companyContext],
     queryFn: () => api<SubmitScope>(path("/sales/submit-scope")),
     enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -44,6 +58,8 @@ export function useRpmSubmitScope(enabled: boolean) {
     queryKey: ["rpm-sales-submit-scope", companyContext],
     queryFn: () => api<SubmitScope & { program?: string; enabledPrograms?: string[] }>(path("/rpm-sales/submit-scope")),
     enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
@@ -120,7 +136,7 @@ export function SaleAssignmentPicker({
           >
             <option value="">— Select agent —</option>
             {agentOptions.map((e) => (
-              <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
+              <option key={e.id} value={e.id}>{agentOptionLabel(e)}</option>
             ))}
           </select>
         </FormField>
@@ -128,7 +144,7 @@ export function SaleAssignmentPicker({
           <select value={closerId} onChange={(e) => onChange({ closerId: e.target.value })}>
             <option value="">— Select closer —</option>
             {closerOptions.map((e) => (
-              <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
+              <option key={e.id} value={e.id}>{agentOptionLabel(e)}</option>
             ))}
           </select>
         </FormField>

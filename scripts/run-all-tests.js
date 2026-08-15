@@ -6,6 +6,8 @@ const scripts = [
   "test-access-scope.js",
   "test-quality-sales-perms.js",
   "test-sale-submit-scope.js",
+  "test-rpm-submission-correction.js",
+  "test-rpm-sales-controls.js",
   "test-sales-submit-required.js",
   "test-employee-id-reuse.js",
   "test-airtable-sales-sync.js",

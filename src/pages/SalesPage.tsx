@@ -16,6 +16,7 @@ import { parseSalesProgram, type SalesProgram } from "@/features/sales/sale-prog
 import { canOpenQualityTicketForSale } from "@/lib/salesEmployeeFilters";
 import { useProcessNewSaleRequest } from "@/features/sales/useProcessNewSaleRequest";
 import { useSalesIntentStore } from "@/stores/sales-intent-store";
+import { useRpmSubmitScope } from "@/features/sales/SaleAssignmentPicker";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { DataGrid } from "@/ui/DataGrid";
 import { Card, StatTile } from "@/ui/Card";
@@ -24,8 +25,55 @@ import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
 
 type Row = Record<string, unknown>;
 type ListColumn = { columnKey: string; label?: string };
+type Emp = { id: string; american_name?: string; team?: string };
 
 const CLOSER_ROLES = new Set(["agent", "tl", "op"]);
+
+const RPM_REVIEWER_FEEDBACK = ["Pending", "Done"];
+const RPM_CLIENT_FEEDBACK = ["Pending", "Approved", "Denied", "Callback", "Retransfer"];
+
+function digitsOnly(value: unknown) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function saleMatchesCustomerSearch(sale: Row, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const fd = (sale.formData as Record<string, unknown>) || {};
+  const name = String(sale.fullName || fd.fullName || "").toLowerCase();
+  if (name.includes(q)) return true;
+
+  const qDigits = digitsOnly(q);
+  if (!qDigits) {
+    const hay = [
+      sale.id,
+      sale.agentId,
+      sale.client,
+      sale.status,
+      sale.memberId,
+      fd.client,
+      fd.memberId,
+      fd.clientFeedback,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+
+  const phones = [
+    sale.phoneNumber,
+    fd.phoneNumber,
+    fd.alternativePhoneNumber,
+    fd.alternative_phone,
+    fd.altPhone,
+    fd.altPhoneNumber,
+  ]
+    .map(digitsOnly)
+    .filter(Boolean);
+
+  return phones.some((p) => p.includes(qDigits) || qDigits.includes(p.slice(-Math.min(10, qDigits.length))));
+}
 
 export function SalesPage() {
   const month = useAppStore((s) => s.month);
@@ -37,6 +85,13 @@ export function SalesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
+  const [closerFilter, setCloserFilter] = useState("");
+  const [dayFilter, setDayFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
+  const [reviewerFeedbackFilter, setReviewerFeedbackFilter] = useState("");
+  const [clientFeedbackFilter, setClientFeedbackFilter] = useState("");
+  const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
   const [retransferOnly, setRetransferOnly] = useState(false);
   const [viewSale, setViewSale] = useState<Row | null>(null);
   const [qualitySale, setQualitySale] = useState<Row | null>(null);
@@ -107,20 +162,57 @@ export function SalesPage() {
     if (program === "mla" && !canSubmitMla && canSubmitRpm) setProgram("rpm");
   }, [submitScopeReady, program, canSubmitMla, canSubmitRpm]);
 
+  useEffect(() => {
+    setAgentFilter("");
+    setCloserFilter("");
+    setDayFilter("");
+    setClientFilter("");
+    setReviewerFeedbackFilter("");
+    setClientFeedbackFilter("");
+    setSortOrder("latest");
+  }, [program]);
+
+  const { data: rpmScope } = useRpmSubmitScope(program === "rpm");
+
   const { data: salesRes, isLoading, error, refetch } = useQuery({
-    queryKey: ["sales", program, from, to, statusFilter, teamFilter, retransferOnly, companyContext],
+    queryKey: [
+      "sales",
+      program,
+      from,
+      to,
+      statusFilter,
+      teamFilter,
+      retransferOnly,
+      agentFilter,
+      closerFilter,
+      dayFilter,
+      clientFilter,
+      reviewerFeedbackFilter,
+      clientFeedbackFilter,
+      sortOrder,
+      companyContext,
+    ],
     queryFn: () => {
       const q = new URLSearchParams({ from, to, dateBasis: "submission" });
       if (statusFilter) q.set("status", statusFilter);
       if (teamFilter) q.set("team", teamFilter);
-      if (program === "rpm" && retransferOnly) q.set("retransfer", "1");
+      if (program === "rpm") {
+        if (retransferOnly) q.set("retransfer", "1");
+        if (agentFilter) q.set("agentId", agentFilter);
+        if (closerFilter) q.set("closerId", closerFilter);
+        if (dayFilter) q.set("day", dayFilter);
+        if (clientFilter) q.set("client", clientFilter);
+        if (reviewerFeedbackFilter) q.set("reviewerFeedback", reviewerFeedbackFilter);
+        if (clientFeedbackFilter) q.set("clientFeedback", clientFeedbackFilter);
+        if (sortOrder) q.set("sort", sortOrder);
+      }
       return api<{ sales: Row[]; listColumns?: ListColumn[]; statuses?: string[] }>(`${salesBase}?${q}`);
     },
   });
 
   const { data: empData } = useQuery({
     queryKey: ["employees-sales", companyContext],
-    queryFn: () => api<{ employees: { id: string; american_name?: string; team?: string }[] }>(path("/employees")),
+    queryFn: () => api<{ employees: Emp[] }>(path("/employees")),
   });
 
   const empById = useMemo(
@@ -133,6 +225,7 @@ export function SalesPage() {
     : program === "rpm"
       ? [
           { columnKey: "workingDay", label: "Day" },
+          { columnKey: "submissionTime", label: "Time" },
           { columnKey: "client", label: "Client" },
           { columnKey: "customer", label: "Customer" },
           { columnKey: "memberId", label: "Member ID" },
@@ -143,6 +236,7 @@ export function SalesPage() {
         ]
       : [
           { columnKey: "workingDay", label: "Day" },
+          { columnKey: "submissionTime", label: "Time" },
           { columnKey: "agentName", label: "Agent" },
           { columnKey: "client", label: "Client" },
           { columnKey: "status", label: "Status" },
@@ -152,16 +246,8 @@ export function SalesPage() {
 
   const rows = useMemo(() => {
     let list = salesRes?.sales || [];
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter((s) => {
-        const fd = s.formData as Record<string, unknown> | undefined;
-        const hay = [
-          s.id, s.agentId, s.client, s.status, s.fullName, s.phoneNumber, s.memberId,
-          fd?.client, fd?.memberId, fd?.clientFeedback,
-        ].filter(Boolean).join(" ").toLowerCase();
-        return hay.includes(q);
-      });
+    if (search.trim()) {
+      list = list.filter((s) => saleMatchesCustomerSearch(s, search));
     }
     return list;
   }, [salesRes?.sales, search]);
@@ -170,6 +256,40 @@ export function SalesPage() {
     () => [...new Set((empData?.employees || []).map((e) => e.team).filter(Boolean))].sort() as string[],
     [empData?.employees]
   );
+
+  const agentOptions = useMemo(() => {
+    const fromScope = (rpmScope?.agents || []).map((a) => a.id);
+    const fromSales = (salesRes?.sales || []).map((s) => String(s.agentId || "")).filter(Boolean);
+    const ids = [...new Set([...fromScope, ...fromSales])].filter(Boolean).sort();
+    return ids.map((id) => {
+      const emp = empById.get(id) || (rpmScope?.agents || []).find((a) => a.id === id);
+      return { value: id, label: `${emp?.american_name || id} (${id})` };
+    });
+  }, [rpmScope?.agents, salesRes?.sales, empById]);
+
+  const closerOptions = useMemo(() => {
+    const fromScope = (rpmScope?.closers || []).map((c) => c.id);
+    const fromSales = (salesRes?.sales || []).map((s) => String(s.closerId || "")).filter(Boolean);
+    const ids = [...new Set([...fromScope, ...fromSales])].filter(Boolean).sort();
+    return ids.map((id) => {
+      const emp = empById.get(id) || (rpmScope?.closers || []).find((c) => c.id === id);
+      return { value: id, label: `${emp?.american_name || id} (${id})` };
+    });
+  }, [rpmScope?.closers, salesRes?.sales, empById]);
+
+  const dayOptions = useMemo(() => {
+    return [...new Set((salesRes?.sales || []).map((s) => String(s.workingDay || "")).filter(Boolean))].sort();
+  }, [salesRes?.sales]);
+
+  const clientOptions = useMemo(() => {
+    return [
+      ...new Set(
+        (salesRes?.sales || [])
+          .map((s) => String(s.client || (s.formData as Record<string, unknown>)?.client || ""))
+          .filter(Boolean)
+      ),
+    ].sort();
+  }, [salesRes?.sales]);
 
   const isRetransferRow = (row: Row) => {
     const fd = row.formData as Record<string, unknown> | undefined;
@@ -283,9 +403,48 @@ export function SalesPage() {
       </Tabs.Root>
 
       <PageToolbar>
-        <SearchField value={search} onChange={setSearch} placeholder="Search client, agent, phone…" />
+        <SearchField value={search} onChange={setSearch} placeholder="Search customer name or phone" />
         <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={salesRes?.statuses || []} />
         <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={teams} />
+        {program === "rpm" && (
+          <>
+            <FilterSelect
+              label="Sort"
+              value={sortOrder}
+              onChange={(v) => setSortOrder((v as "latest" | "oldest") || "latest")}
+              options={[
+                { value: "latest", label: "Latest → oldest" },
+                { value: "oldest", label: "Oldest → latest" },
+              ]}
+            />
+            <FilterSelect
+              label="Agent"
+              value={agentFilter}
+              onChange={setAgentFilter}
+              options={agentOptions.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <FilterSelect
+              label="Closer"
+              value={closerFilter}
+              onChange={setCloserFilter}
+              options={closerOptions.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <FilterSelect label="Day" value={dayFilter} onChange={setDayFilter} options={dayOptions} />
+            <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter} options={clientOptions} />
+            <FilterSelect
+              label="Reviewer feedback"
+              value={reviewerFeedbackFilter}
+              onChange={setReviewerFeedbackFilter}
+              options={RPM_REVIEWER_FEEDBACK}
+            />
+            <FilterSelect
+              label="Client feedback"
+              value={clientFeedbackFilter}
+              onChange={setClientFeedbackFilter}
+              options={RPM_CLIENT_FEEDBACK}
+            />
+          </>
+        )}
         {program === "rpm" && canSeeRetransferFilter && (
           <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
             <input type="checkbox" checked={retransferOnly} onChange={(e) => setRetransferOnly(e.target.checked)} />

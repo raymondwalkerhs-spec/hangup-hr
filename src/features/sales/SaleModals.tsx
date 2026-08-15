@@ -46,6 +46,195 @@ function deviceLabel(device: unknown) {
   return map[key] || (device ? String(device) : "—");
 }
 
+function submissionDateTimeLocal(saleOrValue: unknown, timeHint?: unknown) {
+  if (saleOrValue && typeof saleOrValue === "object") {
+    const sale = saleOrValue as Record<string, unknown>;
+    const combined = String(sale.submissionDate || "");
+    const match = combined.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    if (match) return `${match[1]}T${match[2]}`;
+    const dateOnly = combined.slice(0, 10);
+    const time = String(sale.submissionTime || timeHint || "").trim();
+    const tm = time.match(/^(\d{1,2}):(\d{2})/);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly) && tm) {
+      return `${dateOnly}T${String(tm[1]).padStart(2, "0")}:${tm[2]}`;
+    }
+    return "";
+  }
+  const match = String(saleOrValue || "").match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return match ? `${match[1]}T${match[2]}` : "";
+}
+
+function canCorrectSubmissionDateRole(role: unknown) {
+  const r = String(role || "").trim().toLowerCase();
+  return r === "admin" || r === "ceo" || r === "rtm" || r === "superadmin";
+}
+
+function canViewSaleHistoryRole(role: unknown) {
+  const r = String(role || "").trim().toLowerCase();
+  return r === "quality" || r === "rtm" || r === "admin" || r === "ceo" || r === "superadmin";
+}
+
+function historySourceLabel(source: string) {
+  switch (source) {
+    case "submission_correction":
+      return "Submission correction";
+    case "quality_ticket":
+      return "Quality ticket";
+    case "create":
+      return "Create sale";
+    case "delete":
+      return "Delete";
+    case "attachment":
+      return "Attachment";
+    default:
+      return "Edit sale";
+  }
+}
+
+function formatHistoryWhen(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function SaleHistoryPanel({
+  program,
+  saleId,
+  open,
+}: {
+  program: "mla" | "rpm";
+  saleId?: string;
+  open: boolean;
+}) {
+  const { user } = useAppStatus();
+  const { path, companyContext } = useSaleApiScope();
+  const enabled = open && !!saleId && canViewSaleHistoryRole(user?.role);
+  const base = program === "rpm" ? "/rpm-sales" : "/sales";
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["sale-history", program, saleId, companyContext],
+    queryFn: () =>
+      api<{
+        history: {
+          changedAt: string;
+          changedBy: string;
+          fieldLabel: string;
+          oldDisplay: string;
+          newDisplay: string;
+          source: string;
+        }[];
+      }>(path(`${base}/${saleId}/history`)),
+    enabled,
+  });
+
+  if (!enabled) return null;
+
+  const groups = useMemo(() => {
+    const list = data?.history || [];
+    const map = new Map<string, typeof list>();
+    for (const entry of list) {
+      const key = `${entry.changedAt}|${entry.changedBy}|${entry.source}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(entry);
+    }
+    return [...map.entries()];
+  }, [data?.history]);
+
+  return (
+    <FormSection title="History">
+      {isLoading && <p className="muted">Loading history…</p>}
+      {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
+      {!isLoading && !error && groups.length === 0 && <p className="muted">No edits recorded yet.</p>}
+      {groups.map(([key, entries]) => {
+        const head = entries[0];
+        return (
+          <div key={key} style={{ marginBottom: "0.85rem" }}>
+            <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+              {head.changedBy || "Unknown"} · {formatHistoryWhen(head.changedAt)} · {historySourceLabel(head.source)}
+            </div>
+            {entries.map((e, i) => (
+              <div key={`${key}-${i}`} className="muted" style={{ fontSize: "0.9rem", marginLeft: "0.15rem" }}>
+                {e.fieldLabel}: {e.oldDisplay || "—"} → {e.newDisplay || "—"}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </FormSection>
+  );
+}
+
+function SubmissionCorrectionPanel({
+  program,
+  saleId,
+  submissionDateTime,
+  setSubmissionDateTime,
+  onSaved,
+}: {
+  program: "mla" | "rpm";
+  saleId?: string;
+  submissionDateTime: string;
+  setSubmissionDateTime: (v: string) => void;
+  onSaved?: () => void;
+}) {
+  const qc = useQueryClient();
+  const { path, withCompany } = useSaleApiScope();
+  const base = program === "rpm" ? "/rpm-sales" : "/sales";
+  const correctSubmissionDate = useMutation({
+    mutationFn: () =>
+      api(path(`${base}/${saleId}`), {
+        method: "PATCH",
+        body: JSON.stringify(withCompany({ submissionDateTime })),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rpm-sales"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["sale-history"] });
+      onSaved?.();
+    },
+  });
+
+  return (
+    <FormSection title="Admin / RTM / CEO submission correction">
+      <FormGrid>
+        <FormField label="Submission date & time (Cairo)">
+          <input
+            type="datetime-local"
+            value={submissionDateTime}
+            onChange={(e) => setSubmissionDateTime(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Working day">
+          <div className={styles.readonlyUnit}>
+            Recalculated from the corrected Cairo timestamp when saved (2 AM Cairo grace).
+          </div>
+        </FormField>
+      </FormGrid>
+      <p className="muted">
+        This only changes the submission timestamp and derived working day. It does not edit other sale fields.
+      </p>
+      <Button
+        variant="secondary"
+        onClick={() => {
+          if (!confirm("Correct submission date & time? This updates working day and list month placement.")) return;
+          correctSubmissionDate.mutate();
+        }}
+        disabled={!submissionDateTime || correctSubmissionDate.isPending}
+      >
+        Save corrected date & time
+      </Button>
+      {correctSubmissionDate.isError && (
+        <p style={{ color: "var(--err)" }}>{(correctSubmissionDate.error as Error).message}</p>
+      )}
+    </FormSection>
+  );
+}
+
 function SaleSummary({ sale, empById }: { sale: Sale; empById: Map<string, { american_name?: string }> }) {
   const fd = (sale.formData as Record<string, unknown>) || {};
   const agent = empById.get(String(sale.agentId || ""));
@@ -247,6 +436,7 @@ export function ViewSaleModal({
     }>
       <SaleSummary sale={sale} empById={empById} />
       <FieldGrid fields={fields} sale={sale} empById={empById} form={{}} setForm={() => {}} editable={false} />
+      <SaleHistoryPanel program="mla" saleId={String(sale.id || "")} open={open} />
       <SaleAttachmentsPanel
         attachments={attachments?.attachments || []}
         attachKinds={attachKinds}
@@ -554,6 +744,7 @@ export function QualityTicketModal({
       }
     >
       <SaleSummary sale={sale} empById={empById} />
+      <SaleHistoryPanel program="mla" saleId={String(sale.id || "")} open={open} />
       {canReassign && submitScope && (
         <SaleAssignmentPicker
           scope={submitScope}
@@ -750,6 +941,7 @@ export function RpmQualityTicketModal({
       }
     >
       <RpmSaleSummary sale={sale} empById={empById} />
+      <SaleHistoryPanel program="rpm" saleId={String(sale.id || "")} open={open} />
       {canReassign && submitScope && (
         <SaleAssignmentPicker
           scope={submitScope}
@@ -832,6 +1024,7 @@ export function RpmViewSaleModal({
     }>
       <RpmSaleSummary sale={sale} empById={empById} />
       <FieldGrid fields={fields} sale={sale} empById={empById} form={{}} setForm={() => {}} editable={false} />
+      <SaleHistoryPanel program="rpm" saleId={String(sale.id || "")} open={open} />
       <SaleAttachmentsPanel
         attachments={attachments?.attachments || []}
         attachKinds={attachKinds}
@@ -865,7 +1058,9 @@ export function RpmSaleFormModal({
 
   const { user: meUser } = useAppStatus();
   const canReassign = Boolean(meUser?.canReassignSaleLead);
+  const canCorrectSubmissionDate = canCorrectSubmissionDateRole(meUser?.role);
   const { path, withCompany } = useSaleApiScope();
+  const [submissionDateTime, setSubmissionDateTime] = useState("");
 
   const { data: catalog } = useQuery({
     queryKey: ["rpm-sale-catalog-form", sale?.id, open],
@@ -914,6 +1109,7 @@ export function RpmSaleFormModal({
       setCloserId(String(sale?.closerId || ""));
       setUnit(String(sale?.unit || fd.unit || ""));
       setTeam(String(sale?.team || fd.team || ""));
+      setSubmissionDateTime(submissionDateTimeLocal(sale));
       formInitialized.current = true;
       return;
     }
@@ -950,6 +1146,7 @@ export function RpmSaleFormModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rpm-sales"] });
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
       onOpenChange(false);
     },
@@ -972,6 +1169,19 @@ export function RpmSaleFormModal({
       }
     >
       {isEdit && sale && <RpmSaleSummary sale={sale} empById={empById} />}
+      {isEdit && canCorrectSubmissionDate && (
+        <SubmissionCorrectionPanel
+          program="rpm"
+          saleId={String(sale?.id || "")}
+          submissionDateTime={submissionDateTime}
+          setSubmissionDateTime={setSubmissionDateTime}
+          onSaved={() => {
+            onSaved?.();
+            onOpenChange(false);
+          }}
+        />
+      )}
+      {isEdit && <SaleHistoryPanel program="rpm" saleId={String(sale?.id || "")} open={open} />}
       {!isEdit && submitScope && (
         <SaleAssignmentPicker
           scope={submitScope}
@@ -1058,7 +1268,9 @@ export function SaleFormModal({
   const { user: meUser } = useAppStatus();
   const draftUsername = meUser?.username as string | undefined;
   const canReassign = Boolean(meUser?.canReassignSaleLead);
+  const canCorrectSubmissionDate = canCorrectSubmissionDateRole(meUser?.role);
   const { path, withCompany } = useSaleApiScope();
+  const [submissionDateTime, setSubmissionDateTime] = useState("");
 
   const surface = isEdit ? `main&saleId=${encodeURIComponent(String(sale?.id))}` : "submit";
   const { data: catalog } = useQuery({
@@ -1120,6 +1332,7 @@ export function SaleFormModal({
       setCloserId(String(sale?.closerId || ""));
       setUnit(String(sale?.unit || fd.unit || ""));
       setTeam(String(sale?.team || fd.team || ""));
+      setSubmissionDateTime(submissionDateTimeLocal(sale));
       formInitialized.current = true;
       return;
     }
@@ -1205,6 +1418,7 @@ export function SaleFormModal({
     onSuccess: () => {
       if (!isEdit && draftUsername) localStorage.removeItem(saleDraftKey(draftUsername));
       qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
       onOpenChange(false);
     },
@@ -1257,6 +1471,19 @@ export function SaleFormModal({
       }
     >
       {isEdit && sale && <SaleSummary sale={sale} empById={empById} />}
+      {isEdit && canCorrectSubmissionDate && (
+        <SubmissionCorrectionPanel
+          program="mla"
+          saleId={String(sale?.id || "")}
+          submissionDateTime={submissionDateTime}
+          setSubmissionDateTime={setSubmissionDateTime}
+          onSaved={() => {
+            onSaved?.();
+            onOpenChange(false);
+          }}
+        />
+      )}
+      {isEdit && <SaleHistoryPanel program="mla" saleId={String(sale?.id || "")} open={open} />}
       {!isEdit && submitScope ? (
         <SaleAssignmentPicker
           scope={submitScope}

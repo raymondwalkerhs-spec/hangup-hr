@@ -21,7 +21,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.3.22` (`package.json` → `version`)
+- **Current version:** `2.3.23` (`package.json` → `version`)
 - **Previous:** `2.3.21`
 
 ---
@@ -514,7 +514,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.3.22** | **true** | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
+| **2.3.23** | **true** | Roster freshness for dialing pickers; MLA+RPM submission date/time correction (date+time columns); Deleted excluded from picker; RPM sort/filters/search; portal `sale_edit_history` for Quality/RTM/Admin/CEO. |
+| **2.3.22** | false | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
 | **2.3.21** | false | Announcements + coaching; live role over ID prefix; agent/closer sale submit (Amy Tris closer teams, agent-role closers); HS-2 employee move confirmation. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
 | **2.3.20** | false | Viewport cat loading overlay; payroll cache-first + prefetch; quality tickets use live Users role (HR-2 Eva); hide-zero display net; unified payroll trainees; RPM/MLA closer picker includes org closers as self (Ria). Shipped GitHub Latest + Supabase `is_current` 2026-08-12. |
 | **2.3.19** | false | Closer picker Out/Deleted fix; unified payroll trainees visible; hide-zero = display net; Rose→Rose Brown merge; payroll core month-WD daily rate; HR→Quality transfer uses live `app_users.role` for quality tickets |
