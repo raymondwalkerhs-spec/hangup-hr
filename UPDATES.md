@@ -1,14 +1,8 @@
-## v2.3.23 release checklist
+## v2.3.24 release checklist
 
-**Pending ship:** bump, push, Release workflow, promote Latest, `node scripts/publish-app-version.js`.
+**Release:** Clean Windows NSIS rebuild to correct updater assets. Release v2.3.24 includes Hangup-Portal-Setup-2.3.24.exe, Hangup-Portal-Web-Setup.exe, and win-x64-latest.json; Supabase app_versions 2.3.24 is_current.
 
-1. Bump `package.json` → `2.3.23`
-2. Docs: `CHANGELOG.md`, `FEATURES.md`, `SALES_LOG.md`, `AI_Agent.md`, `UPDATES.md`, `TUTORIAL.md`, `README.md`
-3. Apply migration `20260822_sale_edit_history.sql`
-4. `git push` then `gh workflow run "Release (update packages)" … -f tag=v2.3.23`
-5. Promote Latest + publish app version to Supabase `is_current`
-
-**2.3.23 changes:** Employee roster freshness on auth/submit-scope; MLA+RPM Admin/RTM/CEO submission date/time correction with reconstructed timestamps; Deleted excluded from dialing picker; RPM sort/filters; customer name/phone search; sale edit history UI.
+**2.3.24 changes:** Rebuilt the Windows NSIS installer and updater manifest so clients download the correct 2.3.24 package.
 
 ## v2.3.22 release checklist
 

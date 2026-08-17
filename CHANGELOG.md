@@ -4,6 +4,11 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [2.3.24] — 2026-08-17
+
+### Fixed
+- Clean Windows NSIS rebuild and corrected updater release assets so clients receive the 2.3.24 package.
+
 ## [2.3.23] — 2026-08-14
 
 ### Added
