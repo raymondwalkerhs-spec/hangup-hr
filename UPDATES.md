@@ -1,6 +1,6 @@
 ## v2.3.26 release checklist
 
-**Release status — 2026-08-17:** Prepared locally; do not mark current until GitHub [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26) exists and is promoted to **Latest**. Then run `node scripts/publish-app-version.js` to set Supabase `app_versions` `2.3.26` to `is_current`. The NSIS includes the sales/dashboard reliability work: Cairo RPM date filtering, explicit Add-sale intent, HS-2 switcher hardening, and role-scoped dashboard metrics.
+**Shipped 2026-08-17 (installer-only):** GitHub [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26) is **Latest**. Supabase `app_versions` `2.3.26` is `is_current`. Assets: `Hangup-Portal-Setup-2.3.26.exe`. Includes Cairo RPM date filtering, explicit Add-sale intent, HS-2 switcher hardening, and role-scoped dashboard metrics.
 
 ## v2.3.23 release checklist
 

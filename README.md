@@ -6,7 +6,7 @@
 
 **Current version:** `2.3.26`
 
-**Latest installer:** GitHub release [v2.3.25](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.25) (`Hangup-Portal-Setup-2.3.25.exe`). Version 2.3.26 is prepared locally and becomes current after its GitHub release and Supabase promotion.
+**Latest installer:** GitHub release [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26) (`Hangup-Portal-Setup-2.3.26.exe`). In-app updates and Supabase `app_versions` point at this version.
 
 | Document | Purpose |
 |----------|---------|

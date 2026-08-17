@@ -514,8 +514,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.3.26** | pending | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Prepared locally 2026-08-17; promote only after GitHub release succeeds. |
-| **2.3.25** | **true** | Sales log defaults to RPM; NSIS includes React `public/dist` (DNA login). Installer-only Latest 2026-08-17. |
+| **2.3.26** | **true** | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
+| **2.3.25** | false | Sales log defaults to RPM; NSIS includes React `public/dist` (DNA login). Installer-only Latest 2026-08-17. |
 | **2.3.23** | false | Roster freshness for dialing pickers; MLA+RPM submission date/time correction (date+time columns); Deleted excluded from picker; RPM sort/filters/search; portal `sale_edit_history` for Quality/RTM/Admin/CEO. |
 | **2.3.22** | false | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
 | **2.3.21** | false | Announcements + coaching; live role over ID prefix; agent/closer sale submit (Amy Tris closer teams, agent-role closers); HS-2 employee move confirmation. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
