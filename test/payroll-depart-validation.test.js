@@ -6,7 +6,7 @@ const { applyPayrollHybridDbCore } = require('../lib/payroll-hybrid');
 
 test('payroll calculation respects depart auto-OUT', () => {
   const employees = [
-    { id: 'HS1-12', american_name: 'Test Agent', depart_date: '2026-07-17', status: 'Active' },
+    { id: 'HS1-12', american_name: 'Test Agent', depart_date: '2026-07-17', status: 'Out' },
   ];
 
   const rawRecords = [
@@ -70,6 +70,7 @@ test('DB override accepts reasonable working_days', () => {
     bonuses: { Transportation: 2500 },
     totalBonuses: 2500,
     basicSalary: 5000,
+    dailyRate: 227.27,
     totalDeductions: 0,
     bonusTransferPayroll: 0,
     netSalary: 7500,
@@ -79,6 +80,9 @@ test('DB override accepts reasonable working_days', () => {
   const validDbRow = {
     employee_id: 'HS1-01',
     working_days: 20,
+    daily_rate: 227.27,
+    transport_daily_rate: 136.36,
+    transport_days: 18,
     transport_allowance: 2500,
     basic_salary: 5000,
   };

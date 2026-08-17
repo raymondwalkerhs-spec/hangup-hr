@@ -20,6 +20,7 @@ function testStatusMapping() {
     reviewerFeedback: "Pending",
   });
   assert.strictEqual(pending.status, "pending");
+  assert.strictEqual(pending.formData.internalFeedback, "Pending process");
 
   const denied = rpmStatus.syncSaleStatusFromQuality({ clientFeedback: "Denied" });
   assert.strictEqual(denied.status, "denied");
@@ -36,6 +37,7 @@ function testSubmitExcludesQualityFields() {
   assert(!submitKeys.includes("reviewerFeedback"));
   assert(!submitKeys.includes("clientFeedback"));
   assert(!submitKeys.includes("clientFeedbackComments"));
+  assert(!submitKeys.includes("internalFeedback"));
   assert(!submitKeys.includes("assignVerifier"));
 }
 
@@ -51,10 +53,30 @@ function testQualitySurfaceFields() {
   const keys = catalog.listFieldsForRoleOnSurface("quality", {}, "quality").map((f) => f.key);
   assert(keys.includes("reviewer"));
   assert(keys.includes("reviewerFeedback"));
+  assert(keys.includes("internalFeedback"));
   assert(keys.includes("clientFeedback"));
   assert(keys.includes("clientFeedbackComments"));
   assert(!keys.includes("assignVerifier"));
   assert(!keys.includes("verifierFeedback"));
+  const internal = catalog.listFieldsForRoleOnSurface("quality", {}, "quality").find((f) => f.key === "internalFeedback");
+  assert.strictEqual(internal?.canEdit, false, "quality cannot edit internal feedback by default");
+  assert.strictEqual(internal?.defaultValue, "Pending process");
+  const rtmInternal = catalog.listFieldsForRoleOnSurface("rtm", {}, "quality").find((f) => f.key === "internalFeedback");
+  assert.strictEqual(rtmInternal?.canEdit, true, "RTM can edit internal feedback");
+  const adminInternal = catalog.listFieldsForRoleOnSurface("admin", {}, "main").find((f) => f.key === "internalFeedback");
+  assert.strictEqual(adminInternal?.canEdit, true, "admin can edit internal feedback on view/edit");
+  assert(!catalog.listFieldsForRole("agent", {}, { surface: "main" }).some((f) => f.key === "internalFeedback"));
+  assert(!catalog.listFieldsForRole("hr", {}, { surface: "main" }).some((f) => f.key === "internalFeedback"));
+  const grantQuality = {
+    internalFeedback: {
+      view_roles: ["quality", "rtm", "admin"],
+      edit_roles: ["admin", "rtm", "quality"],
+      main_view_roles: ["quality", "rtm", "admin"],
+      quality_view_roles: ["quality", "rtm", "admin"],
+    },
+  };
+  const qualityGranted = catalog.listFieldsForRoleOnSurface("quality", grantQuality, "quality").find((f) => f.key === "internalFeedback");
+  assert.strictEqual(qualityGranted?.canEdit, true, "quality can edit after Sales permissions grant");
 }
 
 function testRpmQualityTicketRoles() {
@@ -78,6 +100,10 @@ function testNotesField() {
 
   const qualityKeys = catalog.listFieldsForRoleOnSurface("quality", {}, "quality").map((f) => f.key);
   assert(qualityKeys.includes("notes"), "notes on quality surface");
+  assert(qualityKeys.includes("internalFeedback"), "internal feedback on quality surface");
+
+  const mainKeysAdmin = catalog.listFieldsForRole("quality", {}, { surface: "main" }).map((f) => f.key);
+  assert(mainKeysAdmin.includes("internalFeedback"), "internal feedback on view/edit");
 }
 
 function testRpmAttachmentUploadRoles() {

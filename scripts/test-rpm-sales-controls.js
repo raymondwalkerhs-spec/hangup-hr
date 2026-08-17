@@ -65,6 +65,12 @@ assert.strictEqual(oldest[0].agentId, "A1");
 
 const byDay = filterSales(rows, { day: "2026-08-12" });
 assert.strictEqual(byDay.length, 2);
+const byDayIgnoresSubmissionRange = filterSales(rows, {
+  day: "2026-08-12",
+  from: "2026-08-13",
+  to: "2026-08-31",
+});
+assert.strictEqual(byDayIgnoresSubmissionRange.length, 2);
 const byReviewer = filterSales(rows, { reviewerFeedback: "Done" });
 assert.strictEqual(byReviewer.length, 1);
 assert.strictEqual(byReviewer[0].agentId, "A1");

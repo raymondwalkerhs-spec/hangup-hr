@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 2.3.23 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 2.3.26 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -8,7 +8,7 @@ This document describes the **Sales log**, **filters**, **form fields**, **permi
 
 ## Overview
 
-The Sales log tracks **MLA** and **RPM** sales programs from submission through quality review and client feedback. Each program uses **separate Supabase tables** and **separate Supabase Storage roots** (including quality recordings).
+The Sales log tracks **MLA** and **RPM** sales programs from submission through quality review and client feedback. The page **opens on RPM** by default (MLA is the second tab). Each program uses **separate Supabase tables** and **separate Supabase Storage roots** (including quality recordings).
 
 | Program | Sales table | Attachments table | Storage root |
 |---------|-------------|-------------------|--------------|
@@ -26,7 +26,7 @@ MLA-Ray form fields live in `sales.form_data` jsonb. RPM has its own field catal
 | Area | Where in app |
 |------|----------------|
 | Sales list & filters | **Sales log** (sidebar) |
-| Add / edit sale | **+ Add sale** or row **Edit** |
+| Add / edit sale | **+ Add sale**, dock **Sale**, or command palette New sale — sidebar **Sales** does not open the form |
 | View sale (read-only) | Row **View sale** — Access Control **View sale**; fields from Sales permissions **Edit sale** tab |
 | Quality review | Row **Quality ticket** |
 | Field view/edit ACL | **Sales permissions** (sidebar) — RTM / Admin only |
@@ -49,7 +49,7 @@ Team dashboards load sales when **working day**, **submission date**, or **effec
 | **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; **no attachments on Add sale form** |
 | **Recording attachments** | Quality, RTM, admin, HR (upload on edit); finance/CEO view | **Hidden from Agent and TL**; not shown on create/submit |
 | **Airtable MLA sync** | All sales (when configured) | Columns match `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv` order; upsert by Portal Sale ID; dedupe on sync; reset: `node scripts/reset-airtable-sales.js --confirm-wipe --provision --backfill` |
-| **Draft** | All on Add sale | Auto-save to browser; resume or discard; Clear all fields |
+| **Draft** | All on Add sale | MLA and **RPM**: auto-save to browser while typing; closing by mistake and opening Add sale again offers **Resume your saved … draft?** Successful submit clears the draft. |
 | **Double submit** | All | Save disabled while in flight; server 409 on duplicate within 2 min |
 
 ---
@@ -76,7 +76,7 @@ Admin / RTM / CEO can correct MLA or RPM **submission date & time** (Cairo) from
 | **Roster freshness** | All submitters | Auth + submit-scope refresh local employees (~15s) so team moves show in agent pickers without restart |
 | **Deleted agents** | Dialing picker | Excluded like Out (unless `sales_agent_picker` override) |
 | **RPM sort** | All RPM viewers | Default latest→oldest by submission date/time; option oldest→latest |
-| **RPM filters** | All RPM viewers | Agent, closer, day (working day), team, reviewer feedback, client, client feedback + status/retransfer |
+| **RPM filters** | Quality, HR, RTM, Admin, OP, CEO | Team (current company **dialing** teams only — no HS-2 on Hangup, no HR/Quality), agent & closer (**values already on the loaded sales**; HR/Quality such as Phoebe are never closer options), **day (calendar, defaults to current Cairo working day)**, client, reviewer feedback, client feedback + status/retransfer. **Not shown to Agent or TL.** RPM list auto-refreshes every 30s. |
 | **Search** | MLA + RPM | Customer name or phone (primary / alternative), digit-normalized |
 | **Edit history** | Quality, RTM, Admin, CEO | History panel on View / Edit / Quality; portal `sale_edit_history` table |
 
@@ -106,14 +106,11 @@ After upgrading to v1.4.1, open **Log columns → Reset defaults**, then enable 
 
 On **day**, **week**, and **month** views:
 
-| Filter | Scope |
-|--------|--------|
-| **Client** | Sales for selected catalog client |
-| **Agent** | Sales where this agent submitted |
-| **Closer** | Sales where this employee closed |
-| **Client status** | Client feedback dropdown (Passed, Dropped, …) |
-| **Reviewer status** | Verifier feedback dropdown (Sale done, Callback, …) |
-| **Period** | Daily / Weekly / Monthly |
+| Filter | Who | Scope |
+|--------|-----|--------|
+| **Search / Status** | Everyone | Customer name/phone; sale status |
+| **Sort** (RPM) | Everyone on RPM | Latest→oldest (default) or oldest→latest |
+| **Team / Agent / Closer / Day / Client / feedback** (RPM) | Quality, HR, RTM, Admin, OP, CEO | **Not Agent or TL.** Team = org **dialing** teams in the current company (no HS-2 on Hangup, no HR/Quality). Agent and closer = people **already on the loaded sales**; HR/Quality (e.g. Phoebe) never appear as closers. **Day** is a date picker defaulted to today’s Cairo working day (clear to see the whole month). |
 
 Stat cards show **client status** counts (Passed, Pending bank, Processed, Dropped) when the user can view the Client status column. Click a card to filter by that client status.
 
@@ -233,7 +230,7 @@ When **Payment method = Card**, bank fields are hidden; card number, expiry, and
 
 **MLA:** Quality / RTM / Admin (and assigned OP/TL **verifiers** for `verifierFeedback` only) open **Quality ticket** for fields allowed in **Sales permissions** `quality_view_roles`. Access uses the **current** Users role (e.g. after transferring HR-2 to Quality), not a stale session role from before the change.
 
-**RPM:** **Quality ticket** (editable workflow) is for **Quality, RTM, and Admin** only (`workQualityTicket` in Access Control). **Agents, TL, and OP** do not get the Quality button — they use **View sale** (read-only; fields from Sales permissions **Edit sale** / main view). RPM has **no verifier workflow** — only a **Reviewer** field (quality team).
+**RPM:** **Quality ticket** (editable workflow) is for **Quality, RTM, and Admin** only (`workQualityTicket` in Access Control). **Agents, TL, and OP** do not get the Quality button — they use **View sale** (read-only; fields from Sales permissions **Edit sale** / main view). RPM has **no verifier workflow** — only a **Reviewer** field (quality team, including live Quality role after HR→Quality transfers such as HR-2 Eva). **Internal feedback** (`Pending process` / `Processed`, default pending) is **not** on Add sale. Quality / RTM / Admin see it on View, Edit, and Quality ticket; only **Admin / RTM** can edit unless Sales permissions grant Quality later.
 
 Card/bank payment fields show based on `paymentMethod`. Summary shows client, device, agent, status.
 

@@ -2919,13 +2919,17 @@ router.post("/attendance/import", async (req, res) => {
     const config = store.getConfigForCompany(company);
     const rules = fpImport.getRulesForMonth(config, month);
     const buffer = Buffer.from(base64, "base64");
+    // Read the local cache first so an import cannot overwrite an attendance
+    // edit made moments earlier while Supabase is still replicating. The store
+    // read below then merges remote rows when that backend is enabled.
+    const cachedExisting = cache.getAttendanceForMonth(month) || [];
     const existing = await store.readAttendanceEventsForMonth(month);
     const result = fpImport.processImport({
       buffer,
       employees: filterEmployeesForRequest(store.getEmployees(), req),
       rules,
       month,
-      existingRecords: existing,
+      existingRecords: existing.length ? existing : cachedExisting,
       overwritePolicy: overwritePolicy || "skip_manual",
     });
     if (!dryRun && result.records.length) {

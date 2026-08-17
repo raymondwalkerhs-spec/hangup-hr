@@ -21,8 +21,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.3.23` (`package.json` → `version`)
-- **Previous:** `2.3.21`
+- **Current version:** `2.3.26` (`package.json` → `version`)
+- **Previous:** `2.3.25`
 
 ---
 
@@ -175,7 +175,7 @@ See [`DB_SCHEMA.md`](DB_SCHEMA.md) for full table reference.
 |------|----------------|
 | **Unit → Team → Agent** | Organization page; OP per unit, TL per team, **closers** per team (sales/IT on behalf) |
 | **HS-1, HS-3** | Main Hangup; OP manages each unit |
-| **HS-2** | **Separate company** — `canAccessHs2CompanyContext` (managers + native HS-2 staff); strict isolation — HS-2 data only in HS-2 context; test: `node scripts/test-hs2-isolation.js` |
+| **HS-2** | **Separate company** — switcher is admin/ceo/hr only (`manageHs2Company` hard-denied for OP/TL/agent); native HS-2 staff stay on their unit; strict isolation — HS-2 data only in HS-2 context; test: `node scripts/test-hs2-access.js` |
 | **HS-Back-End** | No OP — reports to CEO; teams: HR, Quality, RTM, Finance, Admins |
 | **HR manager** | Phoebe (`HR-Phoebe`) — `node scripts/link-phoebe-hr-manager.js` |
 | **Team names** | `node scripts/normalize-team-names.js` — strip `"Team "`, dedupe per unit |
@@ -223,11 +223,11 @@ Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 | Topic | Rule |
 |-------|------|
-| **Working day** | Until **1 AM Cairo** counts on previous day; list uses `dateBasis=workingDay` |
+| **Working day** | Until **2 AM Cairo** counts on previous day; RPM Day filter defaults to current Cairo working day |
 | **List columns** | All catalog fields + Day/Time/Agent/Closer/Customer — admin enables on **Log columns** page; visibility ∩ field view ACL |
-| **Toolbar filters** | Client, Agent, Closer, Status (all periods) |
+| **Toolbar filters** | Client, Agent, Closer, Status (all periods). RPM Day is a calendar (privileged roles). |
 | **Advanced filter** | AND/OR/NOT when 2+ rules; employee/client dropdowns for ID fields; persisted in `localStorage` |
-| **Add sale** | Unit → agent (team auto-fills from agent). Closer scoped by role (self + team TLs for agents; self default for org closers/TLs). Org closers/TLs see dialing agents on closer/lead teams (e.g. Amy → Tris), not TLs. `employees.sales_agent_picker` SQL override. Catalog client/device/price when configured |
+| **Add sale** | Opens only from **+ Add sale**, dock Sale, or command palette — not from visiting `/sales`. Unit → agent (team auto-fills from agent). Closer scoped by role (self + team TLs for agents; self default for org closers/TLs). Org closers/TLs see dialing agents on closer/lead teams (e.g. Amy → Tris), not TLs. `employees.sales_agent_picker` SQL override. Catalog client/device/price when configured |
 | **Sales log visibility** | Row visible to team TL, assigned closer (`closerId`), and assigned agent (`agentId`). Not all closer-team sales. |
 | **Bank payment** | routing number, bank name, account number, address, who chose bank account (required fields when Bank account) |
 | **Verifier feedback** | Dropdown; assigned verifier + RTM/Admin override |
@@ -514,7 +514,9 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.3.23** | **true** | Roster freshness for dialing pickers; MLA+RPM submission date/time correction (date+time columns); Deleted excluded from picker; RPM sort/filters/search; portal `sale_edit_history` for Quality/RTM/Admin/CEO. |
+| **2.3.26** | **true** | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
+| **2.3.25** | false | Sales log defaults to RPM; NSIS includes React `public/dist` (DNA login). Installer-only Latest 2026-08-17. |
+| **2.3.23** | false | Roster freshness for dialing pickers; MLA+RPM submission date/time correction (date+time columns); Deleted excluded from picker; RPM sort/filters/search; portal `sale_edit_history` for Quality/RTM/Admin/CEO. |
 | **2.3.22** | false | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
 | **2.3.21** | false | Announcements + coaching; live role over ID prefix; agent/closer sale submit (Amy Tris closer teams, agent-role closers); HS-2 employee move confirmation. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |
 | **2.3.20** | false | Viewport cat loading overlay; payroll cache-first + prefetch; quality tickets use live Users role (HR-2 Eva); hide-zero display net; unified payroll trainees; RPM/MLA closer picker includes org closers as self (Ria). Shipped GitHub Latest + Supabase `is_current` 2026-08-12. |

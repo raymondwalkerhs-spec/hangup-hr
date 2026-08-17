@@ -143,6 +143,13 @@ if ($env:CI -eq "true") {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+Write-Host "Building React UI (public/dist)..." -ForegroundColor Cyan
+npm run build:web
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not (Test-Path "public\dist\index.html")) {
+  throw "React UI missing: public/dist/index.html was not produced. Packaging would serve the legacy login screen."
+}
+
 $pkgPath = Join-Path $PWD "package.json"
 $packageJson = Get-Content $pkgPath -Raw | ConvertFrom-Json
 $originalVersion = $packageJson.version

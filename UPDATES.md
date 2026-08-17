@@ -1,8 +1,18 @@
-## v2.3.24 release checklist
+## v2.3.26 release checklist
 
-**Release:** Clean Windows NSIS rebuild to correct updater assets. Release v2.3.24 includes Hangup-Portal-Setup-2.3.24.exe, Hangup-Portal-Web-Setup.exe, and win-x64-latest.json; Supabase app_versions 2.3.24 is_current.
+**Release status — 2026-08-17:** GitHub [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26) is **Latest**. Supabase `app_versions` `2.3.26` is `is_current`. The NSIS includes the sales/dashboard reliability work: Cairo RPM date filtering, explicit Add-sale intent, HS-2 switcher hardening, and role-scoped dashboard metrics.
 
-**2.3.24 changes:** Rebuilt the Windows NSIS installer and updater manifest so clients download the correct 2.3.24 package.
+## v2.3.23 release checklist
+
+**Shipped 2026-08-15:** GitHub [v2.3.23](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.23) is **Latest**. Supabase `app_versions` `2.3.23` is `is_current`. Assets: `Hangup-Portal-Setup-2.3.23.exe`, win full/patch zips, `Hangup-Portal-Web-Setup.exe`, `win-x64-latest.json`. (macOS CI job failed; Windows assets shipped.)
+
+1. Bump `package.json` → `2.3.23`
+2. Docs: `CHANGELOG.md`, `FEATURES.md`, `SALES_LOG.md`, `AI_Agent.md`, `UPDATES.md`, `TUTORIAL.md`, `README.md`
+3. Apply migration `20260822_sale_edit_history.sql`
+4. Push `ship/v2.3.23-from-222` then Release workflow `-f tag=v2.3.23`
+5. Promote Latest + `publish-app-version.js`
+
+**2.3.23 changes:** Employee roster freshness on auth/submit-scope; MLA+RPM Admin/RTM/CEO submission date/time correction with reconstructed timestamps; Deleted excluded from dialing picker; RPM sort/filters; customer name/phone search; sale edit history UI.
 
 ## v2.3.22 release checklist
 

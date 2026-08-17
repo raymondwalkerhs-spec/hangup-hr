@@ -1,6 +1,8 @@
 node_modules/
 hr-app/
-dist/
+# electron-builder output at repo root only. Do not use a bare `dist/` —
+# that also ignores public/dist (React UI) and ships the legacy login.
+/dist/
 dist-build/
 dist-build2/
 dist-bootstrap/

@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.23`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.26`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -159,7 +159,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 - **Approvers:** Mark, Raymond, Phoebe.  
 - Approved annual leave sets **Day-OFF** with **paid leave** flag (counts for payroll working days).
 
-**HS-2 mode (CEO / Admin / HR only):** Use **Managing → HS-2** in the sidebar to switch company context (HS-2 roster vs main Hangup). Quality agents see HS-2 in the **sales log** unit filter only — not the company switcher.
+**HS-2 mode (CEO / Admin / HR only):** Use **Managing → HS-2** in the sidebar to switch company context (HS-2 roster vs main Hangup). OP, TL, and agent never get the switcher (including via Access Control). Quality agents see HS-2 in the **sales log** unit filter only — not the company switcher.
 
 ---
 
@@ -250,7 +250,7 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (own team leaders allowed). Org closers (e.g. Ria) keep agent login, stay in the closer list, default to themselves, and can submit their own sales. Closers/TLs assigned in Organization (e.g. Amy on Tris) pick that team even if their employee home team is Management.
 - **My docs (1.6.12):** self-upload National ID, Medical Note, Exam Note only; HR/Admin upload Contract and all types.
 - **Requests (1.6.12):** annual leave hidden from agents.
-- **Sales log (MLA / RPM tabs):** **View** (read-only), **Edit** (if permitted), **Quality** (RPM: Quality/RTM/Admin only; MLA: quality workflow + verifier assignees). **+ Add sale** opens program picker when both MLA and RPM are enabled. Agents see sales where they are the agent; closers see sales where they are the closer; team TLs see their team's sales.
+- **Sales log (MLA / RPM tabs):** Opens on **RPM**. **View** (read-only), **Edit** (if permitted), **Quality** (RPM: Quality/RTM/Admin only; MLA: quality workflow + verifier assignees). **+ Add sale** opens program picker when both MLA and RPM are enabled. RPM Team/Agent/Closer (and day/client/feedback) filters are for Quality / HR / RTM / Admin / OP / CEO only — agents and TLs do not get those dropdowns. Team list is company dialing teams; closer list is people on the loaded sales (not HR). Agents see sales where they are the agent; closers see sales where they are the closer; team TLs see their team's sales.
 - **Quality ticket (1.6.11):** fix — **Sales permissions → Quality ticket** grants now apply correctly (was ignoring DB rows); payment card/bank sub-fields show on readonly tickets.
 - **Quality ticket (1.6.10):** quality surface defaults deny non-quality fields unless granted in **Sales permissions → Quality ticket** tab; agent/closer shown in summary only; non-editable fields are display-only; attachments gated by **Attachments** tab.
 - **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).

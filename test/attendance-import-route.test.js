@@ -20,11 +20,13 @@ test('attendance import route uses live attendance rows for protection', async (
   // getAttendanceForMonth (the new cache-first read path) so we can verify that
   // readAttendanceEventsForMonth is called before processImport runs.
   const originalGetConfig = store.getConfig;
+  const originalGetConfigForCompany = store.getConfigForCompany;
   const originalGetAttendanceForMonth = cache.getAttendanceForMonth;
   const originalGetEmployees = store.getEmployees;
   let called = false;
   try {
     store.getConfig = () => ({ attendanceFpRulesByMonth: {} });
+    store.getConfigForCompany = () => ({ attendanceFpRulesByMonth: {} });
     store.getEmployees = () => [];
     cache.getAttendanceForMonth = (ym) => {
       called = true;
@@ -37,6 +39,7 @@ test('attendance import route uses live attendance rows for protection', async (
     const handler = layer.route.stack[0].handle;
     const req = {
       body: { month: '2026-07', base64: Buffer.from('dummy').toString('base64'), dryRun: true },
+      query: {},
       userRole: { role: 'hr' },
       username: 'tester',
     };
@@ -52,6 +55,7 @@ test('attendance import route uses live attendance rows for protection', async (
     assert.equal(res.statusCode, 200);
   } finally {
     store.getConfig = originalGetConfig;
+    store.getConfigForCompany = originalGetConfigForCompany;
     store.getEmployees = originalGetEmployees;
     cache.getAttendanceForMonth = originalGetAttendanceForMonth;
     backend.useSupabase = originalUseSupabase;

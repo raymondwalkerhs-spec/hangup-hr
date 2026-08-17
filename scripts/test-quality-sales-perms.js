@@ -140,7 +140,10 @@ assert("OP not in default editSales", !roles.canEditSale({ role: "op" }));
 assert("OP can open quality ticket when assignee", roles.canOpenQualityTicketOnSale(opVerifier, sale));
 assert("OP cannot open quality ticket when not assignee", !roles.canOpenQualityTicketOnSale(opOther, sale));
 assert("quality role can work tickets", roles.canWorkQualityTicket({ role: "quality", employeeId: "HR-2", username: "HR-2" }));
-assert("HR role cannot work tickets by default", !roles.canWorkQualityTicket({ role: "hr", employeeId: "HR-2", username: "HR-2" }));
+assert(
+  "HR role cannot work tickets by default",
+  !roles.canWorkQualityTicket({ role: "hr", employeeId: "HR-default", username: "hr-default" })
+);
 assert("live app_users.role wins over frozen session role", roles.effectiveLoginRole("hr", { role: "quality" }) === "quality");
 assert("session role used when app user missing", roles.effectiveLoginRole("hr", null) === "hr");
 
@@ -264,6 +267,18 @@ assert("rtm reviewer eligible", qualityAssignees.isEligibleQualityReviewer({ id:
 assert("admin reviewer eligible", qualityAssignees.isEligibleQualityReviewer({ id: "ADM1", role: "admin", status: "active" }));
 assert("agent reviewer rejected", !qualityAssignees.isEligibleQualityReviewer({ id: "AG1", role: "agent", status: "active" }));
 assert("out reviewer rejected", !qualityAssignees.isEligibleQualityReviewer({ id: "QV2", role: "quality", status: "out" }));
+assert(
+  "HR-2 on Quality team is a reviewer even if ID still looks like HR",
+  qualityAssignees.isEligibleQualityReviewer({ id: "HR-2", american_name: "Eva", team: "Quality", status: "active", role: "hr" })
+);
+assert(
+  "HR-2 with QA lead_role is a reviewer",
+  qualityAssignees.isEligibleQualityReviewer({ id: "HR-2", american_name: "Eva", team: "HR", status: "active", lead_role: "QA" })
+);
+assert(
+  "HR-2 Quality is not a dialing agent",
+  qualityAssignees.isNonDialingReviewer({ id: "HR-2", american_name: "Eva", team: "Quality", status: "active", role: "quality" })
+);
 const assignOk = qualityAssignees.validateQualityAssignees(
   { reviewer: "QV1", assignVerifier: "OP1-01" },
   (id) => {

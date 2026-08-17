@@ -31,3 +31,20 @@
   background: var(--surface-elevated);
   color: var(--text);
 }
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.dateRow input[type="date"] {
+  min-width: 9.5rem;
+}
+.clearDate {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  line-height: 1;
+}

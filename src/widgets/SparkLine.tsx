@@ -14,7 +14,13 @@ export function SparkLine({
     <ResponsiveContainer width="100%" height={80}>
       <LineChart data={data}>
         <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
-        <Tooltip />
+        <Tooltip
+          formatter={(value: number) => [value, "Sales"]}
+          labelFormatter={(_, payload) => {
+            const row = payload?.[0]?.payload as { label?: string } | undefined;
+            return row?.label ? `Day ${row.label}` : "";
+          }}
+        />
       </LineChart>
     </ResponsiveContainer>
   );

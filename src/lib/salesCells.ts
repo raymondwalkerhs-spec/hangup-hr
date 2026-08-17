@@ -81,3 +81,35 @@ export function monthDateRange(month: string) {
   const last = new Date(y, m, 0).getDate();
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
 }
+
+function cairoNowParts(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  return Object.fromEntries(
+    fmt.formatToParts(date).filter((p) => p.type !== "literal").map((p) => [p.type, p.value])
+  ) as Record<string, string>;
+}
+
+function addUtcDays(isoDate: string, delta: number) {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Current Cairo working day. 00:00–01:59 → previous calendar day. */
+export function cairoWorkingDayToday(date = new Date()) {
+  const p = cairoNowParts(date);
+  let hour = parseInt(p.hour || "12", 10);
+  if (hour === 24) hour = 0;
+  const cal = `${p.year}-${p.month}-${p.day}`;
+  if (hour < 2) return addUtcDays(cal, -1);
+  return cal;
+}

@@ -41,6 +41,10 @@ function createApp() {
   const hasReactBuild = fs.existsSync(path.join(distPath, "index.html"));
   if (hasReactBuild) {
     app.use(express.static(distPath));
+  } else {
+    console.warn(
+      "[startup] public/dist/index.html is missing. The login screen will fall back to the legacy page. Run npm run build:web."
+    );
   }
   app.use("/api", apiRoutes);
   app.use("/api/supabase", require("./routes/supabase"));

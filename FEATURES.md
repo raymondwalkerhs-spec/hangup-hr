@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.3.23 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.3.25 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -210,14 +210,15 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 - **+ Add sale** shows MLA/RPM picker when the user can submit both
 
 ### Sales log
+- **Default program** — Opens on **RPM** (MLA tab still available)
 - **Search** — Customer name or phone (primary / alternative), digit-normalized
-- **RPM filters & sort** — Agent, closer, working day, team, reviewer/client feedback; latest→oldest by default
+- **RPM filters & sort** — Sort for all RPM viewers. Team / agent / closer / day / client / reviewer / client-feedback filters are **Quality, HR, RTM, Admin, OP, CEO only** (not Agent or TL). Team list is company-scoped **dialing** teams (no HS-2 on Hangup, no HR/Quality). Agent and closer lists are people already on the loaded sales; HR/Quality staff (e.g. Phoebe) are not closer options.
 - **Edit history** — Quality / RTM / Admin / CEO History panel on View / Edit / Quality (portal-owned, not Airtable)
 - **Submission correction** — Admin / RTM / CEO can correct MLA and RPM Cairo date+time (working day uses 2 AM grace)
 - **Roster freshness** — Submit-scope / auth refresh employee teams so dialing pickers stay current
 - Sorted by **submission date + time** (newest first)
 
-- **RPM quality ticket** — Editable quality workflow for Quality, RTM, Admin only; agents/TL/OP use View sale (field visibility via Sales permissions)
+- **RPM quality ticket** — Editable quality workflow for Quality, RTM, Admin only; agents/TL/OP use View sale (field visibility via Sales permissions). Reviewer accepts live Quality role (including HR-2 after HR→Quality). **Internal feedback** is not on Add sale; Quality / RTM / Admin see it on View, Edit, and Quality ticket; Admin / RTM edit by default (Sales permissions).
 - Per-sale records with dynamic MLA-Ray form (all fields in `form_data`) for MLA; RPM has its own form and field catalog
 - Day / week / month dashboards with status filters and stat cards
 - **Working day rule** — sales until 2 AM Cairo count on previous day
@@ -235,7 +236,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 
 ### Sale forms & tickets
 
-- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/**agent**/**closer** pickers (agents: self + team TLs; org closers: pick closer teams then agents, self default closer; TL: lead + closer teams; OP: any). Non-dialing home teams (e.g. Management) are not locked; sale unit/team follows the selected agent. No quality section on create; **no attachments section** on create; **draft auto-save** and **Clear all**; **Airtable-aligned required validation**; double-submit prevention
+- **Add sale** — dedicated submit surface: full editable form (not Sales permissions ACL); role-scoped unit/team/**agent**/**closer** pickers (agents: self + team TLs; org closers: pick closer teams then agents, self default closer; TL: lead + closer teams; OP: any). Non-dialing home teams (e.g. Management) are not locked; sale unit/team follows the selected agent. No quality section on create; **no attachments section** on create; **draft auto-save** (MLA and RPM) and **Clear all** (MLA); **Airtable-aligned required validation**; double-submit prevention
 - **Edit sale** — field visibility and edit rights from Sales permissions; **Delete sale** (Admin/RTM); **reassign unit/team/agent/closer** (Admin/RTM/CEO)
 - **View sale** — read-only detail modal (Access Control **View sale**); fields from Edit sale tab
 - **Quality ticket** — separate surface with its own view/edit grants; assigned OP/TL verifiers can update reviewer status when permitted; **reassign unit/team/agent/closer** for Admin/RTM/CEO. Access follows the **current** login role in Users (not a stale session role from before a transfer).
@@ -357,7 +358,9 @@ Per-user exceptions inherit live role defaults from Access Control.
 - Payroll totals (finance / HR / leadership)
 - Document expiry summary
 - Team and company sales dashboards (role-scoped)
-- **HS-2 company isolation** — Binary company model (`hangup` vs `hs2`). **Managing** toggle (top-left sidebar) for admin/ceo/hr with `manageHs2Company`; native HS-2 staff locked to **Viewing HS-2**. `?company=hs2` denied without `canAccessHs2Company`. HS-2 sales/data visible **only** in HS-2 company context (strict — not on Main Hangup tab).
+- **Sales this month** — Sales per calendar day for the selected month, scoped by role (agent = own; TL = team; closer = closed; OP = unit; RTM / Admin / Quality / HR = company)
+- **Attendance tiles** — Day off, NSNC, Half day, and WFH counts for the same employee scope
+- **HS-2 company isolation** — Binary company model (`hangup` vs `hs2`). **Managing** toggle (top-left sidebar) for admin/ceo/hr only (`manageHs2Company` is hard-denied for OP / TL / agent). Native HS-2 staff stay on their unit with no switcher. `?company=hs2` denied unless the user can access HS-2. HS-2 sales/data visible **only** in HS-2 company context (strict — not on Main Hangup tab).
 
 ### Reports
 
@@ -489,4 +492,4 @@ Separate Electron entry for Admin/RTM:
 
 ---
 
-*Last updated for release **2.3.23** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*
+*Last updated for release **2.3.25** · Detail: [`CHANGELOG.md`](CHANGELOG.md) · Updates: [`UPDATES.md`](UPDATES.md) · User guide: [`TUTORIAL.md`](TUTORIAL.md)*

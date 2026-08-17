@@ -47,6 +47,14 @@ else
   npm run rebuild:native
 fi
 
+echo "Building React UI (public/dist)..."
+npm run build:web
+if [[ ! -f public/dist/index.html ]]; then
+  echo "ERROR: React UI missing: public/dist/index.html was not produced."
+  echo "Packaging would serve the legacy login screen."
+  exit 1
+fi
+
 echo "Building macOS dmg + zip..."
 PUBLISH_FLAG=""
 if [[ "${CI:-}" == "true" ]]; then

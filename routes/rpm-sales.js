@@ -662,9 +662,14 @@ router.patch("/:id", async (req, res) => {
       const synced = rpmStatus.syncSaleStatusFromQuality(sanitizedForm);
 
       const employees = scopedEmployees(req, { hideOut: false });
-      const { validateQualityAssignees } = require("../lib/sales-quality-assignees");
+      const employeeAppRole = require("../lib/employee-app-role");
+      const { validateQualityAssignees, isNonDialingReviewer } = require("../lib/sales-quality-assignees");
       const rpmEmpById = new Map(employees.map((e) => [e.id, e]));
-      const assignCheck = validateQualityAssignees(synced.formData, (id) => rpmEmpById.get(id) || null);
+      const assignCheck = validateQualityAssignees(synced.formData, (id) => {
+        const scoped = rpmEmpById.get(id);
+        const emp = scoped || store.getEmployeeById(id);
+        return emp ? employeeAppRole.enrichEmployeeWithLiveAppRole(emp) : null;
+      });
       if (!assignCheck.ok) return res.status(400).json({ error: assignCheck.error });
 
       const built = rpmFieldAccess.buildPayloadFromBody(req.body, synced.formData);
@@ -686,31 +691,36 @@ router.patch("/:id", async (req, res) => {
       if (req.body.agentId) {
         const emp = store.getEmployeeById(req.body.agentId);
         if (!emp) return res.status(404).json({ error: "Agent not found" });
-        if (!roles.canAccessEmployee(req.userRole, emp)) {
+        const liveEmp = employeeAppRole.enrichEmployeeWithLiveAppRole(emp);
+        if (isNonDialingReviewer(liveEmp)) {
+          /* Reviewer IDs (e.g. HR-2 Eva / Quality) are not sale agents. */
+        } else if (!roles.canAccessEmployee(req.userRole, emp)) {
           return res.status(403).json({ error: "No access to assign this agent" });
-        }
-        if (canReassign && (ticketOnly || req.body.edit === true)) {
-          const orgTeams = await hrmsRepo.readOrgTeams();
-          const assignment = saleSubmitScope.validateSaleSubmitAssignment(
-            req.userRole,
-            {
-              agentId: req.body.agentId,
-              closerId: req.body.closerId ?? existing.closerId,
-              unit: req.body.unit || existing.unit,
-              team: req.body.team || existing.team,
-            },
-            employees,
-            {
-              program: "rpm",
-              orgTeams,
-              teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams),
-            }
-          );
-          if (!assignment.ok) return res.status(403).json({ error: assignment.error });
-          patch.agentId = req.body.agentId;
-          if (req.body.closerId !== undefined) patch.closerId = assignment.closerId;
         } else {
-          patch.agentId = req.body.agentId;
+          const reassigning = String(req.body.agentId) !== String(existing.agentId || "");
+          if (canReassign && (ticketOnly || req.body.edit === true) && reassigning) {
+            const orgTeams = await hrmsRepo.readOrgTeams();
+            const assignment = saleSubmitScope.validateSaleSubmitAssignment(
+              req.userRole,
+              {
+                agentId: req.body.agentId,
+                closerId: req.body.closerId ?? existing.closerId,
+                unit: req.body.unit || existing.unit,
+                team: req.body.team || existing.team,
+              },
+              employees,
+              {
+                program: "rpm",
+                orgTeams,
+                teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams),
+              }
+            );
+            if (!assignment.ok) return res.status(403).json({ error: assignment.error });
+            patch.agentId = req.body.agentId;
+            if (req.body.closerId !== undefined) patch.closerId = assignment.closerId;
+          } else if (reassigning) {
+            patch.agentId = req.body.agentId;
+          }
         }
       }
       if (req.body.closerId !== undefined && patch.closerId === undefined) patch.closerId = req.body.closerId;

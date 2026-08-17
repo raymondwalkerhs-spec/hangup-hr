@@ -45,7 +45,9 @@ export function filterEmployeesForSaleField(
       if (role === "quality" || role === "rtm" || role === "admin" || role === "ceo") return true;
       const id = idOf(e);
       if (/^(QA|RTM|MG)/i.test(id)) return true;
-      if (/^HR/i.test(id) && String(e.team || "").toLowerCase() === "quality") return true;
+      const team = String(e.team || "").toLowerCase();
+      if (team === "quality") return true;
+      if (/^HR/i.test(id) && (role === "quality" || team === "quality")) return true;
       return false;
     });
   } else if (filter === "verifiers") {

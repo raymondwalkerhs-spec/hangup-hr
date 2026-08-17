@@ -34,11 +34,33 @@ type CatalogField = {
   hideOnEdit?: boolean;
   hideOnCreate?: boolean;
   employeeFilter?: string;
+  selectPlaceholder?: boolean;
+  defaultValue?: string;
 };
 
 type AttachKind = { key: string; label?: string; canView?: boolean; canEdit?: boolean; canUpload?: boolean };
 
 type EmpMap = Map<string, SalePickerEmployee>;
+
+function sectionTitle(sec: string) {
+  if (sec === "internal") return "Internal feedback";
+  return sec;
+}
+
+function invalidateSalesQueries(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["sales"] });
+  qc.invalidateQueries({ queryKey: ["rpm-sales"] });
+  qc.invalidateQueries({ queryKey: ["sales-dashboard"] });
+  qc.invalidateQueries({ queryKey: ["sales-ops-month"] });
+}
+
+function fieldDefaultValue(f: CatalogField): string {
+  if (f.defaultValue) return String(f.defaultValue);
+  if (f.key === "reviewerFeedback") return "Pending";
+  if (f.key === "clientFeedback") return "Pending";
+  if (f.key === "internalFeedback") return "Pending process";
+  return "";
+}
 
 function deviceLabel(device: unknown) {
   const key = String(device || "").toLowerCase();
@@ -192,8 +214,7 @@ function SubmissionCorrectionPanel({
         body: JSON.stringify(withCompany({ submissionDateTime })),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rpm-sales"] });
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateSalesQueries(qc);
       qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
     },
@@ -275,14 +296,20 @@ function FieldGrid({
         const secFields = fields.filter((f) => (f.section || "general") === sec);
         if (!secFields.length) return null;
         return (
-          <FormSection key={sec} title={sec}>
+          <FormSection key={sec} title={sectionTitle(sec)}>
             <FormGrid wide>
               {secFields.map((f) => {
-                const val = String(form[f.key] ?? fd[f.key] ?? sale[f.key] ?? "");
+                const val = String(form[f.key] ?? fd[f.key] ?? sale[f.key] ?? fieldDefaultValue(f));
                 if (!editable || !f.canEdit) {
-                  const display = f.type === "employee"
-                    ? empById.get(val)?.american_name || val
-                    : saleCellValue(f.key, sale, empById);
+                  let display: string;
+                  if (f.type === "employee") {
+                    display = empById.get(val)?.american_name || val;
+                  } else if (f.type === "select" && val) {
+                    display = val;
+                  } else {
+                    const cell = saleCellValue(f.key, sale, empById);
+                    display = cell && cell !== "—" ? cell : val;
+                  }
                   return (
                     <FormField key={f.key} label={f.label || f.key}>
                       <div className={styles.readonly}>{display || "—"}</div>
@@ -293,7 +320,7 @@ function FieldGrid({
                   return (
                     <FormField key={f.key} label={f.label || f.key}>
                       <select value={val} onChange={(e) => setForm(f.key, e.target.value)}>
-                        <option value="">—</option>
+                        {f.selectPlaceholder !== false && <option value="">—</option>}
                         {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </FormField>
@@ -701,7 +728,7 @@ export function QualityTicketModal({
         })),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateSalesQueries(qc);
       onSaved?.();
       onOpenChange(false);
     },
@@ -868,7 +895,7 @@ export function RpmQualityTicketModal({
     const init: Record<string, string> = {};
     fields.forEach((f) => {
       const raw = fd[f.key] ?? sale[f.key];
-      init[f.key] = raw != null && raw !== "" ? String(raw) : f.key === "reviewerFeedback" ? "Pending" : f.key === "clientFeedback" ? "Pending" : "";
+      init[f.key] = raw != null && raw !== "" ? String(raw) : fieldDefaultValue(f);
     });
     setForm(init);
     const assignment = initAssignmentFromSale(sale);
@@ -884,21 +911,25 @@ export function RpmQualityTicketModal({
   }, [open]);
 
   const save = useMutation({
-    mutationFn: () =>
-      api(path(`/rpm-sales/${sale?.id}`), {
+    mutationFn: () => {
+      const body: Record<string, unknown> = {
+        edit: true,
+        qualityTicket: true,
+        formData: form,
+      };
+      if (canReassign) {
+        body.agentId = agentId;
+        body.closerId = closerId;
+        body.unit = unit;
+        body.team = team;
+      }
+      return api(path(`/rpm-sales/${sale?.id}`), {
         method: "PATCH",
-        body: JSON.stringify(withCompany({
-          edit: true,
-          qualityTicket: true,
-          formData: form,
-          agentId: canReassign ? agentId : sale?.agentId,
-          closerId: canReassign ? closerId : sale?.closerId,
-          unit: canReassign ? unit : sale?.unit,
-          team: canReassign ? team : sale?.team,
-        })),
-      }),
+        body: JSON.stringify(withCompany(body)),
+      });
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rpm-sales"] });
+      invalidateSalesQueries(qc);
       onSaved?.();
       onOpenChange(false);
     },
@@ -1036,6 +1067,15 @@ export function RpmViewSaleModal({
   );
 }
 
+function saleDraftHasContent(fields: Record<string, string> | undefined) {
+  return Object.values(fields || {}).some((v) => String(v || "").trim() !== "");
+}
+
+function rpmSaleDraftKey(username?: string, companyContext?: string) {
+  const company = String(companyContext || "hangup").trim() || "hangup";
+  return `hr_rpm_sale_draft_v1_${company}_${username || "anon"}`;
+}
+
 export function RpmSaleFormModal({
   sale,
   open,
@@ -1055,11 +1095,15 @@ export function RpmSaleFormModal({
   const [unit, setUnit] = useState("");
   const [team, setTeam] = useState("");
   const formInitialized = useRef(false);
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipDraftPersist = useRef(false);
+  const [draftReady, setDraftReady] = useState(false);
 
   const { user: meUser } = useAppStatus();
+  const draftUsername = meUser?.username as string | undefined;
   const canReassign = Boolean(meUser?.canReassignSaleLead);
   const canCorrectSubmissionDate = canCorrectSubmissionDateRole(meUser?.role);
-  const { path, withCompany } = useSaleApiScope();
+  const { path, withCompany, companyContext } = useSaleApiScope();
   const [submissionDateTime, setSubmissionDateTime] = useState("");
 
   const { data: catalog } = useQuery({
@@ -1085,14 +1129,19 @@ export function RpmSaleFormModal({
       if (f.canView === false) return false;
       if (!isEdit && f.hideOnCreate) return false;
       if (isEdit && f.hideOnEdit) return false;
-      if (!isEdit && (f.section === "quality" || f.section === "client")) return false;
+      if (!isEdit && (f.section === "quality" || f.section === "client" || f.section === "internal")) return false;
       if (f.key === "client" && !isEdit && (clientsData?.clients?.length || 0) > 0) return false;
       return true;
     });
   }, [catalog?.fields, isEdit, clientsData?.clients?.length]);
 
   useEffect(() => {
-    if (!open) { formInitialized.current = false; return; }
+    if (!open) {
+      formInitialized.current = false;
+      setDraftReady(false);
+      return;
+    }
+    skipDraftPersist.current = false;
     if (!isEdit && !submitScope) return;
     if (!catalog) return;
     if (formInitialized.current) return;
@@ -1101,7 +1150,7 @@ export function RpmSaleFormModal({
     fields.forEach((f) => {
       const raw = fd[f.key] ?? sale?.[f.key];
       if (f.type === "multi-checkbox" && Array.isArray(raw)) init[f.key] = raw.join(",");
-      else init[f.key] = String(raw ?? "");
+      else init[f.key] = raw != null && raw !== "" ? String(raw) : fieldDefaultValue(f);
     });
     if (isEdit) {
       setForm(init);
@@ -1113,14 +1162,62 @@ export function RpmSaleFormModal({
       formInitialized.current = true;
       return;
     }
-    const assignment = initAssignmentFromScope(submitScope!);
+    let assignment = initAssignmentFromScope(submitScope!);
+    if (draftUsername) {
+      try {
+        const raw = localStorage.getItem(rpmSaleDraftKey(draftUsername, companyContext));
+        if (raw) {
+          const draft = JSON.parse(raw) as {
+            fields?: Record<string, string>;
+            agentId?: string;
+            closerId?: string;
+            unit?: string;
+            team?: string;
+          };
+          if (saleDraftHasContent(draft.fields) && confirm("Resume your saved RPM sale draft?")) {
+            Object.assign(init, draft.fields);
+            assignment = {
+              agentId: draft.agentId || assignment.agentId,
+              closerId: draft.closerId || assignment.closerId,
+              unit: draft.unit || assignment.unit,
+              team: draft.team || assignment.team,
+            };
+          } else {
+            localStorage.removeItem(rpmSaleDraftKey(draftUsername, companyContext));
+          }
+        }
+      } catch { /* ignore */ }
+    }
     setForm(init);
     setAgentId(assignment.agentId);
     setCloserId(assignment.closerId);
     setUnit(assignment.unit);
     setTeam(assignment.team);
     formInitialized.current = true;
-  }, [open, isEdit, submitScope, catalog, fields, sale]);
+    setDraftReady(true);
+  }, [open, isEdit, submitScope, catalog, fields, sale, draftUsername, companyContext]);
+
+  useEffect(() => {
+    if (!open || isEdit || !draftUsername || !draftReady) return;
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    const key = rpmSaleDraftKey(draftUsername, companyContext);
+    const persist = () => {
+      if (skipDraftPersist.current) return;
+      if (!saleDraftHasContent(form)) {
+        localStorage.removeItem(key);
+        return;
+      }
+      localStorage.setItem(
+        key,
+        JSON.stringify({ savedAt: Date.now(), fields: form, agentId, closerId, unit, team })
+      );
+    };
+    draftTimer.current = setTimeout(persist, 800);
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      persist();
+    };
+  }, [open, isEdit, draftUsername, draftReady, companyContext, form, agentId, closerId, unit, team]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -1128,24 +1225,27 @@ export function RpmSaleFormModal({
       if (form.medicalConditions) {
         formData.medicalConditions = String(form.medicalConditions).split(",").map((s) => s.trim()).filter(Boolean);
       }
-      const body = {
+      const body: Record<string, unknown> = {
         edit: isEdit,
         formData,
-        agentId,
-        closerId,
-        unit,
-        team,
         phoneNumber: form.phoneNumber,
         fullName: form.fullName,
         client: form.client,
         memberId: form.memberId,
       };
+      if (!isEdit || canReassign) {
+        body.agentId = agentId;
+        body.closerId = closerId;
+        body.unit = unit;
+        body.team = team;
+      }
       if (isEdit) return api(path(`/rpm-sales/${sale?.id}`), { method: "PATCH", body: JSON.stringify(withCompany(body)) });
       return api(path("/rpm-sales"), { method: "POST", body: JSON.stringify(withCompany(body)) });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rpm-sales"] });
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      skipDraftPersist.current = true;
+      if (!isEdit && draftUsername) localStorage.removeItem(rpmSaleDraftKey(draftUsername, companyContext));
+      invalidateSalesQueries(qc);
       qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
       onOpenChange(false);
@@ -1417,7 +1517,7 @@ export function SaleFormModal({
     },
     onSuccess: () => {
       if (!isEdit && draftUsername) localStorage.removeItem(saleDraftKey(draftUsername));
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateSalesQueries(qc);
       qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
       onOpenChange(false);
@@ -1427,7 +1527,7 @@ export function SaleFormModal({
   const deleteSale = useMutation({
     mutationFn: () => api(path(`/sales/${sale?.id}`), { method: "DELETE" }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["sales"] });
+      invalidateSalesQueries(qc);
       onOpenChange(false);
     },
   });

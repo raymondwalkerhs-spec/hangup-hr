@@ -7,6 +7,8 @@ type SalesIntentState = {
   /** Explicit program, or undefined to auto-resolve / show picker. */
   program?: SalesProgram | null;
   requestNewSale: (program?: SalesProgram | null) => void;
+  /** Clear leftover intent so a later /sales visit does not reopen the form. */
+  consumeNewSale: () => void;
 };
 
 export const useSalesIntentStore = create<SalesIntentState>((set) => ({
@@ -17,4 +19,5 @@ export const useSalesIntentStore = create<SalesIntentState>((set) => ({
       tick: s.tick + 1,
       program,
     })),
+  consumeNewSale: () => set({ tick: 0, program: undefined }),
 }));

@@ -12,8 +12,6 @@ export function CompanySwitcher({ collapsed }: { collapsed?: boolean }) {
   const statusUser = (status?.user || {}) as Record<string, unknown>;
   const canManage =
     statusUser.canManageHs2Company === true || status?.canManageHs2Company === true;
-  const canAccessHs2 =
-    statusUser.canAccessHs2Company === true || status?.canAccessHs2Company === true;
   const isHs2 = companyContext === "hs2";
 
   const switchTo = (next: "hangup" | "hs2") => {
@@ -24,18 +22,11 @@ export function CompanySwitcher({ collapsed }: { collapsed?: boolean }) {
     refreshStatus().catch(() => {});
   };
 
-  if (!canAccessHs2 && !canManage) {
+  if (!canManage) {
     return null;
   }
 
   if (collapsed) {
-    if (!canManage) {
-      return (
-        <div className={styles.collapsedBadge} title={isHs2 ? "HS-2" : "Main Hangup"}>
-          {isHs2 ? "2" : "H"}
-        </div>
-      );
-    }
     return (
       <button
         type="button"
@@ -48,34 +39,25 @@ export function CompanySwitcher({ collapsed }: { collapsed?: boolean }) {
     );
   }
 
-  if (canManage) {
-    return (
-      <div className={styles.switcher} role="group" aria-label="Company to manage">
-        <span className={styles.label}>Managing</span>
-        <div className={styles.btns}>
-          <button
-            type="button"
-            className={`${styles.btn} ${!isHs2 ? styles.active : ""}`}
-            onClick={() => switchTo("hangup")}
-          >
-            Main Hangup
-          </button>
-          <button
-            type="button"
-            className={`${styles.btn} ${isHs2 ? styles.active : ""}`}
-            onClick={() => switchTo("hs2")}
-          >
-            HS-2
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.viewing}>
-      <span className={styles.label}>Viewing</span>
-      <strong>{isHs2 ? "HS-2" : "Main Hangup"}</strong>
+    <div className={styles.switcher} role="group" aria-label="Company to manage">
+      <span className={styles.label}>Managing</span>
+      <div className={styles.btns}>
+        <button
+          type="button"
+          className={`${styles.btn} ${!isHs2 ? styles.active : ""}`}
+          onClick={() => switchTo("hangup")}
+        >
+          Main Hangup
+        </button>
+        <button
+          type="button"
+          className={`${styles.btn} ${isHs2 ? styles.active : ""}`}
+          onClick={() => switchTo("hs2")}
+        >
+          HS-2
+        </button>
+      </div>
     </div>
   );
 }

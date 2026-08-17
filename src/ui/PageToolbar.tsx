@@ -72,3 +72,32 @@ export function FilterSelect({
     </label>
   );
 }
+
+export function FilterDate({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className={styles.field}>
+      <span className="muted">{label}</span>
+      <span className={styles.dateRow}>
+        <input
+          type="date"
+          className={styles.select}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {value ? (
+          <button type="button" className={styles.clearDate} onClick={() => onChange("")} aria-label="Clear date">
+            ×
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+}

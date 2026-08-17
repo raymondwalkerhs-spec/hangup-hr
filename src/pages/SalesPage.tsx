@@ -8,7 +8,7 @@ import { api, fmt, monthLabel } from "@/api/client";
 import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAppStatus } from "@/hooks/useAppStatus";
-import { monthDateRange, saleCellValue } from "@/lib/salesCells";
+import { monthDateRange, saleCellValue, cairoWorkingDayToday } from "@/lib/salesCells";
 import { ViewSaleModal, QualityTicketModal, RpmQualityTicketModal, RpmViewSaleModal, RpmSaleFormModal, SaleFormModal } from "@/features/sales/SaleModals";
 import { SaleProgramPickerDialog } from "@/features/sales/SaleProgramPickerDialog";
 import { useSaleSubmitPrograms } from "@/features/sales/useSaleSubmitPrograms";
@@ -16,18 +16,47 @@ import { parseSalesProgram, type SalesProgram } from "@/features/sales/sale-prog
 import { canOpenQualityTicketForSale } from "@/lib/salesEmployeeFilters";
 import { useProcessNewSaleRequest } from "@/features/sales/useProcessNewSaleRequest";
 import { useSalesIntentStore } from "@/stores/sales-intent-store";
-import { useRpmSubmitScope } from "@/features/sales/SaleAssignmentPicker";
+import { companyForUnit } from "@/lib/companyUnit";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { DataGrid } from "@/ui/DataGrid";
 import { Card, StatTile } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
+import { PageToolbar, SearchField, FilterSelect, FilterDate } from "@/ui/PageToolbar";
 
 type Row = Record<string, unknown>;
 type ListColumn = { columnKey: string; label?: string };
-type Emp = { id: string; american_name?: string; team?: string };
+type Emp = { id: string; american_name?: string; team?: string; unit?: string; role?: string; position?: string };
+type OrgUnitSection = { unit?: string; teams?: { name?: string; dialsSales?: boolean }[] };
 
 const CLOSER_ROLES = new Set(["agent", "tl", "op"]);
+const RPM_LOG_FILTER_ROLES = new Set(["quality", "hr", "rtm", "admin", "op", "ceo"]);
+const NON_DIALING_TEAM_NAMES = new Set([
+  "hr",
+  "quality",
+  "back-end",
+  "backend",
+  "management",
+  "hs-mgmt",
+  "hr-mgmt",
+]);
+
+function isDialingFilterTeam(name: string, dialsSales?: boolean) {
+  if (dialsSales === false) return false;
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return false;
+  return !NON_DIALING_TEAM_NAMES.has(n);
+}
+
+function isSupportStaffForCloserFilter(emp?: Emp | null, fallbackId?: string) {
+  const id = String(emp?.id || fallbackId || "").trim().toUpperCase();
+  if (/^(HR|QA|RTM|OF|NW)/.test(id)) return true;
+  const role = String(emp?.role || "").trim().toLowerCase();
+  if (["hr", "quality", "rtm", "finance", "it", "office_assistant"].includes(role)) return true;
+  const team = String(emp?.team || "").trim().toLowerCase();
+  if (["hr", "quality"].includes(team)) return true;
+  const pos = String(emp?.position || "").trim().toLowerCase();
+  return pos === "hr" || pos.includes("human resource") || pos.startsWith("hr ");
+}
 
 const RPM_REVIEWER_FEEDBACK = ["Pending", "Done"];
 const RPM_CLIENT_FEEDBACK = ["Pending", "Approved", "Denied", "Callback", "Retransfer"];
@@ -77,17 +106,18 @@ function saleMatchesCustomerSearch(sale: Row, query: string) {
 
 export function SalesPage() {
   const month = useAppStore((s) => s.month);
-  const { path, companyContext } = useCompanyScope();
+  const { path, companyContext, isHs2 } = useCompanyScope();
   const { user } = useAppStatus();
   const userRole = String(user?.role || "").toLowerCase();
+  const canUseRpmLogFilters = RPM_LOG_FILTER_ROLES.has(userRole);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [program, setProgram] = useState<SalesProgram>("mla");
+  const [program, setProgram] = useState<SalesProgram>("rpm");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [teamFilter, setTeamFilter] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [closerFilter, setCloserFilter] = useState("");
-  const [dayFilter, setDayFilter] = useState("");
+  const [dayFilter, setDayFilter] = useState(() => cairoWorkingDayToday());
   const [clientFilter, setClientFilter] = useState("");
   const [reviewerFeedbackFilter, setReviewerFeedbackFilter] = useState("");
   const [clientFeedbackFilter, setClientFeedbackFilter] = useState("");
@@ -99,6 +129,7 @@ export function SalesPage() {
   const [programPickerOpen, setProgramPickerOpen] = useState(false);
   const newSaleIntentTick = useSalesIntentStore((s) => s.tick);
   const newSaleIntentProgram = useSalesIntentStore((s) => s.program);
+  const consumeNewSale = useSalesIntentStore((s) => s.consumeNewSale);
 
   const {
     enabledPrograms,
@@ -136,18 +167,20 @@ export function SalesPage() {
     if (!submitScopeReady) return;
 
     processNewSaleRequest(parseSalesProgram(searchParams.get("program")) ?? newSaleIntentProgram);
+    consumeNewSale();
 
     const next = new URLSearchParams(searchParams);
     next.delete("action");
     next.delete("program");
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, submitScopeReady, processNewSaleRequest, newSaleIntentProgram]);
+  }, [searchParams, setSearchParams, submitScopeReady, processNewSaleRequest, newSaleIntentProgram, consumeNewSale]);
 
   useEffect(() => {
     if (!newSaleIntentTick) return;
     if (!submitScopeReady) return;
     processNewSaleRequest(newSaleIntentProgram);
-  }, [newSaleIntentTick, newSaleIntentProgram, submitScopeReady, processNewSaleRequest]);
+    consumeNewSale();
+  }, [newSaleIntentTick, newSaleIntentProgram, submitScopeReady, processNewSaleRequest, consumeNewSale]);
 
   useEffect(() => {
     const prog = parseSalesProgram(searchParams.get("program"));
@@ -156,23 +189,30 @@ export function SalesPage() {
 
   const { from, to } = monthDateRange(month);
   const salesBase = path(program === "rpm" ? "/rpm-sales" : "/sales");
+  const applyRpmExtraFilters = program === "rpm" && canUseRpmLogFilters;
+
+  const { data: orgRes } = useQuery({
+    queryKey: ["hrms-org-structure", companyContext],
+    queryFn: () => api<{ units?: OrgUnitSection[] }>(path("/hrms/org-structure")),
+    enabled: applyRpmExtraFilters,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!submitScopeReady) return;
+    if (program === "rpm" && !canSubmitRpm && canSubmitMla) setProgram("mla");
     if (program === "mla" && !canSubmitMla && canSubmitRpm) setProgram("rpm");
   }, [submitScopeReady, program, canSubmitMla, canSubmitRpm]);
 
   useEffect(() => {
     setAgentFilter("");
     setCloserFilter("");
-    setDayFilter("");
+    setDayFilter(program === "rpm" ? cairoWorkingDayToday() : "");
     setClientFilter("");
     setReviewerFeedbackFilter("");
     setClientFeedbackFilter("");
     setSortOrder("latest");
   }, [program]);
-
-  const { data: rpmScope } = useRpmSubmitScope(program === "rpm");
 
   const { data: salesRes, isLoading, error, refetch } = useQuery({
     queryKey: [
@@ -190,24 +230,37 @@ export function SalesPage() {
       reviewerFeedbackFilter,
       clientFeedbackFilter,
       sortOrder,
+      applyRpmExtraFilters,
       companyContext,
     ],
     queryFn: () => {
-      const q = new URLSearchParams({ from, to, dateBasis: "submission" });
+      const q = new URLSearchParams();
+      if (program === "rpm" && applyRpmExtraFilters && dayFilter) {
+        q.set("day", dayFilter);
+      } else {
+        q.set("from", from);
+        q.set("to", to);
+        q.set("dateBasis", "submission");
+      }
       if (statusFilter) q.set("status", statusFilter);
-      if (teamFilter) q.set("team", teamFilter);
+      if (program !== "rpm" && teamFilter) q.set("team", teamFilter);
       if (program === "rpm") {
-        if (retransferOnly) q.set("retransfer", "1");
-        if (agentFilter) q.set("agentId", agentFilter);
-        if (closerFilter) q.set("closerId", closerFilter);
-        if (dayFilter) q.set("day", dayFilter);
-        if (clientFilter) q.set("client", clientFilter);
-        if (reviewerFeedbackFilter) q.set("reviewerFeedback", reviewerFeedbackFilter);
-        if (clientFeedbackFilter) q.set("clientFeedback", clientFeedbackFilter);
         if (sortOrder) q.set("sort", sortOrder);
+        if (applyRpmExtraFilters) {
+          if (teamFilter) q.set("team", teamFilter);
+          if (retransferOnly) q.set("retransfer", "1");
+          if (agentFilter) q.set("agentId", agentFilter);
+          if (closerFilter) q.set("closerId", closerFilter);
+          if (clientFilter) q.set("client", clientFilter);
+          if (reviewerFeedbackFilter) q.set("reviewerFeedback", reviewerFeedbackFilter);
+          if (clientFeedbackFilter) q.set("clientFeedback", clientFeedbackFilter);
+        }
       }
       return api<{ sales: Row[]; listColumns?: ListColumn[]; statuses?: string[] }>(`${salesBase}?${q}`);
     },
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: program === "rpm" ? 30_000 : false,
   });
 
   const { data: empData } = useQuery({
@@ -252,34 +305,51 @@ export function SalesPage() {
     return list;
   }, [salesRes?.sales, search]);
 
-  const teams = useMemo(
-    () => [...new Set((empData?.employees || []).map((e) => e.team).filter(Boolean))].sort() as string[],
-    [empData?.employees]
-  );
+  const teams = useMemo(() => {
+    if (program === "rpm") {
+      const names = new Set<string>();
+      for (const section of orgRes?.units || []) {
+        const unit = String(section.unit || "");
+        const unitCompany = companyForUnit(unit);
+        if (isHs2 && unitCompany !== "hs2") continue;
+        if (!isHs2 && unitCompany === "hs2") continue;
+        for (const team of section.teams || []) {
+          const name = String(team.name || "").trim();
+          if (isDialingFilterTeam(name, team.dialsSales)) names.add(name);
+        }
+      }
+      return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    }
+    return [...new Set((empData?.employees || []).map((e) => e.team).filter(Boolean))].sort() as string[];
+  }, [program, orgRes?.units, empData?.employees, isHs2]);
 
   const agentOptions = useMemo(() => {
-    const fromScope = (rpmScope?.agents || []).map((a) => a.id);
-    const fromSales = (salesRes?.sales || []).map((s) => String(s.agentId || "")).filter(Boolean);
-    const ids = [...new Set([...fromScope, ...fromSales])].filter(Boolean).sort();
+    const ids = [...new Set((salesRes?.sales || []).map((s) => String(s.agentId || "")).filter(Boolean))].sort();
     return ids.map((id) => {
-      const emp = empById.get(id) || (rpmScope?.agents || []).find((a) => a.id === id);
+      const emp = empById.get(id);
       return { value: id, label: `${emp?.american_name || id} (${id})` };
     });
-  }, [rpmScope?.agents, salesRes?.sales, empById]);
+  }, [salesRes?.sales, empById]);
 
   const closerOptions = useMemo(() => {
-    const fromScope = (rpmScope?.closers || []).map((c) => c.id);
-    const fromSales = (salesRes?.sales || []).map((s) => String(s.closerId || "")).filter(Boolean);
-    const ids = [...new Set([...fromScope, ...fromSales])].filter(Boolean).sort();
-    return ids.map((id) => {
-      const emp = empById.get(id) || (rpmScope?.closers || []).find((c) => c.id === id);
-      return { value: id, label: `${emp?.american_name || id} (${id})` };
-    });
-  }, [rpmScope?.closers, salesRes?.sales, empById]);
+    const ids = [...new Set((salesRes?.sales || []).map((s) => String(s.closerId || "")).filter(Boolean))];
+    return ids
+      .filter((id) => !isSupportStaffForCloserFilter(empById.get(id), id))
+      .sort()
+      .map((id) => {
+        const emp = empById.get(id);
+        return { value: id, label: `${emp?.american_name || id} (${id})` };
+      });
+  }, [salesRes?.sales, empById]);
 
-  const dayOptions = useMemo(() => {
-    return [...new Set((salesRes?.sales || []).map((s) => String(s.workingDay || "")).filter(Boolean))].sort();
-  }, [salesRes?.sales]);
+  useEffect(() => {
+    if (closerFilter && !closerOptions.some((o) => o.value === closerFilter)) setCloserFilter("");
+  }, [closerFilter, closerOptions]);
+
+  useEffect(() => {
+    if (program !== "rpm" || !orgRes) return;
+    if (teamFilter && !teams.includes(teamFilter)) setTeamFilter("");
+  }, [program, teamFilter, teams, orgRes]);
 
   const clientOptions = useMemo(() => {
     return [
@@ -373,6 +443,19 @@ export function SalesPage() {
         <Tabs.List style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", alignItems: "center" }}>
           <span className="muted" style={{ fontSize: "0.85rem", marginRight: "0.25rem" }}>Program:</span>
           <Tabs.Trigger
+            value="rpm"
+            style={{
+              padding: "0.35rem 0.75rem",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: program === "rpm" ? "var(--accent, #2563eb)" : "transparent",
+              color: program === "rpm" ? "#fff" : "inherit",
+              fontWeight: program === "rpm" ? 600 : 400,
+            }}
+          >
+            RPM
+          </Tabs.Trigger>
+          <Tabs.Trigger
             value="mla"
             title={!canSubmitMla ? "View existing MLA sales (new MLA submit disabled)" : undefined}
             style={{
@@ -386,37 +469,29 @@ export function SalesPage() {
           >
             MLA
           </Tabs.Trigger>
-          <Tabs.Trigger
-            value="rpm"
-            style={{
-              padding: "0.35rem 0.75rem",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: program === "rpm" ? "var(--accent, #2563eb)" : "transparent",
-              color: program === "rpm" ? "#fff" : "inherit",
-              fontWeight: program === "rpm" ? 600 : 400,
-            }}
-          >
-            RPM
-          </Tabs.Trigger>
         </Tabs.List>
       </Tabs.Root>
 
       <PageToolbar>
         <SearchField value={search} onChange={setSearch} placeholder="Search customer name or phone" />
         <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={salesRes?.statuses || []} />
-        <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={teams} />
+        {program !== "rpm" && (
+          <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={teams} />
+        )}
         {program === "rpm" && (
+          <FilterSelect
+            label="Sort"
+            value={sortOrder}
+            onChange={(v) => setSortOrder((v as "latest" | "oldest") || "latest")}
+            options={[
+              { value: "latest", label: "Latest → oldest" },
+              { value: "oldest", label: "Oldest → latest" },
+            ]}
+          />
+        )}
+        {applyRpmExtraFilters && (
           <>
-            <FilterSelect
-              label="Sort"
-              value={sortOrder}
-              onChange={(v) => setSortOrder((v as "latest" | "oldest") || "latest")}
-              options={[
-                { value: "latest", label: "Latest → oldest" },
-                { value: "oldest", label: "Oldest → latest" },
-              ]}
-            />
+            <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={teams} />
             <FilterSelect
               label="Agent"
               value={agentFilter}
@@ -429,7 +504,7 @@ export function SalesPage() {
               onChange={setCloserFilter}
               options={closerOptions.map((o) => ({ value: o.value, label: o.label }))}
             />
-            <FilterSelect label="Day" value={dayFilter} onChange={setDayFilter} options={dayOptions} />
+            <FilterDate label="Day" value={dayFilter} onChange={setDayFilter} />
             <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter} options={clientOptions} />
             <FilterSelect
               label="Reviewer feedback"

@@ -20,7 +20,24 @@ import "react-resizable/css/styles.css";
 import styles from "./DashboardPage.module.css";
 
 const ResponsiveGrid = WidthProvider(GridLayout);
-const LAYOUT_KEY = "hangup-dashboard-layout";
+const LAYOUT_KEY = "hangup-dashboard-layout-v2";
+
+const STATUS_LABELS: Record<string, string> = {
+  passed: "Passed",
+  pending: "Pending",
+  callback: "Callback",
+  denied: "Denied",
+  postdated: "Postdated",
+};
+
+const SCOPE_LABELS: Record<string, string> = {
+  company: "All teams",
+  unit: "Your unit",
+  team: "Your team",
+  closer: "Sales you closed",
+  "team+closed": "Team + closed",
+  self: "Your sales",
+};
 
 const defaultLayout = [
   { i: "headcount", x: 0, y: 0, w: 3, h: 2, minH: 2 },
@@ -29,7 +46,24 @@ const defaultLayout = [
   { i: "units", x: 9, y: 0, w: 3, h: 2, minH: 2 },
   { i: "sales", x: 0, y: 2, w: 6, h: 3, minH: 3 },
   { i: "spark", x: 6, y: 2, w: 6, h: 3, minH: 3 },
+  { i: "attDayOff", x: 0, y: 5, w: 3, h: 2, minH: 2 },
+  { i: "attNsnc", x: 3, y: 5, w: 3, h: 2, minH: 2 },
+  { i: "attHalf", x: 6, y: 5, w: 3, h: 2, minH: 2 },
+  { i: "attWfh", x: 9, y: 5, w: 3, h: 2, minH: 2 },
 ];
+
+type OpsMonth = {
+  scope?: string;
+  dailySales?: { date: string; sales: number }[];
+  attendance?: {
+    dayOff?: number;
+    nsnc?: number;
+    halfDay?: number;
+    wfh?: number;
+    attended?: number;
+  };
+  employeeCount?: number;
+};
 
 function loadLayout() {
   try {
@@ -39,6 +73,10 @@ function loadLayout() {
     /* ignore */
   }
   return defaultLayout;
+}
+
+function isActiveEmployeeStatus(status?: string) {
+  return String(status || "").trim().toLowerCase() === "active";
 }
 
 export function DashboardPage() {
@@ -64,10 +102,18 @@ export function DashboardPage() {
   const { data: salesDash } = useQuery({
     queryKey: ["sales-dashboard", month, filters.team, companyContext],
     queryFn: () => {
-      const q = new URLSearchParams({ month });
+      const q = new URLSearchParams({
+        period: "month",
+        date: `${month}-01`,
+        month,
+      });
       if (filters.team) q.set("team", filters.team);
       return api<Record<string, unknown>>(path(`/sales/dashboard?${q}`));
     },
+  });
+  const { data: opsMonth } = useQuery({
+    queryKey: ["sales-ops-month", month, companyContext],
+    queryFn: () => api<OpsMonth>(path("/sales/ops-month", { month })),
   });
 
   const onLayoutChange = useCallback((next: typeof defaultLayout) => {
@@ -81,10 +127,19 @@ export function DashboardPage() {
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
   const employees = empData?.employees || [];
-  const active = employees.filter((e) => e.status === "Active").length;
-  const salesByStatus = Object.entries((salesDash?.byStatus as Record<string, number>) || {}).map(
-    ([name, value]) => ({ name, value })
-  );
+  const active = employees.filter((e) => isActiveEmployeeStatus(e.status)).length;
+  const totals = (salesDash?.totals || salesDash?.byStatus || {}) as Record<string, number>;
+  const salesByStatus = Object.entries(totals)
+    .filter(([, value]) => typeof value === "number")
+    .map(([name, value]) => ({ name: STATUS_LABELS[name] || name, value }));
+  const scopeKey = String(opsMonth?.scope || salesDash?.scope || "");
+  const salesScopeLabel = filters.team || SCOPE_LABELS[scopeKey] || "Scoped";
+  const dailySpark = (opsMonth?.dailySales || []).map((d) => ({
+    v: d.sales,
+    label: d.date.slice(8),
+  }));
+  const att = opsMonth?.attendance || {};
+  const attMax = Math.max(att.dayOff || 0, att.nsnc || 0, att.halfDay || 0, att.wfh || 0, 1);
 
   return (
     <div>
@@ -128,7 +183,7 @@ export function DashboardPage() {
         </div>
         <div key="active">
           <WidgetCard title="Active" className="drag-handle">
-            <KpiRing value={active} label="Active agents" max={Math.max(employees.length, 1)} />
+            <KpiRing value={active} label="Active employees" max={Math.max(employees.length, 1)} />
           </WidgetCard>
         </div>
         <div key="payroll">
@@ -150,15 +205,33 @@ export function DashboardPage() {
           </WidgetCard>
         </div>
         <div key="sales">
-          <WidgetCard title="Sales by status" scope={filters.team || "All teams"} className="drag-handle">
-            <LinkedBarChart data={salesByStatus} filterKey="team" />
+          <WidgetCard title="Sales by status" scope={salesScopeLabel} className="drag-handle">
+            <LinkedBarChart data={salesByStatus} filterKey="status" />
           </WidgetCard>
         </div>
         <div key="spark">
-          <WidgetCard title="Payroll trend" className="drag-handle">
-            <SparkLine
-              data={[1, 2, 3, 4, 5].map((v) => ({ v: (payData?.totals?.totalNet || 0) * (0.9 + v * 0.02) }))}
-            />
+          <WidgetCard title="Sales this month" scope={salesScopeLabel} className="drag-handle">
+            <SparkLine data={dailySpark} />
+          </WidgetCard>
+        </div>
+        <div key="attDayOff">
+          <WidgetCard title="Day off" className="drag-handle">
+            <KpiRing value={att.dayOff || 0} label="Day-OFF" max={attMax} />
+          </WidgetCard>
+        </div>
+        <div key="attNsnc">
+          <WidgetCard title="NSNC" className="drag-handle">
+            <KpiRing value={att.nsnc || 0} label="NSNC" max={attMax} />
+          </WidgetCard>
+        </div>
+        <div key="attHalf">
+          <WidgetCard title="Half day" className="drag-handle">
+            <KpiRing value={att.halfDay || 0} label="Half Day" max={attMax} />
+          </WidgetCard>
+        </div>
+        <div key="attWfh">
+          <WidgetCard title="WFH" className="drag-handle">
+            <KpiRing value={att.wfh || 0} label="WFH" max={attMax} />
           </WidgetCard>
         </div>
       </ResponsiveGrid>

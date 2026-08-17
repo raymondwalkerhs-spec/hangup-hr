@@ -4,10 +4,29 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
-## [2.3.24] — 2026-08-17
+## [2.3.26] — 2026-08-17
+
+### Changed
+- **RPM sales log filters** — Team / agent / closer / day / client / feedback dropdowns are Quality, HR, RTM, Admin, OP, and CEO only (not Agent or TL). Team list is current-company **dialing** teams (Hangup excludes HS-2 and HR/Quality). Agent and closer options are IDs already on the loaded sales; HR/Quality staff (e.g. Phoebe) are excluded from closer.
+- **RPM Day filter** — Calendar date (clearable), defaulted to the current Cairo **working day** (00:00–01:59 → previous day). Filtering by day uses `working_day` and includes grace sales whose submission date is the next calendar day.
+- **HS-2 switcher** — Managing toggle is admin/ceo/hr only. OP / TL / agent cannot get the switcher via Access Control. Hangup-only users no longer see Viewing HS-2 chrome.
+- **Dashboard** — Sales-by-status uses the monthly dashboard contract. Payroll sparkline replaced by a role-scoped sales-per-day trend plus Day off / NSNC / Half day / WFH tiles (agent = own, TL = team, closer = closed, OP = unit, RTM/Admin/Quality/HR = company).
+
+### Added
+- **RPM submit draft** — Add RPM sale auto-saves to the browser. Closing by mistake and opening the form again offers to resume the draft; a successful submit clears it.
 
 ### Fixed
-- Clean Windows NSIS rebuild and corrected updater release assets so clients receive the 2.3.24 package.
+- **RPM reviewer (Eva / HR-2)** — Quality logins with an HR employee ID can be chosen as reviewer. Saving a reviewer no longer runs sale-agent assignment checks, which previously returned “Agent not allowed for your role”.
+- **Add sale auto-open** — Opening Sales from the sidebar no longer reopens the submit form. The form opens only from **+ Add sale**, dock **Sale**, or command palette New sale.
+- **Dashboard active count** — Treats employee status as Active case-insensitively.
+
+## [2.3.25] — 2026-08-17
+
+### Changed
+- **Sales log** — Default program tab is RPM (MLA remains available).
+
+### Fixed
+- **Packaged login UI** — Installer now includes the React `public/dist` bundle so the DNA login ships (2.3.24 fell back to the legacy orb screen). `build:web` is required before NSIS pack.
 
 ## [2.3.23] — 2026-08-14
 

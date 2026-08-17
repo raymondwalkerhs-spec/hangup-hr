@@ -2,6 +2,7 @@ const express = require("express");
 const business = require("../lib/business-repo");
 const salesScope = require("../lib/sales-scope");
 const periodGrid = require("../lib/sales-period-grid");
+const opsMonth = require("../lib/sales-ops-month");
 const teamDashboard = require("../lib/team-dashboard");
 const rpmRepo = require("../lib/rpm-sales-repo");
 const usersAdmin = require("../lib/users-admin");
@@ -107,9 +108,14 @@ function validateQualityAssignees(formData, getEmployeeById) {
 }
 
 function scopedEmployeeLookup(req) {
+  const employeeAppRole = require("../lib/employee-app-role");
   const scoped = scopedEmployees(req, { hideOut: false });
   const byId = new Map(scoped.map((e) => [e.id, e]));
-  return (id) => byId.get(id) || null;
+  return (id) => {
+    const scopedEmp = byId.get(id);
+    const emp = scopedEmp || store.getEmployeeById(id);
+    return emp ? employeeAppRole.enrichEmployeeWithLiveAppRole(emp) : null;
+  };
 }
 
 function normalizePaymentMethod(method) {
@@ -397,24 +403,74 @@ router.get("/team-dashboard", async (req, res) => {
   }
 });
 
+router.get("/ops-month", async (req, res) => {
+  try {
+    const month = String(req.query.month || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month=YYYY-MM required" });
+    }
+    const employees = store.getEmployees({ hideOut: false });
+    const companyEmps = companyContext.filterEmployeesByCompany(
+      employees,
+      companyContext.resolveCompanyContextForUser(req.query.company, req.userRole)
+    );
+    const bounds = periodGrid.buildPeriodBounds("month", `${month}-01`);
+    const expanded = opsMonth.expandRangeForWorkingDay(bounds.from, bounds.to);
+
+    let sales = await business.readSales({
+      from: expanded.from,
+      to: expanded.to,
+      dateBasis: req.query.dateBasis || "either",
+    });
+    let rpmSales = [];
+    try {
+      rpmSales = await rpmRepo.readRpmSales({ from: expanded.from, to: expanded.to });
+    } catch {
+      rpmSales = [];
+    }
+    sales = [...sales, ...rpmSales];
+    sales = filterSalesForRequest(sales, req);
+
+    const attendanceRecords = store.getAttendanceEvents(month) || [];
+    const payload = opsMonth.buildOpsMonth({
+      month,
+      sales,
+      employees: companyEmps,
+      attendanceRecords,
+      userRole: req.userRole,
+    });
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/dashboard", async (req, res) => {
   try {
-    const employees = scopedEmployees(req);
-    const grants = await business.readSalesVisibilityGrants(req.username);
+    const range = opsMonth.resolveDashboardRange(req.query);
+    const expanded = opsMonth.expandRangeForWorkingDay(range.from, range.to);
     let sales = await business.readSales({
-      from: req.query.from,
-      to: req.query.to,
-      dateBasis: req.query.dateBasis || "submission",
+      from: expanded.from,
+      to: expanded.to,
+      dateBasis: req.query.dateBasis || "either",
     });
-    sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
-    sales = filterSalesByCompany(sales, employees);
+    let rpmSales = [];
+    try {
+      rpmSales = await rpmRepo.readRpmSales({ from: expanded.from, to: expanded.to });
+    } catch {
+      rpmSales = [];
+    }
+    sales = [...sales, ...rpmSales];
+    sales = opsMonth.filterSalesForDashboardOps(sales, req.userRole);
     sales = filterSalesForRequest(sales, req);
     sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
     const dashboard = salesScope.buildSalesDashboard(sales, {
-      period: req.query.period || "day",
-      date: req.query.date,
+      period: range.period || "month",
+      date: range.date,
       groupBy: req.query.groupBy || "team",
     });
+    dashboard.byStatus = dashboard.totals;
+    dashboard.scope = opsMonth.describeScope(req.userRole);
     res.json(dashboard);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -811,29 +867,36 @@ router.patch("/:id", async (req, res) => {
       if (req.body.agentId) {
         const emp = store.getEmployeeById(req.body.agentId);
         if (!emp) return res.status(404).json({ error: "Agent not found" });
-        if (!roles.canAccessEmployee(req.userRole, emp)) {
+        const employeeAppRole = require("../lib/employee-app-role");
+        const { isNonDialingReviewer } = require("../lib/sales-quality-assignees");
+        const liveEmp = employeeAppRole.enrichEmployeeWithLiveAppRole(emp);
+        if (isNonDialingReviewer(liveEmp)) {
+          /* Reviewer IDs are not sale agents. */
+        } else if (!roles.canAccessEmployee(req.userRole, emp)) {
           return res.status(403).json({ error: "No access to assign this agent" });
-        }
-        const canReassign = roles.canReassignSaleLead(req.userRole);
-        if (canReassign && (ticketOnly || req.body.edit === true)) {
-          const saleSubmitScope = require("../lib/sale-submit-scope");
-          const orgTeams = await hrmsRepo.readOrgTeams();
-          const assignment = saleSubmitScope.validateSaleSubmitAssignment(
-            req.userRole,
-            {
-              agentId: req.body.agentId,
-              closerId: req.body.closerId ?? existing.closerId,
-              unit: req.body.unit || patch.unit || existing.unit,
-              team: req.body.team || patch.team || existing.team,
-            },
-            employees,
-            { orgTeams, teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams) }
-          );
-          if (!assignment.ok) return res.status(403).json({ error: assignment.error });
-          patch.agentId = req.body.agentId;
-          if (req.body.closerId !== undefined) patch.closerId = assignment.closerId;
         } else {
-          patch.agentId = req.body.agentId;
+          const canReassign = roles.canReassignSaleLead(req.userRole);
+          const reassigning = String(req.body.agentId) !== String(existing.agentId || "");
+          if (canReassign && (ticketOnly || req.body.edit === true) && reassigning) {
+            const saleSubmitScope = require("../lib/sale-submit-scope");
+            const orgTeams = await hrmsRepo.readOrgTeams();
+            const assignment = saleSubmitScope.validateSaleSubmitAssignment(
+              req.userRole,
+              {
+                agentId: req.body.agentId,
+                closerId: req.body.closerId ?? existing.closerId,
+                unit: req.body.unit || patch.unit || existing.unit,
+                team: req.body.team || patch.team || existing.team,
+              },
+              employees,
+              { orgTeams, teamLeadIds: saleSubmitScope.teamLeadIdsFromOrgTeams(orgTeams) }
+            );
+            if (!assignment.ok) return res.status(403).json({ error: assignment.error });
+            patch.agentId = req.body.agentId;
+            if (req.body.closerId !== undefined) patch.closerId = assignment.closerId;
+          } else if (reassigning) {
+            patch.agentId = req.body.agentId;
+          }
         }
       }
       if (req.body.closerId !== undefined && patch.closerId === undefined) patch.closerId = req.body.closerId;
