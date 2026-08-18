@@ -22,6 +22,38 @@ export function tlCandidates(teamName: string, employees: Employee[], allTeams: 
   return { onTeam, otherTls, agents: agents.slice(0, 80) };
 }
 
+export function opIdsForUnit(
+  unit: string,
+  unitOps: Record<string, string[]>,
+  managers: { unit: string; opEmployeeId?: string }[] = []
+) {
+  const key = String(unit || "").trim();
+  const ids: string[] = [];
+  for (const [u, list] of Object.entries(unitOps || {})) {
+    if (String(u || "").trim() === key) ids.push(...(list || []));
+  }
+  const fromMgr = managers.find((m) => String(m.unit || "").trim() === key)?.opEmployeeId;
+  if (fromMgr) ids.push(fromMgr);
+  return [...new Set(ids.filter(Boolean))];
+}
+
+export function opCandidates(unit: string, employees: Employee[]) {
+  const unitKey = String(unit || "").replace(/\s+/g, "").toUpperCase();
+  const inUnit = employees.filter((e) => String(e.unit || "").replace(/\s+/g, "").toUpperCase() === unitKey);
+  const ops = employees.filter(
+    (e) => /^OP/i.test(String(e.id || "")) || String(e.role || "").toLowerCase() === "op"
+  );
+  const seen = new Set<string>();
+  const out: Employee[] = [];
+  for (const e of [...ops, ...inUnit]) {
+    if (!e?.id || seen.has(e.id)) continue;
+    if (String(e.status || "").toLowerCase() === "out" || String(e.status || "").toLowerCase() === "deleted") continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+  return out.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
 export function closerCandidates(teamName: string, teamUnit: string | undefined, employees: Employee[]) {
   const unit = String(teamUnit || "").trim();
   return employees

@@ -4,6 +4,9 @@ import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAuth } from "@/app/AuthProvider";
 import { SectionHeader } from "@/ui/SectionHeader";
+import { QueryErrorCard } from "@/ui/QueryErrorCard";
+import { EmptyState } from "@/ui/EmptyState";
+import { Skeleton } from "@/ui/Skeleton";
 import { Card } from "@/ui/Card";
 
 export { OrgPage } from "./org/OrgPage";
@@ -23,11 +26,10 @@ export function PayslipPage() {
   const month = useAppStore((s) => s.month);
   const { user } = useAuth();
   const employeeId = user?.employeeId;
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["payslip", month, employeeId],
     queryFn: async () => {
-      if (!employeeId) throw new Error("No employee record linked to your account.");
-      return api<{ payslip?: Record<string, unknown> }>(`/payroll/${encodeURIComponent(employeeId)}?month=${encodeURIComponent(month)}`);
+      return api<{ payslip?: Record<string, unknown> }>(`/payroll/${encodeURIComponent(employeeId || "")}?month=${encodeURIComponent(month)}`);
     },
     enabled: Boolean(employeeId),
   });
@@ -36,15 +38,28 @@ export function PayslipPage() {
 
   return (
     <div>
-      <SectionHeader title="My payslip" subtitle={monthLabel(month)} />
-      {isLoading && <p className="muted">Loading…</p>}
-      {error && (
-        <Card>
-          <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>
-          <p className="muted">HR must release your payslip for {monthLabel(month)} before you can view it here.</p>
-        </Card>
+      <SectionHeader title="Payroll" subtitle={monthLabel(month)} />
+      {!employeeId && (
+        <EmptyState
+          title="No employee record linked"
+          hint="Ask HR to link your login to an employee ID so your payslip can appear here."
+        />
       )}
-      {!isLoading && !error && p && (
+      {employeeId && isLoading && <Skeleton />}
+      {employeeId && error && (
+        <QueryErrorCard
+          error={error}
+          pageName="your payslip"
+          onRetry={() => refetch()}
+        />
+      )}
+      {employeeId && !isLoading && !error && !p && (
+        <EmptyState
+          title={`HR has not released your payslip for ${monthLabel(month)} yet`}
+          hint="When HR checks Show to agent on your payslip, it will appear here."
+        />
+      )}
+      {employeeId && !isLoading && !error && p && (
         <Card>
           <p className="muted" style={{ marginBottom: "1rem" }}>{String(p.name || "")}</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem" }}>

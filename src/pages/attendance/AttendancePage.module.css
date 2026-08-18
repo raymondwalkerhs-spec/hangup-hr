@@ -16,6 +16,7 @@
   border-spacing: 0;
   font-size: 0.75rem;
   min-width: max-content;
+  user-select: none;
 }
 .grid th,
 .grid td {

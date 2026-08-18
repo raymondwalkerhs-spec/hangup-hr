@@ -81,6 +81,8 @@ export function EmployeeHrmsLifecycle({
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["hrms-lifecycle", id] });
+    qc.invalidateQueries({ queryKey: ["clearance-board"] });
+    qc.invalidateQueries({ queryKey: ["hrms-equipment-employee", id] });
     onUpdated?.();
   };
 
@@ -135,6 +137,11 @@ export function EmployeeHrmsLifecycle({
 
   const equipmentAssignments = equipmentData?.assignments || [];
   const unreturnedEquipment = equipmentAssignments.filter((a) => !a.returnedAt);
+  const derivedHandover = unreturnedEquipment.length
+    ? "pending"
+    : equipmentAssignments.length
+      ? "done"
+      : "not_needed";
 
   const saveOnboarding = useMutation({
     mutationFn: (body: Record<string, boolean>) =>
@@ -174,6 +181,7 @@ export function EmployeeHrmsLifecycle({
       qc.invalidateQueries({ queryKey: ["employees-compliance"] });
       qc.invalidateQueries({ queryKey: ["employees"] });
       qc.invalidateQueries({ queryKey: ["attendance-grid"] });
+      qc.invalidateQueries({ queryKey: ["clearance-board"] });
     },
   });
 
@@ -190,6 +198,7 @@ export function EmployeeHrmsLifecycle({
       qc.invalidateQueries({ queryKey: ["employees"] });
       qc.invalidateQueries({ queryKey: ["employees-list"] });
       qc.invalidateQueries({ queryKey: ["attendance-grid"] });
+      qc.invalidateQueries({ queryKey: ["clearance-board"] });
     },
   });
 
@@ -442,9 +451,11 @@ export function EmployeeHrmsLifecycle({
             />
             Final pay processed
           </label>
-          {focus === "offboarding" && clearanceItems.some((c) => c.status === "pending") && (
+          {focus === "offboarding" &&
+            (clearanceItems.some((c) => c.itemKey !== "equipment_handover" && c.status === "pending") ||
+              derivedHandover === "pending") && (
             <p className={styles.warnBanner}>
-              {clearanceItems.filter((c) => c.status === "pending").length} clearance item(s) still pending —{" "}
+              Clearance still open —{" "}
               <Link to={`/clearance?employee=${id}`}>Open clearance</Link>
             </p>
           )}
@@ -463,11 +474,23 @@ export function EmployeeHrmsLifecycle({
               <Link to={`/equipment?employee=${id}`}>Equipment</Link>
             </p>
           )}
-          {clearanceItems.map((c) => (
+          {clearanceItems.map((c) => {
+            const isEquip = c.itemKey === "equipment_handover";
+            const status = isEquip ? derivedHandover : c.status || "pending";
+            return (
             <div key={c.itemKey} className={styles.clearanceCard}>
               <FormField label={clearanceLabel(c.itemKey)}>
+                {isEquip ? (
+                  <p className="muted" style={{ margin: 0 }}>
+                    {status === "pending"
+                      ? "Devices still outstanding — return them on Equipment"
+                      : status === "done"
+                        ? "All issued devices returned"
+                        : "No devices issued — not needed"}
+                  </p>
+                ) : (
                 <select
-                  value={c.status || "pending"}
+                  value={status}
                   disabled={!canEdit}
                   onChange={(e) => saveClearance.mutate({ itemKey: c.itemKey, status: e.target.value, notes: c.notes })}
                 >
@@ -475,7 +498,9 @@ export function EmployeeHrmsLifecycle({
                   <option value="done">Done</option>
                   <option value="not_needed">Not needed</option>
                 </select>
+                )}
               </FormField>
+              {!isEquip && (
               <FormField label="Notes">
                 <input
                   type="text"
@@ -490,8 +515,10 @@ export function EmployeeHrmsLifecycle({
                   }}
                 />
               </FormField>
+              )}
             </div>
-          ))}
+            );
+          })}
           <div className={styles.equipmentBlock}>
             <h5>Equipment assignments</h5>
             {unreturnedEquipment.length ? (

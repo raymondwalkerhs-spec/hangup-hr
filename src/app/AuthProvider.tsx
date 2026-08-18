@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, getSessionId, clearSessionId, getCompanyContext } from "@/api/client";
 import { useAppStore } from "@/stores/theme-store";
 import { scopedPath, userCompanyFromUnit } from "@/lib/apiQuery";
@@ -38,8 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus(null);
       return null;
     }
+    const month = useAppStore.getState().month;
     const data = await api<Record<string, unknown>>(
-      scopedPath("/status", {}, getCompanyContext())
+      scopedPath("/status", month ? { month } : {}, getCompanyContext())
     );
     setStatus(data);
     const authUser = (data.user as AuthUser) || null;
@@ -57,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     return data;
   };
+  const refreshRef = useRef(refreshStatus);
+  refreshRef.current = refreshStatus;
 
   useEffect(() => {
     refreshStatus()
@@ -70,6 +73,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading || !getSessionId()) return;
     refreshStatus().catch(() => {});
   }, [companyContext]);
+
+  useEffect(() => {
+    if (loading || !getSessionId()) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") refreshRef.current().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    const id = setInterval(() => {
+      refreshRef.current().catch(() => {});
+    }, 30000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+      clearInterval(id);
+    };
+  }, [loading]);
 
   const logout = async () => {
     try {

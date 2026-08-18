@@ -4,6 +4,48 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [2.3.28] — 2026-08-18
+
+### Added
+- **Cats playground** (`/cats`) — many orbiting cats, no HR data.
+- **Shared Select** — 150ms open, flip, keyboard, search at 10+ options.
+- **Recycle bin** — 20-day archive table for announcements, coaching, IT, pending leave, and attachments (live rows are deleted so old EXEs/SQLite drop them).
+- **Dropzone uploads** — drag/drop with progress, ETA, retry; multipart with JSON fallback.
+- **RPM Member ID** — `NLAN-LAN-LLNN` (display `XXXX-XXX-XXXX`); Quality must repair existing junk; API rejects invalid IDs. One live row (`HS1-05` on 2026-08-12, stored `7R08HFHH29`) is 10 characters and still needs a correct 11-character ID.
+- **Attendance drag-select** — anyone with attendance edit (including TL/OP) can paint a range; one OUT dialog; paused still expands Mon–Fri only on a single cell.
+- **Sales period picker** — Today/Yesterday/Mon–Fri weeks/months + drag calendar for Quality/HR/RTM/Admin/OP/CEO.
+- **Agent Payroll tab** — Show-to-agent opens `/payroll` for that agent’s own released month (not the company grid).
+- **Dashboard Net payroll** — blurred until double-click (60s); fetched only with `canViewDashboardPayroll`.
+- **Full transportation grant** — payslip checkbox pays the monthly transport budget (config, default 3000) bypassing WFH / Day-OFF / lateness.
+- **Bonus/deduction posted** notices to the employee; bell pulse on new unread.
+- **Reconnect banner** — Live / Reconnecting / Offline; cache reads stay usable.
+- **Agent first-login guide** — agent and office_assistant only, Don’t show again.
+
+### Changed
+- Cat overlay stays on route changes (Retry under the cat at 90s). Skeletons/error cards are in-page only.
+- Sidebar labels fade 180ms instead of unmounting. Dialogs enter 250ms / exit 150ms.
+- Deletes: in-app confirm + 6s undo toast. Coaching restore is Admin/CEO only.
+- Leave submit: one notification (late/TL folded into the same row).
+- PUT payroll omit-key leaves `payslipVisibleToAgent` / `fullTransportGrant` unchanged.
+- Closers with TL access who are not assigned as team TL (Amy, Ria) see only their own attendance.
+- Dashboard **Units** KPI is replaced with **Teams you close** for TLs and closers.
+- Daily/weekly **Team dashboards** use RPM columns (Passed / Pending / Dropped / Retransfer / Total) instead of the old MLA Approved / PostDated layout.
+- Adding an OP who is already assigned is a no-op (no duplicate-key error). OPs can be assigned to another Hangup unit (e.g. OP1 Steven on HS-3).
+
+## [2.3.27] — 2026-08-17
+
+### Added
+- **Emerald theme** — jade primary on mint surfaces; pick it in Settings → Appearance or cycle themes in the header.
+- **Clearance work queue** — dedicated `/clearance` table of every Out / departed employee. Click Form / Files in the row to mark done. Devices follow live assignments. KPI tiles split clearance-complete vs payroll-ready.
+
+### Changed
+- **Offboarding** — interactive leaver table (revoke access and final pay in the row). Final pay stays locked until clearance is complete. Distinct from Clearance.
+- **Equipment tab** — IT/HR/Admin/CEO always see inventory; OP sees their unit; everyone else only if they have an unreturned device. Search by name or ID. Issue picker is searchable Active employees only; Out names still resolve on outstanding rows.
+- **Equipment issue** — stamps `company`, no `created_by`. One open assignment per device is enforced in Postgres. IT can edit and return.
+
+### Fixed
+- Payroll gates fail closed if clearance/equipment reads throw. Outstanding devices block from live assignments only (never a synthetic `equipment_handover` pending row). Missing devices are not a blocker.
+
 ## [2.3.26] — 2026-08-17
 
 ### Changed

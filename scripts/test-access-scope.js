@@ -80,6 +80,65 @@ test("assigned closer sees sale under their closer field", () => {
   if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("closer should see assigned sale");
 });
 
+test("unassigned TL closer sees only self in employee/attendance roster", () => {
+  const closerOrg = [
+    { name: "Phoenix", unit: "HS-1", tlEmployeeId: "TL1-01", closerEmployeeIds: ["HS1-05"] },
+  ];
+  const ur = roles.attachLeadTeams(
+    { role: "tl", employeeId: "HS1-05", unit: "HS-1", team: "Phoenix", username: "amy" },
+    closerOrg
+  );
+  if (roles.hasLeadTeamAssignment(ur)) throw new Error("should not be assigned TL");
+  const scoped = roles.filterEmployeesForUser(employees, ur).map((e) => e.id);
+  if (JSON.stringify(scoped) !== JSON.stringify(["HS1-05"])) {
+    throw new Error(`expected self only, got ${scoped.join(", ")}`);
+  }
+  if (roles.canAccessEmployee(ur, employees[1])) throw new Error("should not access home-team peer");
+  if (!roles.usesCloseTeamsDashboardKpi(ur)) throw new Error("should use close-teams dashboard KPI");
+});
+
+test("assigned TL still sees led team in employee/attendance roster", () => {
+  const ur = roles.attachLeadTeams(
+    { role: "tl", employeeId: "HS1-05", unit: "HS-1", team: "Phoenix", username: "tl" },
+    orgTeams
+  );
+  if (!roles.hasLeadTeamAssignment(ur)) throw new Error("HS1-05 leads Ayla in this fixture");
+  const scoped = roles.filterEmployeesForUser(employees, ur).map((e) => e.id).sort();
+  if (!scoped.includes("HS3-20") || !scoped.includes("HS1-05")) {
+    throw new Error(`expected self + Ayla, got ${scoped.join(", ")}`);
+  }
+});
+
+test("OP assigned via unit_ops can access extra unit", () => {
+  const ur = roles.attachOpUnits(
+    { role: "op", employeeId: "OP1", unit: "HS-1", username: "steven" },
+    { "HS-1": ["OP1"], "HS-3": ["OP1"] }
+  );
+  if (!ur.opUnits.includes("HS-3")) throw new Error("HS-3 missing from opUnits");
+  if (!roles.employeeInOpUnitScope(ur, { id: "HS3-20", unit: "HS-3" })) {
+    throw new Error("OP should access HS-3 after unit_ops assignment");
+  }
+  const sale = { agentId: "HS3-20", closerId: "TL3-01", unit: "HS-3", team: "Ayla", status: "passed" };
+  if (!salesScope.defaultCanViewSale(sale, ur, employees)) throw new Error("OP should view HS-3 sale");
+});
+
+test("unit ops merge shows HS-3 OP from join table and manager field", () => {
+  const teamTlsRepo = require("../lib/team-tls-repo");
+  const merged = teamTlsRepo.mergeUnitOpsMaps(
+    { "HS-3": ["OP1"] },
+    [
+      { unit: "HS-1", opEmployeeId: "TL01" },
+      { unit: "HS-3", opEmployeeId: "OP1" },
+      { unit: "HS-2", opEmployeeId: "MG2" },
+    ]
+  );
+  if (!merged["HS-3"]?.includes("OP1")) throw new Error("HS-3 OP1 missing");
+  if (!merged["HS-1"]?.includes("TL01")) throw new Error("HS-1 manager OP missing");
+  const hangup = teamTlsRepo.filterUnitOpsByCompany(merged, "hangup");
+  if (!hangup["HS-3"]?.includes("OP1")) throw new Error("hangup filter dropped HS-3 OP");
+  if (hangup["HS-2"]) throw new Error("HS-2 OP should not appear on Hangup");
+});
+
 test("org closer does not see team sale unless named closer", () => {
   const ur = {
     role: "tl",

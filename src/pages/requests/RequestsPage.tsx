@@ -6,9 +6,11 @@ import { useAppStatus } from "@/hooks/useAppStatus";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { StatusPill } from "@/ui/StatusPill";
 import { PageToolbar, FilterSelect } from "@/ui/PageToolbar";
+import { Select } from "@/ui/Select";
+import { useDeferredDelete } from "@/ui/useDeferredDelete";
 import { LeaveDocsDialog } from "./LeaveDocsDialog";
 import { LeaveDocsPanel, uploadPendingLeaveDocs, type PendingLeaveDoc } from "./LeaveDocsPanel";
 import {
@@ -74,15 +76,25 @@ export function RequestsPage() {
   });
 
   const employees = data?.employees || [];
+  const deferred = useDeferredDelete({
+    items: data?.requests || [],
+    commit: async (id) => {
+      await api(path(`/hrms/leave/${id}`), { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["leave-requests"] });
+      qc.invalidateQueries({ queryKey: ["attendance-grid"] });
+      qc.invalidateQueries({ queryKey: ["employees-list"] });
+    },
+    message: "Request deleted",
+  });
   const filteredRequests = useMemo(() => {
-    const base = data?.requests || [];
+    const base = (data?.requests || []).filter((r) => !deferred.hiddenIds.has(r.id));
     const filtered = canViewFilters
       ? filterLeaveRequests(base, employees, filters)
       : filters.status
         ? base.filter((r) => (r.status || "") === filters.status)
         : base;
     return filtered;
-  }, [data?.requests, employees, filters, canViewFilters]);
+  }, [data?.requests, employees, filters, canViewFilters, deferred.hiddenIds]);
 
   const grouped = useMemo(
     () => groupRequestsByFrequency(filteredRequests, frequency),
@@ -202,13 +214,6 @@ export function RequestsPage() {
     },
   });
 
-  const removeRequest = useMutation({
-    mutationFn: (id: string) => api(path(`/hrms/leave/${id}`), { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["leave-requests"] });
-      invalidateAttendance();
-    },
-  });
 
   const renderRow = (r: LeaveRequest) => {
     const kind = r.requestKind || r.leaveType || "annual";
@@ -253,14 +258,11 @@ export function RequestsPage() {
             {showEditDelete && (
               <>
                 <Button size="sm" variant="secondary" onClick={() => openEditRequest(r)}>Edit</Button>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => {
-                    if (!confirm("Delete this request? Approved attendance will be cleared.")) return;
-                    removeRequest.mutate(r.id);
-                  }}
-                >
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => deferred.requestDelete(r.id)}
+                    >
                   Delete
                 </Button>
               </>
@@ -312,15 +314,15 @@ export function RequestsPage() {
             />
             <label className={styles.field}>
               <span className="muted">Group by</span>
-              <select
-                className={styles.select}
+              <Select
                 value={frequency}
-                onChange={(e) => setFrequency(e.target.value as "daily" | "weekly" | "monthly")}
-              >
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
+                onChange={(v) => setFrequency(v as "daily" | "weekly" | "monthly")}
+                options={[
+                  { value: "daily", label: "Daily" },
+                  { value: "weekly", label: "Weekly" },
+                  { value: "monthly", label: "Monthly" },
+                ]}
+              />
             </label>
           </>
         ) : (
@@ -386,12 +388,18 @@ export function RequestsPage() {
           {forOthers && !editing ? (
             <label>
               <span className="muted">Employee</span>
-              <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
-                <option value="">— Select —</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.american_name || e.id} ({e.id})</option>
-                ))}
-              </select>
+              <Select
+                value={form.employeeId}
+                onChange={(employeeId) => setForm({ ...form, employeeId })}
+                options={[
+                  { value: "", label: "— Select —" },
+                  ...employees.map((e) => ({
+                    value: e.id,
+                    label: `${e.american_name || e.id} (${e.id})`,
+                  })),
+                ]}
+                placeholder="— Select —"
+              />
             </label>
           ) : (
             <p className="muted" style={{ margin: 0 }}>
@@ -431,38 +439,33 @@ export function RequestsPage() {
           </label>
           <label>
             <span className="muted">Type</span>
-            <select
+            <Select
               value={form.leaveType}
-              onChange={(e) => {
-                const leaveType = e.target.value;
+              onChange={(leaveType) => {
                 setForm({
                   ...form,
                   leaveType,
                   dayFraction: leaveType === "pause" ? "1" : form.dayFraction,
                 });
               }}
-            >
-              {showAnnualOption && (
-                <option value="annual">Annual leave (paid)</option>
-              )}
-              <option value="unpaid">Unpaid day off</option>
-              <option value="medical">Medical / sick</option>
-              <option value="exam">Exam leave</option>
-              <option value="same_day">Same-day off</option>
-              <option value="pause">Pause request (Mon–Fri week)</option>
-            </select>
+              options={[
+                ...(showAnnualOption ? [{ value: "annual", label: "Annual leave (paid)" }] : []),
+                { value: "unpaid", label: "Unpaid day off" },
+                { value: "medical", label: "Medical / sick" },
+                { value: "exam", label: "Exam leave" },
+                { value: "same_day", label: "Same-day off" },
+                { value: "pause", label: "Pause request (Mon–Fri week)" },
+              ]}
+            />
           </label>
           {showFraction && (
             <label>
               <span className="muted">Duration</span>
-              <select
+              <Select
                 value={form.dayFraction}
-                onChange={(e) => setForm({ ...form, dayFraction: e.target.value })}
-              >
-                {FRACTION_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+                onChange={(dayFraction) => setForm({ ...form, dayFraction })}
+                options={FRACTION_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+              />
             </label>
           )}
           <label>
@@ -504,6 +507,14 @@ export function RequestsPage() {
           path={path}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(deferred.confirmId)}
+        onOpenChange={(o) => !o && deferred.setConfirmId(null)}
+        title="Delete this request?"
+        message="Pending requests go to the recycle bin. Approved leave is removed and attendance is cleared. You can undo for 6 seconds."
+        danger
+        onConfirm={deferred.confirmDelete}
+      />
     </div>
   );
 }

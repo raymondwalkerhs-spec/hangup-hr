@@ -12,7 +12,8 @@ import { useInspectorStore } from "@/stores/cross-filter-store";
 import { InspectorDetail } from "@/ui/InspectorDetail";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
-import { confirmAddTl, confirmAddCloser, tlCandidates, closerCandidates } from "./orgHelpers";
+import { Select } from "@/ui/Select";
+import { confirmAddTl, confirmAddCloser, tlCandidates, closerCandidates, opCandidates, opIdsForUnit } from "./orgHelpers";
 import { canManageOrgPage } from "./orgAccess";
 import { OrgStructureEditor } from "./OrgStructureEditor";
 import type { Agent, Employee, TeamMeta, UnitSection } from "./orgTypes";
@@ -37,19 +38,14 @@ function TeamSelect({
   className?: string;
 }) {
   return (
-    <select
-      className={className || styles.teamSelect}
-      value={value}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">—</option>
-      {teamNames.map((tn) => (
-        <option key={tn} value={tn}>
-          {tn}
-        </option>
-      ))}
-    </select>
+    <div onClick={(e) => e.stopPropagation()}>
+      <Select
+        className={className || styles.teamSelect}
+        value={value}
+        onChange={onChange}
+        options={[{ value: "", label: "—" }, ...teamNames.map((tn) => ({ value: tn, label: tn }))]}
+      />
+    </div>
   );
 }
 
@@ -64,14 +60,14 @@ export function OrgPage() {
 
   const { user: statusUser } = useAppStatus();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["org-full", companyContext],
     queryFn: async () => {
       const [structure, empData, teamsRes, mgrRes] = await Promise.all([
         api<{ units?: UnitSection[]; unassigned?: Agent[] }>(path("/hrms/org-structure")),
         api<{ employees: Employee[] }>(path("/employees")).catch(() => ({ employees: [] })),
         api<{ teams?: TeamMeta[]; orgUnits?: string[] }>(path("/hrms/teams")).catch(() => ({ teams: [] })),
-        api<{ managers?: { unit: string; opEmployeeId?: string }[]; teamTls?: Record<string, string[]>; teamClosers?: Record<string, string[]>; unitOps?: Record<string, string[]> }>(path("/org/managers")).catch(() => ({})),
+        api<{ managers?: { unit: string; opEmployeeId?: string }[]; teamTls?: Record<string, string[]>; teamClosers?: Record<string, string[]>; unitOps?: Record<string, string[]> }>(path("/org/managers")),
       ]);
       return { structure, employees: empData.employees || [], teams: teamsRes.teams || [], mgr: mgrRes };
     },
@@ -79,6 +75,7 @@ export function OrgPage() {
 
   const employees = data?.employees || [];
   const unitOps = data?.mgr?.unitOps || {};
+  const managers = data?.mgr?.managers || [];
   const teamTls = data?.mgr?.teamTls || {};
   const teamClosers = data?.mgr?.teamClosers || {};
   const allTeams = data?.teams || [];
@@ -124,7 +121,10 @@ export function OrgPage() {
   const addOp = useMutation({
     mutationFn: ({ unit, employeeId }: { unit: string; employeeId: string }) =>
       api(path(`/org/unit-ops/${encodeURIComponent(unit)}`), { method: "POST", body: JSON.stringify({ employeeId }) }),
-    onSuccess: invalidateOrg,
+    onSuccess: () => {
+      toast.success("OP assigned");
+      invalidateOrg();
+    },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Could not add OP"),
   });
 
@@ -249,6 +249,15 @@ export function OrgPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div>
+        <SectionHeader title="Organization" subtitle="Units, teams, and hierarchy" />
+        <p style={{ color: "var(--err)" }}>{error instanceof Error ? error.message : "Could not load organization"}</p>
+      </div>
+    );
+  }
+
   const units = data?.structure?.units || [];
   const unassigned = data?.structure?.unassigned || [];
 
@@ -333,7 +342,7 @@ export function OrgPage() {
       )}
 
       {units.map((section) => {
-        const opIds = [...new Set([...(unitOps[section.unit] || [])])];
+        const opIds = opIdsForUnit(section.unit, unitOps, managers);
         return (
           <Card key={section.unit} style={{ marginBottom: "1rem" }}>
             <div className={styles.unitHeader}>
@@ -360,20 +369,21 @@ export function OrgPage() {
                   </span>
                 )) : <span className="muted">—</span>}
                 {canManage && (
-                  <select
+                  <Select
                     className={styles.addSelect}
-                    defaultValue=""
-                    onChange={(e) => {
-                      const employeeId = e.target.value;
+                    value=""
+                    onChange={(employeeId) => {
                       if (employeeId) addOp.mutate({ unit: section.unit, employeeId });
-                      e.target.value = "";
                     }}
-                  >
-                    <option value="">+ Add OP</option>
-                    {employees.filter((emp) => emp.unit === section.unit).map((emp) => (
-                      <option key={emp.id} value={emp.id}>{emp.id} — {emp.american_name || emp.id}</option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "+ Add OP" },
+                      ...opCandidates(section.unit, employees).map((emp) => ({
+                        value: emp.id,
+                        label: `${emp.id} — ${emp.american_name || emp.id}${emp.unit && emp.unit !== section.unit ? ` (${emp.unit})` : ""}`,
+                      })),
+                    ]}
+                    placeholder="+ Add OP"
+                  />
                 )}
               </div>
             </div>
@@ -426,39 +436,24 @@ export function OrgPage() {
                           </span>
                         )) : <span className="muted">—</span>}
                         {canManage && meta?.id && (
-                          <select
+                          <div onClick={(e) => e.stopPropagation()}>
+                          <Select
                             className={styles.addSelect}
-                            defaultValue=""
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              const employeeId = e.target.value;
-                              const reset = () => { e.target.value = ""; };
+                            value=""
+                            onChange={(employeeId) => {
                               if (!employeeId) return;
-                              if (!confirmAddTl(employeeId, team.name, employees, allTeams)) {
-                                reset();
-                                return;
-                              }
+                              if (!confirmAddTl(employeeId, team.name, employees, allTeams)) return;
                               handleAddTlDirect(meta.id, team.name, employeeId);
-                              reset();
                             }}
-                          >
-                            <option value="">+ Add TL</option>
-                            <optgroup label={`TLs on ${team.name}`}>
-                              {tlOpts.onTeam.map((e) => (
-                                <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Other TLs">
-                              {tlOpts.otherTls.map((e) => (
-                                <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Agents (unusual)">
-                              {tlOpts.agents.map((e) => (
-                                <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
-                              ))}
-                            </optgroup>
-                          </select>
+                            options={[
+                              { value: "", label: "+ Add TL" },
+                              ...tlOpts.onTeam.map((e) => ({ value: e.id, label: `On team · ${e.id} — ${e.american_name || e.id}` })),
+                              ...tlOpts.otherTls.map((e) => ({ value: e.id, label: `Other TLs · ${e.id} — ${e.american_name || e.id}` })),
+                              ...tlOpts.agents.map((e) => ({ value: e.id, label: `Agent · ${e.id} — ${e.american_name || e.id}` })),
+                            ]}
+                            placeholder="+ Add TL"
+                          />
+                          </div>
                         )}
                         <span className="muted" style={{ marginLeft: "0.5rem" }}>Closers:</span>
                         {closerIds.length ? closerIds.map((id) => (
@@ -481,27 +476,24 @@ export function OrgPage() {
                           </span>
                         )) : <span className="muted">—</span>}
                         {canManage && meta?.id && (
-                          <select
+                          <div onClick={(e) => e.stopPropagation()}>
+                          <Select
                             className={styles.addSelect}
-                            defaultValue=""
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              const employeeId = e.target.value;
-                              const reset = () => { e.target.value = ""; };
+                            value=""
+                            onChange={(employeeId) => {
                               if (!employeeId) return;
-                              if (!confirmAddCloser(employeeId, team.name, employees)) {
-                                reset();
-                                return;
-                              }
+                              if (!confirmAddCloser(employeeId, team.name, employees)) return;
                               addCloser.mutate({ teamId: meta.id, employeeId });
-                              reset();
                             }}
-                          >
-                            <option value="">+ Add closer</option>
-                            {closerOpts.filter((e) => !closerIds.includes(e.id)).map((e) => (
-                              <option key={e.id} value={e.id}>{e.id} — {e.american_name || e.id}</option>
-                            ))}
-                          </select>
+                            options={[
+                              { value: "", label: "+ Add closer" },
+                              ...closerOpts
+                                .filter((e) => !closerIds.includes(e.id))
+                                .map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || e.id}` })),
+                            ]}
+                            placeholder="+ Add closer"
+                          />
+                          </div>
                         )}
                       </span>
                     </summary>
@@ -620,12 +612,14 @@ export function OrgPage() {
             <input value={approveUnit} readOnly />
           </FormField>
           <FormField label="Team (optional)">
-            <select value={approveTeam} onChange={(e) => setApproveTeam(e.target.value)}>
-              <option value="">— Unassigned (assign later) —</option>
-              {approveTeamOptions.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+            <Select
+              value={approveTeam}
+              onChange={setApproveTeam}
+              options={[
+                { value: "", label: "— Unassigned (assign later) —" },
+                ...approveTeamOptions.map((name) => ({ value: name, label: name })),
+              ]}
+            />
           </FormField>
         </FormGrid>
       </Dialog>

@@ -11,6 +11,7 @@ import { Button } from "@/ui/Button";
 import { DataGrid } from "@/ui/DataGrid";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { InspectorDetail } from "@/ui/InspectorDetail";
 import { useInspectorStore } from "@/stores/cross-filter-store";
 
@@ -90,18 +91,21 @@ export function DeductionsPage() {
       >
         <FormGrid wide>
           <FormField label="Employee">
-            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
-              <option value="">—</option>
-              {(emps?.employees || []).map((e) => (
-                <option key={e.id} value={e.id}>{e.id} — {e.american_name || ""}</option>
-              ))}
-            </select>
+            <Select
+              value={form.employeeId}
+              onChange={(employeeId) => setForm({ ...form, employeeId })}
+              options={[
+                { value: "", label: "—" },
+                ...(emps?.employees || []).map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+              ]}
+            />
           </FormField>
           <FormField label="Type">
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option value="">—</option>
-              {(data?.types || []).map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <Select
+              value={form.type}
+              onChange={(type) => setForm({ ...form, type })}
+              options={[{ value: "", label: "—" }, ...(data?.types || []).map((t) => ({ value: t, label: t }))]}
+            />
           </FormField>
           <FormField label="Amount"><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></FormField>
           <FormField label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></FormField>

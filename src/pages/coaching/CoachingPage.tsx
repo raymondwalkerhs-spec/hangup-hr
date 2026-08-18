@@ -6,8 +6,10 @@ import { useAppStatus } from "@/hooks/useAppStatus";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { StatusPill } from "@/ui/StatusPill";
+import { Select } from "@/ui/Select";
+import { useDeferredDelete } from "@/ui/useDeferredDelete";
 import styles from "./CoachingPage.module.css";
 
 type Person = {
@@ -149,6 +151,16 @@ export function CoachingPage() {
   });
 
   const tickets = data?.tickets || [];
+  const deferred = useDeferredDelete({
+    items: tickets,
+    commit: async (id) => {
+      await api(path(`/coaching/${id}`), { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["coaching"] });
+      setEditorOpen(false);
+      setSelected(null);
+    },
+    message: "Coaching ticket deleted",
+  });
   const filterOptions = data?.filterOptions;
   const agents = options?.agents || [];
   const coachSections = options?.coaches || {};
@@ -261,14 +273,6 @@ export function CoachingPage() {
     onError: (err: Error) => setFormError(err.message || "Save failed"),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api(path(`/coaching/${id}`), { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["coaching"] });
-      setEditorOpen(false);
-      setSelected(null);
-    },
-  });
 
   const coachSelect = (disabled: boolean) => {
     const sections: { label: string; people: Person[] }[] = [
@@ -280,26 +284,23 @@ export function CoachingPage() {
     ].filter((s) => s.people.length);
     const known = new Set(sections.flatMap((s) => s.people.map((p) => p.id)));
     const defaultId = form.coachEmployeeId || options?.defaultCoachId || "";
+    const options = [
+      { value: "", label: "Select coach" },
+      ...(defaultId && !known.has(defaultId)
+        ? [{ value: defaultId, label: `${empLabel(agentMap[defaultId], defaultId)} (me)` }]
+        : []),
+      ...sections.flatMap((s) =>
+        s.people.map((p) => ({ value: p.id, label: `${s.label} · ${empLabel(p)} (${p.id})` }))
+      ),
+    ];
     return (
-      <select
+      <Select
         value={form.coachEmployeeId}
-        onChange={(e) => setForm((f) => ({ ...f, coachEmployeeId: e.target.value }))}
+        onChange={(value) => setForm((f) => ({ ...f, coachEmployeeId: value }))}
         disabled={disabled}
-      >
-        <option value="">Select coach</option>
-        {defaultId && !known.has(defaultId) && (
-          <option value={defaultId}>{empLabel(agentMap[defaultId], defaultId)} (me)</option>
-        )}
-        {sections.map((s) => (
-          <optgroup key={s.label} label={s.label}>
-            {s.people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {empLabel(p)} ({p.id})
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        options={options}
+        placeholder="Select coach"
+      />
     );
   };
 
@@ -330,59 +331,75 @@ export function CoachingPage() {
         </label>
         <label>
           Agent
-          <select value={filters.agent} onChange={(e) => setFilters((f) => ({ ...f, agent: e.target.value }))}>
-            <option value="">All agents</option>
-            {(filterOptions?.agents || agents).map((a) => (
-              <option key={a.id} value={a.id}>{empLabel(a)}</option>
-            ))}
-          </select>
+          <Select
+            value={filters.agent}
+            onChange={(agent) => setFilters((f) => ({ ...f, agent }))}
+            options={[
+              { value: "", label: "All agents" },
+              ...(filterOptions?.agents || agents).map((a) => ({ value: a.id, label: empLabel(a) })),
+            ]}
+            placeholder="All agents"
+          />
         </label>
         <label>
           Coach
-          <select value={filters.coach} onChange={(e) => setFilters((f) => ({ ...f, coach: e.target.value }))}>
-            <option value="">All coaches</option>
-            {(filterOptions?.coaches || []).map((c) => (
-              <option key={c.id} value={c.id}>{empLabel(c)}</option>
-            ))}
-          </select>
+          <Select
+            value={filters.coach}
+            onChange={(coach) => setFilters((f) => ({ ...f, coach }))}
+            options={[
+              { value: "", label: "All coaches" },
+              ...(filterOptions?.coaches || []).map((c) => ({ value: c.id, label: empLabel(c) })),
+            ]}
+            placeholder="All coaches"
+          />
         </label>
         <label>
           Outcome
-          <select value={filters.outcome} onChange={(e) => setFilters((f) => ({ ...f, outcome: e.target.value }))}>
-            <option value="">All outcomes</option>
-            {(filterOptions?.outcomes || options?.outcomes || Object.keys(OUTCOME_LABELS)).map((o) => (
-              <option key={o} value={o}>{OUTCOME_LABELS[o] || o}</option>
-            ))}
-          </select>
+          <Select
+            value={filters.outcome}
+            onChange={(outcome) => setFilters((f) => ({ ...f, outcome }))}
+            options={[
+              { value: "", label: "All outcomes" },
+              ...(filterOptions?.outcomes || options?.outcomes || Object.keys(OUTCOME_LABELS)).map((o) => ({
+                value: o,
+                label: OUTCOME_LABELS[o] || o,
+              })),
+            ]}
+            placeholder="All outcomes"
+          />
         </label>
         <label>
           Agent status
-          <select
+          <Select
             value={filters.agentStatus}
-            onChange={(e) => setFilters((f) => ({ ...f, agentStatus: e.target.value }))}
-          >
-            <option value="">Active + out</option>
-            <option value="active">Active agents</option>
-            <option value="out">Out agents</option>
-          </select>
+            onChange={(agentStatus) => setFilters((f) => ({ ...f, agentStatus }))}
+            options={[
+              { value: "", label: "Active + out" },
+              { value: "active", label: "Active agents" },
+              { value: "out", label: "Out agents" },
+            ]}
+          />
         </label>
         <label>
           Team
-          <select value={filters.team} onChange={(e) => setFilters((f) => ({ ...f, team: e.target.value }))}>
-            <option value="">All teams</option>
-            {(filterOptions?.teams || []).map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+          <Select
+            value={filters.team}
+            onChange={(team) => setFilters((f) => ({ ...f, team }))}
+            options={[
+              { value: "", label: "All teams" },
+              ...(filterOptions?.teams || []).map((t) => ({ value: t, label: t })),
+            ]}
+            placeholder="All teams"
+          />
         </label>
       </div>
 
       {isLoading && <p className="muted">Loading…</p>}
       {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
-      {!isLoading && !tickets.length && <p className="muted">No coaching tickets.</p>}
+      {!isLoading && !deferred.visibleItems.length && <p className="muted">No coaching tickets.</p>}
 
       <div className={styles.grid}>
-        {tickets.map((t) => (
+        {deferred.visibleItems.map((t) => (
           <Card key={t.id} className={styles.card} onClick={() => openTicket(t)}>
             <div className={styles.cardHeader}>
               <strong>{t.agentName || empLabel(agentMap[t.employeeId || ""]) || t.employeeId}</strong>
@@ -412,7 +429,7 @@ export function CoachingPage() {
         footer={
           <div className={styles.actions}>
             {editing && canDelete && selected?.id && (
-              <Button variant="danger" onClick={() => remove.mutate(selected.id)}>Delete</Button>
+              <Button variant="danger" onClick={() => selected.id && deferred.requestDelete(selected.id)}>Delete</Button>
             )}
             <Button variant="secondary" onClick={() => setEditorOpen(false)}>Close</Button>
             {canSave && (
@@ -428,17 +445,15 @@ export function CoachingPage() {
           <label>
             Agent
             {canSubmit && !editing ? (
-              <select
+              <Select
                 value={form.employeeId}
-                onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))}
-              >
-                <option value="">Select agent</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {empLabel(a)} ({a.id})
-                  </option>
-                ))}
-              </select>
+                onChange={(employeeId) => setForm((f) => ({ ...f, employeeId }))}
+                options={[
+                  { value: "", label: "Select agent" },
+                  ...agents.map((a) => ({ value: a.id, label: `${empLabel(a)} (${a.id})` })),
+                ]}
+                placeholder="Select agent"
+              />
             ) : (
               <input value={selected?.agentName || empLabel(agentMap[form.employeeId]) || form.employeeId} readOnly />
             )}
@@ -465,15 +480,15 @@ export function CoachingPage() {
           </label>
           <label>
             Outcome
-            <select
+            <Select
               value={form.outcome}
-              onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))}
+              onChange={(outcome) => setForm((f) => ({ ...f, outcome }))}
               disabled={editing && !(coachCanFollowUp || canEditOriginal)}
-            >
-              {(options?.outcomes || Object.keys(OUTCOME_LABELS)).map((o) => (
-                <option key={o} value={o}>{OUTCOME_LABELS[o] || o}</option>
-              ))}
-            </select>
+              options={(options?.outcomes || Object.keys(OUTCOME_LABELS)).map((o) => ({
+                value: o,
+                label: OUTCOME_LABELS[o] || o,
+              }))}
+            />
           </label>
           <label>
             General notes
@@ -522,6 +537,18 @@ export function CoachingPage() {
           )}
         </div>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(deferred.confirmId)}
+        onOpenChange={(o) => !o && deferred.setConfirmId(null)}
+        title="Delete coaching ticket?"
+        message="It will move to the recycle bin. Only Admin/CEO can restore it. You can undo for 6 seconds."
+        danger
+        onConfirm={() => {
+          deferred.confirmDelete();
+          setEditorOpen(false);
+          setSelected(null);
+        }}
+      />
     </div>
   );
 }

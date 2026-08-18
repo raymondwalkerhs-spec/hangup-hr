@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 2.3.26 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 2.3.28 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -23,6 +23,8 @@ MLA-Ray form fields live in `sales.form_data` jsonb. RPM has its own field catal
 
 **v2.3.17 — RPM Notes:** Optional **Notes** textarea on RPM submit (all other submit fields remain required). Notes appear on edit, view, and quality modals per `rpm_sales_field_permissions`. Quality recordings upload/play inline in React modals (stream via `/attachments/:id/file`).
 
+**v2.3.28 — Member ID:** RPM `memberId` is 11 characters, pattern **NLAN-LAN-LLNN** (N = digit, L = letter except L/O/B/I/Z/S, A = digit or allowed letter). Display groups as `XXXX-XXX-XXXX`. Invalid IDs are rejected on save; existing junk must be repaired (no grandfather). Quality/HR/RTM/Admin/OP/CEO get a **period picker** (Today / Yesterday / Mon–Fri weeks / months + drag calendar). Agent and TL never see it. RPM single-day still uses `?day=` + Cairo 2 AM working day.
+
 | Area | Where in app |
 |------|----------------|
 | Sales list & filters | **Sales log** (sidebar) |
@@ -34,11 +36,11 @@ MLA-Ray form fields live in `sales.form_data` jsonb. RPM has its own field catal
 | Clients / devices / prices | **Settings → Sales clients & breaks** |
 | App-wide role permissions | **Access Control** (separate from sales field matrix) |
 
-| Team dashboards | **Team dashboards** (sidebar) — daily/weekly roster + approved/postdated/dropped/total sent per agent; matches sale **working day** (v2.3.3+) |
+| Team dashboards | **Team dashboards** (sidebar) — daily/weekly RPM roster: Passed / Pending / Dropped / Retransfer / Total per agent; matches sale **working day** |
 
 ### v2.3.3 — team dashboard date alignment
 
-Team dashboards load sales when **working day**, **submission date**, or **effective date** falls on the selected day. **Pending** and **callback** submissions count in **Total Sent** (Approved stays 0 until passed). Pick the same **working day** shown in Sales log if totals look empty.
+Team dashboards load **RPM** sales when **working day**, **submission date**, or **effective date** falls on the selected day. Columns match RPM Sales: **Passed**, **Pending**, **Dropped**, **Retransfer**, **Total**. Pick the same **working day** shown in Sales log if totals look empty.
 
 ### v1.6.16 — form hardening
 

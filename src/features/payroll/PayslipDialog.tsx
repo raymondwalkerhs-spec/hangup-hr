@@ -4,9 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, fmt } from "@/api/client";
 import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
+import { useConfirmUndo } from "@/ui/useDeferredDelete";
 import { downloadApiFile, shiftMonth } from "@/lib/files";
 import { normalizePaymentMethod, PAYMENT_METHOD_OPTIONS, resolvePaymentMethod } from "@/lib/paymentMethods";
 import { isPayrollSettled, payrollEarnedNet, settledLabel, isTrainingDeferredRow, trainingDeferredLabel } from "@/lib/payrollSettled";
@@ -129,6 +131,7 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
     skipCurrentMonth: false,
     notes: "",
   });
+  const undo = useConfirmUndo();
   const [extraForm, setExtraForm] = useState({
     label: "",
     workingDays: "",
@@ -247,6 +250,7 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
       transportEligible: adj.transportEligible === true,
       noPayroll: adj.noPayroll === true,
       payslipVisibleToAgent: adj.payslipVisibleToAgent === true,
+      fullTransportGrant: adj.fullTransportGrant === true,
       salesCount: String(adj.salesCount ?? slip.salesCount ?? ""),
       monthNotes: String(adj.monthNotes || ""),
       bankReference: String(adj.bankReference || ""),
@@ -277,6 +281,7 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
           transportEligible: profile.transportEligible === true,
           noPayroll: profile.noPayroll === true,
           payslipVisibleToAgent: profile.payslipVisibleToAgent === true,
+          fullTransportGrant: profile.fullTransportGrant === true,
           salesCount: Number(profile.salesCount) || 0,
           monthNotes: profile.monthNotes,
           bankReference: profile.bankReference,
@@ -990,19 +995,18 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
             )}
             <FormGrid wide>
               <FormField label="Payroll status">
-                <select value={String(profile.payrollStatus || "")} onChange={(e) => set("payrollStatus", e.target.value)}>
-                  {["pending", "approved", "paid", "hold", "no payroll"].map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <Select
+                  value={String(profile.payrollStatus || "")}
+                  onChange={(v) => set("payrollStatus", v)}
+                  options={["pending", "approved", "paid", "hold", "no payroll"].map((s) => ({ value: s, label: s }))}
+                />
               </FormField>
               <FormField label="Payment method">
-                <select value={String(profile.paymentMethod || "")} onChange={(e) => set("paymentMethod", e.target.value)}>
-                  <option value="">—</option>
-                  {PAYMENT_METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                <Select
+                  value={String(profile.paymentMethod || "")}
+                  onChange={(v) => set("paymentMethod", v)}
+                  options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
+                />
               </FormField>
               {showAgentProfile && (
                 <FormField label="2-week hold">
@@ -1023,6 +1027,7 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
               <label><input type="checkbox" checked={!!profile.transportEligible} onChange={(e) => set("transportEligible", e.target.checked)} /> Transport eligible</label>
               <label><input type="checkbox" checked={!!profile.noPayroll} onChange={(e) => set("noPayroll", e.target.checked)} /> No payroll</label>
               <label><input type="checkbox" checked={!!profile.payslipVisibleToAgent} onChange={(e) => set("payslipVisibleToAgent", e.target.checked)} /> Show to agent</label>
+              <label><input type="checkbox" checked={!!profile.fullTransportGrant} onChange={(e) => set("fullTransportGrant", e.target.checked)} /> Grant full transportation</label>
             </div>
           </CardBlock>
 
@@ -1047,9 +1052,11 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                   <Button
                     size="sm"
                     variant="danger"
-                    onClick={() => {
-                      if (confirm("Delete this extra payroll entry?")) deleteExtraPayroll.mutate(e.id);
-                    }}
+                    onClick={() => undo.confirmUndo({
+                      title: "Delete this extra payroll entry?",
+                      toast: "Extra payroll deleted",
+                      commit: () => deleteExtraPayroll.mutateAsync(e.id),
+                    })}
                   >
                     Delete
                   </Button>
@@ -1124,7 +1131,11 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                 <div style={{ display: "flex", gap: "0.25rem", marginTop: "0.35rem" }}>
                   {l.status === "active" && <Button size="sm" variant="secondary" onClick={() => cancelLoan.mutate(l.id)}>Cancel</Button>}
                   {!(l.installmentsPaid && l.installmentsPaid > 0) && l.status !== "completed" && (
-                    <Button size="sm" variant="danger" onClick={() => { if (confirm("Delete loan?")) deleteLoan.mutate(l.id); }}>Delete</Button>
+                    <Button size="sm" variant="danger" onClick={() => undo.confirmUndo({
+                      title: "Delete loan?",
+                      toast: "Loan deleted",
+                      commit: () => deleteLoan.mutateAsync(l.id),
+                    })}>Delete</Button>
                   )}
                 </div>
               </div>
@@ -1151,22 +1162,22 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
             <FormSection title="Add bonus">
               <FormGrid>
                 <FormField label="Type">
-                  <select value={bonusForm.type} onChange={(e) => setBonusForm({ ...bonusForm, type: e.target.value, deductFromEmployeeId: "" })}>
-                    <option value="">—</option>
-                    {(bonusTypes?.types || []).map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <Select
+                    value={bonusForm.type}
+                    onChange={(type) => setBonusForm({ ...bonusForm, type, deductFromEmployeeId: "" })}
+                    options={[{ value: "", label: "—" }, ...(bonusTypes?.types || []).map((t) => ({ value: t, label: t }))]}
+                  />
                 </FormField>
                 {isTlBonusForm && (
                   <FormField label="Deduct from (TL/OP pays)" span="full">
-                    <select
+                    <Select
                       value={bonusForm.deductFromEmployeeId}
-                      onChange={(e) => setBonusForm({ ...bonusForm, deductFromEmployeeId: e.target.value })}
-                    >
-                      <option value="">— Select TL/OP —</option>
-                      {tlPayers.map((e) => (
-                        <option key={e.id} value={e.id}>{e.id} — {e.american_name || ""}</option>
-                      ))}
-                    </select>
+                      onChange={(deductFromEmployeeId) => setBonusForm({ ...bonusForm, deductFromEmployeeId })}
+                      options={[
+                        { value: "", label: "— Select TL/OP —" },
+                        ...tlPayers.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+                      ]}
+                    />
                   </FormField>
                 )}
                 <FormField label="Amount"><input type="number" value={bonusForm.amount} onChange={(e) => setBonusForm({ ...bonusForm, amount: e.target.value })} /></FormField>
@@ -1187,10 +1198,11 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
             <FormSection title="Add deduction">
               <FormGrid>
                 <FormField label="Type">
-                  <select value={dedForm.type} onChange={(e) => setDedForm({ ...dedForm, type: e.target.value })}>
-                    <option value="">—</option>
-                    {(dedTypes?.types || []).map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <Select
+                    value={dedForm.type}
+                    onChange={(type) => setDedForm({ ...dedForm, type })}
+                    options={[{ value: "", label: "—" }, ...(dedTypes?.types || []).map((t) => ({ value: t, label: t }))]}
+                  />
                 </FormField>
                 <FormField label="Amount"><input type="number" value={dedForm.amount} onChange={(e) => setDedForm({ ...dedForm, amount: e.target.value })} /></FormField>
                 <FormField label="Date"><input type="date" value={dedForm.date} onChange={(e) => setDedForm({ ...dedForm, date: e.target.value })} /></FormField>
@@ -1217,7 +1229,11 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                     {s.status === "received" && (
                       <Button size="sm" variant="outline" onClick={() => downloadApiFile(`/payslip/${employeeId}/pdf?month=${month}&splitId=${s.id}`, `payslip-split-${s.id}.pdf`)}>PDF</Button>
                     )}
-                    <Button size="sm" variant="danger" onClick={() => deleteSplit.mutate(s.id)}>Delete</Button>
+                    <Button size="sm" variant="danger" onClick={() => undo.confirmUndo({
+                      title: "Delete this split?",
+                      toast: "Split deleted",
+                      commit: () => deleteSplit.mutateAsync(s.id),
+                    })}>Delete</Button>
                   </span>
                 </li>
               ))}
@@ -1226,19 +1242,27 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
             <FormGrid>
               <FormField label="Amount"><input type="number" value={splitForm.amount} onChange={(e) => setSplitForm({ ...splitForm, amount: e.target.value })} /></FormField>
               <FormField label="Type">
-                <select value={splitForm.splitKind} onChange={(e) => setSplitForm({ ...splitForm, splitKind: e.target.value })}>
-                  <option value="payment">Payment</option>
-                  <option value="training_bonus">Training bonus</option>
-                  <option value="training_payroll">Training payroll</option>
-                  <option value="correction">Correction</option>
-                </select>
+                <Select
+                  value={splitForm.splitKind}
+                  onChange={(splitKind) => setSplitForm({ ...splitForm, splitKind })}
+                  options={[
+                    { value: "payment", label: "Payment" },
+                    { value: "training_bonus", label: "Training bonus" },
+                    { value: "training_payroll", label: "Training payroll" },
+                    { value: "correction", label: "Correction" },
+                  ]}
+                />
               </FormField>
               <FormField label="Status">
-                <select value={splitForm.status} onChange={(e) => setSplitForm({ ...splitForm, status: e.target.value })}>
-                  <option value="pending">Pending</option>
-                  <option value="received">Received</option>
-                  <option value="deferred">Deferred</option>
-                </select>
+                <Select
+                  value={splitForm.status}
+                  onChange={(status) => setSplitForm({ ...splitForm, status })}
+                  options={[
+                    { value: "pending", label: "Pending" },
+                    { value: "received", label: "Received" },
+                    { value: "deferred", label: "Deferred" },
+                  ]}
+                />
               </FormField>
               {splitForm.status === "deferred" && (
                 <FormField label="Defer to month">
@@ -1256,6 +1280,14 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
           {(saveProfile.error || addBonus.error || addDeduction.error || addLoan.error || addExtraPayroll.error || deleteExtraPayroll.error as Error)?.message}
         </p>
       )}
+      <ConfirmDialog
+        open={undo.confirmOpen}
+        onOpenChange={undo.setConfirmOpen}
+        title={undo.confirmTitle}
+        message={undo.confirmMessage}
+        danger
+        onConfirm={undo.confirmDelete}
+      />
     </Dialog>
   );
 }

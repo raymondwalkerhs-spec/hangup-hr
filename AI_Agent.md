@@ -21,8 +21,8 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.3.26` (`package.json` → `version`)
-- **Previous:** `2.3.25`
+- **Current version:** `2.3.28` (`package.json` → `version`)
+- **Previous:** `2.3.26`
 
 ---
 
@@ -114,10 +114,9 @@ to Supabase via Express, then re-sync.
 
 ## UI themes
 
-- `public/js/theme.js` — persists `hr_ui_theme` in `localStorage`
-- Themes: `light` (default), `dark`, `grey`, `dark-wine`, `dark-grey`, `alabaster`
-- CSS variables on `[data-theme="…"]` in `public/css/app.css`
-- Picker: Settings → Appearance
+React (`src/styles/tokens.css`, `hangup-theme` in localStorage): `light` (default), `dark`, `violet`, `pink`, `red-wine`, `diamond`, `emerald`.
+Legacy vanilla: `public/js/theme.js` + `public/css/app.css` (`hr_ui_theme`).
+Picker: Settings → Appearance, or cycle from the header.
 
 ---
 
@@ -192,10 +191,10 @@ Sales field permissions remain in `sales_field_permissions` — managed on **Sal
 
 | Role | Employees | Org edit | Sales | Payslip | Equipment |
 |------|-----------|----------|-------|---------|-----------|
-| **Agent** | Self row, docs upload, no card/filters | Own team + OP view | Status, device, customer only; no export | My payslip when HR releases | Hidden |
-| **TL** | Team roster read-only; no edit others | View | Team scope; OP can grant 24h wider view | — | View |
-| **OP** | Unit roster | View | Unit scope; grant temp visibility | — | View |
-| **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | View |
+| **Agent** | Self row, docs upload, no card/filters | Own team + OP view | Status, device, customer only; no export | My payslip when HR releases | Own devices only while assigned |
+| **TL** | Team roster read-only; no edit others | View | Team scope; OP can grant 24h wider view | — | Own devices only while assigned |
+| **OP** | Unit roster | View | Unit scope; grant temp visibility | — | Unit inventory |
+| **Quality/RTM** | Self (scoped) | View + PIN | Company/team per rules; write notes | — | Own devices only while assigned |
 | **HR/Admin** | Full CRUD | Team structure (admin/ceo/hr) | Full + **Sales permissions** / **Log columns** pages (RTM/admin/hr) | Full + release to agent | Full |
 
 **Sales admin pages (1.4.1+, role-first since 1.4.2):** sidebar **Sales permissions** and **Log columns**. Visible when `canViewSalesAdmin` / `canManageSalesFieldPermissions` — **RTM / Admin only** (HR removed in 1.4.3).
@@ -514,7 +513,9 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.3.26** | **true** | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
+| **2.3.28** | **true** | UI/UX makeover: Select, recycle bin, dropzone, RPM member ID, attendance drag-select, sales period picker, agent payslip tab, transport grant, reconnect banner, agent guide, Cats tab. Closers with TL access who are not assigned TLs (Amy, Ria) see only own attendance; TL/closer dashboard Units KPI is teams they close. Team dashboards use RPM columns. OP assignment is idempotent (HS-3 OP1 Steven). Breaking ship 2026-08-18 so every role must update. |
+| **2.3.27** | false | Equipment inventory + Clearance/Offboarding interactive tables; Emerald theme. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
+| **2.3.26** | false | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
 | **2.3.25** | false | Sales log defaults to RPM; NSIS includes React `public/dist` (DNA login). Installer-only Latest 2026-08-17. |
 | **2.3.23** | false | Roster freshness for dialing pickers; MLA+RPM submission date/time correction (date+time columns); Deleted excluded from picker; RPM sort/filters/search; portal `sale_edit_history` for Quality/RTM/Admin/CEO. |
 | **2.3.22** | false | Sale agent picker uses employees/`org_teams` (+ `sales_agent_picker` DB override), not `app_users.role`; team field follows selected agent. Shipped GitHub Latest + Supabase `is_current` 2026-08-13. |

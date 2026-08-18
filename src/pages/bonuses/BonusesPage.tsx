@@ -12,6 +12,7 @@ import { Button } from "@/ui/Button";
 import { DataGrid } from "@/ui/DataGrid";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { InspectorDetail } from "@/ui/InspectorDetail";
 import { useInspectorStore } from "@/stores/cross-filter-store";
 
@@ -234,30 +235,32 @@ export function BonusesPage() {
       >
         <FormGrid wide>
           <FormField label="Employee">
-            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
-              <option value="">—</option>
-              {(emps?.employees || []).map((e) => (
-                <option key={e.id} value={e.id}>{e.id} — {e.american_name || ""}</option>
-              ))}
-            </select>
+            <Select
+              value={form.employeeId}
+              onChange={(employeeId) => setForm({ ...form, employeeId })}
+              options={[
+                { value: "", label: "—" },
+                ...(emps?.employees || []).map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+              ]}
+            />
           </FormField>
           <FormField label="Type">
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, deductFromEmployeeId: "" })}>
-              <option value="">—</option>
-              {(data?.types || []).map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <Select
+              value={form.type}
+              onChange={(type) => setForm({ ...form, type, deductFromEmployeeId: "" })}
+              options={[{ value: "", label: "—" }, ...(data?.types || []).map((t) => ({ value: t, label: t }))]}
+            />
           </FormField>
           {isTlBonusForm && (
             <FormField label="Deduct from (TL/OP pays)" span="full">
-              <select
+              <Select
                 value={form.deductFromEmployeeId}
-                onChange={(e) => setForm({ ...form, deductFromEmployeeId: e.target.value })}
-              >
-                <option value="">— Select TL/OP —</option>
-                {tlPayers.map((e) => (
-                  <option key={e.id} value={e.id}>{e.id} — {e.american_name || ""}</option>
-                ))}
-              </select>
+                onChange={(deductFromEmployeeId) => setForm({ ...form, deductFromEmployeeId })}
+                options={[
+                  { value: "", label: "— Select TL/OP —" },
+                  ...tlPayers.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+                ]}
+              />
             </FormField>
           )}
           <FormField label="Amount"><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></FormField>
@@ -283,12 +286,14 @@ export function BonusesPage() {
       >
         <FormGrid wide>
           <FormField label="Agent">
-            <select value={reqForm.employeeId} onChange={(e) => setReqForm({ ...reqForm, employeeId: e.target.value })}>
-              <option value="">—</option>
-              {agents.map((e) => (
-                <option key={e.id} value={e.id}>{e.id} — {e.american_name || ""}</option>
-              ))}
-            </select>
+            <Select
+              value={reqForm.employeeId}
+              onChange={(employeeId) => setReqForm({ ...reqForm, employeeId })}
+              options={[
+                { value: "", label: "—" },
+                ...agents.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+              ]}
+            />
           </FormField>
           <FormField label="Date">
             <input type="date" value={reqForm.date || `${month}-15`} onChange={(e) => setReqForm({ ...reqForm, date: e.target.value })} />

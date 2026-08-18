@@ -6,6 +6,7 @@ import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { Dialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { EmployeeLifecyclePanel } from "./EmployeeLifecyclePanel";
 import { DepartDateDialog } from "./DepartDateDialog";
 import {
@@ -274,23 +275,34 @@ export function EmployeeEditDialog({
               <input value={form.arabic_name || ""} onChange={(e) => set("arabic_name", e.target.value)} disabled={!canEdit} />
             </FormField>
             <FormField label="Status">
-              <select value={form.status || ""} onChange={(e) => set("status", e.target.value)} disabled={!canEdit}>
-                {statuses.map((s) => <option key={s} value={s}>{s || "(blank)"}</option>)}
-              </select>
+              <Select
+                value={form.status || ""}
+                onChange={(v) => set("status", v)}
+                disabled={!canEdit}
+                options={statuses.map((s) => ({ value: s, label: s || "(blank)" }))}
+              />
             </FormField>
             <FormField label="Unit">
-              <select value={form.unit || ""} onChange={(e) => onUnitChange(e.target.value)} disabled={!canEdit}>
-                {units.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <Select
+                value={form.unit || ""}
+                onChange={(v) => onUnitChange(v)}
+                disabled={!canEdit}
+                options={units.map((u) => ({ value: u, label: u }))}
+              />
             </FormField>
             <FormField label="Team">
-              <select value={form.team || ""} onChange={(e) => set("team", e.target.value)} disabled={!canEdit}>
-                <option value="">{companyChanged ? "Choose a team in the new company" : "—"}</option>
-                {unitTeams.map((t) => <option key={t} value={t}>{t}</option>)}
-                {form.team && !unitTeams.some((t) => t.toLowerCase() === form.team.toLowerCase()) && (
-                  <option value={form.team}>{form.team}</option>
-                )}
-              </select>
+              <Select
+                value={form.team || ""}
+                onChange={(v) => set("team", v)}
+                disabled={!canEdit}
+                options={[
+                  { value: "", label: companyChanged ? "Choose a team in the new company" : "—" },
+                  ...unitTeams.map((t) => ({ value: t, label: t })),
+                  ...(form.team && !unitTeams.some((t) => t.toLowerCase() === form.team.toLowerCase())
+                    ? [{ value: form.team, label: form.team }]
+                    : []),
+                ]}
+              />
             </FormField>
             {companyChanged && (
               <p className={styles.warn} style={{ gridColumn: "1 / -1" }}>
@@ -300,18 +312,20 @@ export function EmployeeEditDialog({
             )}
             {formError && <p className={styles.warn} style={{ gridColumn: "1 / -1", color: "var(--err)" }}>{formError}</p>}
             <FormField label="Position">
-              <select value={form.position || ""} onChange={(e) => set("position", e.target.value)} disabled={!canEdit}>
-                <option value="">—</option>
-                {positions.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <Select
+                value={form.position || ""}
+                onChange={(v) => set("position", v)}
+                disabled={!canEdit}
+                options={[{ value: "", label: "—" }, ...positions.map((p) => ({ value: p, label: p }))]}
+              />
             </FormField>
             <FormField label="Payment method">
-              <select value={form.payment_method || ""} onChange={(e) => set("payment_method", e.target.value)} disabled={!canEdit}>
-                <option value="">—</option>
-                {PAYMENT_METHOD_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+              <Select
+                value={form.payment_method || ""}
+                onChange={(v) => set("payment_method", v)}
+                disabled={!canEdit}
+                options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
+              />
             </FormField>
             {pm === "instapay" && (
               <FormField label="Instapay / wallet details">
@@ -325,12 +339,12 @@ export function EmployeeEditDialog({
             )}
             {pm === "cash" && (
               <FormField label="Cash branch">
-                <select value={form.alternative_payment || ""} onChange={(e) => set("alternative_payment", e.target.value)} disabled={!canEdit}>
-                  <option value="">—</option>
-                  {["Makram", "Abbas", "Square", "Other"].map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
+                <Select
+                  value={form.alternative_payment || ""}
+                  onChange={(v) => set("alternative_payment", v)}
+                  disabled={!canEdit}
+                  options={[{ value: "", label: "—" }, ...["Makram", "Abbas", "Square", "Other"].map((b) => ({ value: b, label: b }))]}
+                />
               </FormField>
             )}
             {pm === "bank" && (
@@ -392,11 +406,16 @@ export function EmployeeEditDialog({
               <input value={form.fp_number || ""} onChange={(e) => set("fp_number", e.target.value)} disabled={!canEdit} />
             </FormField>
             <FormField label="Nationality">
-              <select value={form.nationality || ""} onChange={(e) => set("nationality", e.target.value)} disabled={!canEdit}>
-                <option value="">—</option>
-                {nationalities.map((n) => <option key={n} value={n}>{n}</option>)}
-                <option value="Other">Other</option>
-              </select>
+              <Select
+                value={form.nationality || ""}
+                onChange={(v) => set("nationality", v)}
+                disabled={!canEdit}
+                options={[
+                  { value: "", label: "—" },
+                  ...nationalities.map((n) => ({ value: n, label: n })),
+                  { value: "Other", label: "Other" },
+                ]}
+              />
             </FormField>
             {form.nationality === "Other" && (
               <FormField label="Nationality (other)">
@@ -404,14 +423,20 @@ export function EmployeeEditDialog({
               </FormField>
             )}
             <FormField label="Work permit">
-              <select value={form.work_permit_status || ""} onChange={(e) => set("work_permit_status", e.target.value)} disabled={!canEdit}>
-                {WORK_PERMIT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <Select
+                value={form.work_permit_status || ""}
+                onChange={(v) => set("work_permit_status", v)}
+                disabled={!canEdit}
+                options={WORK_PERMIT}
+              />
             </FormField>
             <FormField label="Social insurance">
-              <select value={form.social_insurance_status || ""} onChange={(e) => set("social_insurance_status", e.target.value)} disabled={!canEdit}>
-                {INSURANCE.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              <Select
+                value={form.social_insurance_status || ""}
+                onChange={(v) => set("social_insurance_status", v)}
+                disabled={!canEdit}
+                options={INSURANCE}
+              />
             </FormField>
             <FormField label="Insurance details" span="full">
               <input value={form.social_insurance_details || ""} onChange={(e) => set("social_insurance_details", e.target.value)} disabled={!canEdit} />

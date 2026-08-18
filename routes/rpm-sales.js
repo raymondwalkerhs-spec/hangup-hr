@@ -503,15 +503,25 @@ router.post("/:id/attachments", async (req, res) => {
     if (!roles.canWorkQualityTicket(req.userRole) && !roles.canEditSale(req.userRole)) {
       return res.status(403).json({ error: "No permission to upload attachments" });
     }
-    const { fileName, contentBase64, kind } = req.body || {};
-    if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
-    const kindKey = kind || "recording";
+    const { readUploadBuffer } = require("../lib/read-upload-buffer");
+    const parsed = await readUploadBuffer(req, {
+      assertSize: (payload) => {
+        if (Buffer.isBuffer(payload)) {
+          if (payload.length > MAX_ATTACHMENT_BYTES) {
+            return { ok: false, error: `File too large (max ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB)` };
+          }
+          return { ok: true, buffer: payload };
+        }
+        return assertAttachmentPayloadSize(payload);
+      },
+    });
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    const fileName = parsed.fileName;
+    const kindKey = parsed.kind || "recording";
     if (!(await canUserManageRpmAttachmentKind(req.userRole, kindKey))) {
       return res.status(403).json({ error: "No permission to upload this attachment type" });
     }
-    const sizeCheck = assertAttachmentPayloadSize(contentBase64);
-    if (!sizeCheck.ok) return res.status(400).json({ error: sizeCheck.error });
-    const buffer = sizeCheck.buffer;
+    const buffer = parsed.buffer;
     const uploaded = await saleStorage.uploadRpmSaleAttachmentBuffer({
       saleId: req.params.id,
       kind: kindKey,
@@ -543,8 +553,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
     if (!(await canUserManageRpmAttachmentKind(req.userRole, att.kind))) {
       return res.status(403).json({ error: "No permission" });
     }
-    if (att.dropboxPath) await saleStorage.deleteSaleAttachmentFile(att.dropboxPath);
-    await rpmRepo.deleteRpmSaleAttachment(att.id);
+    await rpmRepo.deleteRpmSaleAttachment(att.id, req.username);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -673,6 +682,11 @@ router.patch("/:id", async (req, res) => {
       if (!assignCheck.ok) return res.status(400).json({ error: assignCheck.error });
 
       const built = rpmFieldAccess.buildPayloadFromBody(req.body, synced.formData);
+      const nextMember = built.memberId || existing.memberId;
+      if (String(nextMember || "") !== String(existing.memberId || "") || built.memberId) {
+        const memberCheck = require("../lib/rpm-member-id").validateMemberId(nextMember || "");
+        if (!memberCheck.ok) return res.status(400).json({ error: memberCheck.message, field: "memberId" });
+      }
 
       const { submissionDate: _ignoredSubmissionDate, ...safeForm } = synced.formData || {};
       const patch = {

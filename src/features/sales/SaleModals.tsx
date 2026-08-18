@@ -3,9 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppStatus } from "@/hooks/useAppStatus";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { api, getSessionId } from "@/api/client";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
+import { Select } from "@/ui/Select";
+import { Dropzone } from "@/ui/Dropzone";
+import { useConfirmUndo, useDeferredDelete } from "@/ui/useDeferredDelete";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
+import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import { saleCellValue } from "@/lib/salesCells";
 import { filterEmployeesForSaleField, type SalePickerEmployee } from "@/lib/salesEmployeeFilters";
 import {
@@ -44,7 +48,12 @@ type EmpMap = Map<string, SalePickerEmployee>;
 
 function sectionTitle(sec: string) {
   if (sec === "internal") return "Internal feedback";
+  if (sec === "notes" || sec === "general") return "Notes";
   return sec;
+}
+
+function keepRpmNotesField(f: CatalogField) {
+  return f.key === "notes";
 }
 
 function invalidateSalesQueries(qc: ReturnType<typeof useQueryClient>) {
@@ -319,10 +328,15 @@ function FieldGrid({
                 if (f.type === "select" && f.options) {
                   return (
                     <FormField key={f.key} label={f.label || f.key}>
-                      <select value={val} onChange={(e) => setForm(f.key, e.target.value)}>
-                        {f.selectPlaceholder !== false && <option value="">—</option>}
-                        {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
+                      <Select
+                        value={val}
+                        placeholder="—"
+                        options={[
+                          ...(f.selectPlaceholder !== false ? [{ value: "", label: "—" }] : []),
+                          ...f.options.map((o) => ({ value: o, label: o })),
+                        ]}
+                        onChange={(v) => setForm(f.key, v)}
+                      />
                     </FormField>
                   );
                 }
@@ -394,15 +408,43 @@ function FieldGrid({
                   const options = filterEmployeesForSaleField([...empById.values()], f.employeeFilter, val);
                   return (
                     <FormField key={f.key} label={f.label || f.key}>
-                      <select value={val} onChange={(e) => setForm(f.key, e.target.value)}>
-                        <option value="">—</option>
-                        {options.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.id} — {e.american_name || e.id}
-                            {f.employeeFilter === "reviewers" && String(e.role || "").toLowerCase() === "quality" ? " ★" : ""}
-                          </option>
-                        ))}
-                      </select>
+                      <Select
+                        value={val}
+                        placeholder="—"
+                        options={[
+                          { value: "", label: "—" },
+                          ...options.map((e) => ({
+                            value: e.id,
+                            label: `${e.id} — ${e.american_name || e.id}${
+                              f.employeeFilter === "reviewers" && String(e.role || "").toLowerCase() === "quality" ? " ★" : ""
+                            }`,
+                          })),
+                        ]}
+                        onChange={(v) => setForm(f.key, v)}
+                      />
+                    </FormField>
+                  );
+                }
+                if (f.key === "memberId") {
+                  const display = formatMemberId(val);
+                  return (
+                    <FormField key={f.key} label={f.label || f.key}>
+                      <input
+                        value={display}
+                        onChange={(e) => {
+                          const caret = e.target.selectionStart || 0;
+                          const next = applyMemberIdInput(e.target.value, caret);
+                          setForm(f.key, next.stored);
+                          requestAnimationFrame(() => {
+                            e.target.setSelectionRange(next.caret, next.caret);
+                          });
+                        }}
+                        onBlur={(e) => {
+                          const check = validateMemberId(e.target.value, { required: false });
+                          if (e.target.value && !check.ok) e.target.setCustomValidity(check.message || "Invalid");
+                          else e.target.setCustomValidity("");
+                        }}
+                      />
                     </FormField>
                   );
                 }
@@ -550,6 +592,11 @@ function SaleAttachmentsPanel({
   uploadPending?: boolean;
   loadingKinds?: boolean;
 }) {
+  const deferred = useDeferredDelete({
+    items: attachments,
+    commit: (id) => onDelete?.(id),
+    message: "Attachment removed",
+  });
   const kindEditable = (k: AttachKind) => k.canEdit === true || k.canUpload === true;
   const kindCanEdit = useMemo(
     () => Object.fromEntries(attachKinds.map((k) => [k.key, k.canEdit === true || k.canUpload === true])),
@@ -582,7 +629,7 @@ function SaleAttachmentsPanel({
         </p>
       )}
       <ul style={{ fontSize: "0.85rem", margin: "0 0 0.75rem", paddingLeft: 0, listStyle: "none" }}>
-        {attachments.map((a) => {
+        {deferred.visibleItems.map((a) => {
           const canRemove = onDelete && kindCanEdit[a.kind] === true;
           const playInline =
             inlinePlayback &&
@@ -598,31 +645,32 @@ function SaleAttachmentsPanel({
                 ) : null}
                 <Button size="sm" variant="outline" onClick={() => downloadApiFile(downloadPath(a.id), a.fileName)}>Download</Button>
                 {canRemove && (
-                  <Button size="sm" variant="danger" onClick={() => onDelete(a.id)}>Remove</Button>
+                  <Button size="sm" variant="danger" onClick={() => deferred.requestDelete(a.id)}>Remove</Button>
                 )}
               </div>
               {playInline && <InlineMediaPlayer streamPath={streamPath(a.id)} fileName={a.fileName} />}
             </li>
           );
         })}
-        {!attachments.length && <li className="muted">No records uploaded</li>}
+        {!deferred.visibleItems.length && <li className="muted">No records uploaded</li>}
       </ul>
       {uploadable.map((k) => (
-        <label key={k.key} style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.85rem" }}>
-          Upload {k.label || k.key}
-          <input
-            type="file"
-            accept="audio/*,video/*,.mp3,.wav,.m4a,.mp4,.webm,.ogg,.aac,.3gp,.amr,.mov,.opus,.flac,.mpeg,.wma"
-            disabled={uploadPending}
-            style={{ display: "block", marginTop: "0.25rem" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onPickFile(f, k.key);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        <Dropzone
+          key={k.key}
+          label={`Upload ${k.label || k.key}`}
+          disabled={uploadPending}
+          accept="audio/*,video/*,.mp3,.wav,.m4a,.mp4,.webm,.ogg,.aac,.3gp,.amr,.mov,.opus,.flac,.mpeg,.wma"
+          onFile={(f) => onPickFile(f, k.key)}
+        />
       ))}
+      <ConfirmDialog
+        open={Boolean(deferred.confirmId)}
+        onOpenChange={(o) => !o && deferred.setConfirmId(null)}
+        title="Remove this file?"
+        message="It goes to the recycle bin for 20 days. You can undo for 6 seconds."
+        danger
+        onConfirm={deferred.confirmDelete}
+      />
     </FormSection>
   );
 }
@@ -736,10 +784,10 @@ export function QualityTicketModal({
 
   const uploadAtt = useMutation({
     mutationFn: async ({ file, kind }: { file: File; kind: string }) => {
-      const contentBase64 = await fileToBase64(file);
-      return api(path(`/sales/${sale?.id}/attachments`), {
-        method: "POST",
-        body: JSON.stringify(withCompany({ fileName: file.name, contentBase64, kind })),
+      return uploadWithProgress({
+        url: `/api${path(`/sales/${sale?.id}/attachments`)}`,
+        file,
+        fields: { kind },
       });
     },
     onSuccess: () => refetchAtt(),
@@ -937,10 +985,10 @@ export function RpmQualityTicketModal({
 
   const uploadAtt = useMutation({
     mutationFn: async ({ file, kind }: { file: File; kind: string }) => {
-      const contentBase64 = await fileToBase64(file);
-      return api(path(`/rpm-sales/${sale?.id}/attachments`), {
-        method: "POST",
-        body: JSON.stringify(withCompany({ fileName: file.name, contentBase64, kind })),
+      return uploadWithProgress({
+        url: `/api${path(`/rpm-sales/${sale?.id}/attachments`)}`,
+        file,
+        fields: { kind },
       });
     },
     onSuccess: () => refetchAtt(),
@@ -1044,7 +1092,9 @@ export function RpmViewSaleModal({
     enabled: open && !!sale?.id,
   });
   const empById = useMemo(() => new Map((empData?.employees || []).map((e) => [e.id, e])), [empData?.employees]);
-  const fields = (catalog?.fields || []).filter((f) => f.canView !== false && !f.hideOnEdit);
+  const fields = (catalog?.fields || []).filter(
+    (f) => f.canView !== false && (keepRpmNotesField(f) || !f.hideOnEdit)
+  );
   const attachKinds = (catalog?.attachmentKinds || []).filter((k) => k.canView !== false);
 
   if (!sale) return null;
@@ -1126,6 +1176,7 @@ export function RpmSaleFormModal({
 
   const fields = useMemo(() => {
     return (catalog?.fields || []).filter((f) => {
+      if (keepRpmNotesField(f)) return false;
       if (f.canView === false) return false;
       if (!isEdit && f.hideOnCreate) return false;
       if (isEdit && f.hideOnEdit) return false;
@@ -1152,6 +1203,8 @@ export function RpmSaleFormModal({
       if (f.type === "multi-checkbox" && Array.isArray(raw)) init[f.key] = raw.join(",");
       else init[f.key] = raw != null && raw !== "" ? String(raw) : fieldDefaultValue(f);
     });
+    const notesRaw = fd.notes ?? sale?.notes;
+    init.notes = notesRaw != null && notesRaw !== "" ? String(notesRaw) : "";
     if (isEdit) {
       setForm(init);
       setAgentId(String(sale?.agentId || ""));
@@ -1316,17 +1369,32 @@ export function RpmSaleFormModal({
         <FormSection title="Client">
           <FormGrid wide>
             <FormField label="Client Name">
-              <select value={form.client || ""} onChange={(e) => setField("client", e.target.value)}>
-                <option value="">—</option>
-                {(clientsData?.clients || []).map((c) => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <Select
+                value={form.client || ""}
+                placeholder="—"
+                options={[
+                  { value: "", label: "—" },
+                  ...(clientsData?.clients || []).map((c) => ({ value: c.name || c.id, label: String(c.name || c.id) })),
+                ]}
+                onChange={(v) => setField("client", v)}
+              />
             </FormField>
           </FormGrid>
         </FormSection>
       )}
       <FieldGrid fields={fields} sale={sale || {}} empById={empById} form={form} setForm={setField} editable />
+      <FormSection title="Notes">
+        <FormGrid wide>
+          <FormField label="Notes" span="full">
+            <textarea
+              rows={4}
+              value={form.notes || ""}
+              onChange={(e) => setField("notes", e.target.value)}
+              placeholder="Optional"
+            />
+          </FormField>
+        </FormGrid>
+      </FormSection>
       {save.isError && <p style={{ color: "var(--err)" }}>{(save.error as Error).message}</p>}
     </Dialog>
   );
@@ -1356,6 +1424,8 @@ export function SaleFormModal({
 }) {
   const qc = useQueryClient();
   const isEdit = !!sale?.id;
+  const saleUndo = useConfirmUndo();
+  const attUndo = useConfirmUndo();
   const [form, setForm] = useState<Record<string, string>>({});
   const [agentId, setAgentId] = useState("");
   const [closerId, setCloserId] = useState("");
@@ -1534,10 +1604,10 @@ export function SaleFormModal({
 
   const uploadAtt = useMutation({
     mutationFn: async ({ file, kind }: { file: File; kind: string }) => {
-      const contentBase64 = await fileToBase64(file);
-      return api(path(`/sales/${sale?.id}/attachments`), {
-        method: "POST",
-        body: JSON.stringify(withCompany({ fileName: file.name, contentBase64, kind })),
+      return uploadWithProgress({
+        url: `/api${path(`/sales/${sale?.id}/attachments`)}`,
+        file,
+        fields: { kind },
       });
     },
     onSuccess: () => refetchAtt(),
@@ -1561,9 +1631,12 @@ export function SaleFormModal({
       footer={
         <>
           {isEdit && (
-            <Button variant="danger" onClick={() => {
-              if (confirm("Delete this sale?")) deleteSale.mutate();
-            }}>Delete</Button>
+            <Button variant="danger" onClick={() => saleUndo.confirmUndo({
+              title: "Delete this sale?",
+              message: "This permanently removes the sale after 6 seconds. Undo from the toast if you change your mind.",
+              toast: "Sale deleted",
+              commit: () => deleteSale.mutateAsync(),
+            })}>Delete</Button>
           )}
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={() => save.mutate()} disabled={save.isPending}>Save</Button>
@@ -1638,27 +1711,42 @@ export function SaleFormModal({
               <li key={a.id} style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.25rem" }}>
                 <span>{a.kind}: {a.fileName}</span>
                 <Button size="sm" variant="outline" onClick={() => downloadApiFile(`/sales/attachments/${a.id}/download`, a.fileName)}>Download</Button>
-                <Button size="sm" variant="danger" onClick={() => deleteAtt.mutate(a.id)}>Delete</Button>
+                <Button size="sm" variant="danger" onClick={() => attUndo.confirmUndo({
+                  title: "Remove this file?",
+                  message: "It goes to the recycle bin. You can undo for 6 seconds.",
+                  toast: "Attachment removed",
+                  commit: () => deleteAtt.mutateAsync(a.id),
+                })}>Delete</Button>
               </li>
             ))}
             {!attachments?.attachments?.length && <li className="muted">No attachments</li>}
           </ul>
           {attachKinds.filter((k) => k.canEdit !== false).map((k) => (
-            <label key={k.key} style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.85rem" }}>
-              Upload {k.label || k.key}
-              <input
-                type="file"
-                style={{ display: "block", marginTop: "0.25rem" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadAtt.mutate({ file: f, kind: k.key });
-                }}
-              />
-            </label>
+            <Dropzone
+              key={k.key}
+              label={`Upload ${k.label || k.key}`}
+              onFile={(f) => uploadAtt.mutate({ file: f, kind: k.key })}
+            />
           ))}
         </FormSection>
       )}
       {save.isError && <p style={{ color: "var(--err)" }}>{(save.error as Error).message}</p>}
+      <ConfirmDialog
+        open={saleUndo.confirmOpen}
+        onOpenChange={saleUndo.setConfirmOpen}
+        title={saleUndo.confirmTitle}
+        message={saleUndo.confirmMessage}
+        danger
+        onConfirm={saleUndo.confirmDelete}
+      />
+      <ConfirmDialog
+        open={attUndo.confirmOpen}
+        onOpenChange={attUndo.setConfirmOpen}
+        title={attUndo.confirmTitle}
+        message={attUndo.confirmMessage}
+        danger
+        onConfirm={attUndo.confirmDelete}
+      />
     </Dialog>
   );
 }

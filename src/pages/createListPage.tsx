@@ -8,6 +8,8 @@ import { SectionHeader } from "@/ui/SectionHeader";
 import { DataGrid } from "@/ui/DataGrid";
 import { Card } from "@/ui/Card";
 import { InspectorDetail } from "@/ui/InspectorDetail";
+import { QueryErrorCard } from "@/ui/QueryErrorCard";
+import { Skeleton } from "@/ui/Skeleton";
 import { useInspectorStore } from "@/stores/cross-filter-store";
 import { useAppStore } from "@/stores/theme-store";
 
@@ -47,20 +49,23 @@ export function createListPage<T extends Record<string, unknown>>({
     ];
     const sub = typeof subtitle === "function" ? subtitle(month) : subtitle;
 
-    const { data, isLoading, error } = useQuery({
+    const { data, isLoading, isFetching, error, refetch } = useQuery({
       queryKey: qk,
       queryFn: () => api(path),
     });
 
     const rows = extractRows<T>(data, selectRows);
+    const showSkeleton = (isLoading || isFetching) && !error && data === undefined;
 
     return (
       <div>
         <SectionHeader title={title} subtitle={sub} actions={actions} />
         <Card>
-          {isLoading && <p className="muted">Loading…</p>}
-          {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
-          {!isLoading && !error && (
+          {showSkeleton && <Skeleton />}
+          {error && (
+            <QueryErrorCard error={error} pageName={title} onRetry={() => refetch()} />
+          )}
+          {!error && data !== undefined && (
             <DataGrid
               data={rows}
               columns={columns}
@@ -81,5 +86,4 @@ export function createListPage<T extends Record<string, unknown>>({
   };
 }
 
-// Re-export col from columnMaps for backward compat
 export { col } from "@/api/columnMaps";

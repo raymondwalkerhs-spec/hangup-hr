@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.26`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.28`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -17,7 +17,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 3. Optional: **Remember my username** (stored locally on this PC only).
 4. Click **Sign in**.
 
-**First login** needs internet. You will see **Syncing HR data…** while employees, attendance, and payroll load into the local cache. Switching pages (especially **Payroll** and **Employees**) shows a centered cat loading overlay until that page’s data is ready; returning to a page you already opened is usually instant.
+**First login** needs internet. You will see **Syncing HR data…** while employees, attendance, and payroll load into the local cache. Switching pages (especially **Payroll** and **Employees**) shows a centered cat loading overlay until that page’s data is ready; returning to a page you already opened is usually instant. Agents and office assistants see a short **first-login guide** (Don’t show again). Connection loss shows a **Reconnecting / Offline** banner — cached reads still work.
 
 | Issue | What to do |
 |-------|------------|
@@ -39,12 +39,16 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | **Employees** | Profiles, nationality, documents, lifecycle. Moving unit to another company needs confirmation and a new team |
 | **Coaching** | Agent coaching tickets (coach, outcome, general + secret notes) |
 | **Attendance** | Monthly grid; **Import FP file** for device exports; per-month FP rules |
-| **Payroll** | Monthly payroll, payslips, month lock, MoM compare |
+| **Payroll** | Monthly payroll, payslips, month lock, MoM compare. **Agents** see their own released payslip here when HR ticks Show to agent |
+| **Cats** | Fun orbiting cats — no HR data |
+| **Recycle bin** | HR/Admin/CEO/RTM/IT restore deleted announcements, coaching, IT, pending leave, and files (20 days) |
 | **Bonuses / Deductions / Loans / Salaries** | Payroll inputs; **Loan approvals** (Mark/Phoebe/Raymond only) |
 | **Reports** | Monthly report, turnover, rankings, **saved custom reports** |
 | **Costs** | Expenses, petty cash, monthly bills *(finance + HR submit)* |
 | **Requests** | Annual, unpaid, medical, and same-day off (replaces Leave) |
-| **Equipment** | Company asset registry |
+| **Equipment** | Company asset registry (inventory vs own devices) |
+| **Offboarding** | Leaver table — revoke access and final pay in the row |
+| **Clearance** | Leaver table — form, devices, files |
 | **Organization** | Unit → team → agent; OP/TL assignment; registrations |
 | **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, **break schedules**, refresh |
 | **Sales** | Sales log, add/edit sale, quality tickets, exports |
@@ -93,7 +97,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 5. **Locked payroll months** block edits — unlock from Payroll page.  
 6. Changes save automatically (watch for the Saved indicator).
 
-Edits outside an employee’s **active employment period** are rejected (after depart or before re-hire).
+Edits outside an employee’s **active employment period** are rejected (after depart or before re-hire). Closers with TL access who are **not** assigned as that team’s TL (Amy, Ria) only see their own row. Assigned TLs still see their led teams.
 
 ---
 
@@ -165,7 +169,9 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 ## 7. Equipment & organization
 
-- **Equipment** — search an agent by name or ID in the toolbar, or open from a payslip **Equipment** link (`#equipment?employee=…`). Issue device lists agents only.
+- **Equipment** — search an agent by name or ID in the toolbar, or open from a payslip **Equipment** link (`/equipment?employee=…`). Issue device lists **active** agents only (searchable). The Equipment tab is inventory for IT/HR/Admin/CEO (OP: own unit); other roles see it only while they have a device out.
+- **Offboarding** — table of everyone who left. Click **Revoke access** or **Final pay** in the row (final pay waits until clearance is complete). Open a row for depart / re-hire.
+- **Clearance** — separate table for handover form, devices, and files. Click Form or Files to mark done. Devices with items still out link to Equipment. Payroll cannot close until form/files are done or not needed, devices are returned (if any were issued), and Offboarding **Final pay** is ticked.
 - **Organization** — read-only view of team reporting lines (Dialing → OP Manager, HR → HR Manager, etc.).
 
 ---
@@ -174,7 +180,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 | Section | Who | What |
 |---------|-----|------|
-| **Appearance** | Everyone | Light / Dark / Grey / Wine / Dark grey / Alabaster |
+| **Appearance** | Everyone | Hangup Light / Dark / Violet / Pink / Red Wine / Diamond / Emerald |
 | **Change password** | Everyone | Current + new password |
 | **Display** | HR | Hide out / inactive employees |
 | **Federal holidays** | HR | Import USA 2024–2028, toggle per holiday, year accordion in Settings |
@@ -209,7 +215,7 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 | **op** | Unit attendance + unit bonuses/deductions (read) |
 | **tl** | Team attendance (edit) + team bonuses/deductions |
 | **quality** / **rtm** | Own attendance + own bonuses/deductions; bonuses transferred to others |
-| **agent** | Own attendance + own bonuses/deductions (read) |
+| **agent** | Own attendance + own bonuses/deductions (read); **Payroll** tab when a payslip is shown to the agent |
 | **office_assistant** | Same as agent |
 
 ### Bonus requests

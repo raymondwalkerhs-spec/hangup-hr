@@ -8,6 +8,7 @@ import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { PageToolbar, SearchField } from "@/ui/PageToolbar";
 import { StatusPill } from "@/ui/StatusPill";
 
@@ -103,10 +104,14 @@ export function LoansPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen} title="Add loan" wide footer={<><Button variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button><Button onClick={() => create.mutate()} disabled={!form.employeeId || !form.totalAmount}>Create</Button></>}>
         <FormGrid wide>
           <FormField label="Employee">
-            <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
-              <option value="">—</option>
-              {(emps?.employees || []).map((e) => <option key={e.id} value={e.id}>{e.id} — {e.american_name}</option>)}
-            </select>
+            <Select
+              value={form.employeeId}
+              onChange={(employeeId) => setForm({ ...form, employeeId })}
+              options={[
+                { value: "", label: "—" },
+                ...(emps?.employees || []).map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name}` })),
+              ]}
+            />
           </FormField>
           <FormField label="Total amount"><input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} /></FormField>
           <FormField label="Installment"><input type="number" value={form.installmentAmount} onChange={(e) => setForm({ ...form, installmentAmount: e.target.value })} /></FormField>

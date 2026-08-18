@@ -6,8 +6,11 @@ import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAppStatus } from "@/hooks/useAppStatus";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
-import { fetchApiBlob, fileToBase64, isAudioFileName, MAX_SALE_ATTACHMENT_BYTES } from "@/lib/files";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
+import { Dropzone } from "@/ui/Dropzone";
+import { useDeferredDelete } from "@/ui/useDeferredDelete";
+import { fetchApiBlob, isAudioFileName, MAX_SALE_ATTACHMENT_BYTES } from "@/lib/files";
+import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import { RichTextEditor } from "./RichTextEditor";
 import styles from "./AnnouncementsPage.module.css";
 
@@ -190,6 +193,17 @@ export function AnnouncementsPage() {
 
   const items = data?.announcements || [];
   const detail = detailData?.announcement;
+  const deferred = useDeferredDelete({
+    items,
+    commit: async (id) => {
+      await api(path(`/announcements/${id}`), { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-unread"] });
+      qc.invalidateQueries({ queryKey: ["hrms-notifications"] });
+      if (selectedId === id) setSelectedId(null);
+    },
+    message: "Announcement deleted",
+  });
 
   useEffect(() => {
     const openId = searchParams.get("open");
@@ -252,18 +266,16 @@ export function AnnouncementsPage() {
       }
       if (pendingImage) {
         if (pendingImage.size > MAX_IMAGE_BYTES) throw new Error("Image must be 8 MB or smaller");
-        const contentBase64 = await fileToBase64(pendingImage);
-        await api(path(`/announcements/${id}/image`), {
-          method: "POST",
-          body: JSON.stringify({ fileName: pendingImage.name, contentBase64 }),
+        await uploadWithProgress({
+          url: `/api${path(`/announcements/${id}/image`)}`,
+          file: pendingImage,
         });
       }
       if (pendingAudio) {
         if (pendingAudio.size > MAX_SALE_ATTACHMENT_BYTES) throw new Error("Audio must be 35 MB or smaller");
-        const contentBase64 = await fileToBase64(pendingAudio);
-        await api(path(`/announcements/${id}/audio`), {
-          method: "POST",
-          body: JSON.stringify({ fileName: pendingAudio.name, contentBase64 }),
+        await uploadWithProgress({
+          url: `/api${path(`/announcements/${id}/audio`)}`,
+          file: pendingAudio,
         });
       }
       return id;
@@ -280,15 +292,6 @@ export function AnnouncementsPage() {
     onError: (err: Error) => setFormError(err.message || "Save failed"),
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api(path(`/announcements/${id}`), { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["announcements"] });
-      qc.invalidateQueries({ queryKey: ["announcement-unread"] });
-      qc.invalidateQueries({ queryKey: ["hrms-notifications"] });
-      setSelectedId(null);
-    },
-  });
 
   const resetMedia = () => {
     setPendingImage(null);
@@ -340,10 +343,10 @@ export function AnnouncementsPage() {
 
       {isLoading && <p className="muted">Loading…</p>}
       {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
-      {!isLoading && !items.length && <p className="muted">No announcements yet.</p>}
+      {!isLoading && !deferred.visibleItems.length && <p className="muted">No announcements yet.</p>}
 
       <div className={styles.list}>
-        {items.map((item) => (
+        {deferred.visibleItems.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -371,7 +374,7 @@ export function AnnouncementsPage() {
           canEdit && detail ? (
             <div className={styles.actions}>
               <Button variant="secondary" onClick={() => openEdit(detail)}>Edit</Button>
-              <Button variant="danger" onClick={() => detail.id && remove.mutate(detail.id)}>Delete</Button>
+              <Button variant="danger" onClick={() => detail.id && deferred.requestDelete(detail.id)}>Delete</Button>
             </div>
           ) : undefined
         }
@@ -510,21 +513,19 @@ export function AnnouncementsPage() {
               ) : null
             )}
             <div className={styles.mediaActions}>
-              <label className="muted">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    setPendingImage(f);
-                    setPendingImageUrl((prev) => {
-                      if (prev) URL.revokeObjectURL(prev);
-                      return f ? URL.createObjectURL(f) : "";
-                    });
-                    setRemoveImage(false);
-                  }}
-                />
-              </label>
+              <Dropzone
+                label="Drop a picture or click to browse"
+                accept="image/*"
+                maxBytes={MAX_IMAGE_BYTES}
+                onFile={(f) => {
+                  setPendingImage(f);
+                  setPendingImageUrl((prev) => {
+                    if (prev) URL.revokeObjectURL(prev);
+                    return URL.createObjectURL(f);
+                  });
+                  setRemoveImage(false);
+                }}
+              />
               {(pendingImage || (editingId && detail?.hasImage)) && (
                 <Button
                   variant="ghost"
@@ -550,21 +551,19 @@ export function AnnouncementsPage() {
               <AuthoredMedia kind="audio" id={editingId} pathFn={path} audioName={detail.audioName} />
             )}
             <div className={styles.mediaActions}>
-              <label className="muted">
-                <input
-                  type="file"
-                  accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.opus,.amr"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    if (f && !isAudioFileName(f.name) && !String(f.type || "").startsWith("audio/")) {
-                      setFormError("Choose an audio file");
-                      return;
-                    }
-                    setPendingAudio(f);
-                    setRemoveAudio(false);
-                  }}
-                />
-              </label>
+              <Dropzone
+                label="Drop audio or click to browse"
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.opus,.amr"
+                maxBytes={MAX_SALE_ATTACHMENT_BYTES}
+                onFile={(f) => {
+                  if (!isAudioFileName(f.name) && !String(f.type || "").startsWith("audio/")) {
+                    setFormError("Choose an audio file");
+                    return;
+                  }
+                  setPendingAudio(f);
+                  setRemoveAudio(false);
+                }}
+              />
               {(pendingAudio || (editingId && detail?.hasAudio)) && (
                 <Button
                   variant="ghost"
@@ -581,6 +580,14 @@ export function AnnouncementsPage() {
           </div>
         </div>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(deferred.confirmId)}
+        onOpenChange={(o) => !o && deferred.setConfirmId(null)}
+        title="Delete announcement?"
+        message="It will move to the recycle bin for 20 days. You can undo for 6 seconds."
+        danger
+        onConfirm={deferred.confirmDelete}
+      />
     </div>
   );
 }

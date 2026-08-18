@@ -13,6 +13,22 @@ const teamsMeta = [
   { id: "t2", name: "Ayla", unit: "HS-1", tlEmployeeId: "HS1-05", dialsSales: true },
 ];
 const appUsers = [{ username: "ayla", role: "tl", employeeId: "HS1-05" }];
+test("agentCountsForDay uses RPM client feedback buckets", () => {
+  const date = "2026-08-18";
+  const sales = [
+    { agentId: "HS1-10", status: "passed", workingDay: date, formData: { clientFeedback: "Approved" } },
+    { agentId: "HS1-10", status: "pending", workingDay: date, formData: { clientFeedback: "Pending" } },
+    { agentId: "HS1-10", status: "denied", workingDay: date, formData: { clientFeedback: "Denied" } },
+    { agentId: "HS1-10", status: "callback", workingDay: date, formData: { clientFeedback: "Retransfer", retransfer: true } },
+  ];
+  const counts = teamDashboard.agentCountsForDay(sales, "HS1-10", date);
+  assert.equal(counts.approved, 1);
+  assert.equal(counts.pending, 1);
+  assert.equal(counts.dropped, 1);
+  assert.equal(counts.retransfer, 1);
+  assert.equal(counts.totalSent, 4);
+});
+
 test("agentCountsForDay includes pending sales in totalSent", () => {
   const date = "2026-08-04";
   const sales = [

@@ -83,7 +83,11 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { status } = useAuth();
   const user = status?.user as StatusUser | undefined;
+  const showPayroll = user?.canViewDashboardPayroll === true;
   const showAnnouncements = canAccessPage(user, "announcements");
+  const [payrollRevealed, setPayrollRevealed] = useState(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout>>();
+  const payrollPtr = useRef<{ x: number; y: number } | null>(null);
   const showCoaching = canAccessPage(user, "coaching");
   const month = useAppStore((s) => s.month);
   const { path, companyContext } = useCompanyScope();
@@ -98,6 +102,7 @@ export function DashboardPage() {
   const { data: payData } = useQuery({
     queryKey: ["payroll", month, companyContext],
     queryFn: () => api<{ totals: { totalNet: number } }>(path("/payroll", { month })),
+    enabled: showPayroll,
   });
   const { data: salesDash } = useQuery({
     queryKey: ["sales-dashboard", month, filters.team, companyContext],
@@ -140,6 +145,19 @@ export function DashboardPage() {
   }));
   const att = opsMonth?.attendance || {};
   const attMax = Math.max(att.dayOff || 0, att.nsnc || 0, att.halfDay || 0, att.wfh || 0, 1);
+  const closerTeams = (user?.closerTeams as { team?: string; name?: string }[] | undefined) || [];
+  const closeTeamCount =
+    typeof user?.closeTeamCount === "number"
+      ? user.closeTeamCount
+      : new Set(
+          closerTeams
+            .map((t) => String(t.team || t.name || "").trim().toLowerCase())
+            .filter(Boolean)
+        ).size;
+  const showCloseTeamsKpi =
+    user?.usesCloseTeamsDashboardKpi === true ||
+    String(user?.role || "").toLowerCase() === "tl" ||
+    closerTeams.length > 0;
 
   return (
     <div>
@@ -168,7 +186,7 @@ export function DashboardPage() {
       )}
       <ResponsiveGrid
         className={styles.grid}
-        layout={layout}
+        layout={showPayroll ? layout : layout.filter((l) => l.i !== "payroll")}
         cols={12}
         rowHeight={90}
         margin={[12, 12]}
@@ -186,22 +204,40 @@ export function DashboardPage() {
             <KpiRing value={active} label="Active employees" max={Math.max(employees.length, 1)} />
           </WidgetCard>
         </div>
+        {showPayroll && (
         <div key="payroll">
           <WidgetCard title="Net payroll" className="drag-handle">
             <motion.strong
-              className="tabular-nums"
+              className={`tabular-nums ${payrollRevealed ? "" : styles.payrollBlur}`}
               style={{ fontSize: "1.75rem", color: "var(--primary)" }}
+              aria-hidden={!payrollRevealed}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              onMouseDown={(e) => {
+                payrollPtr.current = { x: e.clientX, y: e.clientY };
+              }}
+              onDoubleClick={(e) => {
+                const start = payrollPtr.current;
+                if (start && (Math.abs(e.clientX - start.x) > 6 || Math.abs(e.clientY - start.y) > 6)) return;
+                e.stopPropagation();
+                setPayrollRevealed(true);
+                clearTimeout(revealTimer.current);
+                revealTimer.current = setTimeout(() => setPayrollRevealed(false), 60000);
+              }}
             >
               {payData?.totals?.totalNet?.toLocaleString("en-EG") ?? "—"}
             </motion.strong>
-            <span className="muted">EGP</span>
+            <span className="muted">EGP{payrollRevealed ? "" : " · double-click to reveal"}</span>
           </WidgetCard>
         </div>
+        )}
         <div key="units">
-          <WidgetCard title="Units" className="drag-handle">
-            <KpiRing value={empData?.units?.length || 0} label="Units" max={20} />
+          <WidgetCard title={showCloseTeamsKpi ? "Close teams" : "Units"} className="drag-handle">
+            <KpiRing
+              value={showCloseTeamsKpi ? closeTeamCount : empData?.units?.length || 0}
+              label={showCloseTeamsKpi ? "Teams you close" : "Units"}
+              max={showCloseTeamsKpi ? Math.max(closeTeamCount, 5) : 20}
+            />
           </WidgetCard>
         </div>
         <div key="sales">

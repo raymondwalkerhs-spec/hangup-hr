@@ -53,6 +53,21 @@
 .itemUnread {
   font-weight: 600;
 }
+.pulse {
+  animation: bellPulse 500ms ease;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}
+@keyframes bellPulse {
+  0% { transform: scale(1) rotate(0); }
+  25% { transform: scale(1.12) rotate(-8deg); }
+  50% { transform: scale(1.08) rotate(8deg); }
+  100% { transform: scale(1) rotate(0); }
+}
 .header {
   display: flex;
   justify-content: space-between;

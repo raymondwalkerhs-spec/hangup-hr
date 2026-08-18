@@ -45,21 +45,24 @@ window.TeamDashboardModule = (function () {
     }
     const teamBlocks = [...byTeam.entries()]
       .map(([team, teamRows]) => {
-        let tApproved = 0;
-        let tPost = 0;
+        let tPassed = 0;
+        let tPending = 0;
         let tDrop = 0;
+        let tRetransfer = 0;
         let tTotal = 0;
         const body = teamRows
           .map((r) => {
-            tApproved += r.approved || 0;
-            tPost += r.postdated || 0;
+            tPassed += r.approved || 0;
+            tPending += r.pending || 0;
             tDrop += r.dropped || 0;
+            tRetransfer += r.retransfer || 0;
             tTotal += r.totalSent || 0;
             return `<tr class="${r.dayOff ? "muted" : ""}">
               <td>${escapeHtml(r.agentName)}</td>
               <td>${cellVal(r.approved)}</td>
-              <td>${cellVal(r.postdated)}</td>
+              <td>${cellVal(r.pending)}</td>
               <td>${cellVal(r.dropped)}</td>
+              <td>${cellVal(r.retransfer)}</td>
               <td>${r.totalSent ?? 0}</td>
             </tr>`;
           })
@@ -67,17 +70,17 @@ window.TeamDashboardModule = (function () {
         return `<div class="table-wrap team-dash-table" style="margin-bottom:1rem">
           <h4 style="margin:0 0 .5rem">${escapeHtml(team)}</h4>
           <table>
-            <thead><tr><th>Agent name</th><th>Approved</th><th>PostDated</th><th>Dropped</th><th>Total Sent</th></tr></thead>
+            <thead><tr><th>Agent name</th><th>Passed</th><th>Pending</th><th>Dropped</th><th>Retransfer</th><th>Total</th></tr></thead>
             <tbody>${body}
               <tr class="team-dash-total-row"><td><strong>Team total</strong></td>
-                <td>${cellVal(tApproved)}</td><td>${cellVal(tPost)}</td><td>${cellVal(tDrop)}</td><td><strong>${tTotal}</strong></td></tr>
+                <td>${cellVal(tPassed)}</td><td>${cellVal(tPending)}</td><td>${cellVal(tDrop)}</td><td>${cellVal(tRetransfer)}</td><td><strong>${tTotal}</strong></td></tr>
             </tbody>
           </table>
         </div>`;
       })
       .join("");
     return `${teamBlocks}<div class="table-wrap team-dash-table"><table><tbody>
-      <tr class="team-dash-total-row"><td colspan="5"><strong>Grand total</strong> — Approved ${cellVal(totals.approved)} · Total ${totals.totalSent ?? 0}</td></tr>
+      <tr class="team-dash-total-row"><td colspan="6"><strong>Grand total</strong> — Passed ${cellVal(totals.approved)} · Pending ${cellVal(totals.pending)} · Dropped ${cellVal(totals.dropped)} · Retransfer ${cellVal(totals.retransfer)} · Total ${totals.totalSent ?? 0}</td></tr>
     </tbody></table></div>`;
   }
 
@@ -86,7 +89,7 @@ window.TeamDashboardModule = (function () {
     return `<div class="table-wrap team-dash-table" style="margin-top:1rem">
       <table>
         <thead><tr>
-          <th>Team</th><th>Agents count</th><th>Approved</th><th>Total</th><th>Conversion</th><th>Day-Offs</th>
+          <th>Team</th><th>Agents count</th><th>Passed</th><th>Total</th><th>Conversion</th><th>Day-Offs</th>
         </tr></thead>
         <tbody>${summaries.map((t) => `<tr>
           <td><strong>${escapeHtml(t.team)}</strong></td>

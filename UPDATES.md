@@ -1,6 +1,14 @@
+## v2.3.28 release checklist
+
+**Shipped 2026-08-18 (installer-only, breaking):** GitHub [v2.3.28](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.28) is **Latest**. Supabase `app_versions` `2.3.28` is `is_current` with `--breaking`. Apply `20260824_recycle_bin_and_transport_grant.sql`. Then `npm run build:web`, `dist:installer`, `dist:web-installer`, `publish:installer`.
+
+## v2.3.27 release checklist
+
+**Shipped 2026-08-17 (installer-only):** GitHub [v2.3.27](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.27) is **Latest**. Supabase `app_versions` `2.3.27` is `is_current`. Assets: `Hangup-Portal-Setup-2.3.27.exe`, `Hangup-Portal-Web-Setup.exe`, `win-x64-latest.json`. Equipment/Clearance/Offboarding tables, Emerald theme.
+
 ## v2.3.26 release checklist
 
-**Shipped 2026-08-17 (installer-only):** GitHub [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26) is **Latest**. Supabase `app_versions` `2.3.26` is `is_current`. Assets: `Hangup-Portal-Setup-2.3.26.exe`. Includes Cairo RPM date filtering, explicit Add-sale intent, HS-2 switcher hardening, and role-scoped dashboard metrics.
+**Shipped 2026-08-17 (installer-only):** GitHub [v2.3.26](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.26). Supabase `app_versions` `2.3.26` was `is_current`. Assets: `Hangup-Portal-Setup-2.3.26.exe`. Includes Cairo RPM date filtering, explicit Add-sale intent, HS-2 switcher hardening, and role-scoped dashboard metrics.
 
 ## v2.3.23 release checklist
 

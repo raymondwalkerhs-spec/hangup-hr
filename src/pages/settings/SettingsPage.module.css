@@ -40,6 +40,7 @@
 .swatch_pink { background: linear-gradient(135deg, #fff1f5 50%, #be185d 50%); }
 .swatch_red-wine { background: linear-gradient(135deg, #1a1214 50%, #f43f5e 50%); }
 .swatch_diamond { background: linear-gradient(135deg, #f8fafc 50%, #94a3b8 50%); }
+.swatch_emerald { background: linear-gradient(135deg, #eef7f2 50%, #059669 50%); }
 .themeOption strong {
   display: block;
 }

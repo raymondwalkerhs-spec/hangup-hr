@@ -10,6 +10,7 @@ import type { StaffOption } from "./interviewStaffOptions";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
+import { Select } from "@/ui/Select";
 import { DataGrid } from "@/ui/DataGrid";
 import { InspectorDetail } from "@/ui/InspectorDetail";
 import { useInspectorStore } from "@/stores/cross-filter-store";
@@ -110,14 +111,16 @@ export function InterviewsPage() {
       <SectionHeader title="Interviews" subtitle={`${rows.length} candidates · synced ${new Date(dataUpdatedAt).toLocaleTimeString()}`} />
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
         <input type="search" placeholder="Search candidates…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select value={firstStatus} onChange={(e) => setFirstStatus(e.target.value)}>
-          <option value="">All 1st status</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={secondStatus} onChange={(e) => setSecondStatus(e.target.value)}>
-          <option value="">All 2nd status</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <Select
+          value={firstStatus}
+          onChange={setFirstStatus}
+          options={[{ value: "", label: "All 1st status" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
+        />
+        <Select
+          value={secondStatus}
+          onChange={setSecondStatus}
+          options={[{ value: "", label: "All 2nd status" }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s }))]}
+        />
       </div>
       <Card>
         {isLoading ? <p className="muted">Loading…</p> : <DataGrid data={rows} columns={columns} virtualize={rows.length > 50} />}

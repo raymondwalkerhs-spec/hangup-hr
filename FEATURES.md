@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.3.25 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.3.28 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -20,6 +20,17 @@
 | **Governance** | Role-based access, field-level sales permissions, full audit trail |
 
 **One-line pitch:** A fast, offline-friendly desktop HR system that keeps workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
+
+### New in 2.3.28
+- Shared **Select** (search at 10+ options), sidebar label fade, dialog 250/150ms motion
+- **Cats** playground (`/cats`) — no HR data
+- **Recycle bin** (20 days) for announcements, coaching, IT, pending leave, and attachments
+- Drag-and-drop **uploads** with progress; confirm + 6s undo on deletes
+- RPM **Member ID** pattern `NLAN-LAN-LLNN` (display `XXXX-XXX-XXXX`)
+- Attendance **drag-select**; sales **period picker** (Quality/HR/RTM/Admin/OP/CEO)
+- Agent **Payroll** tab for released payslips; dashboard Net payroll blur-until-double-click
+- Full **transport grant** on payslip; bonus/deduction notices to the employee
+- **Reconnect** banner (Live / Reconnecting / Offline); agent first-login guide
 
 ---
 
@@ -96,8 +107,8 @@ Supabase (Postgres + Storage)
 
 - **Employment periods** — start, depart, re-hire; gap months excluded from attendance
 - **Onboarding checklist** — AD user, ID scan, contract, training phases 1–4
-- **Offboarding** — revoke access, final pay
-- **Clearance** — handover form, equipment return, file checklist
+- **Offboarding** — interactive table of leavers; click Revoke access / Final pay in the row. Final pay stays locked until clearance is complete.
+- **Clearance** — separate table of Out / departed staff: click Form / Files in the row; devices follow live assignments. Payslip banners link here.
 - **Reposition** — move agents between units/teams with correct ID pool rules
 - **Agent registration** — 3-step wizard (PIN → details → approval pipeline)
 
@@ -323,10 +334,12 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 ### Equipment
 
-- Company asset registry (serial, type, status)
-- Assign and return devices to any employee (IT / HR / Admin)
-- Unit-scoped view for OP; self-only for agents
-- Deep links: `#equipment?employee=HS3-08`
+- Company asset registry (`asset_tag` + type: Mouse / Keyboard / Laptop / Workstation / Headset / Phone / Mini router)
+- Assign and return devices (IT / HR / Admin / CEO); OP sees own unit inventory
+- Agents and other non-inventory roles see the tab **only while they have an unreturned device**
+- Search by name or ID; payslip / clearance deep link `?employee=`
+- Issue picker: searchable **active** employees; unit taken from the employee
+- Company isolation (Hangup vs HS-2) on the `equipment.company` column
 - Issue equipment permission in Access Control
 
 ### Organization
@@ -356,9 +369,11 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 - Headcount and turnover widgets
 - Payroll totals (finance / HR / leadership)
+- Units count for HR / Admin / CEO / Quality / OP; TLs and closers see **Teams you close** instead
 - Document expiry summary
 - Team and company sales dashboards (role-scoped)
 - **Sales this month** — Sales per calendar day for the selected month, scoped by role (agent = own; TL = team; closer = closed; OP = unit; RTM / Admin / Quality / HR = company)
+- **Team dashboards** — daily/weekly RPM Passed / Pending / Dropped / Retransfer / Total (no MLA PostDated layout)
 - **Attendance tiles** — Day off, NSNC, Half day, and WFH counts for the same employee scope
 - **HS-2 company isolation** — Binary company model (`hangup` vs `hs2`). **Managing** toggle (top-left sidebar) for admin/ceo/hr only (`manageHs2Company` is hard-denied for OP / TL / agent). Native HS-2 staff stay on their unit with no switcher. `?company=hs2` denied unless the user can access HS-2. HS-2 sales/data visible **only** in HS-2 company context (strict — not on Main Hangup tab).
 
@@ -404,7 +419,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 ### Settings
 
-- Seven color themes (saved per device)
+- Seven color themes (saved per device), including **Emerald** (jade on mint)
 - **Page loading overlay** — cat animation centered in the viewport while Payroll/Employees (and other cold pages) load; running cat uses nearby changing paths and faces the way it is going
 - Federal holidays, tax rules, break schedules (timed pop-up reminders)
 - Sales catalog (clients, products, prices)
@@ -424,7 +439,7 @@ Separate Electron entry for Admin/RTM:
 
 ## Appearance & user experience
 
-- Seven themes: Light, Dark, Grey, Dark wine, Dark grey, Alabaster, Girly pink
+- Themes: Hangup Light, Hangup Dark, Violet, Pink, Red Wine, Diamond, **Emerald**
 - Shared design tokens — badges and statuses render correctly in every theme
 - Full button system with hover, focus, disabled, and loading states
 - Polished tables: sticky headers, zebra rows, styled empty states
@@ -481,6 +496,8 @@ Separate Electron entry for Admin/RTM:
 | Costs | Expenses, petty cash, bills |
 | Requests | Leave and time-off approvals |
 | Equipment | Asset registry and assignments |
+| Offboarding | Leaver table — revoke access, final pay |
+| Clearance | Leaver table — form, devices, files |
 | Organization | Units, teams, rosters, registrations |
 | Sales | Log, forms, quality tickets, export |
 | Sales permissions | Field-level ACL (Admin / RTM) |

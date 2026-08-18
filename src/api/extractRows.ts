@@ -61,6 +61,7 @@ export function joinEquipmentRows(data: unknown): Record<string, unknown>[] {
         notes: a.notes || eq.notes,
         assignedAt: a.assignedAt || a.issuedAt,
         equipmentId: a.equipmentId,
+        assetTag: a.assetTag || eq.assetTag || "",
       };
     });
 }

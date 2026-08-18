@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
@@ -25,7 +25,9 @@ function navFor(n: Notif): string | null {
   if (t.includes("meeting")) return "/meeting-requests";
   if (t.includes("it_request")) return "/it-requests";
   if (t.includes("loan")) return "/loan-approvals";
+  if (t.includes("deduction")) return "/deductions";
   if (t.includes("bonus")) return "/bonuses";
+  if (t.includes("payslip") || t.includes("payroll")) return "/payroll";
   if (t.includes("registration")) return "/org";
   if (t.includes("announcement")) {
     return n.entityId ? `/announcements?open=${encodeURIComponent(n.entityId)}` : "/announcements";
@@ -57,10 +59,21 @@ export function NotificationBell() {
 
   const items = data?.notifications || [];
   const unread = data?.unreadCount ?? items.filter((n) => !n.readAt).length;
+  const prevUnread = useRef(unread);
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    if (unread > prevUnread.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 500);
+      prevUnread.current = unread;
+      return () => clearTimeout(t);
+    }
+    prevUnread.current = unread;
+  }, [unread]);
 
   return (
     <div className={styles.wrap}>
-      <button type="button" className={`${styles.btn} ${unread > 0 ? styles.btnHasItems : ""}`} onClick={() => setOpen((o) => !o)} aria-label="Notifications">
+      <button type="button" className={`${styles.btn} ${unread > 0 ? styles.btnHasItems : ""} ${pulse ? styles.pulse : ""}`} onClick={() => setOpen((o) => !o)} aria-label="Notifications">
         <Bell size={16} />
         {unread > 0 && <span className={styles.badge}>{unread > 99 ? "99+" : unread}</span>}
       </button>

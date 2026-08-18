@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { FormField } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import type { SalesProgram } from "./sale-program";
 
 type CatalogClient = {
@@ -74,64 +75,67 @@ export function SaleCatalogPicker({
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
       <FormField label="Client">
-        <select
-          required
+        <Select
           value={clientId}
-          onChange={(e) => {
-            const c = clients.find((x) => x.id === e.target.value);
-            onChange({ clientId: e.target.value, productId: "", priceId: "", client: c?.name });
+          placeholder="Select client…"
+          options={[
+            { value: "", label: "Select client…" },
+            ...clients.map((c) => ({
+              value: c.id,
+              label: `${c.name}${c.status === "hold" ? " (on hold)" : ""}`,
+            })),
+          ]}
+          onChange={(v) => {
+            const c = clients.find((x) => x.id === v);
+            onChange({ clientId: v, productId: "", priceId: "", client: c?.name });
           }}
-        >
-          <option value="">Select client…</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.status === "hold" ? " (on hold)" : ""}</option>
-          ))}
-        </select>
+        />
       </FormField>
       <FormField label="Device / product">
-        <select
-          required
+        <Select
           value={productId}
           disabled={!clientId}
-          onChange={(e) => {
-            const p = products.find((x) => x.id === e.target.value);
+          placeholder="Select device…"
+          options={[
+            { value: "", label: "Select device…" },
+            ...products.map((p) => ({ value: p.id, label: String(p.label || p.deviceType || p.id) })),
+          ]}
+          onChange={(v) => {
+            const p = products.find((x) => x.id === v);
             onChange({
               clientId,
-              productId: e.target.value,
+              productId: v,
               priceId: "",
               client: client?.name,
               device: p?.deviceType || p?.label,
             });
           }}
-        >
-          <option value="">Select device…</option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>{p.label || p.deviceType}</option>
-          ))}
-        </select>
+        />
       </FormField>
       <FormField label="Price tier">
-        <select
-          required
+        <Select
           value={priceId}
           disabled={!productId}
-          onChange={(e) => {
-            const pr = prices.find((x) => x.id === e.target.value);
+          placeholder="Select price…"
+          options={[
+            { value: "", label: "Select price…" },
+            ...prices.map((p) => ({
+              value: p.id,
+              label: `${p.label || "Standard"} — ${p.price} EGP`,
+            })),
+          ]}
+          onChange={(v) => {
+            const pr = prices.find((x) => x.id === v);
             onChange({
               clientId,
               productId,
-              priceId: e.target.value,
+              priceId: v,
               client: client?.name,
               device: product?.deviceType || product?.label,
               price: pr?.price != null ? String(pr.price) : "",
             });
           }}
-        >
-          <option value="">Select price…</option>
-          {prices.map((p) => (
-            <option key={p.id} value={p.id}>{p.label || "Standard"} — {p.price} EGP</option>
-          ))}
-        </select>
+        />
       </FormField>
     </div>
   );

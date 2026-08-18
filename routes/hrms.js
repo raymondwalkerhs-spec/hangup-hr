@@ -6,12 +6,13 @@ const { useSupabase } = require("../lib/backend");
 const store = require("../lib/data-store");
 const changelog = require("../lib/changelog");
 const { mondayOfWeek, fridayOfWeek } = require("../lib/employment-periods");
-const { statusOptions } = require("../lib/employee-status");
+const { statusOptions, isOutStatus } = require("../lib/employee-status");
 const requestRules = require("../lib/request-rules");
 const leaveAttendance = require("../lib/leave-attendance");
 const leaveRequestAccess = require("../lib/leave-request-access");
 const auditNotify = require("../lib/notify-routing");
 const departureDeductions = require("../lib/departure-deductions");
+const { employeeEquipmentLookupIds } = require("../lib/equipment-clearance");
 
 const companyContext = require("../lib/company-context");
 
@@ -519,6 +520,29 @@ router.put("/clearance/:employeeId/:itemKey", async (req, res) => {
   }
 });
 
+router.get("/clearance-board", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  try {
+    const company = parseCompany(req);
+    const leavers = companyContext
+      .filterEmployeesByCompany(store.getEmployees({ hideOut: false }), company)
+      .filter((e) => isOutStatus(e.status) || e.depart_date);
+    const rows = await hrms.buildClearanceBoard(leavers);
+    const counts = {
+      leavers: rows.length,
+      blocked: rows.filter((r) => r.blocked).length,
+      devices: rows.filter((r) => (r.unreturned || []).length > 0).length,
+      formPending: rows.filter((r) => String(r.form?.status || "pending") === "pending").length,
+      filesPending: rows.filter((r) => String(r.files?.status || "pending") === "pending").length,
+      clearanceComplete: rows.filter((r) => r.clearanceComplete).length,
+      payrollReady: rows.filter((r) => r.payrollReady).length,
+    };
+    res.json({ rows, counts });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get("/equipment", async (req, res) => {
   if (!roles.canViewEquipmentInventory(req.userRole)) {
     return res.status(403).json({ error: "No permission" });
@@ -559,17 +583,24 @@ router.get("/equipment/:employeeId", async (req, res) => {
   const targetId = req.params.employeeId;
   const emp = store.getEmployeeById(targetId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
+  const selfIds = new Set(employeeEquipmentLookupIds({
+    id: req.userRole?.employeeId,
+    former_ids: store.getEmployeeById(req.userRole?.employeeId)?.former_ids,
+    archived_app_id: store.getEmployeeById(req.userRole?.employeeId)?.archived_app_id,
+  }));
   const allowed =
     roles.canViewEquipmentAll(req.userRole) ||
     (roles.canViewEquipmentUnit(req.userRole) &&
       req.userRole?.unit &&
       emp.unit === req.userRole.unit) ||
+    selfIds.has(String(targetId)) ||
     (req.userRole?.employeeId && req.userRole.employeeId === targetId);
   if (!allowed) {
     return res.status(403).json({ error: "No permission" });
   }
   try {
-    const assignments = await hrms.readEquipmentAssignments(targetId);
+    const lookupIds = employeeEquipmentLookupIds(emp);
+    const assignments = await hrms.readEquipmentAssignments(lookupIds.length ? lookupIds : targetId);
     res.json({ assignments });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -579,9 +610,14 @@ router.get("/equipment/:employeeId", async (req, res) => {
 router.post("/equipment", async (req, res) => {
   if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to issue equipment" });
   try {
+    await store.ensureEmployeesFresh();
+    const company = parseCompany(req);
     if (req.body?.employeeId) {
       const emp = store.getEmployeeById(req.body.employeeId);
-      if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+      if (!emp) {
+        return res.status(400).json({ error: "Employee not found" });
+      }
+      if (!assertEmployeeInCompanyContext(emp, req)) {
         return res.status(403).json({ error: "Employee not in company context" });
       }
     } else {
@@ -590,7 +626,7 @@ router.post("/equipment", async (req, res) => {
         return res.status(403).json({ error: "Unit not in company context" });
       }
     }
-    const equipment = await hrms.createEquipment(req.body, req.username);
+    const equipment = await hrms.createEquipment({ ...req.body, company }, req.username);
     res.json({ ok: true, equipment });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -598,7 +634,7 @@ router.post("/equipment", async (req, res) => {
 });
 
 router.patch("/equipment/:id", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to edit equipment" });
   try {
     const prior = (await hrms.readAllEquipment()).find((e) => String(e.id) === String(req.params.id));
     const equipment = await hrms.updateEquipment(req.params.id, req.body, req.username);
@@ -632,7 +668,7 @@ router.post("/equipment/assign", async (req, res) => {
 });
 
 router.post("/equipment/return/:assignmentId", async (req, res) => {
-  if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
+  if (!roles.canIssueEquipment(req.userRole)) return res.status(403).json({ error: "No permission to return equipment" });
   try {
     const a = await hrms.returnEquipment(req.params.assignmentId, req.username);
     res.json({ ok: true, assignment: a });
@@ -714,34 +750,20 @@ router.post("/leave", async (req, res) => {
     if (validated.pauseEndDate)   payload.endDate   = validated.pauseEndDate;
     const request = await hrms.createLeaveRequest(payload, req.username);
     const dispatch = require("../lib/notify-dispatch");
+    const bits = [];
+    if (validated.lateSubmission) bits.push("late same-day");
+    if (validated.tlRequested) bits.push("requested by TL/OP");
+    const title = bits.length ? `Leave request submitted (${bits.join("; ")})` : "Leave request submitted";
     await dispatch.dispatchNotification({
       actionKey: "leave_submitted",
       type: "leave",
-      title: "Leave request submitted",
+      title,
       body: `${req.body.employeeId}: ${req.body.startDate} – ${req.body.endDate || req.body.startDate}`,
       entityType: "leave",
       entityId: String(request.id),
       actor: req.username,
       context: { company },
     });
-    if (validated.lateSubmission) {
-      await auditNotify.hrWarning({
-        actor: req.username,
-        title: "Late same-day leave request",
-        body: `${req.body.employeeId}: ${req.body.startDate}`,
-        entityType: "leave",
-        entityId: String(request.id),
-      });
-    }
-    if (validated.tlRequested) {
-      await auditNotify.hrWarning({
-        actor: req.username,
-        title: "Leave requested by TL/OP",
-        body: `${req.body.employeeId} — ${validated.requestKind}`,
-        entityType: "leave",
-        entityId: String(request.id),
-      });
-    }
     res.status(201).json({ ok: true, request });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -846,8 +868,16 @@ router.delete("/leave/:id", async (req, res) => {
     if (prior?.status === "approved") {
       const records = leaveAttendance.clearLeaveAttendanceRecords(prior);
       if (records.length) await store.saveAttendanceBatch(records, req.username);
+      await hrms.deleteLeaveRequest(req.params.id);
+    } else {
+      const recycleBin = require("../lib/recycle-bin");
+      await recycleBin.archiveLiveRow({
+        table: "leave_requests",
+        id: req.params.id,
+        company,
+        deletedBy: req.username,
+      });
     }
-    await hrms.deleteLeaveRequest(req.params.id);
     await auditNotify.auditNotify({
       actor: req.username,
       action: "leave_delete",
@@ -909,9 +939,23 @@ router.get("/leave/:id/documents", async (req, res) => {
 
 router.post("/leave/:id/documents", async (req, res) => {
   const leaveId = req.params.id;
-  const { fileName, contentBase64, docType, notes } = req.body;
-  if (!fileName || !contentBase64) {
-    return res.status(400).json({ error: "fileName and contentBase64 required" });
+  const { readUploadBuffer } = require("../lib/read-upload-buffer");
+  let fileName;
+  let buffer;
+  let docType = req.body?.docType;
+  let notes = req.body?.notes;
+  try {
+    const parsed = await readUploadBuffer(req);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    fileName = parsed.fileName;
+    buffer = parsed.buffer;
+    docType = parsed.kind || parsed.fields?.docType || docType;
+    notes = parsed.fields?.notes || notes;
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (!fileName || !buffer) {
+    return res.status(400).json({ error: "fileName and file required" });
   }
   try {
     const companyCtx = require("../lib/company-context");
@@ -932,7 +976,7 @@ router.post("/leave/:id/documents", async (req, res) => {
     const os = require("os");
     const path = require("path");
     const tmpPath = path.join(os.tmpdir(), `leave-doc-${Date.now()}-${fileName}`);
-    fs.writeFileSync(tmpPath, Buffer.from(contentBase64, "base64"));
+    fs.writeFileSync(tmpPath, buffer);
 
     let storagePath = "";
     let driveFileId = "";

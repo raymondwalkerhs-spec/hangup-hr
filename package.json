@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "2.3.26",
+  "version": "2.3.28",
   "description": "Hangup Portal desktop app ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -50,6 +50,7 @@
     "test:access-scope": "node scripts/test-access-scope.js",
     "test:quality-sales-perms": "node scripts/test-quality-sales-perms.js",
     "test:rbac-defaults": "node scripts/test-rbac-defaults.js",
+    "test:equipment-clearance": "node scripts/test-equipment-clearance.js",
     "test:rbac-company": "node scripts/test-rbac-company-scope.js",
     "test:company-scenarios": "node scripts/test-company-isolation-scenarios.js",
     "backup": "node scripts/ensure-electron.js && electron electron/backup-main.js",

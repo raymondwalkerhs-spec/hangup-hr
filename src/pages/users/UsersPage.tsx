@@ -6,8 +6,10 @@ import { useAppStatus } from "@/hooks/useAppStatus";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
+import { useConfirmUndo } from "@/ui/useDeferredDelete";
 import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
 import { StatusPill } from "@/ui/StatusPill";
 import { UserPermissionsDialog } from "@/features/users/UserPermissionsDialog";
@@ -43,6 +45,7 @@ type UserRow = {
 export function UsersPage() {
   const qc = useQueryClient();
   const { path, companyContext } = useCompanyScope();
+  const undo = useConfirmUndo();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
@@ -285,7 +288,11 @@ export function UsersPage() {
                       {u.status === "inactive" && u.employeeId && (
                         <Button size="sm" onClick={() => { setActivateUser(u); setActivateForm({ password: "", role: u.role || "agent" }); }}>Activate</Button>
                       )}
-                      <Button size="sm" variant="danger" onClick={() => { if (confirm(`Remove ${u.username}?`)) deleteUser.mutate(u.username); }}>Remove</Button>
+                      <Button size="sm" variant="danger" onClick={() => undo.confirmUndo({
+                        title: `Remove ${u.username}?`,
+                        toast: "User removed",
+                        commit: () => deleteUser.mutateAsync(u.username),
+                      })}>Remove</Button>
                       {u.employeeId && (
                         <Button size="sm" variant="danger" onClick={() => {
                           if (!confirm(`Permanently remove login for ${u.username} and release employee ID?`)) return;
@@ -324,14 +331,18 @@ export function UsersPage() {
             <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </FormField>
           <FormField label="Role">
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              {(data?.roles || ["agent", "tl", "op", "hr", "admin"]).map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+            <Select
+              value={form.role}
+              onChange={(role) => setForm({ ...form, role })}
+              options={(data?.roles || ["agent", "tl", "op", "hr", "admin"]).map((r) => ({ value: r, label: r }))}
+            />
           </FormField>
           <FormField label="Status">
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {(data?.statuses || ["active", "inactive"]).map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <Select
+              value={form.status}
+              onChange={(status) => setForm({ ...form, status })}
+              options={(data?.statuses || ["active", "inactive"]).map((s) => ({ value: s, label: s }))}
+            />
           </FormField>
           <FormField label="Employee ID"><input value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} /></FormField>
           <FormField label="IT access">
@@ -357,9 +368,11 @@ export function UsersPage() {
         <FormGrid>
           <FormField label="Password"><input type="password" value={activateForm.password} onChange={(e) => setActivateForm({ ...activateForm, password: e.target.value })} /></FormField>
           <FormField label="Role">
-            <select value={activateForm.role} onChange={(e) => setActivateForm({ ...activateForm, role: e.target.value })}>
-              {(data?.roles || []).map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+            <Select
+              value={activateForm.role}
+              onChange={(role) => setActivateForm({ ...activateForm, role })}
+              options={(data?.roles || []).map((r) => ({ value: r, label: r }))}
+            />
           </FormField>
         </FormGrid>
       </Dialog>
@@ -378,6 +391,14 @@ export function UsersPage() {
             : "Login is inactive — contact IT."}
         </p>
       </Dialog>
+      <ConfirmDialog
+        open={undo.confirmOpen}
+        onOpenChange={undo.setConfirmOpen}
+        title={undo.confirmTitle}
+        message={undo.confirmMessage}
+        danger
+        onConfirm={undo.confirmDelete}
+      />
     </div>
   );
 }

@@ -36,9 +36,36 @@ export function WidgetCard({
   );
 }
 
-export function StatTile({ value, label, accent }: { value: ReactNode; label: string; accent?: boolean }) {
+export function StatTile({
+  value,
+  label,
+  accent,
+  onClick,
+  active,
+}: {
+  value: ReactNode;
+  label: string;
+  accent?: boolean;
+  onClick?: () => void;
+  active?: boolean;
+}) {
   return (
-    <Card className={clsx(styles.stat, accent && styles.statAccent)}>
+    <Card
+      className={clsx(styles.stat, accent && styles.statAccent, onClick && styles.statClick, active && styles.statActive)}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <strong className="tabular-nums">{value}</strong>
       <span className="muted">{label}</span>
     </Card>

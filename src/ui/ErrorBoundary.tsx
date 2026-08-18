@@ -2,11 +2,15 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "./Button";
 import styles from "./ErrorBoundary.module.css";
 
-type Props = { children: ReactNode; label?: string };
-type State = { error: Error | null };
+type Props = {
+  children: ReactNode;
+  label?: string;
+  onRetry?: () => void;
+};
+type State = { error: Error | null; remount: number };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, remount: 0 };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
@@ -16,16 +20,30 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 
+  retry = () => {
+    this.props.onRetry?.();
+    this.setState((s) => ({ error: null, remount: s.remount + 1 }));
+  };
+
   render() {
     if (this.state.error) {
+      const isChunk = /chunkload|loading chunk|failed to fetch dynamically/i.test(this.state.error.message);
       return (
-        <div className={styles.wrap}>
-          <h2>Something went wrong{this.props.label ? ` on ${this.props.label}` : ""}</h2>
-          <p className="muted">{this.state.error.message}</p>
-          <Button onClick={() => this.setState({ error: null })}>Try again</Button>
+        <div className={styles.wrap} data-error-boundary="1">
+          <h2>{isChunk ? "Reload the app" : `Something went wrong${this.props.label ? ` on ${this.props.label}` : ""}`}</h2>
+          <p className="muted">
+            {isChunk
+              ? "The app was updated. Reload to get the latest version."
+              : this.state.error.message}
+          </p>
+          {isChunk ? (
+            <Button onClick={() => window.location.reload()}>Reload</Button>
+          ) : (
+            <Button onClick={this.retry}>Try again</Button>
+          )}
         </div>
       );
     }
-    return this.props.children;
+    return <div key={this.state.remount} data-error-boundary-root="1">{this.props.children}</div>;
   }
 }

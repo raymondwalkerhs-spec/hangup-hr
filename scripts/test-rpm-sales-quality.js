@@ -94,6 +94,7 @@ function testNotesField() {
   const submitKeys = catalog.listFieldsForSubmit("agent").map((f) => f.key);
   assert(submitKeys.includes("notes"), "notes on RPM submit form");
   assert(!catalog.getFieldDef("notes")?.required, "notes optional on submit");
+  assert.strictEqual(catalog.getFieldDef("notes")?.section, "notes", "notes has its own modal section");
 
   const mainKeys = catalog.listFieldsForRole("agent", {}, { surface: "main" }).map((f) => f.key);
   assert(mainKeys.includes("notes"), "notes on main/view surface");
@@ -102,8 +103,15 @@ function testNotesField() {
   assert(qualityKeys.includes("notes"), "notes on quality surface");
   assert(qualityKeys.includes("internalFeedback"), "internal feedback on quality surface");
 
+  const emptyQualityPerm = {
+    notes: { quality_view_roles: [], view_roles: [], main_view_roles: [] },
+  };
+  const qualityWithEmptyDb = catalog.listFieldsForRoleOnSurface("quality", emptyQualityPerm, "quality").map((f) => f.key);
+  assert(qualityWithEmptyDb.includes("notes"), "notes stay on quality when DB quality_view_roles is empty");
+
   const mainKeysAdmin = catalog.listFieldsForRole("quality", {}, { surface: "main" }).map((f) => f.key);
   assert(mainKeysAdmin.includes("internalFeedback"), "internal feedback on view/edit");
+  assert(mainKeysAdmin.includes("notes"), "notes on quality view/edit");
 }
 
 function testRpmAttachmentUploadRoles() {

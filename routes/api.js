@@ -791,6 +791,10 @@ async function probeBackendHealth() {
 }
 
 // Badge still renders when sync is failing.
+router.get("/ping", (_req, res) => {
+  res.json({ ok: true, t: Date.now() });
+});
+
 router.get("/status", async (req, res) => {
   let online = await isOnline();
   const health = await probeBackendHealth();
@@ -815,11 +819,24 @@ router.get("/status", async (req, res) => {
   let agentPayslipAvailable = false;
   if (["agent", "office_assistant"].includes(req.userRole?.role) && req.userRole?.employeeId) {
     const emp = store.getEmployeeById(req.userRole.employeeId);
-    const adj = store.getPayrollAdjustment(roles.localYearMonth(), req.userRole.employeeId);
+    const month = String(req.query.month || roles.localYearMonth()).slice(0, 7);
+    const adj = store.getPayrollAdjustment(month, req.userRole.employeeId);
     agentPayslipAvailable = roles.canViewAgentPayslip(req.userRole, emp, adj);
   }
   const company = parseCompany(req);
   const scopedConfig = store.getConfigForCompany(company);
+  let hasAssignedEquipment = false;
+  if (!roles.canViewEquipmentInventory(req.userRole) && req.userRole?.employeeId) {
+    try {
+      const linked = store.getEmployeeById(req.userRole.employeeId);
+      const lookupIds = require("../lib/equipment-clearance").employeeEquipmentLookupIds(
+        linked || { id: req.userRole.employeeId }
+      );
+      hasAssignedEquipment = await hrms.hasOpenEquipmentAssignment(lookupIds);
+    } catch {
+      hasAssignedEquipment = false;
+    }
+  }
   res.json({
     online,
     backendOk,
@@ -842,6 +859,9 @@ router.get("/status", async (req, res) => {
       employeeId: req.userRole.employeeId,
       leadTeams: req.userRole.leadTeams || [],
       closerTeams: req.userRole.closerTeams || [],
+      closeTeamCount: roles.uniqueCloserTeamCount(req.userRole),
+      usesCloseTeamsDashboardKpi: roles.usesCloseTeamsDashboardKpi(req.userRole),
+      opUnits: req.userRole.opUnits || [],
       canManageUsers: roles.canManageAppUsersPerm(req.userRole, req.realUsername || req.username),
       canImpersonate: roles.canImpersonateUsers(req.realUsername || req.username),
       canApproveLeave: roles.canApproveLeave(req.realUsername || req.username, req.userRole),
@@ -880,6 +900,7 @@ router.get("/status", async (req, res) => {
       canViewEquipmentAll: roles.canViewEquipmentAll(req.userRole),
       canViewEquipmentUnit: roles.canViewEquipmentUnit(req.userRole),
       canViewEquipmentInventory: roles.canViewEquipmentInventory(req.userRole),
+      hasAssignedEquipment,
       canViewReports: roles.canViewReports(req.userRole),
       canViewBonusTransferSource: roles.canViewBonusTransferSource(req.userRole),
       canViewTlOpBonusTransfers: roles.canViewTlOpBonusTransfers(req.userRole),
@@ -1266,32 +1287,30 @@ router.post("/registration/:id/reject", async (req, res) => {
 router.get("/org/managers", async (req, res) => {
   try {
     const [managers, allTls, allClosers, allOps, allTeams] = await Promise.all([
-      orgHierarchy.readUnitManagers(),
-      teamTlsRepo.readAllTeamTls(),
+      orgHierarchy.readUnitManagers().catch(() => []),
+      teamTlsRepo.readAllTeamTls().catch(() => ({})),
       teamClosersRepo.readAllTeamClosers().catch(() => ({})),
-      teamTlsRepo.readAllUnitOps(),
-      hrms.readOrgTeams(),
+      teamTlsRepo.readAllUnitOps().catch(() => ({})),
+      hrms.readOrgTeams().catch(() => []),
     ]);
     const company = parseCompany(req);
-    const companyEmployees = companyContext.filterEmployeesByCompany(
-      store.getEmployees({ hideOut: false }),
-      company
-    );
-    const companyUnits = new Set(companyEmployees.map((e) => e.unit).filter(Boolean));
-    const filteredManagers = (managers || []).filter((m) => companyUnits.has(m.unit));
+    const filteredManagers = (managers || []).filter((m) => companyContext.getCompanyForUnit(m.unit) === company);
     const filteredTls = Object.fromEntries(
       Object.entries(allTls || {}).filter(([teamId]) => {
         const team = (allTeams || []).find((t) => t.id === teamId);
-        return team && companyUnits.has(team.unit);
+        return team && companyContext.getCompanyForUnit(team.unit) === company;
       })
     );
     const filteredClosers = Object.fromEntries(
       Object.entries(allClosers || {}).filter(([teamId]) => {
         const team = (allTeams || []).find((t) => t.id === teamId);
-        return team && companyUnits.has(team.unit);
+        return team && companyContext.getCompanyForUnit(team.unit) === company;
       })
     );
-    const filteredOps = (allOps || []).filter((o) => companyUnits.has(o.unit));
+    const filteredOps = teamTlsRepo.filterUnitOpsByCompany(
+      teamTlsRepo.mergeUnitOpsMaps(allOps, filteredManagers),
+      company
+    );
     res.json({
       managers: filteredManagers,
       unitRules: orgHierarchy.UNIT_RULES,
@@ -1440,6 +1459,7 @@ router.post("/org/unit-ops/:unit", async (req, res) => {
   }
   try {
     await teamTlsRepo.addUnitOp(req.params.unit, employeeId);
+    roles.invalidateOrgTeamsCache();
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1453,6 +1473,7 @@ router.delete("/org/unit-ops/:unit/:employeeId", async (req, res) => {
   }
   try {
     await teamTlsRepo.removeUnitOp(req.params.unit, req.params.employeeId);
+    roles.invalidateOrgTeamsCache();
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1668,14 +1689,44 @@ router.delete('/it-requests/:id', async (req, res) => {
     if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
       return res.status(404).json({ error: "Request not found" });
     }
-    await itRequestsRepo.deleteItRequest(req.params.id);
+    await itRequestsRepo.deleteItRequest(req.params.id, req.username);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.patch("/it-requests/:id", async (req, res) => {
+router.get("/recycle-bin", async (req, res) => {
+  const recycleBin = require("../lib/recycle-bin");
+  const role = String(req.userRole?.role || "").toLowerCase();
+  if (!["hr", "admin", "ceo", "rtm", "it"].includes(role)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const items = await recycleBin.listRecycle({ company: parseCompany(req) });
+    res.json({
+      items: items.filter((item) => recycleBin.canRestoreKind(req.userRole, item.sourceTable)),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/recycle-bin/:id/restore", async (req, res) => {
+  const recycleBin = require("../lib/recycle-bin");
+  try {
+    const items = await recycleBin.listRecycle({ company: parseCompany(req) });
+    const item = items.find((r) => String(r.id) === String(req.params.id));
+    if (!item) return res.status(404).json({ error: "Not found" });
+    if (!recycleBin.canRestoreKind(req.userRole, item.sourceTable)) {
+      return res.status(403).json({ error: "No permission to restore this item" });
+    }
+    const restored = await recycleBin.restore(req.params.id);
+    res.json({ ok: true, restored });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
   if (!roles.canViewItRequests(req.userRole)) return res.status(403).json({ error: "Access denied" });
   const {
     status, assignedTo, resolutionNotes, notesHiddenFromRequester,
@@ -3599,6 +3650,25 @@ router.post("/bonuses", async (req, res) => {
     );
   }
 
+  try {
+    const usersAdmin = require("../lib/users-admin");
+    const login = await usersAdmin.findAppUserByEmployeeId(employeeId);
+    if (login?.username) {
+      await require("../lib/notify-dispatch").dispatchNotification({
+        actionKey: "bonus_posted",
+        type: "bonus",
+        title: "Bonus posted",
+        body: `${amount} EGP — ${reason || bonusType}`,
+        entityType: "bonus",
+        entityId: `${employeeId}|${date}`,
+        actor: req.username,
+        context: { company: parseCompany(req), extraUsernames: [login.username] },
+      });
+    }
+  } catch {
+    /* non-fatal */
+  }
+
   res.json({ ok: true });
 });
 
@@ -3754,6 +3824,24 @@ router.post("/deductions", async (req, res) => {
     },
     req.username
   );
+  try {
+    const usersAdmin = require("../lib/users-admin");
+    const login = await usersAdmin.findAppUserByEmployeeId(employeeId);
+    if (login?.username) {
+      await require("../lib/notify-dispatch").dispatchNotification({
+        actionKey: "deduction_posted",
+        type: "deduction",
+        title: "Deduction posted",
+        body: `${amount} EGP — ${reason || type || "Deduction"}`,
+        entityType: "deduction",
+        entityId: `${employeeId}|${date}`,
+        actor: req.username,
+        context: { company: parseCompany(req), extraUsernames: [login.username] },
+      });
+    }
+  } catch {
+    /* non-fatal */
+  }
   res.json({ ok: true });
 });
 
@@ -3970,14 +4058,48 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
     if (!gate.ok) return res.status(400).json({ error: gate.error, blockers: gate.blockers });
   }
   console.log(`${logPrefix} [${Date.now() - startTime}ms] Gates checked`);
-  
+
+  let monthLocked = false;
   try {
     await assertMonthNotLocked(month, req);
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    monthLocked = true;
+    if (req.body.payslipVisibleToAgent === undefined) {
+      return res.status(400).json({ error: err.message });
+    }
   }
   console.log(`${logPrefix} [${Date.now() - startTime}ms] Month lock checked`);
-  
+
+  const existingAdj = store.getPayrollAdjustment(month, req.params.employeeId);
+  if (monthLocked) {
+    const record = {
+      employeeId: req.params.employeeId,
+      yearMonth: month,
+      payslipVisibleToAgent: req.body.payslipVisibleToAgent === true,
+    };
+    const saved = await store.upsertPayrollAdjustment(record, req.username);
+    if (existingAdj?.payslipVisibleToAgent !== true && saved.payslipVisibleToAgent === true) {
+      try {
+        const usersAdmin = require("../lib/users-admin");
+        const login = await usersAdmin.findAppUserByEmployeeId(req.params.employeeId);
+        if (login?.username) {
+          await require("../lib/notify-dispatch").dispatchNotification({
+            actionKey: "payslip_released",
+            type: "payslip",
+            title: "Your payslip is ready",
+            body: `HR released your payslip for ${month}. Open Payroll to view it.`,
+            entityType: "payslip",
+            entityId: `${req.params.employeeId}|${month}`,
+            actor: req.username,
+            context: { company: parseCompany(req), extraUsernames: [login.username] },
+          });
+        }
+      } catch { /* non-fatal */ }
+    }
+    res.json({ ok: true, adjustment: saved, visibilityOnly: true });
+    return;
+  }
+
   const { resolveCanonicalPosition } = require("../lib/position-canonical");
   const rawPosition = req.body.position ?? emp.position;
   const record = {
@@ -4018,15 +4140,38 @@ router.put("/payroll-adjustments/:employeeId", async (req, res) => {
     transportEligible: req.body.transportEligible === true,
     monthNotes: req.body.monthNotes || "",
     noPayroll: req.body.noPayroll === true,
-    payslipVisibleToAgent: req.body.payslipVisibleToAgent === true,
     salesCount: Number(req.body.salesCount) || 0,
   };
+  if (req.body.payslipVisibleToAgent !== undefined) {
+    record.payslipVisibleToAgent = req.body.payslipVisibleToAgent === true;
+  }
+  if (req.body.fullTransportGrant !== undefined) {
+    record.fullTransportGrant = req.body.fullTransportGrant === true;
+  }
   console.log(`${logPrefix} [${Date.now() - startTime}ms] About to upsert:`, {
     monthlySalaryOverride: record.monthlySalaryOverride,
     netSalaryOverride: record.netSalaryOverride,
   });
   
   const saved = await store.upsertPayrollAdjustment(record, req.username);
+  if (existingAdj?.payslipVisibleToAgent !== true && saved.payslipVisibleToAgent === true) {
+    try {
+      const usersAdmin = require("../lib/users-admin");
+      const login = await usersAdmin.findAppUserByEmployeeId(req.params.employeeId);
+      if (login?.username) {
+        await require("../lib/notify-dispatch").dispatchNotification({
+          actionKey: "payslip_released",
+          type: "payslip",
+          title: "Your payslip is ready",
+          body: `HR released your payslip for ${month}. Open Payroll to view it.`,
+          entityType: "payslip",
+          entityId: `${req.params.employeeId}|${month}`,
+          actor: req.username,
+          context: { company: parseCompany(req), extraUsernames: [login.username] },
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
   console.log(`${logPrefix} [${Date.now() - startTime}ms] SAVED - sending response`);
   res.json({ ok: true, adjustment: saved });
   console.log(`${logPrefix} [${Date.now() - startTime}ms] END`);
@@ -4770,9 +4915,23 @@ router.get("/documents/:employeeId/:docId/file", async (req, res) => {
 });
 
 router.post("/documents", async (req, res) => {
-  const { employeeId, docType, fileName, contentBase64, notes, expiry, noExpiry } = req.body;
-  if (!employeeId || !contentBase64 || !fileName) {
-    return res.status(400).json({ error: "employeeId, fileName, contentBase64 required" });
+  const { readUploadBuffer } = require("../lib/read-upload-buffer");
+  let parsed;
+  try {
+    parsed = await readUploadBuffer(req);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  const employeeId = req.body?.employeeId || parsed.fields?.employeeId;
+  const docType = req.body?.docType || parsed.kind || parsed.fields?.docType;
+  const fileName = parsed.fileName || req.body?.fileName;
+  const notes = req.body?.notes || parsed.fields?.notes;
+  const expiry = req.body?.expiry || parsed.fields?.expiry;
+  const noExpiryRaw = req.body?.noExpiry ?? parsed.fields?.noExpiry;
+  const noExpiry = noExpiryRaw === true || noExpiryRaw === "true" || noExpiryRaw === "1";
+  const buffer = parsed.buffer;
+  if (!employeeId || !buffer || !fileName) {
+    return res.status(400).json({ error: "employeeId, fileName, and file required" });
   }
   const emp = store.getEmployeeById(employeeId);
   if (!emp) return res.status(404).json({ error: "Employee not found" });
@@ -4795,7 +4954,7 @@ router.post("/documents", async (req, res) => {
   const os = require("os");
   const path = require("path");
   const tmpPath = path.join(os.tmpdir(), `hr-doc-${Date.now()}-${fileName}`);
-  fs.writeFileSync(tmpPath, Buffer.from(contentBase64, "base64"));
+  fs.writeFileSync(tmpPath, buffer);
   try {
     const uploaded = await documents.uploadEmployeeFile({
       employeeId,

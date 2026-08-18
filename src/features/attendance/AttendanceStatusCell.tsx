@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
+import { Select } from "@/ui/Select";
 import styles from "./AttendanceStatusCell.module.css";
 
 const TRANSPORT_STATUSES = new Set(["Half Day", "Quarter Day-Off", "Lateness A", "Lateness B", "NSNC Half Day"]);
@@ -32,7 +33,9 @@ export function AttendanceStatusCell({
   statuses,
   canEdit,
   locked,
+  selected,
   onChange,
+  onPointerSelect,
 }: {
   empId: string;
   date: string;
@@ -41,7 +44,9 @@ export function AttendanceStatusCell({
   statuses: string[];
   canEdit: boolean;
   locked: boolean;
+  selected?: boolean;
   onChange: (status: string, transport?: string) => void;
+  onPointerSelect?: (empId: string, date: string, mode: "start" | "move" | "end") => void;
 }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
@@ -106,8 +111,21 @@ export function AttendanceStatusCell({
       <button
         ref={btnRef}
         type="button"
-        className={`${styles.chip} ${statusClass(st)}`}
-        onClick={() => setOpen((o) => !o)}
+        className={`${styles.chip} ${statusClass(st)} ${selected ? styles.selected : ""}`}
+        onClick={() => {
+          if (!onPointerSelect) setOpen((o) => !o);
+        }}
+        onPointerDown={(e) => {
+          if (!canEdit || locked || !onPointerSelect) return;
+          e.preventDefault();
+          onPointerSelect(empId, date, "start");
+        }}
+        onPointerEnter={() => onPointerSelect?.(empId, date, "move")}
+        onPointerUp={() => {
+          onPointerSelect?.(empId, date, "end");
+          if (!onPointerSelect) return;
+          setOpen(true);
+        }}
         title={date}
       >
         {labelFor(st, date)}
@@ -140,17 +158,18 @@ export function AttendanceStatusCell({
         </div>
       )}
       {showTransport && (
-        <select
+        <Select
           className={styles.transport}
           value={transportOverride || ""}
-          onChange={(e) => onChange(st, e.target.value)}
-          title="Transport"
-        >
-          <option value="">Transport</option>
-          <option value="full">Full</option>
-          <option value="half">Half</option>
-          <option value="none">None</option>
-        </select>
+          onChange={(v) => onChange(st, v)}
+          aria-label="Transport"
+          options={[
+            { value: "", label: "Transport" },
+            { value: "full", label: "Full" },
+            { value: "half", label: "Half" },
+            { value: "none", label: "None" },
+          ]}
+        />
       )}
     </div>
   );

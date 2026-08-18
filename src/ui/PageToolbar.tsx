@@ -1,4 +1,5 @@
 import styles from "./PageToolbar.module.css";
+import { Select } from "./Select";
 import { clearUiBlockers } from "@/lib/uiBlockers";
 
 export type FilterOption = string | { value: string; label: string };
@@ -59,16 +60,11 @@ export function FilterSelect({
   options: FilterOption[];
   allLabel?: string;
 }) {
-  const items = normalizeFilterOptions(options);
+  const items = [{ value: "", label: allLabel }, ...normalizeFilterOptions(options)];
   return (
     <label className={styles.field}>
       <span className="muted">{label}</span>
-      <select className={styles.select} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">{allLabel}</option>
-        {items.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <Select value={value} onChange={onChange} options={items} placeholder={allLabel} aria-label={label} />
     </label>
   );
 }

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { fileToBase64 } from "@/lib/files";
+import { uploadWithProgress } from "@/lib/uploadWithProgress";
+import { Dropzone } from "@/ui/Dropzone";
 import { Button } from "@/ui/Button";
 import { isMedicalLeaveKind } from "./leaveRequestHelpers";
 import styles from "./RequestsPage.module.css";
@@ -36,15 +37,10 @@ export async function uploadPendingLeaveDocs(
 ) {
   const docType = docTypeForKind(requestKind);
   for (const item of files) {
-    const contentBase64 = await fileToBase64(item.file);
-    await api(path(`/hrms/leave/${leaveId}/documents`), {
-      method: "POST",
-      body: JSON.stringify({
-        fileName: item.file.name,
-        contentBase64,
-        docType,
-        notes: item.notes,
-      }),
+    await uploadWithProgress({
+      url: `/api${path(`/hrms/leave/${leaveId}/documents`)}`,
+      file: item.file,
+      fields: { docType, notes: item.notes },
     });
   }
 }
@@ -78,15 +74,10 @@ export function LeaveDocsPanel({
   const upload = useMutation({
     mutationFn: async () => {
       if (!leaveId || !file) throw new Error("Select a file");
-      const contentBase64 = await fileToBase64(file);
-      return api(path(`/hrms/leave/${leaveId}/documents`), {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: file.name,
-          contentBase64,
-          docType: docTypeForKind(requestKind),
-          notes,
-        }),
+      return uploadWithProgress({
+        url: `/api${path(`/hrms/leave/${leaveId}/documents`)}`,
+        file,
+        fields: { docType: docTypeForKind(requestKind), notes },
       });
     },
     onSuccess: () => {
@@ -171,14 +162,11 @@ export function LeaveDocsPanel({
       )}
 
       <div className={styles.docsUpload}>
-        <label>
-          <span className="muted">Upload {label}</span>
-          <input
-            type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
-        </label>
+        <Dropzone
+          label={`Upload ${label}`}
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+          onFile={(f) => setFile(f)}
+        />
         <label>
           <span className="muted">Notes (optional)</span>
           <input

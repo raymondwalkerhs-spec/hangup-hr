@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { currentMonth } from "@/api/client";
 
-export type Theme = "light" | "dark" | "violet" | "pink" | "red-wine" | "diamond";
+export type Theme = "light" | "dark" | "violet" | "pink" | "red-wine" | "diamond" | "emerald";
 
 export const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "light", label: "Hangup Light", desc: "Warm coral on cream" },
@@ -12,6 +12,7 @@ export const THEMES: { id: Theme; label: string; desc: string }[] = [
   { id: "pink", label: "Pink", desc: "Soft rose workspace" },
   { id: "red-wine", label: "Red Wine", desc: "Burgundy on dark" },
   { id: "diamond", label: "Diamond", desc: "Cool silver / ice light" },
+  { id: "emerald", label: "Emerald", desc: "Jade green on mint" },
 ];
 
 interface ThemeState {
@@ -29,7 +30,7 @@ export const useThemeStore = create<ThemeState>()(
         set({ theme });
       },
       toggle: () => {
-        const order: Theme[] = ["light", "dark", "violet", "pink", "red-wine", "diamond"];
+        const order = THEMES.map((t) => t.id);
         const idx = order.indexOf(get().theme);
         get().setTheme(order[(idx + 1) % order.length]);
       },

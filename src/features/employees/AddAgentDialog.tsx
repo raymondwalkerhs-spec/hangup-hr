@@ -5,6 +5,7 @@ import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { Dialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 
 export function AddAgentDialog({
   open,
@@ -100,24 +101,26 @@ export function AddAgentDialog({
           <input value={form.arabic_name} onChange={(e) => setForm({ ...form, arabic_name: e.target.value })} />
         </FormField>
         <FormField label="Unit *">
-          <select
+          <Select
             value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value, team: "" })}
-          >
-            <option value="">—</option>
-            {(meta?.units || []).map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+            onChange={(unit) => setForm({ ...form, unit, team: "" })}
+            options={[{ value: "", label: "—" }, ...(meta?.units || []).map((u) => ({ value: u, label: u }))]}
+          />
         </FormField>
         <FormField label="Team">
-          <select value={form.team} onChange={(e) => setForm({ ...form, team: e.target.value })}>
-            <option value="">—</option>
-            {unitTeams.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <Select
+            value={form.team}
+            onChange={(team) => setForm({ ...form, team })}
+            options={[{ value: "", label: "—" }, ...unitTeams.map((t) => ({ value: t, label: t }))]}
+          />
         </FormField>
         <FormField label="Position">
-          <select value={form.position} disabled={form.inTraining} onChange={(e) => setForm({ ...form, position: e.target.value })}>
-            {(meta?.positions || ["Agent", "Trainee", "TL"]).map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <Select
+            value={form.position}
+            disabled={form.inTraining}
+            onChange={(position) => setForm({ ...form, position })}
+            options={(meta?.positions || ["Agent", "Trainee", "TL"]).map((p) => ({ value: p, label: p }))}
+          />
         </FormField>
         <FormField label="In training">
           <label><input type="checkbox" checked={form.inTraining} onChange={(e) => setForm({ ...form, inTraining: e.target.checked })} /> Start training program</label>

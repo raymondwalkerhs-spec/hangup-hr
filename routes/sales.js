@@ -344,17 +344,15 @@ router.get("/team-dashboard", async (req, res) => {
     const date = req.query.date || new Date().toISOString().slice(0, 10);
     const { from, to } = periodGrid.buildPeriodBounds(period === "week" ? "week" : "day", date);
 
-    let sales = await business.readSales({ from, to, dateBasis: "either" });
+    const padDate = (iso, delta) => {
+      const d = new Date(`${iso}T12:00:00`);
+      d.setDate(d.getDate() + delta);
+      return d.toISOString().slice(0, 10);
+    };
+    let sales = await rpmRepo.readRpmSales({ from: padDate(from, -1), to: padDate(to, 1) });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterSalesByCompany(sales, employees);
     sales = filterSalesForRequest(sales, req);
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
-
-    let rpmSales = await rpmRepo.readRpmSales({ from, to });
-    rpmSales = salesScope.filterSalesForUser(rpmSales, req.userRole, employees, grants);
-    rpmSales = filterSalesByCompany(rpmSales, employees);
-    rpmSales = filterSalesForRequest(rpmSales, req);
-    sales = [...sales, ...rpmSales];
 
     let teamsMeta = [];
     try {
@@ -386,7 +384,7 @@ router.get("/team-dashboard", async (req, res) => {
         teamsMeta,
         appUsers,
       });
-      return res.json({ period: "week", ...dashboard });
+      return res.json({ period: "week", program: "rpm", ...dashboard });
     }
 
     const dashboard = teamDashboard.buildDayDashboard({
@@ -397,7 +395,7 @@ router.get("/team-dashboard", async (req, res) => {
       teamsMeta,
       appUsers,
     });
-    res.json({ period: "day", ...dashboard });
+    res.json({ period: "day", program: "rpm", ...dashboard });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1380,15 +1378,25 @@ router.post("/:id/attachments", async (req, res) => {
     ) {
       return res.status(403).json({ error: "No permission to upload attachments" });
     }
-    const { fileName, contentBase64, kind } = req.body || {};
-    if (!contentBase64 || !fileName) return res.status(400).json({ error: "fileName and contentBase64 required" });
-    const kindKey = kind || "recording";
+    const { readUploadBuffer } = require("../lib/read-upload-buffer");
+    const parsed = await readUploadBuffer(req, {
+      assertSize: (payload) => {
+        if (Buffer.isBuffer(payload)) {
+          if (payload.length > MAX_ATTACHMENT_BYTES) {
+            return { ok: false, error: `File too large (max ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))} MB)` };
+          }
+          return { ok: true, buffer: payload };
+        }
+        return assertAttachmentPayloadSize(payload);
+      },
+    });
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    const fileName = parsed.fileName;
+    const kindKey = parsed.kind || "recording";
     if (!(await canUserManageAttachmentKind(req.userRole, kindKey, existing))) {
       return res.status(403).json({ error: "No permission to upload this attachment type" });
     }
-    const sizeCheck = assertAttachmentPayloadSize(contentBase64);
-    if (!sizeCheck.ok) return res.status(400).json({ error: sizeCheck.error });
-    const buffer = sizeCheck.buffer;
+    const buffer = parsed.buffer;
     const uploaded = await saleStorage.uploadSaleAttachmentBuffer({
       saleId: req.params.id,
       kind: kindKey,
@@ -1420,14 +1428,7 @@ router.delete("/attachments/:attachmentId", async (req, res) => {
       return res.status(403).json({ error: "No permission to delete this attachment type" });
     }
     const att = access.att;
-    await business.deleteSaleAttachment(req.params.attachmentId);
-    if (att?.dropboxPath) {
-      try {
-        await saleStorage.deleteSaleAttachmentFile(att.dropboxPath);
-      } catch {
-        /* optional */
-      }
-    }
+    await business.deleteSaleAttachment(req.params.attachmentId, req.username);
     try {
       await saleAttachmentCache.evict(att?.id || req.params.attachmentId);
     } catch {

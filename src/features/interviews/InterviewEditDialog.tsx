@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { type StaffOption, staffOptionLabel, staffOptionsWithCurrent } from "./interviewStaffOptions";
 import styles from "./InterviewEditDialog.module.css";
 
@@ -75,14 +76,14 @@ function renderField(
     const options = staffOptionsWithCurrent(pool, val);
     return (
       <FormField key={spec.key} label={spec.label}>
-        <select value={val} onChange={(e) => set(spec.key, e.target.value)}>
-          <option value="">— Select —</option>
-          {options.map((o) => (
-            <option key={o.username} value={o.username}>
-              {staffOptionLabel(o)}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={val}
+          onChange={(v) => set(spec.key, v)}
+          options={[
+            { value: "", label: "— Select —" },
+            ...options.map((o) => ({ value: o.username, label: staffOptionLabel(o) })),
+          ]}
+        />
       </FormField>
     );
   }
@@ -97,10 +98,11 @@ function renderField(
   if (spec.type === "select" && spec.options) {
     return (
       <FormField key={spec.key} label={spec.label}>
-        <select value={val} onChange={(e) => set(spec.key, e.target.value)}>
-          <option value="">—</option>
-          {spec.options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <Select
+          value={val}
+          onChange={(v) => set(spec.key, v)}
+          options={[{ value: "", label: "—" }, ...spec.options.map((o) => ({ value: o, label: o }))]}
+        />
       </FormField>
     );
   }

@@ -21,10 +21,12 @@ import { CompanySwitcher } from "@/features/company/CompanySwitcher";
 import { NotificationBell } from "@/features/shell/NotificationBell";
 import { BreakOverlay } from "@/features/shell/BreakOverlay";
 import { VersionUpdateGate } from "@/features/shell/VersionUpdateGate";
-import { PageLoadingOverlay } from "@/features/shell/PageLoadingOverlay";
+import { ReconnectBanner } from "@/features/shell/ReconnectBanner";
+import { AgentGuide } from "@/features/shell/AgentGuide";
+import { useConnectionStatus } from "@/hooks/useConnectionStatus";
 import { useInspectorStore } from "@/stores/cross-filter-store";
 import { useLocation } from "react-router-dom";
-import { useMemo, useRef, useCallback, useEffect } from "react";
+import { useMemo, useRef, useCallback, useEffect, useState } from "react";
 import styles from "./AppShell.module.css";
 
 function NavIcon({ name }: { name: string }) {
@@ -67,8 +69,13 @@ export function AppShell() {
     enabled: showAnnouncementsNav,
   });
   const unreadAnnouncements = announcementUnreadData?.unreadCount || 0;
+  const { state: connState } = useConnectionStatus();
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const pageKey = location.pathname.replace(/^\//, "") || "dashboard";
+  const [outletKey, setOutletKey] = useState(0);
+  useEffect(() => {
+    setOutletKey((k) => k + 1);
+  }, [location.pathname]);
   const title = PATH_TITLES[pageKey] || PAGE_TITLES[pageKey] || "Hangup Portal";
   const impersonating = Boolean(status?.impersonating);
   const themeMeta = THEMES.find((t) => t.id === theme) || THEMES[0];
@@ -170,7 +177,7 @@ export function AppShell() {
             if (!items.length) return null;
             return (
               <div key={group} className={styles.navGroup}>
-                {!sidebarCollapsed && <div className={styles.navLabel}>{group}</div>}
+                <div className={styles.navLabel} aria-hidden={sidebarCollapsed || undefined}>{group}</div>
                 {items.map((item) => {
                   const unread = item.path === "/announcements" ? unreadAnnouncements : 0;
                   return (
@@ -178,12 +185,13 @@ export function AppShell() {
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) => `${styles.navBtn} ${isActive ? styles.active : ""}`}
+                    data-tour={item.navId}
                     title={sidebarCollapsed ? `${item.label}${unread ? ` (${unread})` : ""}` : undefined}
                     onMouseEnter={() => prefetchPage(item.path)}
                     onFocus={() => prefetchPage(item.path)}
                   >
                     <span className={styles.navIcon}><NavIcon name={item.icon} /></span>
-                    {!sidebarCollapsed && <span className={styles.navText}>{item.label}</span>}
+                    <span className={styles.navText} aria-hidden={sidebarCollapsed || undefined}>{item.label}</span>
                     {unread > 0 && <span className={styles.navCount}>{unread > 99 ? "99+" : unread}</span>}
                   </NavLink>
                   );
@@ -234,7 +242,9 @@ export function AppShell() {
           <div className={styles.topbarTitle}>
             <strong>{title}</strong>
             {companyContext === "hs2" && <StatusPill variant="warn">HS-2</StatusPill>}
-            <StatusPill variant="online">Live</StatusPill>
+            <StatusPill variant={connState === "live" ? "online" : connState === "reconnecting" ? "warn" : "err"}>
+              {connState === "live" ? "Live" : connState === "reconnecting" ? "Reconnecting" : "Offline"}
+            </StatusPill>
           </div>
           <div className={styles.topActions}>
             <NotificationBell />
@@ -247,9 +257,10 @@ export function AppShell() {
           </div>
         </header>
         <div className={styles.contentFrame}>
+          <ReconnectBanner state={connState} />
           <PageLoadingOverlay />
           <main className={`${styles.content} page-enter`}>
-            <ErrorBoundary label={title}>
+            <ErrorBoundary label={title} key={`${location.pathname}:${outletKey}`} onRetry={() => setOutletKey((k) => k + 1)}>
               <Outlet />
             </ErrorBoundary>
           </main>
@@ -260,6 +271,7 @@ export function AppShell() {
       <CommandPalette />
       <BreakOverlay />
       <VersionUpdateGate />
+      <AgentGuide />
       <BottomDock onSync={handleSync} />
     </div>
   );

@@ -197,7 +197,7 @@ function CatLeg({ className, hipX, hipY }: { className: string; hipX: number; hi
   );
 }
 
-function RunningCat() {
+export function RunningCat() {
   return (
     <svg className={styles.orbitCatSvg} viewBox="0 0 86 52" aria-hidden>
       <ellipse className={styles.catShadow} cx="44" cy="48" rx="18" ry="2.4" fill="currentColor" />

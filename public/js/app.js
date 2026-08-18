@@ -715,7 +715,7 @@ function canExportSales() {
 }
 
 function canViewEquipmentNav() {
-  return state.user?.canViewEquipmentInventory === true;
+  return state.user?.canViewEquipmentInventory === true || state.user?.hasAssignedEquipment === true;
 }
 
 function canEditAttendance() {
@@ -2235,13 +2235,29 @@ async function renderDashboard(root) {
   const showFullDash = state.user?.canViewDashboardFull !== false;
   const showPayrollStat = state.user?.canViewDashboardPayroll === true;
   const activeCount = empData.employees.filter((e) => e.status === "Active").length;
+  const closerTeams = state.user?.closerTeams || [];
+  const showCloseTeamsKpi =
+    state.user?.usesCloseTeamsDashboardKpi === true ||
+    String(state.user?.role || "").toLowerCase() === "tl" ||
+    closerTeams.length > 0;
+  const closeTeamCount =
+    typeof state.user?.closeTeamCount === "number"
+      ? state.user.closeTeamCount
+      : new Set(
+          closerTeams
+            .map((t) => String(t.team || t.name || "").trim().toLowerCase())
+            .filter(Boolean)
+        ).size;
+  const unitsOrCloseStat = showCloseTeamsKpi
+    ? `<div class="card card-stat"><strong>${closeTeamCount}</strong><span class="muted">Teams you close</span></div>`
+    : `<div class="card card-stat"><strong>${empData.units.length}</strong><span class="muted">Units</span></div>`;
 
   root.innerHTML = `
     <div class="page-header"><div><h1>Dashboard</h1><p class="muted">${monthLabel(state.month)}</p></div></div>
     <div class="grid-4">
       ${showFullDash ? `<div class="card card-stat"><strong>${empData.employees.length}</strong><span class="muted">Employees</span></div>
       <div class="card card-stat"><strong>${activeCount}</strong><span class="muted">Active</span></div>
-      <div class="card card-stat"><strong>${empData.units.length}</strong><span class="muted">Units</span></div>` : ""}
+      ${unitsOrCloseStat}` : ""}
       ${showPayrollStat ? `<div class="card card-stat"><strong>${payData ? fmt(payData.totals.totalNet) : "—"}</strong><span class="muted">Net payroll (EGP)</span></div>` : ""}
     </div>
     ${salesStats}
@@ -2255,7 +2271,7 @@ async function renderDashboard(root) {
           ${state.user?.canViewAgentPayslipNav ? '<button class="btn" data-go="payslip">My payslip</button>' : ""}
         </div>
       </div>
-      ${showFullDash ? `<div class="card"><h3>Units</h3><p class="muted">${empData.units.join(" · ") || "—"}</p></div>` : ""}
+      ${showFullDash && !showCloseTeamsKpi ? `<div class="card"><h3>Units</h3><p class="muted">${empData.units.join(" · ") || "—"}</p></div>` : ""}
     </div>`;
   root.querySelectorAll("[data-go]").forEach((b) =>
     b.addEventListener("click", () => navigate(b.dataset.go))

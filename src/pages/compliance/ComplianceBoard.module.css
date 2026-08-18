@@ -1,0 +1,66 @@
+.tableCard {
+  padding: 0;
+  overflow: hidden;
+}
+.gridFlush {
+  border: 0;
+  border-radius: 0;
+  max-height: min(72vh, 860px);
+}
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+.pillBtn {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.pillBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+.deviceList {
+  margin: 0 0 0.65rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+.deviceList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.error {
+  margin: 0.75rem 0 0;
+  color: var(--err);
+  font-size: 0.85rem;
+}

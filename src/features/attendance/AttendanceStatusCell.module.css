@@ -18,6 +18,9 @@
 .off { background: color-mix(in srgb, var(--muted) 30%, var(--surface)); }
 .lateness { background: color-mix(in srgb, #f59e0b 25%, var(--surface)); }
 .other { background: var(--bg); }
+.selected {
+  box-shadow: 0 0 0 2px var(--primary);
+}
 .readonly { font-size: 0.65rem; }
 .backdrop {
   position: fixed;

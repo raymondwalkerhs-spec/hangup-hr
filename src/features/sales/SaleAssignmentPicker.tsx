@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import styles from "./SaleModals.module.css";
 
 type Employee = { id: string; american_name?: string; team?: string; unit?: string };
@@ -113,40 +114,40 @@ export function SaleAssignmentPicker({
           {lockUnit && unit ? (
             <div className={styles.readonlyUnit}>{unit}</div>
           ) : (
-            <select
+            <Select
               value={unit}
               disabled={lockUnit}
-              onChange={(e) => onChange({ unit: e.target.value, team: "", agentId: "", closerId: "" })}
-            >
-              <option value="">— Select unit —</option>
-              {units.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
+              placeholder="— Select unit —"
+              options={[{ value: "", label: "— Select unit —" }, ...units.map((u) => ({ value: u, label: u }))]}
+              onChange={(v) => onChange({ unit: v, team: "", agentId: "", closerId: "" })}
+            />
           )}
         </FormField>
         <FormField label="Team">
           <div className={styles.readonlyUnit}>{team || "— (from agent)"}</div>
         </FormField>
         <FormField label="Agent">
-          <select
+          <Select
             value={agentId}
             disabled={lockAgent}
-            onChange={(e) => syncFromAgent(e.target.value)}
-          >
-            <option value="">— Select agent —</option>
-            {agentOptions.map((e) => (
-              <option key={e.id} value={e.id}>{agentOptionLabel(e)}</option>
-            ))}
-          </select>
+            placeholder="— Select agent —"
+            options={[
+              { value: "", label: "— Select agent —" },
+              ...agentOptions.map((e) => ({ value: e.id, label: agentOptionLabel(e) })),
+            ]}
+            onChange={(v) => syncFromAgent(v)}
+          />
         </FormField>
         <FormField label="Closer">
-          <select value={closerId} onChange={(e) => onChange({ closerId: e.target.value })}>
-            <option value="">— Select closer —</option>
-            {closerOptions.map((e) => (
-              <option key={e.id} value={e.id}>{agentOptionLabel(e)}</option>
-            ))}
-          </select>
+          <Select
+            value={closerId}
+            placeholder="— Select closer —"
+            options={[
+              { value: "", label: "— Select closer —" },
+              ...closerOptions.map((e) => ({ value: e.id, label: agentOptionLabel(e) })),
+            ]}
+            onChange={(v) => onChange({ closerId: v })}
+          />
         </FormField>
       </FormGrid>
     </FormSection>

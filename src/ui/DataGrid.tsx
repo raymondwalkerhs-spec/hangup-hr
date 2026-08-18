@@ -5,6 +5,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import type { ReactNode } from "react";
+import { EmptyState } from "@/ui/EmptyState";
 import styles from "./DataGrid.module.css";
 
 export function DataGrid<T>({
@@ -13,6 +14,7 @@ export function DataGrid<T>({
   onRowClick,
   emptyMessage = "No data",
   footer,
+  className,
 }: {
   data: T[];
   columns: ColumnDef<T, unknown>[];
@@ -21,6 +23,7 @@ export function DataGrid<T>({
   rowHeight?: number;
   emptyMessage?: string;
   footer?: ReactNode;
+  className?: string;
 }) {
   const table = useReactTable({
     data,
@@ -30,11 +33,11 @@ export function DataGrid<T>({
   const rows = table.getRowModel().rows;
 
   if (!data.length) {
-    return <p className="muted" style={{ padding: "2rem", textAlign: "center" }}>{emptyMessage}</p>;
+    return <EmptyState title={emptyMessage} />;
   }
 
   return (
-    <div className={styles.wrap}>
+    <div className={clsx(styles.wrap, className)}>
       <table className={styles.table}>
         <thead>
           {table.getHeaderGroups().map((hg) => (

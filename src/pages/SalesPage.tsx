@@ -21,7 +21,8 @@ import { SectionHeader } from "@/ui/SectionHeader";
 import { DataGrid } from "@/ui/DataGrid";
 import { Card, StatTile } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { PageToolbar, SearchField, FilterSelect, FilterDate } from "@/ui/PageToolbar";
+import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
+import { PeriodPicker } from "@/ui/PeriodPicker";
 
 type Row = Record<string, unknown>;
 type ListColumn = { columnKey: string; label?: string };
@@ -187,7 +188,10 @@ export function SalesPage() {
     if (prog) setProgram(prog);
   }, [searchParams]);
 
-  const { from, to } = monthDateRange(month);
+  const monthRange = monthDateRange(month);
+  const [period, setPeriod] = useState<{ from: string; to: string } | null>(null);
+  const from = period?.from || monthRange.from;
+  const to = period?.to || monthRange.to;
   const salesBase = path(program === "rpm" ? "/rpm-sales" : "/sales");
   const applyRpmExtraFilters = program === "rpm" && canUseRpmLogFilters;
 
@@ -207,11 +211,16 @@ export function SalesPage() {
   useEffect(() => {
     setAgentFilter("");
     setCloserFilter("");
-    setDayFilter(program === "rpm" ? cairoWorkingDayToday() : "");
     setClientFilter("");
     setReviewerFeedbackFilter("");
     setClientFeedbackFilter("");
     setSortOrder("latest");
+    if (program === "rpm") {
+      const d = cairoWorkingDayToday();
+      setPeriod({ from: d, to: d });
+    } else {
+      setPeriod(null);
+    }
   }, [program]);
 
   const { data: salesRes, isLoading, error, refetch } = useQuery({
@@ -235,8 +244,8 @@ export function SalesPage() {
     ],
     queryFn: () => {
       const q = new URLSearchParams();
-      if (program === "rpm" && applyRpmExtraFilters && dayFilter) {
-        q.set("day", dayFilter);
+      if (program === "rpm" && applyRpmExtraFilters && from === to) {
+        q.set("day", from);
       } else {
         q.set("from", from);
         q.set("to", to);
@@ -474,6 +483,9 @@ export function SalesPage() {
 
       <PageToolbar>
         <SearchField value={search} onChange={setSearch} placeholder="Search customer name or phone" />
+        {canUseRpmLogFilters && (
+          <PeriodPicker from={from} to={to} onChange={setPeriod} />
+        )}
         <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={salesRes?.statuses || []} />
         {program !== "rpm" && (
           <FilterSelect label="Team" value={teamFilter} onChange={setTeamFilter} options={teams} />
@@ -504,7 +516,6 @@ export function SalesPage() {
               onChange={setCloserFilter}
               options={closerOptions.map((o) => ({ value: o.value, label: o.label }))}
             />
-            <FilterDate label="Day" value={dayFilter} onChange={setDayFilter} />
             <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter} options={clientOptions} />
             <FilterSelect
               label="Reviewer feedback"

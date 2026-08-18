@@ -5,7 +5,9 @@ import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { Dialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid } from "@/ui/FormGrid";
-import { downloadApiFile, fileToBase64 } from "@/lib/files";
+import { Select } from "@/ui/Select";
+import { Dropzone } from "@/ui/Dropzone";
+import { downloadApiFile } from "@/lib/files";
 
 type Doc = { id?: string; driveFileId?: string; docType?: string; fileName?: string; expiry?: string; driveLink?: string };
 type Warning = { id: string; type?: string; title?: string; content?: string; date?: string; severity?: string; warningLevel?: string; createdBy?: string };
@@ -29,35 +31,12 @@ export function EmployeeDocsDialog({
 }) {
   const qc = useQueryClient();
   const { path, companyContext } = useCompanyScope();
-  const [upload, setUpload] = useState({ docType: "", expiry: "", noExpiry: false, notes: "", file: null as File | null });
+  const [upload, setUpload] = useState({ docType: "", expiry: "", noExpiry: false, notes: "" });
 
   const { data, isLoading } = useQuery({
     queryKey: ["employee-docs", employeeId, companyContext],
     queryFn: () => api<{ documents?: Doc[]; docTypes?: string[] }>(path(`/documents/${encodeURIComponent(employeeId!)}`)),
     enabled: open && !!employeeId,
-  });
-
-  const postDoc = useMutation({
-    mutationFn: async () => {
-      if (!upload.file || !employeeId) throw new Error("Choose a file");
-      const contentBase64 = await fileToBase64(upload.file);
-      return api(path("/documents"), {
-        method: "POST",
-        body: JSON.stringify({
-          employeeId,
-          docType: upload.docType || data?.docTypes?.[0],
-          fileName: upload.file.name,
-          contentBase64,
-          notes: upload.notes,
-          expiry: upload.noExpiry ? "" : upload.expiry,
-          noExpiry: upload.noExpiry,
-        }),
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["employee-docs", employeeId] });
-      setUpload({ docType: "", expiry: "", noExpiry: false, notes: "", file: null });
-    },
   });
 
   const docs = data?.documents || [];
@@ -88,9 +67,11 @@ export function EmployeeDocsDialog({
       {canUpload && (
         <FormGrid wide>
           <FormField label="Type">
-            <select value={upload.docType || uploadTypes[0]} onChange={(e) => setUpload({ ...upload, docType: e.target.value })}>
-              {uploadTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <Select
+              value={upload.docType || uploadTypes[0] || ""}
+              onChange={(docType) => setUpload({ ...upload, docType })}
+              options={uploadTypes.map((t) => ({ value: t, label: t }))}
+            />
           </FormField>
           <FormField label="Expiry">
             <input type="date" value={upload.expiry} disabled={upload.noExpiry} onChange={(e) => setUpload({ ...upload, expiry: e.target.value })} />
@@ -99,8 +80,22 @@ export function EmployeeDocsDialog({
             <label><input type="checkbox" checked={upload.noExpiry} onChange={(e) => setUpload({ ...upload, noExpiry: e.target.checked })} /> No expiry date</label>
           </FormField>
           <FormField label="Notes"><input value={upload.notes} onChange={(e) => setUpload({ ...upload, notes: e.target.value })} /></FormField>
-          <FormField label="File"><input type="file" onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] || null })} /></FormField>
-          <Button size="sm" onClick={() => postDoc.mutate()} disabled={postDoc.isPending || !upload.file}>Upload</Button>
+          <FormField label="File" span="full">
+            <Dropzone
+              label="Drop a document or click to browse"
+              uploadUrl={path("/documents")}
+              extraFields={{
+                employeeId: employeeId || "",
+                docType: upload.docType || uploadTypes[0] || "",
+                notes: upload.notes,
+                expiry: upload.noExpiry ? "" : upload.expiry,
+                noExpiry: upload.noExpiry ? "true" : "",
+              }}
+              onUploaded={() => {
+                qc.invalidateQueries({ queryKey: ["employee-docs", employeeId] });
+              }}
+            />
+          </FormField>
         </FormGrid>
       )}
     </Dialog>
@@ -173,22 +168,37 @@ export function EmployeeWarningsDialog({
         <FormGrid wide>
           <h4>Add HR note / warning</h4>
           <FormField label="Type">
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              {["Warning", "Note", "Verbal warning", "Written warning"].map((t) => <option key={t}>{t}</option>)}
-            </select>
+            <Select
+              value={form.type}
+              onChange={(type) => setForm({ ...form, type })}
+              options={["Warning", "Note", "Verbal warning", "Written warning"].map((t) => ({ value: t, label: t }))}
+            />
           </FormField>
           <FormField label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></FormField>
           <FormField label="Title"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></FormField>
           <FormField label="Content"><textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required /></FormField>
           <FormField label="Severity">
-            <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-              <option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option>
-            </select>
+            <Select
+              value={form.severity}
+              onChange={(severity) => setForm({ ...form, severity })}
+              options={[
+                { value: "normal", label: "Normal" },
+                { value: "high", label: "High" },
+                { value: "critical", label: "Critical" },
+              ]}
+            />
           </FormField>
           <FormField label="Warning level">
-            <select value={form.warningLevel} onChange={(e) => setForm({ ...form, warningLevel: e.target.value })}>
-              <option value="">—</option><option value="1st">1st</option><option value="2nd">2nd</option><option value="final">Final</option>
-            </select>
+            <Select
+              value={form.warningLevel}
+              onChange={(warningLevel) => setForm({ ...form, warningLevel })}
+              options={[
+                { value: "", label: "—" },
+                { value: "1st", label: "1st" },
+                { value: "2nd", label: "2nd" },
+                { value: "final", label: "Final" },
+              ]}
+            />
           </FormField>
           <Button size="sm" onClick={() => add.mutate()} disabled={!form.title || !form.content || add.isPending}>Save note</Button>
         </FormGrid>

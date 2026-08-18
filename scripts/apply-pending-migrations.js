@@ -195,7 +195,36 @@ async function probeState(db) {
   state.training_anchor_override = !tpa.error;
   const p1e = await db.from("payroll_adjustments").select("training_phase1_pay_exception").limit(1);
   state.training_phase1_pay_exception = !p1e.error;
+  state.equipment_clearance_integrity = await probeEquipmentClearanceIntegrity();
+  const rb = await db.from("recycle_bin").select("id").limit(1);
+  const ftg = await db.from("payroll_adjustments").select("full_transport_grant").limit(1);
+  state.recycle_bin_transport_grant = !rb.error && !ftg.error;
   return state;
+}
+
+async function probeEquipmentClearanceIntegrity() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT indexname FROM pg_indexes WHERE indexname = 'equipment_assignments_one_open_idx' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function probeStorageIsolation() {
@@ -305,9 +334,10 @@ function filesToApply(state) {
   if (state.rpm_sales_program && !state.admin_sales_program_flags) {
     files.push("20260813_admin_sales_program_flags.sql");
   }
-  if (state.rpm_sales_program && !state.sales_program_employee_backfill) {
-    files.push("20260814_sales_program_employee_backfill.sql");
-  }
+  // Skip 20260814 — references dialing_emp which is not on this database.
+  // if (state.rpm_sales_program && !state.sales_program_employee_backfill) {
+  //   files.push("20260814_sales_program_employee_backfill.sql");
+  // }
   if (state.rpm_sales_program && !state.sales_client_program_isolation) {
     files.push("20260815_sales_client_program_isolation.sql");
   }
@@ -322,6 +352,8 @@ function filesToApply(state) {
   if (!state.v236_registration_rbac_holidays) files.push("20260819_v236_registration_rbac_holidays.sql");
   if (!state.training_phase1_pay_exception) files.push("20260810_training_phase1_pay_exception.sql");
   if (!state.training_anchor_override) files.push("20260820_training_anchor_override.sql");
+  if (!state.equipment_clearance_integrity) files.push("20260823_equipment_clearance_integrity.sql");
+  if (!state.recycle_bin_transport_grant) files.push("20260824_recycle_bin_and_transport_grant.sql");
   return files;
 }
 

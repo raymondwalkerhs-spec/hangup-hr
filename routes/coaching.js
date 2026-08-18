@@ -360,7 +360,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const existing = await coachingRepo.getCoachingTicket(req.params.id);
     if (!existing || existing.company !== companyOf(req)) return res.status(404).json({ error: "Not found" });
-    await coachingRepo.deleteCoachingTicket(req.params.id);
+    await coachingRepo.deleteCoachingTicket(req.params.id, req.username);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });

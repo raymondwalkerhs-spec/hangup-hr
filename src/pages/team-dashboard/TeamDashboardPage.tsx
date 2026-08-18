@@ -12,8 +12,9 @@ type AgentRow = {
   teamKey?: string;
   agentName?: string;
   approved?: number;
-  postdated?: number;
+  pending?: number;
   dropped?: number;
+  retransfer?: number;
   totalSent?: number;
   dayOff?: boolean;
 };
@@ -33,7 +34,14 @@ type DayBlock = {
   date?: string;
   agentRows?: AgentRow[];
   teamSummaries?: TeamSummary[];
-  totals?: { approved?: number; totalSent?: number; unassignedSales?: number };
+  totals?: {
+    approved?: number;
+    pending?: number;
+    dropped?: number;
+    retransfer?: number;
+    totalSent?: number;
+    unassignedSales?: number;
+  };
 };
 
 function todayIso() {
@@ -79,7 +87,7 @@ function AgentTable({ day }: { day: DayBlock }) {
   return (
     <>
       {[...byTeam.entries()].map(([team, teamRows]) => {
-        let tApproved = 0, tPost = 0, tDrop = 0, tTotal = 0;
+        let tPassed = 0, tPending = 0, tDrop = 0, tRetransfer = 0, tTotal = 0;
         return (
           <div key={team} className={styles.teamBlock}>
             <h4>{team}</h4>
@@ -87,33 +95,37 @@ function AgentTable({ day }: { day: DayBlock }) {
               <thead>
                 <tr>
                   <th>Agent</th>
-                  <th>Approved</th>
-                  <th>PostDated</th>
+                  <th>Passed</th>
+                  <th>Pending</th>
                   <th>Dropped</th>
-                  <th>Total Sent</th>
+                  <th>Retransfer</th>
+                  <th>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {teamRows.map((r, i) => {
-                  tApproved += r.approved || 0;
-                  tPost += r.postdated || 0;
+                  tPassed += r.approved || 0;
+                  tPending += r.pending || 0;
                   tDrop += r.dropped || 0;
+                  tRetransfer += r.retransfer || 0;
                   tTotal += r.totalSent || 0;
                   return (
                     <tr key={i} className={r.dayOff ? "muted" : ""}>
                       <td>{r.agentName}</td>
                       <td>{cellVal(r.approved)}</td>
-                      <td>{cellVal(r.postdated)}</td>
+                      <td>{cellVal(r.pending)}</td>
                       <td>{cellVal(r.dropped)}</td>
+                      <td>{cellVal(r.retransfer)}</td>
                       <td>{r.totalSent ?? 0}</td>
                     </tr>
                   );
                 })}
                 <tr className={styles.totalRow}>
                   <td><strong>Team total</strong></td>
-                  <td>{cellVal(tApproved)}</td>
-                  <td>{cellVal(tPost)}</td>
+                  <td>{cellVal(tPassed)}</td>
+                  <td>{cellVal(tPending)}</td>
                   <td>{cellVal(tDrop)}</td>
+                  <td>{cellVal(tRetransfer)}</td>
                   <td><strong>{tTotal}</strong></td>
                 </tr>
               </tbody>
@@ -123,7 +135,7 @@ function AgentTable({ day }: { day: DayBlock }) {
       })}
       {day.totals && (
         <p className="muted">
-          Grand total — Approved {cellVal(day.totals.approved)} · Total {day.totals.totalSent ?? 0}
+          Grand total — Passed {cellVal(day.totals.approved)} · Pending {cellVal(day.totals.pending)} · Dropped {cellVal(day.totals.dropped)} · Retransfer {cellVal(day.totals.retransfer)} · Total {day.totals.totalSent ?? 0}
           {(day.totals.unassignedSales ?? 0) > 0
             ? ` · ${day.totals.unassignedSales} unassigned sale(s) (no agent on record)`
             : ""}
@@ -140,10 +152,10 @@ function TeamSummaryTable({ summaries }: { summaries: TeamSummary[] }) {
         <tr>
           <th>Team</th>
           <th>Active agents</th>
-          <th>Approved</th>
+          <th>Passed</th>
           <th>Total</th>
           <th>Conversion</th>
-          <th title="Approved sales ÷ active agents (1 sale per agent = 100%)">Target %</th>
+          <th title="Passed sales ÷ active agents (1 sale per agent = 100%)">Target %</th>
           <th>Day-offs</th>
         </tr>
       </thead>
@@ -204,7 +216,7 @@ export function TeamDashboardPage() {
 
   return (
     <div>
-      <SectionHeader title="Team dashboards" subtitle={headerLabel} />
+      <SectionHeader title="Team dashboards" subtitle={`${headerLabel} · RPM sales`} />
       <div className={styles.toolbar}>
         <Button variant="secondary" size="sm" onClick={() => period === "week" ? setWeekDate(shiftDate(weekDate, -7)) : setPickDate(shiftDate(pickDate, -1))}>←</Button>
         <strong>{headerLabel}</strong>

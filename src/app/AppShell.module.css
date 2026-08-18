@@ -11,6 +11,7 @@
   bottom: 0;
   width: 14px;
   z-index: 50;
+  box-shadow: inset 2px 0 0 var(--sidebar-active);
 }
 .sidebar {
   width: 252px;
@@ -107,6 +108,33 @@
   opacity: 0.5;
   padding: 0.25rem 0.75rem 0.4rem;
   font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity 180ms ease-out, max-width 180ms ease-out, transform 180ms ease-out;
+}
+.collapsed .navLabel {
+  opacity: 0;
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+}
+.navText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 180ms ease-out, max-width 180ms ease-out, transform 180ms ease-out;
+}
+.collapsed .navText {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-8px);
+  pointer-events: none;
 }
 .navBtn {
   display: flex;
@@ -157,11 +185,6 @@
 .active .navIcon {
   opacity: 1;
   color: var(--sidebar-active);
-}
-.navText {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .navCount {
   margin-left: auto;

@@ -1,7 +1,8 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Button } from "./Button";
+import { ErrorBoundary } from "./ErrorBoundary";
 import styles from "./Dialog.module.css";
 
 type DialogSize = "default" | "wide" | "xlarge";
@@ -30,6 +31,9 @@ export function Dialog({
   const resolved = size || (xlarge ? "xlarge" : wide ? "wide" : "default");
   const sizeClass =
     resolved === "xlarge" ? styles.xlarge : resolved === "wide" ? styles.wide : "";
+  const reduce = useReducedMotion();
+  const enter = reduce ? 0 : 0.25;
+  const exit = reduce ? 0 : 0.15;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -42,6 +46,7 @@ export function Dialog({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                transition={{ duration: exit, ease: "easeOut" }}
               />
             </DialogPrimitive.Overlay>
             <DialogPrimitive.Content asChild>
@@ -50,8 +55,8 @@ export function Dialog({
                 style={{ x: "-50%", y: "-50%" }}
                 initial={{ opacity: 0, y: "-48%" }}
                 animate={{ opacity: 1, y: "-50%" }}
-                exit={{ opacity: 0, y: "-48%" }}
-                transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                exit={{ opacity: 0, y: "-48%", transition: { duration: exit, ease: "easeOut" } }}
+                transition={{ duration: enter, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className={styles.header}>
                   <DialogPrimitive.Title className={styles.title}>{title}</DialogPrimitive.Title>
@@ -61,7 +66,11 @@ export function Dialog({
                     </Button>
                   </DialogPrimitive.Close>
                 </div>
-                <div className={`${styles.body} ${scrollBody ? styles.bodyScroll : ""}`}>{children}</div>
+                <div className={`${styles.body} ${scrollBody ? styles.bodyScroll : ""}`}>
+                  <ErrorBoundary label={title}>
+                    {children}
+                  </ErrorBoundary>
+                </div>
                 {footer && <div className={styles.footer}>{footer}</div>}
               </motion.div>
             </DialogPrimitive.Content>

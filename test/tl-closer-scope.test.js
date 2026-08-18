@@ -74,4 +74,27 @@ assert.deepStrictEqual(itList, ["HS1-05", "HS1-10", "HS1-20"], "closer IT scope 
 const dashEmps = roles.filterEmployeesForTeamDashboard(employees, closerOnly).map((e) => e.id).sort();
 assert.ok(dashEmps.includes("HS1-10"), "closer sees team on dashboard");
 
+const closerWithTlAccess = userRole({
+  role: "tl",
+  employeeId: "HS1-05",
+  leadTeams: [],
+});
+assert.ok(!roles.hasLeadTeamAssignment(closerWithTlAccess), "Amy/Ria-style closer is not an assigned TL");
+assert.ok(roles.hasCloserTeamAssignment(closerWithTlAccess), "still a closer");
+assert.deepStrictEqual(
+  roles.filterEmployeesForUser(employees, closerWithTlAccess).map((e) => e.id),
+  ["HS1-05"],
+  "unassigned TL closer sees only own attendance roster"
+);
+assert.ok(!roles.canAccessEmployee(closerWithTlAccess, employees[0]), "cannot open teammate attendance");
+assert.ok(roles.canAccessEmployee(closerWithTlAccess, employees[2]), "can open own row");
+assert.strictEqual(roles.uniqueCloserTeamCount(closerWithTlAccess), 1, "close-teams KPI is unique closer teams");
+assert.ok(roles.usesCloseTeamsDashboardKpi(closerWithTlAccess), "TL/closer dashboard hides Units");
+
+const assignedTl = userRole({ role: "tl", employeeId: "TL1-01" });
+assert.ok(roles.hasLeadTeamAssignment(assignedTl), "org TL is assigned");
+const tlRoster = roles.filterEmployeesForUser(employees, assignedTl).map((e) => e.id).sort();
+assert.ok(tlRoster.includes("HS1-10") && tlRoster.includes("HS1-05"), "assigned TL still sees led team attendance");
+assert.ok(roles.usesCloseTeamsDashboardKpi(assignedTl), "assigned TL also uses close-teams KPI");
+
 console.log("  ok all tl-closer-scope tests");

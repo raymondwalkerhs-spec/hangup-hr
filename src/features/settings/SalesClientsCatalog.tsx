@@ -4,6 +4,7 @@ import { api } from "@/api/client";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { Select } from "@/ui/Select";
 import { StatusPill } from "@/ui/StatusPill";
 
 const DEVICE_TYPES = [
@@ -240,18 +241,27 @@ function ClientDialog({
       <FormGrid>
         <FormField label="Name"><input value={name} onChange={(e) => setName(e.target.value)} required /></FormField>
         <FormField label="Sales program">
-          <select value={program} onChange={(e) => setProgram(e.target.value as "mla" | "rpm")} disabled={!!client}>
-            <option value="mla">MLA</option>
-            <option value="rpm">RPM</option>
-          </select>
+          <Select
+            value={program}
+            onChange={(v) => setProgram(v as "mla" | "rpm")}
+            disabled={!!client}
+            options={[
+              { value: "mla", label: "MLA" },
+              { value: "rpm", label: "RPM" },
+            ]}
+          />
         </FormField>
         <FormField label="Status">
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
-            <option value="hold">On hold</option>
-            <option value="warn">Warn on submit</option>
-          </select>
+          <Select
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "disabled", label: "Disabled" },
+              { value: "hold", label: "On hold" },
+              { value: "warn", label: "Warn on submit" },
+            ]}
+          />
         </FormField>
         <FormField label="Status message" span="full">
           <textarea rows={2} value={statusMessage} onChange={(e) => setStatusMessage(e.target.value)} />
@@ -288,9 +298,11 @@ function ProductDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={product ? "Edit device" : "Add device"}>
       <FormGrid>
         <FormField label="Device type">
-          <select value={deviceType} onChange={(e) => setDeviceType(e.target.value)}>
-            {DEVICE_TYPES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-          </select>
+          <Select
+            value={deviceType}
+            onChange={setDeviceType}
+            options={DEVICE_TYPES.map((d) => ({ value: d.id, label: d.label }))}
+          />
         </FormField>
         <FormField label="Label"><input value={label} onChange={(e) => setLabel(e.target.value)} /></FormField>
         <FormField label="Favored">

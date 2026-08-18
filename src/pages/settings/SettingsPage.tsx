@@ -6,6 +6,9 @@ import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
+import { Select } from "@/ui/Select";
+import { useConfirmUndo } from "@/ui/useDeferredDelete";
+import { ConfirmDialog } from "@/ui/Dialog";
 import { useThemeStore, THEMES, type Theme } from "@/stores/theme-store";
 import { fileToBase64 } from "@/lib/files";
 import { SettingsAdminExtras } from "./SettingsAdminExtras";
@@ -29,6 +32,8 @@ type Holiday = { id: string; name?: string; date?: string; holidayDate?: string;
 export function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
   const qc = useQueryClient();
+  const undo = useConfirmUndo();
+  const [impersonateUser, setImpersonateUser] = useState("");
   const [taxIncome, setTaxIncome] = useState("");
   const [taxSocial, setTaxSocial] = useState("");
   const [mgrDraft, setMgrDraft] = useState<Record<string, { opEmployeeId: string; hrManagerId: string; qualityManagerId: string }>>({});
@@ -330,17 +335,19 @@ export function SettingsPage() {
             {status?.impersonation?.active && (
               <p className="muted">Currently viewing as <strong>{status.impersonation.as}</strong></p>
             )}
-            <select id="impersonate-select" style={{ width: "100%", marginBottom: "0.5rem" }}>
-              <option value="">— Choose user —</option>
-              {(impUsers?.users || []).map((u) => (
-                <option key={u.username} value={u.username}>
-                  {u.employeeName || u.username} — {u.username} ({u.role})
-                </option>
-              ))}
-            </select>
+            <Select
+              value={impersonateUser}
+              onChange={setImpersonateUser}
+              options={[
+                { value: "", label: "— Choose user —" },
+                ...(impUsers?.users || []).map((u) => ({
+                  value: u.username,
+                  label: `${u.employeeName || u.username} — ${u.username} (${u.role})`,
+                })),
+              ]}
+            />
             <Button size="sm" onClick={() => {
-              const sel = document.getElementById("impersonate-select") as HTMLSelectElement;
-              if (sel?.value && confirm(`View as ${sel.value}?`)) impersonate.mutate(sel.value);
+              if (impersonateUser && confirm(`View as ${impersonateUser}?`)) impersonate.mutate(impersonateUser);
             }}>Start viewing</Button>
           </Card>
         )}
@@ -508,7 +515,11 @@ export function SettingsPage() {
                   />
                   {" "}{h.date || h.holidayDate}: {h.name}
                 </span>
-                <Button size="sm" variant="secondary" onClick={() => { if (confirm("Delete holiday?")) deleteHoliday.mutate(h.id); }}>Delete</Button>
+                <Button size="sm" variant="secondary" onClick={() => undo.confirmUndo({
+                  title: "Delete holiday?",
+                  toast: "Holiday deleted",
+                  commit: () => deleteHoliday.mutateAsync(h.id),
+                })}>Delete</Button>
               </label>
             ))}
             {!usaHolidays.length && <p className="muted">No holidays — click Import.</p>}
@@ -526,7 +537,11 @@ export function SettingsPage() {
                       <input type="checkbox" checked={h.active !== false} onChange={(e) => toggleHoliday.mutate({ id: h.id, active: e.target.checked })} />
                       {" "}{h.date || h.holidayDate}: {h.name}
                     </span>
-                    <Button size="sm" variant="secondary" onClick={() => { if (confirm("Delete?")) deleteHoliday.mutate(h.id); }}>Delete</Button>
+                    <Button size="sm" variant="secondary" onClick={() => undo.confirmUndo({
+                      title: "Delete holiday?",
+                      toast: "Holiday deleted",
+                      commit: () => deleteHoliday.mutateAsync(h.id),
+                    })}>Delete</Button>
                   </label>
                 ))}
               </div>
@@ -553,6 +568,14 @@ export function SettingsPage() {
           </table>
         </Card>
       )}
+      <ConfirmDialog
+        open={undo.confirmOpen}
+        onOpenChange={undo.setConfirmOpen}
+        title={undo.confirmTitle}
+        message={undo.confirmMessage}
+        danger
+        onConfirm={undo.confirmDelete}
+      />
     </div>
   );
 }

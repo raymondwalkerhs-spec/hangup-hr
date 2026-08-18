@@ -18,7 +18,7 @@ import {
 } from "@/pages/HrPages";
 import { EmployeesPage } from "@/features/employees/EmployeesPage";
 import { AttendancePage } from "@/pages/attendance/AttendancePage";
-import { PayrollPage } from "@/pages/payroll/PayrollPage";
+import { PayrollRoute } from "@/pages/payroll/PayrollRoute";
 import {
   OrgPage,
   EquipmentPage,
@@ -42,8 +42,9 @@ import {
   AnnouncementsPage,
 } from "@/pages/AdminPages";
 import { BackupPage } from "@/pages/backup/BackupPage";
-import { EmployeeCompliancePage } from "@/pages/compliance/EmployeeCompliancePage";
-import { getSessionId } from "@/api/client";
+import { OffboardingPage } from "@/pages/compliance/OffboardingPage";
+import { ClearancePage } from "@/pages/compliance/ClearancePage";
+import { RecycleBinPage } from "@/pages/settings/RecycleBinPage";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthProvider";
 import { firstAllowedPage, type StatusUser } from "@/lib/nav-access";
@@ -85,6 +86,7 @@ export function AppRouter() {
         <Route element={<ProtectedLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Guard page="dashboard"><DashboardPage /></Guard>} />
+          <Route path="cats" element={<Guard page="cats"><CatsPage /></Guard>} />
           <Route path="announcements" element={<Guard page="announcements"><AnnouncementsPage /></Guard>} />
           <Route path="employees" element={<Guard page="employees"><EmployeesPage /></Guard>} />
           <Route path="org" element={<Guard page="org"><OrgPage /></Guard>} />
@@ -97,7 +99,7 @@ export function AppRouter() {
           <Route path="requests" element={<Guard page="requests"><RequestsPage /></Guard>} />
           <Route path="meeting-requests" element={<Guard page="meeting-requests"><MeetingRequestsPage /></Guard>} />
           <Route path="it-requests" element={<Guard page="it-requests"><ItRequestsPage /></Guard>} />
-          <Route path="payroll" element={<Guard page="payroll"><PayrollPage /></Guard>} />
+          <Route path="payroll" element={<Guard page="payroll"><PayrollRoute /></Guard>} />
           <Route path="salaries" element={<Guard page="salaries"><SalariesPage /></Guard>} />
           <Route path="bonuses" element={<Guard page="bonuses"><BonusesPage /></Guard>} />
           <Route path="deductions" element={<Guard page="deductions"><DeductionsPage /></Guard>} />
@@ -116,8 +118,9 @@ export function AppRouter() {
           <Route path="rules" element={<Guard page="rules"><RulesPage /></Guard>} />
           <Route path="changes" element={<Guard page="changes"><ChangesPage /></Guard>} />
           <Route path="backup" element={<Guard page="backup"><BackupPage /></Guard>} />
-          <Route path="offboarding" element={<Guard page="offboarding"><EmployeeCompliancePage mode="offboarding" /></Guard>} />
-          <Route path="clearance" element={<Guard page="clearance"><EmployeeCompliancePage mode="clearance" /></Guard>} />
+          <Route path="offboarding" element={<Guard page="offboarding"><OffboardingPage /></Guard>} />
+          <Route path="clearance" element={<Guard page="clearance"><ClearancePage /></Guard>} />
+          <Route path="recycle" element={<Guard page="recycle"><RecycleBinPage /></Guard>} />
           <Route path="settings" element={<Guard page="settings"><SettingsPage /></Guard>} />
           <Route path="*" element={<FallbackRedirect />} />
         </Route>

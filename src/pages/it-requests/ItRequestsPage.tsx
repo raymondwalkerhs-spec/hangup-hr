@@ -7,8 +7,10 @@ import { useAppStatus } from "@/hooks/useAppStatus";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { StatusPill } from "@/ui/StatusPill";
+import { Select } from "@/ui/Select";
+import { useDeferredDelete } from "@/ui/useDeferredDelete";
 import styles from "./ItRequestsPage.module.css";
 
 type ItRequest = {
@@ -169,6 +171,15 @@ export function ItRequestsPage() {
   }, [employees, scopedEmpData?.employees, canItOnBehalf, selfEmpId]);
 
   const items = data?.requests || [];
+  const deferred = useDeferredDelete({
+    items,
+    commit: async (id) => {
+      await api(path(`/it-requests/${id}`), { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["it-requests"] });
+      setSelected(null);
+    },
+    message: "IT ticket deleted",
+  });
   const itUsers = itUsersData?.itUsers || [];
 
   const openNew = useCallback(() => {
@@ -269,13 +280,6 @@ export function ItRequestsPage() {
     });
   };
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api(path(`/it-requests/${id}`), { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["it-requests"] });
-      setSelected(null);
-    },
-  });
 
   const deny = (id: string) => {
     const reason = window.prompt("Reason for denying this request (optional):") ?? "";
@@ -310,10 +314,10 @@ export function ItRequestsPage() {
       )}
 
       {isLoading && <p className="muted">Loading…</p>}
-      {!isLoading && !items.length && <p className="muted">No IT requests found.</p>}
+      {!isLoading && !deferred.visibleItems.length && <p className="muted">No IT requests found.</p>}
 
       <div className={styles.grid}>
-        {items.map((it) => (
+        {deferred.visibleItems.map((it) => (
           <Card key={it.id} className={`interactive ${styles.card}`} onClick={() => setSelected(it)}>
             <div className={styles.cardHeader}>
               <strong>{it.title || it.id}</strong>
@@ -345,9 +349,7 @@ export function ItRequestsPage() {
               <Button variant="secondary" onClick={() => openEdit(selected)}>Edit</Button>
             )}
             {canDelete && (
-              <Button variant="danger" onClick={() => {
-                if (confirm("Delete this ticket?")) remove.mutate(String(selected?.id));
-              }}>Delete</Button>
+              <Button variant="danger" onClick={() => selected.id && deferred.requestDelete(String(selected.id))}>Delete</Button>
             )}
             {canAssign && selected && !selected.assignedTo && selected.status === "open" && (
               <Button variant="secondary" onClick={() => {
@@ -418,25 +420,19 @@ export function ItRequestsPage() {
           </label>
           <label>
             <span className="muted">Category</span>
-            <select
+            <Select
               value={editForm.category}
-              onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-            >
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+              onChange={(category) => setEditForm({ ...editForm, category })}
+              options={CATEGORY_OPTIONS}
+            />
           </label>
           <label>
             <span className="muted">Urgency</span>
-            <select
+            <Select
               value={editForm.urgency}
-              onChange={(e) => setEditForm({ ...editForm, urgency: e.target.value })}
-            >
-              {Object.entries(URGENCY_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
+              onChange={(urgency) => setEditForm({ ...editForm, urgency })}
+              options={Object.entries(URGENCY_LABELS).map(([k, v]) => ({ value: k, label: v }))}
+            />
           </label>
           {patchError && <p style={{ color: "var(--err)", margin: 0 }}>{patchError}</p>}
         </div>
@@ -454,37 +450,47 @@ export function ItRequestsPage() {
           {canItOnBehalf && (
             <label>
               <span className="muted">On behalf of</span>
-              <select value={newForm.employeeId} onChange={(e) => setNewForm({ ...newForm, employeeId: e.target.value })}>
-                <option value={selfEmpId}>Myself ({selfEmpId})</option>
-                {scopedAgents.filter((e) => e.id !== selfEmpId).map((e) => (
-                  <option key={e.id} value={e.id}>{e.american_name || e.id} ({e.id})</option>
-                ))}
-              </select>
+              <Select
+                value={newForm.employeeId}
+                onChange={(employeeId) => setNewForm({ ...newForm, employeeId })}
+                options={[
+                  { value: selfEmpId, label: `Myself (${selfEmpId})` },
+                  ...scopedAgents
+                    .filter((e) => e.id !== selfEmpId)
+                    .map((e) => ({ value: e.id, label: `${e.american_name || e.id} (${e.id})` })),
+                ]}
+              />
             </label>
           )}
           <label>
             <span className="muted">Category</span>
-            <select value={newForm.category} onChange={(e) => setNewForm({ ...newForm, category: e.target.value })}>
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
+            <Select
+              value={newForm.category}
+              onChange={(category) => setNewForm({ ...newForm, category })}
+              options={CATEGORY_OPTIONS}
+            />
           </label>
           <label>
             <span className="muted">Common issue</span>
-            <select value={newForm.issueType} onChange={(e) => setNewForm({ ...newForm, issueType: e.target.value })}>
-              <option value="">— Select —</option>
-              {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <Select
+              value={newForm.issueType}
+              onChange={(issueType) => setNewForm({ ...newForm, issueType })}
+              options={[{ value: "", label: "— Select —" }, ...ISSUE_TYPES.map((t) => ({ value: t, label: t }))]}
+              placeholder="— Select —"
+            />
           </label>
           <label>
             <span className="muted">Urgency</span>
-            <select value={newForm.urgency} onChange={(e) => setNewForm({ ...newForm, urgency: e.target.value })}>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
+            <Select
+              value={newForm.urgency}
+              onChange={(urgency) => setNewForm({ ...newForm, urgency })}
+              options={[
+                { value: "low", label: "Low" },
+                { value: "normal", label: "Normal" },
+                { value: "high", label: "High" },
+                { value: "critical", label: "Critical" },
+              ]}
+            />
           </label>
           <label>
             <span className="muted">Description</span>
@@ -504,12 +510,15 @@ export function ItRequestsPage() {
       }>
         <label>
           <span className="muted">IT staff</span>
-          <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
-            <option value="">— Select —</option>
-            {itUsers.map((u) => (
-              <option key={u.username} value={u.username}>{u.displayName || u.username}</option>
-            ))}
-          </select>
+          <Select
+            value={assignTo}
+            onChange={setAssignTo}
+            options={[
+              { value: "", label: "— Select —" },
+              ...itUsers.map((u) => ({ value: u.username, label: u.displayName || u.username })),
+            ]}
+            placeholder="— Select —"
+          />
         </label>
       </Dialog>
 
@@ -530,6 +539,17 @@ export function ItRequestsPage() {
           <textarea value={resolveNotes} onChange={(e) => setResolveNotes(e.target.value)} rows={4} placeholder="What was fixed, parts replaced, follow-up needed…" />
         </label>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(deferred.confirmId)}
+        onOpenChange={(o) => !o && deferred.setConfirmId(null)}
+        title="Delete IT ticket?"
+        message="It will move to the recycle bin for 20 days. You can undo for 6 seconds."
+        danger
+        onConfirm={() => {
+          deferred.confirmDelete();
+          setSelected(null);
+        }}
+      />
     </div>
   );
 }

@@ -104,7 +104,7 @@ function createApp() {
 
   // SPA fallback for client-side routes (React Router)
   if (hasReactBuild) {
-    app.get(/^\/(dashboard|announcements|employees|org|equipment|interviews|training|coaching|attendance|breaks|requests|meeting-requests|it-requests|payroll|salaries|bonuses|deductions|loans|loan-approvals|payslip|sales|team-dashboard|costs|reports|analytics|users|access-control|sales-permissions|sales-log-columns|rules|changes|settings|backup|offboarding|clearance)(\/.*)?$/, (_req, res) => {
+    app.get(/^\/(dashboard|announcements|cats|employees|org|equipment|interviews|training|coaching|attendance|breaks|requests|meeting-requests|it-requests|payroll|salaries|bonuses|deductions|loans|loan-approvals|payslip|sales|team-dashboard|costs|reports|analytics|users|access-control|sales-permissions|sales-log-columns|rules|changes|settings|backup|offboarding|clearance|recycle)(\/.*)?$/, (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

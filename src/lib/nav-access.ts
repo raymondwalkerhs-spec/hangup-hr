@@ -10,7 +10,9 @@ export type StatusUser = Record<string, unknown> & {
   canSubmitExpense?: boolean;
   canApproveLoan?: boolean;
   canViewEquipmentInventory?: boolean;
+  hasAssignedEquipment?: boolean;
   canViewReports?: boolean;
+  canViewDashboardPayroll?: boolean;
   canViewAgentPayslipNav?: boolean;
   canViewInterviews?: boolean;
   canViewItRequests?: boolean;
@@ -61,10 +63,13 @@ function canViewTeamDashboard(user: StatusUser | undefined | null): boolean {
 }
 
 export function canAccessPage(user: StatusUser | undefined | null, page: string): boolean {
-  if (!page || page === "dashboard" || page === "settings") return true;
+  if (!page || page === "dashboard" || page === "settings" || page === "cats") return true;
 
   if (PAYROLL_PAGES.has(page)) {
     const r = role(user);
+    if (page === "payroll" && PAYROLL_NAV_DENY_ROLES.has(r) && user?.canViewAgentPayslipNav === true) {
+      return true;
+    }
     if (PAYROLL_NAV_DENY_ROLES.has(r)) return false;
     return user?.canViewPayroll === true || PAYROLL_NAV_ROLES.has(r);
   }
@@ -75,8 +80,13 @@ export function canAccessPage(user: StatusUser | undefined | null, page: string)
   if (page === "loan-approvals") {
     return user?.canApproveLoan === true && !["agent", "office_assistant", "tl"].includes(role(user));
   }
-  if (page === "equipment") return user?.canViewEquipmentInventory === true;
+  if (page === "equipment") {
+    return user?.canViewEquipmentInventory === true || user?.hasAssignedEquipment === true;
+  }
   if (page === "reports" || page === "analytics") return user?.canViewReports === true;
+  if (page === "recycle") {
+    return ["hr", "admin", "ceo", "rtm", "it"].includes(role(user));
+  }
   if (page === "payslip") return user?.canViewAgentPayslipNav === true;
   if (page === "interview") return user?.canViewInterviews === true;
   if (page === "training") return TRAINING_ROLES.has(role(user));

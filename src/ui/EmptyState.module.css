@@ -1,0 +1,27 @@
+.wrap {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.icon {
+  margin-bottom: 0.5rem;
+  opacity: 0.55;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.action {
+  margin-top: 0.85rem;
+}

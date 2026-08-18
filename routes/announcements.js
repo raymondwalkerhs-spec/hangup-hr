@@ -219,7 +219,7 @@ router.delete("/:id", async (req, res) => {
   try {
     const existing = await announcementsRepo.getAnnouncement(req.params.id);
     if (!existing || existing.company !== companyOf(req)) return res.status(404).json({ error: "Not found" });
-    await announcementsRepo.deleteAnnouncement(req.params.id);
+    await announcementsRepo.deleteAnnouncement(req.params.id, req.username);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -231,9 +231,12 @@ async function handleMediaUpload(req, res, kind) {
   try {
     const existing = await announcementsRepo.getAnnouncement(req.params.id);
     if (!existing || existing.company !== companyOf(req)) return res.status(404).json({ error: "Not found" });
-    const fileName = String(req.body?.fileName || (kind === "image" ? "image.jpg" : "audio.mp3"));
-    const buffer = decodeBase64(req.body?.contentBase64);
-    if (!buffer.length) return res.status(400).json({ error: "File is required" });
+    const { readUploadBuffer } = require("../lib/read-upload-buffer");
+    const parsed = await readUploadBuffer(req);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    const fileName = String(parsed.fileName || (kind === "image" ? "image.jpg" : "audio.mp3"));
+    const buffer = parsed.buffer;
+    if (!buffer?.length) return res.status(400).json({ error: "File is required" });
     const max = kind === "image" ? MAX_IMAGE_BYTES : MAX_AUDIO_BYTES;
     if (buffer.length > max) {
       return res.status(400).json({ error: `File too large (max ${Math.round(max / (1024 * 1024))} MB)` });

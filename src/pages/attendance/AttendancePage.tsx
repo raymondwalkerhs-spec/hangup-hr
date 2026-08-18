@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, monthLabel } from "@/api/client";
@@ -15,6 +15,7 @@ import { Dialog } from "@/ui/Dialog";
 import { DepartDateDialog } from "@/features/employees/DepartDateDialog";
 import { defaultDepartForm, type DepartFormState } from "@/lib/employeeStatus";
 import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
+import { Select } from "@/ui/Select";
 import { FpImportDialog, FpRulesDialog } from "@/features/attendance/AttendanceDialogs";
 import { AttendanceStatusCell } from "@/features/attendance/AttendanceStatusCell";
 import { parseIsoDate, isAfterIsoDate } from "@/lib/dateIso";
@@ -87,7 +88,10 @@ export function AttendancePage() {
     status: string;
     transportOverride?: string;
     form: DepartFormState;
+    extraDates?: { employeeId: string; date: string }[];
   } | null>(null);
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const dragRef = useRef<{ empId: string; startDate: string; moved: boolean } | null>(null);
 
   const { status: appStatus } = useAppStatus();
 
@@ -269,12 +273,18 @@ export function AttendancePage() {
 
   const onStatusChange = useCallback(
     (employeeId: string, date: string, status: string, transportOverride?: string) => {
+      const keys = selectedCells.size > 1 ? [...selectedCells] : [`${employeeId}|${date}`];
+      const targets = keys.map((k) => {
+        const [emp, d] = k.split("|");
+        return { employeeId: emp, date: d };
+      });
       if (isOutStatus(status)) {
         setDepartConfirm({
           employeeId,
           date,
           status,
           transportOverride,
+          extraDates: targets,
           form: {
             ...defaultDepartForm(status === "OUT BUT STILL GET PAID" ? "out_still_paid" : "out"),
             departDate: date,
@@ -283,20 +293,40 @@ export function AttendancePage() {
         });
         return;
       }
-      if (status === "paused") {
+      if (status === "paused" && targets.length === 1) {
         const { monday, friday } = workWeekBounds(date);
         const weekDates = workWeekDates(monday, friday);
         saveBatch.mutate(weekDates.map((d) => ({ employeeId, date: d, status: "paused" })));
+        setSelectedCells(new Set());
+        return;
+      }
+      if (targets.length > 1) {
+        saveBatch.mutate(targets.map((t) => ({ ...t, status, transportOverride })));
+        setSelectedCells(new Set());
         return;
       }
       saveCell.mutate({ employeeId, date, status, transportOverride });
+      setSelectedCells(new Set());
     },
-    [saveCell, saveBatch]
+    [saveCell, saveBatch, selectedCells]
   );
 
   const confirmDepartSave = useCallback(
     (asDepart: boolean) => {
       if (!departConfirm) return;
+      if (departConfirm.extraDates && departConfirm.extraDates.length > 1 && !asDepart) {
+        saveBatch.mutate(
+          departConfirm.extraDates.map((t) => ({
+            employeeId: t.employeeId,
+            date: t.date,
+            status: departConfirm.status,
+            transportOverride: departConfirm.transportOverride,
+          }))
+        );
+        setDepartConfirm(null);
+        setSelectedCells(new Set());
+        return;
+      }
       saveCell.mutate({
         employeeId: departConfirm.employeeId,
         date: departConfirm.date,
@@ -306,9 +336,47 @@ export function AttendancePage() {
         notice_type: asDepart ? departConfirm.form.notice_type : undefined,
       });
       setDepartConfirm(null);
+      setSelectedCells(new Set());
     },
-    [departConfirm, saveCell]
+    [departConfirm, saveCell, saveBatch]
   );
+
+  const onPointerSelect = useCallback(
+    (empId: string, date: string, mode: "start" | "move" | "end") => {
+      if (!canEdit) return;
+      if (mode === "start") {
+        dragRef.current = { empId, startDate: date, moved: false };
+        setSelectedCells(new Set([`${empId}|${date}`]));
+        return;
+      }
+      if (mode === "move" && dragRef.current && dragRef.current.empId === empId) {
+        const start = dragRef.current.startDate;
+        if (start !== date) dragRef.current.moved = true;
+        const a = start < date ? start : date;
+        const b = start < date ? date : start;
+        const next = new Set<string>();
+        for (const d of days) {
+          if (d >= a && d <= b) next.add(`${empId}|${d}`);
+        }
+        setSelectedCells(next);
+      }
+      if (mode === "end") {
+        dragRef.current = dragRef.current ? { ...dragRef.current, moved: dragRef.current.moved } : null;
+      }
+    },
+    [canEdit, days]
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedCells(new Set());
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerup", () => {
+      dragRef.current = null;
+    });
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const wdVal = workingDays || String(data?.workingDays || 22);
 
@@ -358,10 +426,15 @@ export function AttendancePage() {
           </div>
           <div className={styles.bulkGroup}>
             <span className={styles.bulkLabel}>Agent month</span>
-            <select value={bulkAgent} onChange={(e) => setBulkAgent(e.target.value)}>
-              <option value="">Agent…</option>
-              {employees.map((e) => <option key={e.id} value={e.id}>{e.id} — {e.name}</option>)}
-            </select>
+            <Select
+              value={bulkAgent}
+              onChange={setBulkAgent}
+              options={[
+                { value: "", label: "Agent…" },
+                ...employees.map((e) => ({ value: e.id, label: `${e.id} — ${e.name}` })),
+              ]}
+              placeholder="Agent…"
+            />
             <Button
               size="sm"
               variant="secondary"
@@ -417,7 +490,7 @@ export function AttendancePage() {
         {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
         {!isLoading && !error && (
           <div className={styles.scroll}>
-            <table className={styles.grid}>
+            <table className={styles.grid} onDragStart={(e) => e.preventDefault()}>
               <thead>
                 <tr>
                   <th className={styles.stickyId}>ID</th>
@@ -469,6 +542,8 @@ export function AttendancePage() {
                               statuses={statuses}
                               canEdit={canEdit}
                               locked={locked}
+                              selected={selectedCells.has(`${emp.id}|${d}`)}
+                              onPointerSelect={canEdit ? onPointerSelect : undefined}
                               onChange={(newSt, transport) => onStatusChange(emp.id, d, newSt, transport)}
                             />
                           </td>

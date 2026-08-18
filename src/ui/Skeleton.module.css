@@ -1,0 +1,33 @@
+.block {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem 0;
+}
+
+.line {
+  height: 0.7rem;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border) 80%, var(--surface)) 0%,
+    color-mix(in srgb, var(--primary-light) 55%, var(--surface)) 50%,
+    color-mix(in srgb, var(--border) 80%, var(--surface)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line {
+    animation: none;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
