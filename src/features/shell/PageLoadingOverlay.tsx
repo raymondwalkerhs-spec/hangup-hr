@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { CatOrbitStage } from "./CatOrbitStage";
+import { TurtleSpinStage } from "./TurtleStage";
+import { useThemeStore } from "@/stores/theme-store";
 import { Button } from "@/ui/Button";
 import styles from "./PageLoadingOverlay.module.css";
 
@@ -38,9 +40,11 @@ function isColdPageFetch(query: { queryKey: readonly unknown[]; state: { data: u
  */
 export function PageLoadingOverlay() {
   const location = useLocation();
+  const theme = useThemeStore((s) => s.theme);
   const qc = useQueryClient();
   const skip = location.pathname === "/cats" || location.pathname.startsWith("/cats/");
   const coldFetching = useIsFetching({ predicate: isColdPageFetch });
+  const Stage = theme === "turtles" ? TurtleSpinStage : CatOrbitStage;
 
   const [visible, setVisible] = useState(false);
   const [label, setLabel] = useState("Loading…");
@@ -147,7 +151,7 @@ export function PageLoadingOverlay() {
       aria-busy={visible}
       aria-hidden={!visible}
     >
-      <CatOrbitStage message={label} sub={sub} active={visible} />
+      <Stage message={label} sub={sub} active={visible} />
       {stuck ? (
         <div className={styles.stuckActions}>
           <Button type="button" onClick={retry}>
@@ -163,5 +167,7 @@ export function PageLoadingOverlay() {
 }
 
 export function CatOrbitLoader({ message = "Loading workspace…" }: { message?: string }) {
+  const theme = useThemeStore((s) => s.theme);
+  if (theme === "turtles") return <TurtleSpinStage message={message} />;
   return <CatOrbitStage message={message} />;
 }

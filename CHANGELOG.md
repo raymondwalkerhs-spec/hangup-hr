@@ -4,6 +4,129 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+### Added
+- **RPM1 → Google Forms** — new RPM1 sales are submitted by **Supabase only** (INSERT trigger → Edge Function → **both** Google Forms: TEST Tracking + [Direct Tracking](https://docs.google.com/forms/d/e/1FAIpQLSdd4mYSuHJ4mAiY7hLusQsA62EHN_0ILTMUY-blEGoo9rJC-w/viewform)). No historical backfill when a form is added. Team Code **HS3**. Configure via `GOOGLE_FORM_TARGETS_JSON`. Deploy: `npm run deploy:rpm-google-form`.
+
+## [2.4.9] — 2026-08-27
+
+### Added
+- **Turtle Grove** premium theme (`turtles`) — moss / earth palette, grove + leaf art, full surface polish (sidebar, dock, cards, tables, forms).
+- **Turtle critters** — spinning turtle on page load; slow ambling turtles on `/cats` when Turtle Grove is active (other themes keep cats).
+- **Tiered premium unlock** — Gotham / Hello Kitty / Spiderman at **10** RPM sent as agent **or** 10 closed as closer this month; **Turtle Grove** at **15** sent or 15 closed. Admin/CEO/HR always unlocked.
+
+## [2.4.8] — 2026-08-26
+
+### Added
+- **Checks MCN uniqueness** — one live check per company + Member ID + working day (any agent). Second submit same day returns **409** `MEMBER_DAY_EXISTS`; re-status via edit/PATCH. Migration soft-deletes prior same-day duplicates and adds unique index `uq_rpm_checks_company_member_day`. Cleanup script: `scripts/cleanup-rpm-check-member-day-dups.js`.
+- **RPM identity soft warn** — create flow calls `GET /rpm-sales/identity-check` and shows ConfirmDialog when prior MCN/phone matches; submit still allowed. Duplicate notify recipients: **Quality + RTM + Admin** (`rpm_sale_duplicate` routing seeded).
+- **Shared field rules** — Wrong MCN copy; phones digits-only; person names letters + space/hyphen/apostrophe (Checks, Q Feedback edit, RPM create including emergency name).
+- **RPM Airtable from Supabase** — live sync is a database trigger + Edge Function (`airtable-rpm-sync`), not Hangup Portal. Insert/update/delete on `rpm_sales`, `rpm_checks`, and `rpm_sales_attachments` POSTs to Airtable (**RPM Sales** / **Q Feedback** / **NQ Checks**). A 5-minute catch-up retries recent rows if a webhook is dropped. Deploy: `npm run deploy:airtable:rpm-sync`. Desktop app no longer pushes Airtable unless `AIRTABLE_RPM_SYNC_FROM_APP=true`. NQ Checks still require a 10-digit form phone. Submission Date / Timestamp are Africa/Cairo wall times converted to UTC (no +3 hour shift in Airtable).
+
+### Changed
+- **Sale → Q auto-link** — same `working_day` only (prefer same agent); may overwrite disposed feedback (`not_int`, etc.) to **Sale**.
+- **RPM create validation** — empty required fields (incl. alt/emergency phone) show red field glow after submit attempt; `api()` keeps `errors[]`.
+
+### Fixed
+- Double-submit / multi-browser Checks inserts for the same MCN same day.
+- Q Feedback edit could change member fields without Checks-style validation.
+- **Q Feedback closer name on Sale** — auto-link from RPM Sales left `rpm_checks.closer_id` blank (UI showed —). DB triggers copy the sale closer when a Q is linked and when the sale closer changes; existing sale-linked rows backfilled. List API resolves closer american names even outside the viewer’s employee scope.
+
+## [2.4.7] — 2026-08-25
+
+### Added
+- **RPM + Q Feedback Airtable** — optional outbound sync to a **new** Hangup RPM base (`AIRTABLE_RPM_BASE_ID`), separate from MLA. Live full-row upsert **awaited** on every RPM sale submit/edit/attachment and every check write (Portal Sale ID / Portal Check ID; edits PATCH the same row). Tables: **RPM Sales**, **Q Feedback** (completed dispositions), **NQ Checks** (NQ / Age limit / Duplicate / Under Age). Provision: `npm run provision:airtable:rpm`; backfill: `npm run sync:airtable:rpm`.
+
+### Fixed
+- **Select search lag in dialogs** — while a Dialog was open, intentional Radix scroll-lock was treated as UI “residue,” so every focus/pointer cleared blockers and made agent/closer search feel ~2s sticky. Residue clear now ignores scroll-lock/focus-guards when a Hangup Dialog is open.
+- **RPM Airtable Client** — `Client` was a single-select of RPM1/RPM2, so RPM3 sales synced with a blank Client. Choices now include RPM3; unmatched selects pass through with Airtable `typecast`.
+- **Import from open Q (closers)** — open-for-sale used attendance employee scope (self only) instead of the sale agent picker, so closers got `Agent out of scope` when importing a team agent's Q. Now uses the same agent scope as RPM sale submit.
+- **Deductions Edit / Delete** — React Deductions page and Payslip deductions list now show Edit and Delete for HR/admin (APIs already existed; actions were never ported from legacy).
+- **Bonuses Edit / Delete** — same for Bonuses page and Payslip bonuses list (PATCH/DELETE + TL/OP deduct-from on edit).
+- **Dead form fields (Electron)** — native `confirm`/`alert` while a Radix Dialog was open left `body` pointer-events / scroll-lock residue so text inputs looked filled but would not type (Select often still worked). Safe `clearUiBlockers` with dialog refcount; Dialog content focus clears residue; Select clears inside dialogs; sale draft resume / submission correction / FP import use in-app `ConfirmDialog`.
+- **Employee Out lag** — depart no longer materializes ~24 months of OUT attendance rows under the store lock (status flipped while UI hung on “Saving…”). Post-depart days are virtual-painted as OUT for every viewed month; rehire clears legacy auto-OUT rows.
+- **Attendance depart date** — “Employee leaving” now sends the picked depart date (and Out / still-paid status), not only the clicked cell date; multi-select Set depart OUTs all cells then applies one depart.
+- **Depart date UX** — always-visible local today date (no checkbox trap); shared `DepartDateDialog` on Edit / Lifecycle / HRMS.
+
+## [2.4.6] — 2026-08-25
+
+### Fixed
+- **Checks / Q Feedback API body** — `api()` no longer drops `Content-Type` when callers pass `Idempotency-Key`, so Express parses JSON and stop returning false `agentId required`.
+- **Checks submit** — selecting an agent then typing other fields no longer clears `agentId` (stale form state); Submit sends the selected agent reliably.
+- **Q Feedback submit** — add/edit reads latest form values via refs so disposition/closer cannot be lost on save.
+
+### Changed
+- **Checks fields by status** — **Q** requires agent, member ID, phone, full name, and DOB. **NQ / Duplicate / Age limit / Under age** require agent, member ID, and phone only (name/DOB hidden and not stored).
+
+## [2.4.5] — 2026-08-25
+
+### Added
+- **Hide all OUT** — toggle on Employees, Payroll, and Attendance for TL / HR / RTM / Quality / Admin / OP; hides every OUT status including agents who worked this month.
+
+### Changed
+- **TL Team dashboard** week/month use the same led-team scope as daily (extra teams + home-team fallback).
+- **TL Q Feedback** — open Qs on led team; completed rows limited to own submissions (and team closers on team agents).
+- **TL employees** — payment method/details hidden in list and View/Edit (API strips fields).
+- **Closer target** editor at top of Q Feedback Analysis — OP / RTM / Admin only (Target column remains in tables).
+- **Add bonus** / **Add deduction** — HR / Admin only; Request bonus unchanged for TL/OP/others.
+
+## [2.4.4] — 2026-08-25
+
+### Added
+- **Q Feedback row edit** — Admin and OP can edit member ID, name, DOB, phone, disposition, closer, and info on Q Feedback rows (Sale disposition stays locked; Clear feedback returns a row to open).
+
+### Changed
+- `canEditRpmQFeedback` includes **OP** (with Admin/CEO and existing RTM/Quality/TL defaults).
+
+## [2.4.3] — 2026-08-24
+
+### Added
+- **Optional installer update** — local NSIS ship (no GH Actions). Users see an optional Update available dialog (Continue works); notes highlight Dashboard interface updates.
+- **TL dashboard split** — TL assigned to a team who also closes gets separate **Sales you closed** and **Your team** cards (status + this month).
+- **Live 5s refresh** — Dashboard, Payroll, Attendance, Sales log, notification bell, and announcement badge poll every 5s on the **current mounted page only**; React Query skips UI updates when data is unchanged.
+- **Registration notifications** — new agent registration uses Notification routing (`registration_submitted`, default OP/Admin/HR/CEO) with company stamp fixed; appears under Settings → Notification routing.
+- **RPM sale delete** — Admin/RTM (`deleteSales`) can delete RPM sales from the edit dialog (same undo toast as MLA).
+- **RPM duplicate phone / Member ID** — on submit, historical matches on main phone, alternative phone, or Member ID notify RTM/Admin (`rpm_sale_duplicate`) with prior dates and client feedback; Sales log **Show duplicates** checkbox groups matching rows.
+- **RPM weekly performance** on the main Dashboard (Admin / RTM / Quality / OP / TL by default): Mon–Fri week cards for top closers, agents, and clients; count mode toggle (Passed / Passed+Pending / All); per-team weekly targets with overachieve % colors. TL sees own team(s) only and cannot edit targets. Access Control keys: `viewRpmWeeklyDashboard`, `editRpmWeeklyTargets`. Migration: `20260828_rpm_team_week_targets`.
+- **Sales log filters RBAC** — Access Control key `viewSalesLogFilters` (default on for OP/Admin/Quality/RTM/HR/CEO; off for TL/agent). Admins can show filters to TL or hide them from OP.
+- **Sales log period persistence** — chosen period (e.g. This month) is remembered while navigating away and back in the same session; app restart / first open defaults to **today**.
+
+### Fixed
+- RPM submit form: phone fields accept digits only; DOB accepts pasted dates (e.g. `MM/DD/YYYY` → ISO).
+- Team dashboard conversion / target % use **Passed + Pending** (not Passed alone).
+
+## [2.4.2] — 2026-08-19
+
+### Added
+- **RPM sales log month access** — new Access Control permission `viewSalesThisMonth` lets role `agent` (closers) and `tl` view the current month in RPM sales logs (backend clamps to today unless allowed).
+
+## [2.4.1] — 2026-08-19
+
+GitHub Setup.exe **baseline** for cloud patches. Later `2.4.x` hotfixes use `npm run push:update` (Supabase zip). Do not Supabase-patch 2.4.1 itself — `2.4.0` cannot apply those zips. Operator pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+
+### Added
+- **Other (unassigned) agent** on RPM and MLA pickers. Submit skips unit/team/program checks; Sales log row glows amber until a real agent is assigned. Hidden from org, attendance, payroll, and dialing lists.
+- **Pending registration edit** — Org/Users can PATCH unit, team, names, phone, email; Approve uses the selected unit so IDs mint as `HS1-…` not `HS3-…`.
+- **Select `searchable`** — Agent/Closer search even when the unit has fewer than 10 people.
+- **Cloud patches** — `app_update_assets` + `app-updates` bucket. Same `major.minor` downloads a small zip (full new `app.asar` from the 2.4.1 line baseline). Line change still uses GitHub Setup.exe. `EPERM` falls back to NSIS.
+
+### Fixed
+- Coaching production bundle TDZ (`Cannot access … before initialization`) from an inner `options` shadowing React Query `options`.
+- RPM Sales log counts: `rpm_sales.status` synced from Client feedback (Approved → passed / Denied → denied).
+- RPM Client feedback default: blank stored as **Pending**.
+- Unsupported-version screen offers **Update now**.
+
+## [2.4.0] — 2026-08-18
+
+### Fixed
+- **Dropdowns (all shared Selects, including RPM Add sale):** menus are clickable, searchable, and scrollable inside dialogs. Radix Dialogs were treating the portaled list as “outside” and `pointer-events: none` on `body` ate click, search focus, and wheel.
+
+## [2.3.29] — 2026-08-18
+
+### Fixed
+- Login screen was blank: `/cats` was routed without importing `CatsPage`, which crashed React before the DNA login could render.
+- After login, shell crashed with `PageLoadingOverlay is not defined` (used in `AppShell` without an import).
+- App failed to start: `await` outside an async IT-request handler after recycle-bin routes were inserted. Restore `PATCH /it-requests/:id`.
+
 ## [2.3.28] — 2026-08-18
 
 ### Added
@@ -28,6 +151,8 @@ All notable changes to the Hangup Portal desktop app.
 - Leave submit: one notification (late/TL folded into the same row).
 - PUT payroll omit-key leaves `payslipVisibleToAgent` / `fullTransportGrant` unchanged.
 - Closers with TL access who are not assigned as team TL (Amy, Ria) see only their own attendance.
+
+### Fixed
 - Dashboard **Units** KPI is replaced with **Teams you close** for TLs and closers.
 - Daily/weekly **Team dashboards** use RPM columns (Passed / Pending / Dropped / Retransfer / Total) instead of the old MLA Approved / PostDated layout.
 - Adding an OP who is already assigned is a no-op (no duplicate-key error). OPs can be assigned to another Hangup unit (e.g. OP1 Steven on HS-3).

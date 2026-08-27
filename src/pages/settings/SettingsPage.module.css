@@ -41,6 +41,78 @@
 .swatch_red-wine { background: linear-gradient(135deg, #1a1214 50%, #f43f5e 50%); }
 .swatch_diamond { background: linear-gradient(135deg, #f8fafc 50%, #94a3b8 50%); }
 .swatch_emerald { background: linear-gradient(135deg, #eef7f2 50%, #059669 50%); }
+.swatch_gotham {
+  background: linear-gradient(
+    135deg,
+    #04060c 0%,
+    #04060c 28%,
+    #121826 28%,
+    #121826 48%,
+    #f0c14b 48%,
+    #f0c14b 72%,
+    #5b8def 72%,
+    #5b8def 100%
+  );
+}
+.swatch_hello-kitty {
+  background: linear-gradient(
+    135deg,
+    #fff5f9 0%,
+    #fff5f9 25%,
+    #ffb7d5 25%,
+    #ffb7d5 48%,
+    #ff4d8d 48%,
+    #ff4d8d 72%,
+    #ff7eb3 72%,
+    #ff7eb3 100%
+  );
+}
+.swatch_spiderman {
+  background: linear-gradient(
+    135deg,
+    #0a1028 0%,
+    #0a1028 28%,
+    #e11d2e 28%,
+    #e11d2e 55%,
+    #2563eb 55%,
+    #2563eb 78%,
+    #f87171 78%,
+    #f87171 100%
+  );
+}
+.swatch_turtles {
+  background: linear-gradient(
+    135deg,
+    #0c1a12 0%,
+    #0c1a12 28%,
+    #2d6a4f 28%,
+    #2d6a4f 52%,
+    #d4a574 52%,
+    #d4a574 74%,
+    #5c4033 74%,
+    #5c4033 100%
+  );
+}
+.themeLocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.themeLocked:hover {
+  border-color: var(--border);
+}
+.premiumBadge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border-radius: var(--radius-pill);
+  background: var(--primary-light);
+  color: var(--primary);
+  vertical-align: middle;
+}
 .themeOption strong {
   display: block;
 }

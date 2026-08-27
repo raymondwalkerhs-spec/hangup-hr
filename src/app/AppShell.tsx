@@ -23,10 +23,12 @@ import { BreakOverlay } from "@/features/shell/BreakOverlay";
 import { VersionUpdateGate } from "@/features/shell/VersionUpdateGate";
 import { ReconnectBanner } from "@/features/shell/ReconnectBanner";
 import { AgentGuide } from "@/features/shell/AgentGuide";
+import { PageLoadingOverlay } from "@/features/shell/PageLoadingOverlay";
 import { useConnectionStatus } from "@/hooks/useConnectionStatus";
 import { useInspectorStore } from "@/stores/cross-filter-store";
 import { useLocation } from "react-router-dom";
 import { useMemo, useRef, useCallback, useEffect, useState } from "react";
+import { LIVE_REFETCH_MS } from "@/lib/liveRefresh";
 import styles from "./AppShell.module.css";
 
 function NavIcon({ name }: { name: string }) {
@@ -53,7 +55,7 @@ function useVisibleNav() {
 export function AppShell() {
   const { user, logout, refreshStatus, status } = useAuth();
   const { sidebarCollapsed, sidebarPinned, toggleSidebar, setSidebarCollapsed, setSidebarPinned } = useAppStore();
-  const { theme, setTheme } = useThemeStore();
+  const { theme, cycleUnlocked, ensureUnlocked } = useThemeStore();
   const setCommandOpen = useWorkspaceStore((s) => s.setCommandOpen);
   const location = useLocation();
   const visibleNav = useVisibleNav();
@@ -65,7 +67,8 @@ export function AppShell() {
   const { data: announcementUnreadData } = useQuery({
     queryKey: ["announcement-unread", companyContext],
     queryFn: () => api<{ unreadCount?: number }>(scopedPath("/announcements/unread-count", {}, companyContext)),
-    refetchInterval: 30000,
+    refetchInterval: LIVE_REFETCH_MS,
+    refetchIntervalInBackground: false,
     enabled: showAnnouncementsNav,
   });
   const unreadAnnouncements = announcementUnreadData?.unreadCount || 0;
@@ -79,7 +82,12 @@ export function AppShell() {
   const title = PATH_TITLES[pageKey] || PAGE_TITLES[pageKey] || "Hangup Portal";
   const impersonating = Boolean(status?.impersonating);
   const themeMeta = THEMES.find((t) => t.id === theme) || THEMES[0];
-  const isDark = theme === "dark" || theme === "red-wine";
+  const isDark =
+    theme === "dark" ||
+    theme === "red-wine" ||
+    theme === "gotham" ||
+    theme === "spiderman" ||
+    theme === "turtles";
 
   const showSidebar = () => {
     clearTimeout(hideTimer.current);
@@ -125,9 +133,12 @@ export function AppShell() {
   };
 
   const cycleTheme = () => {
-    const idx = THEMES.findIndex((t) => t.id === theme);
-    setTheme(THEMES[(idx + 1) % THEMES.length].id);
+    cycleUnlocked((status as { themeUnlocks?: import("@/stores/theme-store").ThemeUnlocks } | null)?.themeUnlocks);
   };
+
+  useEffect(() => {
+    ensureUnlocked((status as { themeUnlocks?: import("@/stores/theme-store").ThemeUnlocks } | null)?.themeUnlocks);
+  }, [status, ensureUnlocked]);
 
   useEffect(() => {
     document.body.classList.toggle("company-hs2", companyContext === "hs2");
@@ -137,12 +148,13 @@ export function AppShell() {
   return (
     <div
       className={`${styles.shell} ${sidebarCollapsed ? styles.collapsed : ""} ${sidebarPinned ? styles.pinned : ""}`}
+      data-ui="shell"
       onMouseLeave={scheduleHide}
     >
       {sidebarCollapsed && !sidebarPinned && (
         <div className={styles.sidebarHitZone} onMouseEnter={showSidebar} aria-hidden />
       )}
-      <aside className={styles.sidebar} onMouseEnter={showSidebar}>
+      <aside className={styles.sidebar} data-chrome="sidebar" onMouseEnter={showSidebar}>
         <div className={styles.brand}>
           <button type="button" className={styles.menuBtn} onClick={toggleSidebar} aria-label="Toggle sidebar">
             {sidebarCollapsed ? <Menu size={20} /> : <ChevronLeft size={20} />}
@@ -238,7 +250,7 @@ export function AppShell() {
             </button>
           </div>
         )}
-        <header className={styles.topbar}>
+        <header className={styles.topbar} data-ui="topbar">
           <div className={styles.topbarTitle}>
             <strong>{title}</strong>
             {companyContext === "hs2" && <StatusPill variant="warn">HS-2</StatusPill>}

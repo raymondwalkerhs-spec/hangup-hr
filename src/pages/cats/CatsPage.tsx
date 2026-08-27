@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { RunningCat } from "@/features/shell/CatOrbitStage";
+import { AmblingTurtle } from "@/features/shell/TurtleStage";
+import { useThemeStore } from "@/stores/theme-store";
 import styles from "./CatsPage.module.css";
 
 type Pt = { x: number; y: number };
@@ -53,8 +55,9 @@ const PATHS: PathFn[] = [
 ];
 
 const CAT_COUNT = 10;
+const TURTLE_COUNT = 8;
 
-function PlayCat({ index }: { index: number }) {
+function PlayCritter({ index, slow, useTurtle }: { index: number; slow?: boolean; useTurtle?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const faceRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +69,7 @@ function PlayCat({ index }: { index: number }) {
     const rx = 70 + (index % 5) * 18;
     const ry = 50 + (index % 4) * 16;
     let start = performance.now();
-    let dur = 2800 + (index % 6) * 400;
+    let dur = slow ? 7500 + (index % 6) * 800 : 2800 + (index % 6) * 400;
     let facing = 1;
     let prev = path(0);
     if (reduce) {
@@ -79,7 +82,7 @@ function PlayCat({ index }: { index: number }) {
       let t = (now - start) / dur;
       if (t >= 1) {
         start = now;
-        dur = 2600 + Math.random() * 1400;
+        dur = slow ? 7000 + Math.random() * 4000 : 2600 + Math.random() * 1400;
         t = 0;
       }
       const p = path(t);
@@ -95,24 +98,34 @@ function PlayCat({ index }: { index: number }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [index]);
+  }, [index, slow]);
 
   return (
-    <div className={styles.cat} ref={wrapRef} aria-hidden>
-      <div ref={faceRef}>
-        <RunningCat />
-      </div>
+    <div
+      className={useTurtle ? styles.turtle : styles.cat}
+      ref={wrapRef}
+      aria-hidden
+      data-cat={useTurtle ? undefined : "orbit"}
+      data-turtle={useTurtle ? "amble" : undefined}
+    >
+      <div ref={faceRef}>{useTurtle ? <AmblingTurtle /> : <RunningCat />}</div>
     </div>
   );
 }
 
 export function CatsPage() {
+  const theme = useThemeStore((s) => s.theme);
+  const turtles = theme === "turtles";
+  const count = turtles ? TURTLE_COUNT : CAT_COUNT;
+
   return (
     <div className={styles.page}>
-      <p className={styles.caption}>Hangup cats — no HR data here. Sit back.</p>
+      <p className={styles.caption}>
+        {turtles ? "Hangup turtles — no HR data here. Slow and steady." : "Hangup cats — no HR data here. Sit back."}
+      </p>
       <div className={styles.stage}>
-        {Array.from({ length: CAT_COUNT }, (_, i) => (
-          <PlayCat key={i} index={i} />
+        {Array.from({ length: count }, (_, i) => (
+          <PlayCritter key={`${turtles ? "t" : "c"}-${i}`} index={i} slow={turtles} useTurtle={turtles} />
         ))}
       </div>
     </div>

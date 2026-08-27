@@ -4,9 +4,9 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `2.3.28`
+**Current version:** `2.4.9`
 
-**Latest installer:** GitHub release [v2.3.28](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.28) (`Hangup-Portal-Setup-2.3.28.exe`). In-app updates and Supabase `app_versions` point at this version.
+**Latest installer:** GitHub release [v2.4.9](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.9) (`Hangup-Portal-Setup-2.4.9.exe`). Same-line hotfixes after a GitHub baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
 
 | Document | Purpose |
 |----------|---------|
@@ -15,6 +15,7 @@
 | [`SALES_LOG.md`](SALES_LOG.md) | **Sales log, filters, bank fields, permissions** |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 | [`UPDATES.md`](UPDATES.md) | **Installer vs GitHub in-app updates** |
+| [`PUSH_UPDATE.md`](PUSH_UPDATE.md) | **Build → QA → patch vs major → upload** |
 | [`SHEET_SCHEMA.md`](SHEET_SCHEMA.md) | Redirect → [`DB_SCHEMA.md`](DB_SCHEMA.md) |
 | [`DB_SCHEMA.md`](DB_SCHEMA.md) | **Supabase schema** — tables, migrations, RLS |
 | [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) | **Historical** Google Sheet layout — never use in production |
@@ -91,7 +92,7 @@ After schema changes, update `app_versions` (see `AI_Agent.md` release checklist
 | **Assets** | Equipment registry and assignments |
 | **Documents** | Upload, expiry alerts, bulk ZIP export |
 | **Reporting** | Monthly HR report, turnover, attendance rankings, **Analytics** dashboard (v2.2.0) |
-| **Sales** | MLA + RPM programs (separate DB tables & storage), MLA-Ray form, catalog per program, Supabase attachments, Airtable MLA sync (optional), export CSV/Excel/PDF, approval workflow |
+| **Sales** | MLA + RPM programs (separate DB tables & storage), MLA-Ray form, catalog per program, Supabase attachments, Airtable MLA (from the app) + RPM/Q Feedback/NQ Checks (Supabase → Airtable Edge Function; optional, separate bases), export CSV/Excel/PDF, approval workflow |
 | **Payroll** | No-payroll toggle, per-split PDF, splits ZIP, offboarding gate banners, extra payroll entries with individual PDF export |
 | **Attendance** | Auto-OUT after depart, federal holiday bulk day-off, FP import |
 | **Users** | Activate inactive logins, owner skip rules, Raymond-only Users tab; superadmin purge + release ID |
@@ -261,7 +262,7 @@ App updates are **not** delivered via Supabase Storage (installers are ~90 MB). 
 
 ## Appearance
 
-Settings → **Appearance** — six themes (Light, Dark, Grey, Dark wine, Dark grey, Alabaster), saved per device.
+Settings → **Appearance** — free themes plus premiums: Gotham Night, Hello Kitty, Spiderman (10 RPM sent or 10 closed this month), and **Turtle Grove** (15 sent or 15 closed). Saved per device.
 
 ---
 

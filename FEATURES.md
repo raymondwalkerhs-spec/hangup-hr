@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.3.28 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.4.9 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -20,6 +20,29 @@
 | **Governance** | Role-based access, field-level sales permissions, full audit trail |
 
 **One-line pitch:** A fast, offline-friendly desktop HR system that keeps workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
+
+### New in 2.4.9
+- **Turtle Grove** premium theme — moss/earth art; spinning turtle loader; slow turtles on `/cats`.
+- **Unlock tiers** — Gotham / Hello Kitty / Spiderman at 10 RPM sent or 10 closed; Turtle Grove at 15 sent or 15 closed (Admin/CEO/HR always unlocked).
+
+### New in 2.4.8
+- **Checks:** one live MCN per company + working day (any agent) — duplicate same-day submit blocked (**409**); re-status via edit.
+- **Forms:** **Wrong MCN**; digits-only phones; letters-only names (Checks, Q Feedback edit, RPM + emergency name).
+- **RPM Add sale:** red glow on empty requireds after submit; soft ConfirmDialog on prior MCN/phone (Quality/RTM/Admin notify).
+- **Sale ↔ Q:** same working day only; disposed Q may become Sale; Q closer copied from sale.
+- **Airtable RPM:** live sync via Supabase Edge Function (not the desktop app).
+
+### New in 2.4.7
+- Dead form fields / Electron `confirm` residue fixed; Employee Out lag + depart date wiring; deductions/bonuses Edit+Delete; Select search lag in dialogs; RPM Airtable Client RPM3; Import from open Q closer scope.
+
+### New in 2.4.1
+- Coaching page loads on the production bundle (TDZ fix). Org can edit a pending agent’s unit then approve (`HS1-…` from HS-1). Agent/Closer search works under 10 people. **Other (unassigned)** sales glow on the Sales log. Cloud patches after this GitHub baseline — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+
+### New in 2.4.0
+- Dropdowns (including RPM Add sale agent/closer/client lists) click, search, and scroll inside dialogs.
+
+### New in 2.3.29
+- Hotfix over 2.3.28: app starts, DNA login renders, workspace shell loads (missing `CatsPage` / `PageLoadingOverlay` imports, IT PATCH `await`).
 
 ### New in 2.3.28
 - Shared **Select** (search at 10+ options), sidebar label fade, dialog 250/150ms motion
@@ -225,14 +248,17 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 - **Search** — Customer name or phone (primary / alternative), digit-normalized
 - **RPM filters & sort** — Sort for all RPM viewers. Team / agent / closer / day / client / reviewer / client-feedback filters are **Quality, HR, RTM, Admin, OP, CEO only** (not Agent or TL). Team list is company-scoped **dialing** teams (no HS-2 on Hangup, no HR/Quality). Agent and closer lists are people already on the loaded sales; HR/Quality staff (e.g. Phoebe) are not closer options.
 - **Edit history** — Quality / RTM / Admin / CEO History panel on View / Edit / Quality (portal-owned, not Airtable)
-- **Submission correction** — Admin / RTM / CEO can correct MLA and RPM Cairo date+time (working day uses 2 AM grace)
+- **Submission correction** — Admin / RTM / CEO can correct MLA and RPM Cairo date+time (working day uses 3 AM grace)
 - **Roster freshness** — Submit-scope / auth refresh employee teams so dialing pickers stay current
 - Sorted by **submission date + time** (newest first)
 
 - **RPM quality ticket** — Editable quality workflow for Quality, RTM, Admin only; agents/TL/OP use View sale (field visibility via Sales permissions). Reviewer accepts live Quality role (including HR-2 after HR→Quality). **Internal feedback** is not on Add sale; Quality / RTM / Admin see it on View, Edit, and Quality ticket; Admin / RTM edit by default (Sales permissions).
 - Per-sale records with dynamic MLA-Ray form (all fields in `form_data`) for MLA; RPM has its own form and field catalog
 - Day / week / month dashboards with status filters and stat cards
-- **Working day rule** — sales until 2 AM Cairo count on previous day
+- **Working day rule** — sales until 3 AM Cairo count on previous day
+- **RPM Checks + Q Feedback** — `/checks`, `/q-feedback`, Duplicate separated list; Team Dashboard checks KPIs + notes; Day-OFF excluded from target N; main Dashboard cards; auto-link Sale ↔ Q **same working day** (disposed Q may become Sale); **one live MCN per company+day** (409 if duplicate); **Admin/OP can edit** Q Feedback rows with same MCN/phone/name rules; **TL** sees own/team Q Feedback only; closer-target editor OP/RTM/Admin only; Checks: **Q** needs name+DOB, other statuses agent+member+phone only; RPM create: red glow on empty requireds + soft warn on duplicate MCN/phone (Quality/RTM/Admin notify); optional Airtable **Q Feedback** (completed) + **NQ Checks** (NQ / Age limit / Duplicate / Under Age)
+- **Hide all OUT** — Employees / Payroll / Attendance toggle for TL/HR/RTM/Quality/Admin/OP (includes outs who worked this month)
+- **Bonuses / deductions** — Add bonus & Add deduction are HR/Admin only; others use Request bonus
 - Toolbar filters: client, agent, closer, client status, reviewer status
 - **Advanced filter** — AND / OR / NOT rules with dropdown values
 - **Log columns** — admin enables catalog fields + standard columns; intersected with role view ACL
@@ -259,7 +285,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 ### Attachments & export
 
 - Attachments in **Supabase Storage** (`hr-documents` bucket): MLA → `mla-sales-attachments/…`, RPM → `rpm-sales-attachments/…`; quality recordings under `{root}/{saleId}/quality_record/`
-- **Airtable sync (optional, MLA only)** — when configured in `.env`, MLA sale mutations push to Airtable (upsert by **Portal Sale ID**; duplicate rows removed; MLA column order from template CSV); immediate sync on save
+- **Airtable sync (optional)** — MLA: existing base / `AIRTABLE_TABLE_NAME`; upsert by **Portal Sale ID**. RPM: **Hangup RPM base** (`AIRTABLE_RPM_BASE_ID`) with **RPM Sales**, **Q Feedback** (completed), **NQ Checks** (form phone only). Live sync is **Supabase → Airtable** (DB trigger + Edge Function `airtable-rpm-sync`); deploy `npm run deploy:airtable:rpm-sync`. Manual backfill: `npm run sync:airtable:rpm`.
 - Inline audio/video playback (recording, raw call, quality record), download, signed share links
 - Attachment view/upload gated per role (Sales permissions **Attachments** tab)
 - **Recordings** hidden from Agent and TL (no UI, list, or upload); Quality/RTM/admin manage recordings
@@ -373,7 +399,8 @@ Per-user exceptions inherit live role defaults from Access Control.
 - Document expiry summary
 - Team and company sales dashboards (role-scoped)
 - **Sales this month** — Sales per calendar day for the selected month, scoped by role (agent = own; TL = team; closer = closed; OP = unit; RTM / Admin / Quality / HR = company)
-- **Team dashboards** — daily/weekly RPM Passed / Pending / Dropped / Retransfer / Total (no MLA PostDated layout)
+- **Team dashboards** — daily/weekly RPM sales + Checks KPIs (Q/NQ/Age/Under Age/Duplicate); notes; Day-OFF out of target N; TL extra-team grants; agents own team only
+- **RPM weekly performance** — on main Dashboard (default Admin / RTM / Quality / OP / TL): Mon–Fri week cards ranking closers, agents, and clients by american name; count mode Passed / Passed+Pending / All; per-team weekly targets with overachieve % colors. TL / dual-role TL: own led team(s) only, view-only targets. OP: unit scope (may edit targets). Access Control: `viewRpmWeeklyDashboard`, `editRpmWeeklyTargets`.
 - **Attendance tiles** — Day off, NSNC, Half day, and WFH counts for the same employee scope
 - **HS-2 company isolation** — Binary company model (`hangup` vs `hs2`). **Managing** toggle (top-left sidebar) for admin/ceo/hr only (`manageHs2Company` is hard-denied for OP / TL / agent). Native HS-2 staff stay on their unit with no switcher. `?company=hs2` denied unless the user can access HS-2. HS-2 sales/data visible **only** in HS-2 company context (strict — not on Main Hangup tab).
 
@@ -419,11 +446,13 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 ### Settings
 
-- Seven color themes (saved per device), including **Emerald** (jade on mint)
-- **Page loading overlay** — cat animation centered in the viewport while Payroll/Employees (and other cold pages) load; running cat uses nearby changing paths and faces the way it is going
+- Free themes plus premiums: **Gotham Night**, **Hello Kitty**, **Spiderman** (10 RPM sent or 10 closed), **Turtle Grove** (15 sent or 15 closed); includes **Emerald** (jade on mint)
+- **Page loading overlay** — cat orbit by default; **spinning turtle** under Turtle Grove. `/cats` playground shows cats, or slow turtles on Turtle Grove
 - Federal holidays, tax rules, break schedules (timed pop-up reminders)
 - Sales catalog (clients, products, prices)
-- Notification routing
+- Notification routing (includes **new agent registration** and **RPM duplicate phone / Member ID**)
+- Live 5s refresh on Dashboard, Payroll, Attendance, Sales log, and the notification bell (only the page you are on; unchanged data does not re-render)
+- RPM Sales: **Show duplicates** checkbox; Admin/RTM can **delete** RPM sales; phones digits-only on submit
 - Sync controls, hide-out-employees toggle, session ID
 - Profile photo upload (linked employee)
 

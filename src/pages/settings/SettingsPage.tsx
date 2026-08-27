@@ -9,7 +9,7 @@ import { Button } from "@/ui/Button";
 import { Select } from "@/ui/Select";
 import { useConfirmUndo } from "@/ui/useDeferredDelete";
 import { ConfirmDialog } from "@/ui/Dialog";
-import { useThemeStore, THEMES, type Theme } from "@/stores/theme-store";
+import { useThemeStore, THEMES, type Theme, isThemeUnlocked, type ThemeUnlocks } from "@/stores/theme-store";
 import { fileToBase64 } from "@/lib/files";
 import { SettingsAdminExtras } from "./SettingsAdminExtras";
 import styles from "./SettingsPage.module.css";
@@ -25,6 +25,7 @@ type Status = {
   canManageSessions?: boolean;
   user?: Record<string, boolean | string | undefined>;
   impersonation?: { active?: boolean; as?: string };
+  themeUnlocks?: ThemeUnlocks;
 };
 
 type Holiday = { id: string; name?: string; date?: string; holidayDate?: string; country?: string; active?: boolean };
@@ -265,22 +266,50 @@ export function SettingsPage() {
         {user.canViewSettingsTheme !== false && (
           <Card>
             <h3>Appearance</h3>
-            <p className="muted">Color theme for this device.</p>
+            <p className="muted">
+              Color theme for this device. Most premium themes unlock at 10 RPM sent as agent or 10 closed as closer this month.
+              Turtle Grove needs 15 sent or 15 closed.
+            </p>
             <div className={styles.themePicker}>
-              {THEMES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`${styles.themeOption} ${theme === t.id ? styles.themeActive : ""}`}
-                  onClick={() => setTheme(t.id as Theme)}
-                >
-                  <span className={`${styles.swatch} ${styles[`swatch_${t.id}`]}`} />
-                  <span>
-                    <strong>{t.label}</strong>
-                    <small className="muted">{t.desc}</small>
-                  </span>
-                </button>
-              ))}
+              {THEMES.map((t) => {
+                const unlocks = (status as Status | null)?.themeUnlocks;
+                const unlocked = isThemeUnlocked(t.id, unlocks);
+                const isTurtle = t.id === "turtles";
+                const thresh = isTurtle
+                  ? unlocks?.turtleThreshold ?? 15
+                  : unlocks?.agentThreshold ?? 10;
+                const closerThresh = isTurtle
+                  ? unlocks?.turtleThreshold ?? 15
+                  : unlocks?.closerThreshold ?? 10;
+                const progress = t.premium
+                  ? `${unlocks?.agentSalesThisMonth ?? 0}/${thresh} sent · ${unlocks?.closerSalesThisMonth ?? 0}/${closerThresh} closed`
+                  : null;
+                const needN = isTurtle ? 15 : 10;
+                const lockHint = `Need ${needN} RPM sent as agent or ${needN} closed as closer (${progress})`;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={!unlocked}
+                    title={unlocked ? t.desc : lockHint}
+                    className={`${styles.themeOption} ${theme === t.id ? styles.themeActive : ""} ${!unlocked ? styles.themeLocked : ""}`}
+                    onClick={() => {
+                      if (unlocked) setTheme(t.id as Theme);
+                    }}
+                  >
+                    <span className={`${styles.swatch} ${styles[`swatch_${t.id}` as keyof typeof styles] || ""}`} />
+                    <span>
+                      <strong>
+                        {t.label}
+                        {t.premium ? <span className={styles.premiumBadge}>Premium</span> : null}
+                      </strong>
+                      <small className="muted">
+                        {unlocked ? t.desc : `Locked · ${progress}`}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </Card>
         )}

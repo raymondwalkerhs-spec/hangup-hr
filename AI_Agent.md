@@ -21,8 +21,10 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.3.28` (`package.json` → `version`)
-- **Previous:** `2.3.26`
+- **Current version:** `2.4.9` (`package.json` → `version`)
+- **Previous:** `2.4.7`
+- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.4.9`); Supabase zip on third-segment (`2.4.1` → `2.4.2`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Premium themes:** Gotham / Hello Kitty / Spiderman unlock at **10** RPM sent as agent **or** 10 closed as closer this month; **Turtle Grove** (`turtles`) at **15** sent or 15 closed. Admin/CEO/HR always unlocked (`lib/theme-unlocks.js`).
 
 ---
 
@@ -39,7 +41,7 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 | RPM sale attachments | Supabase Storage `hr-documents` → `rpm-sales-attachments/{saleId}/{kind}/…` (quality_record, recording, raw_call) |
 | Announcements | Table `announcements` (`audience_units/teams/roles`, `image_placement`); storage `hr-documents` → `announcements/{company}/{id}/…`; API `/api/announcements` |
 | Coaching tickets | Table `coaching_tickets`; API `/api/coaching`; secret notes stripped unless `viewCoachingSecret` or author |
-| Airtable sales sync (optional, MLA only) | `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` → table **Sales All Data**; `lib/airtable-sales-sync.js` hooks `routes/sales.js` after create/edit/attachments |
+| Airtable sales sync (optional) | MLA: `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` → table **NEW MLA** / `AIRTABLE_TABLE_NAME`. RPM: **separate** `AIRTABLE_RPM_BASE_ID` → **RPM Sales** + **Q Feedback** + **NQ Checks**. Live RPM sync is **Supabase → Airtable** (DB trigger + Edge Function `airtable-rpm-sync`); deploy `npm run deploy:airtable:rpm-sync`. Desktop app does not write Airtable unless `AIRTABLE_RPM_SYNC_FROM_APP=true`. |
 | Local cache | SQLite per PC (`better-sqlite3`) — **keep this**; do not read Postgres on every UI click |
 | Legacy Sheets | **Removed from runtime** — see [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md) |
 
@@ -91,7 +93,7 @@ to Supabase via Express, then re-sync.
 | Interviews UI | `public/js/interview.js`, `public/css/interview.css` |
 | Interviews server | `routes/interview.js`, `lib/google-sheets.js` |
 | Sales UI | `public/js/sales.js`, `public/js/sales-permissions-pages.js`, `public/js/sales-config-breaks.js` |
-| Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js`, `lib/airtable-sales-sync.js`, `lib/airtable-sales-field-map.js`, `lib/airtable-client.js` |
+| Sales server | `routes/sales.js`, `lib/sales-field-catalog.js`, `lib/sales-list-columns.js`, `lib/sales-filter.js`, `lib/sales-working-day.js`, `lib/sales-field-access.js`, `lib/airtable-sales-sync.js`, `lib/airtable-sales-field-map.js`, `lib/airtable-client.js`, `lib/airtable-rpm-sales-sync.js`, `lib/airtable-rpm-qfeedback-sync.js` |
 | Access Control UI | `public/js/access-control.js`, `lib/permission-catalog.js`, `lib/role-permissions.js` |
 | API | `routes/api.js`, `routes/admin-users.js`, `app.js` (Express entry) |
 | Data layer | `lib/data-store.js`, `lib/backend.js`, `lib/supabase-repo.js`, `lib/cache.js` |
@@ -100,7 +102,7 @@ to Supabase via Express, then re-sync.
 | Users CRUD | `lib/users-admin.js`, `lib/roles.js` |
 | Analytics | `lib/analytics-aggregates.js`, `public/js/analytics.js`, `GET /api/reports/analytics` |
 | TL bonus linking | `lib/tl-bonus-link.js` — paired TL/OP deduction ↔ bonus rows |
-| GitHub in-app updates | `lib/github-updater.js`, `lib/zip-extract.js`, `lib/update-integrity.js`, `UPDATES.md`, `.github/workflows/release.yml` |
+| GitHub in-app updates | `lib/github-updater.js`, `lib/cloud-updater.js`, `lib/zip-extract.js`, `lib/update-integrity.js`, `PUSH_UPDATE.md`, `UPDATES.md`, `.github/workflows/release.yml` |
 | Org & registration | `lib/org-hierarchy.js`, `lib/registration.js`, `lib/training-phases.js`, `public/js/hrms-features.js` |
 | Electron | `electron/main.js`, `electron/preload.js` |
 | Build | `scripts/build.ps1`, `package.json` → `build` section |
@@ -228,12 +230,17 @@ Full user/agent reference: [`SALES_LOG.md`](SALES_LOG.md)
 | **Advanced filter** | AND/OR/NOT when 2+ rules; employee/client dropdowns for ID fields; persisted in `localStorage` |
 | **Add sale** | Opens only from **+ Add sale**, dock Sale, or command palette — not from visiting `/sales`. Unit → agent (team auto-fills from agent). Closer scoped by role (self + team TLs for agents; self default for org closers/TLs). Org closers/TLs see dialing agents on closer/lead teams (e.g. Amy → Tris), not TLs. `employees.sales_agent_picker` SQL override. Catalog client/device/price when configured |
 | **Sales log visibility** | Row visible to team TL, assigned closer (`closerId`), and assigned agent (`agentId`). Not all closer-team sales. |
+| **Q Feedback Sale closer** | When a Q auto-links to an RPM sale, `rpm_checks.closer_id` is set from the sale (DB triggers `20260904_rpm_checks_closer_from_sale` + `linkSaleToCheck`). Reassigning the sale closer updates linked Q rows. |
+| **Checks MCN uniqueness (2.4.8)** | One live check per `(company, member_id_normalized, working_day)` **any agent**. Second insert → **409** `MEMBER_DAY_EXISTS`. Re-status / Duplicate = **PATCH** existing row. Invalid pattern → **"Wrong MCN"**. Names: letters + space/hyphen/apostrophe; phones digits only. |
+| **Sale ↔ Q auto-link (2.4.8)** | Same `working_day` only (prefer same agent). May overwrite disposed feedback (`not_int`, etc.) to **sale**. No cross-day FIFO. |
+| **RPM create validation (2.4.8)** | Empty requireds (incl. alt/emergency phone) red-glow after submit attempt only (not on open/draft). Soft duplicate ConfirmDialog via `GET /rpm-sales/identity-check`; notify Quality/RTM/Admin (`rpm_sale_duplicate`). Never hard-block the sale. |
 | **Bank payment** | routing number, bank name, account number, address, who chose bank account (required fields when Bank account) |
 | **Verifier feedback** | Dropdown; assigned verifier + RTM/Admin override |
 | **Client feedback** | Dropdown; RTM/Admin edit only |
 | **Quality/RTM** | Unit toggles HS-1/2/3 on log |
 | **Attachments** | MLA: `mla-sales-attachments/{saleId}/…` (legacy `sales-attachments/…`); RPM: `rpm-sales-attachments/{saleId}/…`; quality records in separate `quality_record/` subfolders per program; signed share URLs ~7 days |
-| **Airtable sync** | MLA only; optional `.env`: `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, `AIRTABLE_TABLE_NAME`; upsert via `airtable_record_id` + Portal Sale ID lookup; attachments via signed URLs; immediate sync on mutations |
+| **Airtable sync** | MLA: optional `.env` `AIRTABLE_BASE_ID` / `AIRTABLE_TABLE_NAME` (still from the Portal). RPM: separate `AIRTABLE_RPM_BASE_ID` (tables **RPM Sales**, **Q Feedback** completed dispositions, **NQ Checks** with a 10-digit form phone). RPM live sync is **Supabase → Airtable** (trigger + `airtable-rpm-sync`); upsert by Portal UUID (edits PATCH the same row). Manual backfill: `npm run sync:airtable:rpm`. |
+| **RPM1 Google Form** | New inserts with Client **RPM1** only → **Supabase** Edge Function posts **both** Google Forms (TEST + Direct Tracking). Desktop app never submits. No backfill when adding a form. Env: `GOOGLE_FORM_TARGETS_JSON`. Deploy: `npm run deploy:rpm-google-form`. |
 | **Export** | CSV / Excel / PDF |
 | **Payroll link** | Sale create/update recalcs agent `sales_count` for working-day month |
 
@@ -500,7 +507,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | Topic | Decision |
 |-------|----------|
-| App update hosting | **Not** Supabase Storage (&gt;100 MB per EXE). Installers: USB/share folder. **Optional:** GitHub Releases — Setup.exe + full zips for in-app update (`UPDATES.md`) |
+| App update hosting | GitHub Setup.exe on line change; Supabase Storage `app-updates` for same-line zip patches after 2.4.1 (`PUSH_UPDATE.md`) |
 | Local SQLite cache | **Keep** — performance layer on each PC |
 | User management | **Raymond only** |
 | Password reset | Manual by Raymond today; `email` column ready for future |
@@ -513,7 +520,12 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.3.28** | **true** | UI/UX makeover: Select, recycle bin, dropzone, RPM member ID, attendance drag-select, sales period picker, agent payslip tab, transport grant, reconnect banner, agent guide, Cats tab. Closers with TL access who are not assigned TLs (Amy, Ria) see only own attendance; TL/closer dashboard Units KPI is teams they close. Team dashboards use RPM columns. OP assignment is idempotent (HS-3 OP1 Steven). Breaking ship 2026-08-18 so every role must update. |
+| **2.4.9** | **true** | Turtle Grove premium (15 RPM sent or 15 closed); spinning turtle loader + slow turtles on `/cats`; Gotham/Kitty/Spidey stay at 10. Optional update (`min_compatible=1.0.0`). GitHub Latest 2026-08-27. |
+| **2.4.8** | false | Checks MCN uniqueness (409 same day); Wrong MCN / letters name / digits phone; RPM create red glow + soft dup warn (Quality/RTM/Admin); same-day Sale↔Q auto-link; Supabase→Airtable RPM Edge sync; Q closer from sale triggers. Optional update (`min_compatible=1.0.0`). Was Latest before 2.4.9. |
+| **2.4.7** | false | Dead form fields / Electron confirm residue; Employee Out lag + depart date; deductions/bonuses Edit-Delete; Select search lag in dialogs; RPM Airtable Client RPM3; Import from open Q closer scope. Was Latest before 2.4.8. |
+| **2.4.0** | false | Dropdowns work in dialogs (click, search, scroll) including RPM Add sale. Installer-only Latest 2026-08-18; in-app Update now from 2.3.29. |
+| **2.3.29** | false | Hotfix: 2.3.28 would not start (`await` in IT PATCH), blank login (`CatsPage` import), shell crash (`PageLoadingOverlay` import). Breaking ship 2026-08-18. Local NSIS, no GH Actions. |
+| **2.3.28** | false | UI/UX makeover: Select, recycle bin, dropzone, RPM member ID, attendance drag-select, sales period picker, agent payslip tab, transport grant, reconnect banner, agent guide, Cats tab. Closers with TL access who are not assigned TLs (Amy, Ria) see only own attendance; TL/closer dashboard Units KPI is teams they close. Team dashboards use RPM columns. OP assignment is idempotent (HS-3 OP1 Steven). First makeover EXE crashed on load; superseded by 2.3.29. |
 | **2.3.27** | false | Equipment inventory + Clearance/Offboarding interactive tables; Emerald theme. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
 | **2.3.26** | false | Sales dashboard reliability: Cairo RPM day calendar, explicit Add-sale intent, role-scoped sales/attendance widgets, and HS-2 switcher hardening. Shipped GitHub Latest + Supabase `is_current` 2026-08-17. |
 | **2.3.25** | false | Sales log defaults to RPM; NSIS includes React `public/dist` (DNA login). Installer-only Latest 2026-08-17. |

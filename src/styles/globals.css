@@ -1,4 +1,5 @@
 @import "./tokens.css";
+@import "./premium-themes.css";
 
 *,
 *::before,
@@ -18,7 +19,12 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--theme-bg-extra, none);
+  background-repeat: no-repeat;
+  background-size: 100% auto;
+  background-position: bottom center;
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -108,6 +114,9 @@ textarea {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .stat-grid {

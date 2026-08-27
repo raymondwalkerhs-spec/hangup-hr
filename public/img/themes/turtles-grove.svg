@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0a1610" stop-opacity="0"/>
+      <stop offset="55%" stop-color="#0e2218" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#143022" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="hillA" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e4a34"/>
+      <stop offset="100%" stop-color="#0c2418"/>
+    </linearGradient>
+    <linearGradient id="hillB" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2d6a4f"/>
+      <stop offset="100%" stop-color="#143828"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="420" fill="url(#sky)"/>
+  <!-- far hills -->
+  <path d="M0 280 C80 240 160 250 240 265 C340 285 420 230 520 250 C620 270 700 220 800 245 C880 265 940 255 960 260 L960 420 L0 420 Z" fill="url(#hillA)" opacity="0.7"/>
+  <!-- near grove -->
+  <path d="M0 320 C100 290 180 310 280 300 C400 285 480 330 600 310 C720 290 820 330 960 305 L960 420 L0 420 Z" fill="url(#hillB)" opacity="0.9"/>
+  <!-- leaf silhouettes -->
+  <g fill="#3d9b6a" opacity="0.35">
+    <ellipse cx="120" cy="300" rx="28" ry="14" transform="rotate(-25 120 300)"/>
+    <ellipse cx="160" cy="310" rx="22" ry="11" transform="rotate(18 160 310)"/>
+    <ellipse cx="340" cy="280" rx="32" ry="15" transform="rotate(-12 340 280)"/>
+    <ellipse cx="520" cy="295" rx="26" ry="12" transform="rotate(22 520 295)"/>
+    <ellipse cx="700" cy="275" rx="30" ry="14" transform="rotate(-18 700 275)"/>
+    <ellipse cx="860" cy="290" rx="24" ry="11" transform="rotate(14 860 290)"/>
+  </g>
+  <!-- dappled light spots -->
+  <g fill="#6bc48f" opacity="0.12">
+    <circle cx="200" cy="200" r="40"/>
+    <circle cx="480" cy="160" r="55"/>
+    <circle cx="740" cy="190" r="45"/>
+  </g>
+  <!-- soft ground line -->
+  <path d="M0 380 Q240 360 480 375 T960 365 L960 420 L0 420 Z" fill="#0a1a12" opacity="0.65"/>
+</svg>

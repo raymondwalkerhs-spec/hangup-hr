@@ -147,35 +147,35 @@ function CenterCat({ setPupil }: { setPupil: (el: SVGGElement | null, i: number)
         </clipPath>
       </defs>
       <ellipse cx="40" cy="73" rx="16" ry="4.5" fill="currentColor" opacity="0.1" />
-      <path d="M18 32c-2-14 8-24 16-26 1.5 7 4 13 6 16h8c2-3 4.5-9 6-16 8 2 18 12 16 26" fill="#f0a85a" />
-      <path d="M20 20l10 12-8-14c-1 .4-1.6 1.2-2 2z" fill="#f7c98a" />
-      <path d="M60 20l-10 12 8-14c1 .4 1.6 1.2 2 2z" fill="#f7c98a" />
-      <path d="M23 18l6 11-5-12z" fill="#e8899a" />
-      <path d="M57 18l-6 11 5-12z" fill="#e8899a" />
-      <ellipse cx="40" cy="47" rx="25" ry="22.5" fill="#f0a85a" />
-      <ellipse cx="23" cy="52" rx="7.5" ry="5.5" fill="#f7c98a" />
-      <ellipse cx="57" cy="52" rx="7.5" ry="5.5" fill="#f7c98a" />
-      <path d="M16 39c5-2.2 10-1.2 12 1.2" stroke="#d08a42" strokeWidth="1.35" fill="none" strokeLinecap="round" />
-      <path d="M16 45c5-1.2 10 0 12 2" stroke="#d08a42" strokeWidth="1.35" fill="none" strokeLinecap="round" />
-      <path d="M64 39c-5-2.2-10-1.2-12 1.2" stroke="#d08a42" strokeWidth="1.35" fill="none" strokeLinecap="round" />
-      <path d="M64 45c-5-1.2-10 0-12 2" stroke="#d08a42" strokeWidth="1.35" fill="none" strokeLinecap="round" />
-      <ellipse cx="29" cy="42" rx="8.2" ry="9.2" fill="#fffef8" />
-      <ellipse cx="51" cy="42" rx="8.2" ry="9.2" fill="#fffef8" />
+      <path d="M18 32c-2-14 8-24 16-26 1.5 7 4 13 6 16h8c2-3 4.5-9 6-16 8 2 18 12 16 26" fill="var(--cat-fur)" />
+      <path d="M20 20l10 12-8-14c-1 .4-1.6 1.2-2 2z" fill="var(--cat-fur-light)" />
+      <path d="M60 20l-10 12 8-14c1 .4 1.6 1.2 2 2z" fill="var(--cat-fur-light)" />
+      <path d="M23 18l6 11-5-12z" fill="var(--cat-inner)" />
+      <path d="M57 18l-6 11 5-12z" fill="var(--cat-inner)" />
+      <ellipse cx="40" cy="47" rx="25" ry="22.5" fill="var(--cat-fur)" />
+      <ellipse cx="23" cy="52" rx="7.5" ry="5.5" fill="var(--cat-fur-light)" />
+      <ellipse cx="57" cy="52" rx="7.5" ry="5.5" fill="var(--cat-fur-light)" />
+      <path d="M16 39c5-2.2 10-1.2 12 1.2" stroke="var(--cat-whisker)" strokeWidth="1.35" fill="none" strokeLinecap="round" />
+      <path d="M16 45c5-1.2 10 0 12 2" stroke="var(--cat-whisker)" strokeWidth="1.35" fill="none" strokeLinecap="round" />
+      <path d="M64 39c-5-2.2-10-1.2-12 1.2" stroke="var(--cat-whisker)" strokeWidth="1.35" fill="none" strokeLinecap="round" />
+      <path d="M64 45c-5-1.2-10 0-12 2" stroke="var(--cat-whisker)" strokeWidth="1.35" fill="none" strokeLinecap="round" />
+      <ellipse cx="29" cy="42" rx="8.2" ry="9.2" fill="var(--cat-eye-white)" />
+      <ellipse cx="51" cy="42" rx="8.2" ry="9.2" fill="var(--cat-eye-white)" />
       <g clipPath={`url(#${leftClip})`}>
         <g className={styles.pupils} ref={(el) => setPupil(el, 0)}>
-          <circle cx="29" cy="42" r="3.85" fill="#2b1a12" />
+          <circle cx="29" cy="42" r="3.85" fill="var(--cat-eye)" />
           <circle cx="30.5" cy="40.5" r="1.15" fill="#fff" />
         </g>
       </g>
       <g clipPath={`url(#${rightClip})`}>
         <g className={styles.pupils} ref={(el) => setPupil(el, 1)}>
-          <circle cx="51" cy="42" r="3.85" fill="#2b1a12" />
+          <circle cx="51" cy="42" r="3.85" fill="var(--cat-eye)" />
           <circle cx="52.5" cy="40.5" r="1.15" fill="#fff" />
         </g>
       </g>
-      <path d="M40 48.4c-1.5 0-2.7 1.3-2.4 2.4.4 1.4 2.4 2.2 2.4 2.2s2-0.8 2.4-2.2c.3-1.1-.9-2.4-2.4-2.4z" fill="#c45b6a" />
-      <path d="M40 53c0 3.4-2.6 5.4-5.6 5.4" fill="none" stroke="#2b1a12" strokeWidth="1.25" strokeLinecap="round" />
-      <path d="M40 53c0 3.4 2.6 5.4 5.6 5.4" fill="none" stroke="#2b1a12" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M40 48.4c-1.5 0-2.7 1.3-2.4 2.4.4 1.4 2.4 2.2 2.4 2.2s2-0.8 2.4-2.2c.3-1.1-.9-2.4-2.4-2.4z" fill="var(--cat-nose)" />
+      <path d="M40 53c0 3.4-2.6 5.4-5.6 5.4" fill="none" stroke="var(--cat-eye)" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M40 53c0 3.4 2.6 5.4 5.6 5.4" fill="none" stroke="var(--cat-eye)" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   );
 }
@@ -187,11 +187,11 @@ function CatLeg({ className, hipX, hipY }: { className: string; hipX: number; hi
         <path
           d="M0 0 c-1 6 0 10 1 14"
           fill="none"
-          stroke="#e09a4a"
+          stroke="var(--cat-leg)"
           strokeWidth="3.4"
           strokeLinecap="round"
         />
-        <ellipse cx="1.6" cy="15.2" rx="3.1" ry="1.7" fill="#d4883c" />
+        <ellipse cx="1.6" cy="15.2" rx="3.1" ry="1.7" fill="var(--cat-leg-pad)" />
       </g>
     </g>
   );
@@ -199,34 +199,34 @@ function CatLeg({ className, hipX, hipY }: { className: string; hipX: number; hi
 
 export function RunningCat() {
   return (
-    <svg className={styles.orbitCatSvg} viewBox="0 0 86 52" aria-hidden>
+    <svg className={styles.orbitCatSvg} viewBox="0 0 86 52" aria-hidden data-cat="run">
       <ellipse className={styles.catShadow} cx="44" cy="48" rx="18" ry="2.4" fill="currentColor" />
       <g className={styles.runBody}>
         <g className={styles.tail}>
           <path
             d="M18 24c-8-1-14-8-13-16 3 4 8 8 14 10"
             fill="none"
-            stroke="#f0a85a"
+            stroke="var(--cat-fur)"
             strokeWidth="4.2"
             strokeLinecap="round"
           />
         </g>
         <CatLeg className={styles.legHindA} hipX={30} hipY={28} />
         <CatLeg className={styles.legHindB} hipX={36} hipY={28} />
-        <ellipse cx="40" cy="26" rx="18" ry="11" fill="#f0a85a" />
-        <ellipse cx="36" cy="28" rx="8" ry="5.5" fill="#f7c98a" />
+        <ellipse cx="40" cy="26" rx="18" ry="11" fill="var(--cat-fur)" />
+        <ellipse cx="36" cy="28" rx="8" ry="5.5" fill="var(--cat-fur-light)" />
         <CatLeg className={styles.legForeA} hipX={48} hipY={28} />
         <CatLeg className={styles.legForeB} hipX={54} hipY={28} />
         <g className={styles.head}>
-          <path d="M62 8l4 9h-7z" fill="#f0a85a" />
-          <path d="M76 9l-5 9h6z" fill="#f0a85a" />
-          <path d="M63.2 10.2l2.4 6.2h-4z" fill="#e8899a" />
-          <path d="M74.6 10.6l-3 6.2h3.6z" fill="#e8899a" />
-          <ellipse cx="68" cy="22" rx="11" ry="10" fill="#f0a85a" />
-          <circle cx="73.2" cy="20.4" r="1.55" fill="#2b1a12" />
+          <path d="M62 8l4 9h-7z" fill="var(--cat-fur)" />
+          <path d="M76 9l-5 9h6z" fill="var(--cat-fur)" />
+          <path d="M63.2 10.2l2.4 6.2h-4z" fill="var(--cat-inner)" />
+          <path d="M74.6 10.6l-3 6.2h3.6z" fill="var(--cat-inner)" />
+          <ellipse cx="68" cy="22" rx="11" ry="10" fill="var(--cat-fur)" />
+          <circle cx="73.2" cy="20.4" r="1.55" fill="var(--cat-eye)" />
           <circle cx="73.7" cy="19.9" r="0.45" fill="#fff" />
-          <path d="M77.4 23.6c1.4.2 2.1 1.1 1.8 1.9" fill="none" stroke="#c45b6a" strokeWidth="1.35" strokeLinecap="round" />
-          <path d="M66 24.5c1.6 2.2 5.2 2.4 6.6.2" fill="none" stroke="#2b1a12" strokeWidth="1.05" strokeLinecap="round" />
+          <path d="M77.4 23.6c1.4.2 2.1 1.1 1.8 1.9" fill="none" stroke="var(--cat-nose)" strokeWidth="1.35" strokeLinecap="round" />
+          <path d="M66 24.5c1.6 2.2 5.2 2.4 6.6.2" fill="none" stroke="var(--cat-eye)" strokeWidth="1.05" strokeLinecap="round" />
         </g>
       </g>
     </svg>
@@ -246,7 +246,7 @@ export function CatOrbitStage({
 
   return (
     <div className={styles.stage}>
-      <div className={styles.orbitWrap} aria-hidden>
+      <div className={styles.orbitWrap} aria-hidden data-cat="orbit">
         <div className={styles.centerCatWrap}>
           <CenterCat setPupil={setPupil} />
         </div>

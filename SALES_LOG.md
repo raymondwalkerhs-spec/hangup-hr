@@ -1,6 +1,6 @@
 # Sales Log — Reference Guide
 
-> **Version:** 2.3.28 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
+> **Version:** 2.4.9 · **Backend:** Supabase · **Related:** [`TUTORIAL.md`](TUTORIAL.md), [`FEATURES.md`](FEATURES.md), [`CHANGELOG.md`](CHANGELOG.md)
 
 This document describes the **Sales log**, **filters**, **form fields**, **permissions**, and **admin configuration** in Hangup Portal v1.4.0+ (extended through v1.4.6).
 
@@ -23,12 +23,23 @@ MLA-Ray form fields live in `sales.form_data` jsonb. RPM has its own field catal
 
 **v2.3.17 — RPM Notes:** Optional **Notes** textarea on RPM submit (all other submit fields remain required). Notes appear on edit, view, and quality modals per `rpm_sales_field_permissions`. Quality recordings upload/play inline in React modals (stream via `/attachments/:id/file`).
 
-**v2.3.28 — Member ID:** RPM `memberId` is 11 characters, pattern **NLAN-LAN-LLNN** (N = digit, L = letter except L/O/B/I/Z/S, A = digit or allowed letter). Display groups as `XXXX-XXX-XXXX`. Invalid IDs are rejected on save; existing junk must be repaired (no grandfather). Quality/HR/RTM/Admin/OP/CEO get a **period picker** (Today / Yesterday / Mon–Fri weeks / months + drag calendar). Agent and TL never see it. RPM single-day still uses `?day=` + Cairo 2 AM working day.
+**v2.3.28 — Member ID:** RPM `memberId` is 11 characters, pattern **NLAN-LAN-LLNN** (N = digit, L = letter except L/O/B/I/Z/S, A = digit or allowed letter). Display groups as `XXXX-XXX-XXXX`. Invalid IDs show **"Wrong MCN"** (2.4.8); existing junk must be repaired (no grandfather). Quality/HR/RTM/Admin/OP/CEO get a **period picker** (Today / Yesterday / Mon–Fri weeks / months + drag calendar). Agent and TL never see it. RPM single-day still uses `?day=` + Cairo 2 AM working day.
+
+### v2.4.8 — Checks uniqueness + form validation
+
+| Feature | Who | Notes |
+|---------|-----|--------|
+| **Checks MCN uniqueness** | All check submitters | One live row per company + Member ID + working day (**any agent**). Second submit → **409**; edit the existing check to change status. Soft-deleted historical same-day dups + unique index. |
+| **Field rules (Checks / Q Feedback edit / RPM)** | All | MCN → Wrong MCN if invalid; phones digits only; full name (and RPM emergency name) letters + space/hyphen/apostrophe. |
+| **RPM empty required glow** | Create sale only | After Submit attempt: red field errors for missing requireds (incl. alt/emergency phone). Not on open or draft resume. |
+| **RPM duplicate soft warn** | Create sale | Pre-submit ConfirmDialog if prior MCN/phone exists; **Submit anyway** allowed. Notifies Quality + RTM + Admin. |
+| **Sale ↔ Q same day** | Auto | Link only when `working_day` matches; disposed Q (`not_int`, etc.) may become **Sale**. |
 
 | Area | Where in app |
 |------|----------------|
 | Sales list & filters | **Sales log** (sidebar) |
 | Add / edit sale | **+ Add sale**, dock **Sale**, or command palette New sale — sidebar **Sales** does not open the form |
+| Checks / Q Feedback | **Checks**, **Q Feedback** (sidebar) — MCN uniqueness + disposition funnel |
 | View sale (read-only) | Row **View sale** — Access Control **View sale**; fields from Sales permissions **Edit sale** tab |
 | Quality review | Row **Quality ticket** |
 | Field view/edit ACL | **Sales permissions** (sidebar) — RTM / Admin only |
@@ -50,7 +61,9 @@ Team dashboards load **RPM** sales when **working day**, **submission date**, or
 | **Reassign agent/closer** | Admin, RTM, CEO | Unit/team/agent/closer pickers on Edit and Quality ticket |
 | **Required validation** | All submitters | Mirrors MLA Airtable form; client + server; **no attachments on Add sale form** |
 | **Recording attachments** | Quality, RTM, admin, HR (upload on edit); finance/CEO view | **Hidden from Agent and TL**; not shown on create/submit |
-| **Airtable MLA sync** | All sales (when configured) | Columns match `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv` order; upsert by Portal Sale ID; dedupe on sync; reset: `node scripts/reset-airtable-sales.js --confirm-wipe --provision --backfill` |
+| **Airtable MLA sync** | All MLA sales (when configured) | Columns match `Asset/MLA AIRTABLE SHOULD BE LIKE THIS.csv` order; upsert by Portal Sale ID; dedupe on sync; reset: `node scripts/reset-airtable-sales.js --confirm-wipe --provision --backfill` |
+| **Airtable RPM + Q Feedback** | RPM sales + completed Q Feedback + NQ/Age/Duplicate/Under Age (when `AIRTABLE_RPM_BASE_ID` set) | Separate Hangup RPM base. **Live sync is Supabase → Airtable** (DB trigger + Edge Function; the desktop app is not the writer). Edit = PATCH the same row by Portal Sale/Check ID. Q table is completed dispositions only; **NQ Checks** needs a 10-digit form phone. Deploy: `npm run deploy:airtable:rpm-sync`. Historical backfill: `npm run sync:airtable:rpm` |
+| **RPM1 Google Form** | New RPM1 sales only | **Supabase** (not the desktop app): INSERT → Edge Function → **both** TEST + Direct Tracking forms (Team Code HS3). Prior sales are not re-sent when a form is added. |
 | **Draft** | All on Add sale | MLA and **RPM**: auto-save to browser while typing; closing by mistake and opening Add sale again offers **Resume your saved … draft?** Successful submit clears the draft. |
 | **Double submit** | All | Save disabled while in flight; server 409 on duplicate within 2 min |
 
@@ -113,6 +126,8 @@ On **day**, **week**, and **month** views:
 | **Search / Status** | Everyone | Customer name/phone; sale status |
 | **Sort** (RPM) | Everyone on RPM | Latest→oldest (default) or oldest→latest |
 | **Team / Agent / Closer / Day / Client / feedback** (RPM) | Quality, HR, RTM, Admin, OP, CEO | **Not Agent or TL.** Team = org **dialing** teams in the current company (no HS-2 on Hangup, no HR/Quality). Agent and closer = people **already on the loaded sales**; HR/Quality (e.g. Phoebe) never appear as closers. **Day** is a date picker defaulted to today’s Cairo working day (clear to see the whole month). |
+
+Agents and TLs normally see only today’s RPM working day (no period picker). If Access Control → Sales → **View sales this month** (`viewSalesThisMonth`) is allowed for `agent` and/or `tl`, their RPM sales log date range expands to the current month.
 
 Stat cards show **client status** counts (Passed, Pending bank, Processed, Dropped) when the user can view the Client status column. Click a card to filter by that client status.
 
@@ -184,6 +199,8 @@ All catalog fields are available as filter fields.
 **On behalf (leave / IT):** TL — active agents on led team(s) only. OP — active agents in unit. Closer — IT only (same team scope), not leave. IT staff — active agents in their unit.
 
 Agents default **Closer** to themselves (plain agents: self + their team leaders). Org closers and TLs default **Closer** to themselves and remain in the list even with a dialing ID. **Team** is read-only and follows the selected agent. Out / Deleted / company / program filters still apply.
+
+**v2.4.1 — Other (unassigned):** Agent picker includes **Other (unassigned)** at the top (RPM and MLA). Those rows stay in Total, glow amber on the Sales log, and the glow clears after edit assigns a real agent. Other is not a person in Org or payroll.
 
 ### Catalog (required when configured)
 

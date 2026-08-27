@@ -1,3 +1,45 @@
+## v2.4.9 release checklist
+
+**Shipped 2026-08-27 (optional installer + patch from 2.4.8 / not breaking):** GitHub [v2.4.9](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.9) is **Latest**. Supabase `app_versions` `2.4.9` is `is_current` with `min_compatible_version=1.0.0`.
+
+### Shipped in 2.4.9
+- **Turtle Grove** premium theme (moss/earth); spinning turtle loader; slow turtles on `/cats`
+- Premium unlock tiers: Gotham / Hello Kitty / Spiderman at 10 sent or 10 closed; Turtle Grove at 15 sent or 15 closed
+
+### Checklist
+- [x] Bump `package.json` → `2.4.9`; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`)
+- [x] Local NSIS Setup + patch from 2.4.8 + web installer
+- [x] GitHub release `v2.4.9` Latest (Setup.exe, web installer, patch, manifests)
+- [x] `node scripts/publish-app-version.js` (not breaking; `min_compatible=1.0.0`)
+
+## v2.4.8 release checklist
+
+**Shipped 2026-08-26 (optional installer + patch from 2.4.7 / not breaking):** GitHub [v2.4.8](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.8) was **Latest**. Supabase `app_versions` `2.4.8` was `is_current` with `min_compatible_version=1.0.0`.
+
+### Shipped in 2.4.8
+- Checks: unique live MCN per company + working day (any agent) → 409 `MEMBER_DAY_EXISTS`
+- Form validation: Wrong MCN; digits phones; letters-only names (Checks, Q Feedback edit, RPM)
+- RPM create: required-field red glow; soft duplicate ConfirmDialog; notify Quality/RTM/Admin
+- Sale ↔ Q auto-link same working day only; may set disposed feedback to Sale
+- Migration `20260905_rpm_checks_unique_member_day` + cleanup script
+
+### Checklist
+- [x] Bump `package.json` → `2.4.8`; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`, `DB_SCHEMA`)
+- [x] Local NSIS Setup + patch from 2.4.7 + web installer
+- [x] GitHub release `v2.4.8` Latest (Setup.exe, web installer, patch, manifests)
+- [x] `node scripts/publish-app-version.js` (not breaking; `min_compatible=1.0.0`)
+
+## v2.4.7 release checklist
+
+**Shipped 2026-08-25 (optional installer + patch from 2.4.6 / not breaking):** GitHub [v2.4.7](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.7) is **Latest**. Supabase `app_versions` `2.4.7` is `is_current` with `min_compatible_version=1.0.0`. Notes: dead form fields / Electron confirm residue; Employee Out lag + depart date wiring; deductions/bonuses Edit-Delete; Select search lag in dialogs; RPM Airtable Client RPM3; Import from open Q closer scope.
+
+### Build / publish
+- [x] Bump `package.json` → `2.4.7`; docs
+- [x] `npm run build:web` + local NSIS (`npm run dist:installer`)
+- [x] Patch `Hangup-Portal-2.4.7-win-x64-patch-from-2.4.6.zip` + manifests
+- [x] GitHub release `v2.4.7` Latest (Setup.exe, web installer, patch, manifests)
+- [x] `node scripts/publish-app-version.js` (not breaking)
+
 ## v2.3.28 release checklist
 
 **Shipped 2026-08-18 (installer-only, breaking):** GitHub [v2.3.28](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.3.28) is **Latest**. Supabase `app_versions` `2.3.28` is `is_current` with `--breaking`. Apply `20260824_recycle_bin_and_transport_grant.sql`. Then `npm run build:web`, `dist:installer`, `dist:web-installer`, `publish:installer`.

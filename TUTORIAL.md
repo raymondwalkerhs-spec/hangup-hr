@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.3.28`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.4.9`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -23,10 +23,10 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 |-------|------------|
 | No access assigned | Raymond must set your **role** in **Users** |
 | Forgot password | Contact Raymond, or use **Settings → Change password** if you know the current one |
-| Version blocked | Install the latest EXE from Admin (`app_versions` policy) |
-| Update available (login or in-app) | Click **Update now** — silent installer (Windows) or full app replace (macOS) |
+| Version blocked | Click **Update now** (or install the latest EXE). Patches never raise the minimum version. |
+| Update available (login or in-app) | Click **Update now** — small zip on the same `2.4.x` line after 2.4.1; Setup.exe when the line changes. See [`PUSH_UPDATE.md`](PUSH_UPDATE.md). |
 
-**Notifications** — bell icon in the **top bar** (and sidebar). Unread badge shows new items; click for full history. Click a notification to jump to Sales, Requests, Bonuses, or employee notes. Admin/RTM can configure who receives each alert under **Settings → Notification routing** (use **Reset defaults** after first upgrade to 1.3.13).
+**Notifications** — bell icon in the **top bar** (and sidebar). Unread badge shows new items; click for full history. Click a notification to jump to Sales, Requests, Bonuses, or employee notes. Admin/RTM can configure who receives each alert under **Settings → Notification routing** (includes **New agent registration**; use **Reset defaults** after first upgrade to pick up new rule types). The bell and live pages (Dashboard, Payroll, Attendance, Sales) refresh about every **5 seconds** while you are on that screen.
 
 ---
 
@@ -34,7 +34,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 
 | Sidebar | Purpose |
 |---------|---------|
-| **Dashboard** | Headcount, payroll total, document expiry widget |
+| **Dashboard** | Headcount, payroll total, document expiry widget; RPM weekly closer/agent/client cards + team targets (Admin/RTM/Quality/OP) |
 | **Announcements** | Company posts (current workspace), or targeted by unit / team / role; picture above, middle, or below text; also notifies matching users; unread count on sidebar until opened; HR/RTM/Admin/CEO can publish |
 | **Employees** | Profiles, nationality, documents, lifecycle. Moving unit to another company needs confirmation and a new team |
 | **Coaching** | Agent coaching tickets (coach, outcome, general + secret notes) |
@@ -69,6 +69,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 - **Search** by name or ID  
 - **Filters:** status, unit, **nationality**, **work permit**, **insurance status**  
 - **Hide OUT (left previous month)** toggle — shows leavers from the prior month only; legacy leavers (2+ months, no pay) stay hidden unless **Settings → Show legacy employees** is on  
+- **Hide all OUT** (TL / HR / RTM / Quality / Admin / OP) — hides every OUT status, including agents who worked this month  
 
 ### Add an agent
 
@@ -180,7 +181,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 | Section | Who | What |
 |---------|-----|------|
-| **Appearance** | Everyone | Hangup Light / Dark / Violet / Pink / Red Wine / Diamond / Emerald |
+| **Appearance** | Everyone | Free themes + premiums: Gotham / Hello Kitty / Spiderman unlock at **10** RPM sent as agent or **10** closed as closer this month; **Turtle Grove** needs **15** sent or **15** closed (Admin/CEO/HR always unlocked). Turtle Grove uses a spinning turtle loader and slow turtles on Cats. |
 | **Change password** | Everyone | Current + new password |
 | **Display** | HR | Hide out / inactive employees |
 | **Federal holidays** | HR | Import USA 2024–2028, toggle per holiday, year accordion in Settings |
@@ -189,7 +190,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 | **Commission types** | Admin / CEO | Manage commission type rates |
 | **Sales clients & breaks** | RTM / Admin | Clients, devices, price tiers; break schedules |
 | **Refresh** | Everyone | Full re-sync from Supabase |
-| **Notification routing** | Admin / RTM | Who gets alerts for leave, sales, bonuses, notes; **Reset defaults** after upgrade |
+| **Notification routing** | Admin / RTM | Who gets alerts for leave, sales, bonuses, notes, **new registrations**; **Reset defaults** after upgrade |
 | **View as user** | Raymond | Test the app as any login |
 
 ---
@@ -221,6 +222,7 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 ### Bonus requests
 - **TL / OP / quality / RTM** can **request** a bonus for a dialing agent (Bonuses page → pending queue).
 - **HR / admin / CEO** approve or deny; approved bonuses post to payroll.
+- **Add bonus** and **Add deduction** (direct) are **HR / admin / CEO** only; others use Request bonus.
 - **HR / RTM / quality / admin / office_assistant** cannot receive bonuses via requests — only via **payslip** direct add by HR+.
 
 ### Updates (1.3.2+)
@@ -251,12 +253,15 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Admin (1.6.10):** **Sales permissions** has tabs — **Edit sale**, **Quality ticket**, **Attachments**, **Actions** — with independent main vs quality view columns. **Log columns** controls which columns appear.
 - **Admin (1.4.2):** **Sales permissions** is role-first like Access Control — pick a role, toggle View/Edit per field, then **Save changes**. Run **Reset defaults** once after upgrade.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
+- **Access Control (RPM weekly):** **RPM weekly dashboard** (`viewRpmWeeklyDashboard`) — default Admin / RTM / Quality / OP / TL (and dual-role agents with led teams). **Edit RPM weekly team targets** (`editRpmWeeklyTargets`) — Admin / RTM / Quality / OP only (TL view-only). TL scoped to led team(s); OP to unit.
+- **Access Control (Sales log filters):** **Sales log filters** (`viewSalesLogFilters`) — period picker + team/agent/closer/client filters. Default on for OP/Admin/Quality/RTM/HR/CEO; off for TL/agent. Flip per role to show filters to TL or hide from OP. Chosen period stays when you leave Sales and come back.
 - **Dual-role TL:** assign TL on Organization (`team_tls` / `tl_employee_id`); agent login with `leadTeams` sees led team for leave/IT on behalf, not unit-wide sales unless also assigned as **closer** for that team.
 - **Add sale (1.6.13):** team auto-fills from selected agent; quality section hidden on submit.
 - **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (own team leaders allowed). Org closers (e.g. Ria) keep agent login, stay in the closer list, default to themselves, and can submit their own sales. Closers/TLs assigned in Organization (e.g. Amy on Tris) pick that team even if their employee home team is Management.
 - **My docs (1.6.12):** self-upload National ID, Medical Note, Exam Note only; HR/Admin upload Contract and all types.
 - **Requests (1.6.12):** annual leave hidden from agents.
 - **Sales log (MLA / RPM tabs):** Opens on **RPM**. **View** (read-only), **Edit** (if permitted), **Quality** (RPM: Quality/RTM/Admin only; MLA: quality workflow + verifier assignees). **+ Add sale** opens program picker when both MLA and RPM are enabled. RPM Team/Agent/Closer (and day/client/feedback) filters are for Quality / HR / RTM / Admin / OP / CEO only — agents and TLs do not get those dropdowns. Team list is company dialing teams; closer list is people on the loaded sales (not HR). Agents see sales where they are the agent; closers see sales where they are the closer; team TLs see their team's sales.
+- **Checks / Q Feedback (2.4.8):** One live Member ID (MCN) per working day across all agents — duplicate same-day submits are blocked (edit the existing check to change status). Invalid MCN shows **Wrong MCN**. Phones are digits only; names are letters (space/hyphen/apostrophe OK). **Q** needs name + DOB; NQ / Age / Under / Duplicate need agent + MCN + phone only. RPM Add sale warns (does not block) if the same MCN/phone already exists; empty required fields glow red after you click Submit.
 - **Quality ticket (1.6.11):** fix — **Sales permissions → Quality ticket** grants now apply correctly (was ignoring DB rows); payment card/bank sub-fields show on readonly tickets.
 - **Quality ticket (1.6.10):** quality surface defaults deny non-quality fields unless granted in **Sales permissions → Quality ticket** tab; agent/closer shown in summary only; non-editable fields are display-only; attachments gated by **Attachments** tab.
 - **Quality ticket (1.6.7):** uses the same **Sales field permissions** as Edit sale — open ticket shows only fields your role can view on the quality surface; edit only cells with Edit enabled (assigned OP/TL verifiers can update reviewer status when permitted).
