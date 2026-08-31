@@ -28,17 +28,15 @@
   justify-content: center;
 }
 .panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.35rem);
+  position: fixed;
   width: min(360px, 90vw);
-  max-height: 400px;
+  max-height: min(400px, calc(100vh - 5rem));
   overflow: auto;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  z-index: 100;
+  z-index: 1300;
   padding: 0.5rem;
 }
 .item {
@@ -74,4 +72,12 @@
   align-items: center;
   margin-bottom: 0.35rem;
   padding: 0 0.25rem;
+}
+.errorNote {
+  margin: 0 0 0.35rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--danger, #c0392b);
+  background: color-mix(in srgb, var(--danger, #c0392b) 8%, transparent);
+  border-radius: var(--radius-sm);
 }

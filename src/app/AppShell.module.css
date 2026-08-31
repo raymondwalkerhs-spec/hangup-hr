@@ -23,7 +23,7 @@
   display: flex;
   flex-direction: column;
   transition: width var(--dur-med) var(--spring-snappy), box-shadow var(--dur-med) ease;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--chrome-border);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
 }
 .collapsed .sidebar {
@@ -41,7 +41,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.85rem 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--chrome-border);
   min-height: 60px;
 }
 .brandText {
@@ -51,7 +51,7 @@
   min-width: 0;
 }
 .menuBtn {
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--chrome-fg) 8%, transparent);
   border: none;
   color: inherit;
   cursor: pointer;
@@ -61,7 +61,7 @@
   transition: background var(--dur-fast);
 }
 .menuBtn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--chrome-hover);
 }
 .logo {
   width: 38px;
@@ -72,7 +72,7 @@
 }
 .brand strong {
   display: block;
-  color: #fff;
+  color: var(--chrome-fg);
   font-family: var(--font-display);
   font-size: 0.95rem;
   line-height: 1.2;
@@ -80,7 +80,7 @@
 .brandSub {
   display: block;
   font-size: 0.65rem;
-  opacity: 0.55;
+  color: var(--chrome-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -89,13 +89,13 @@
   overflow-y: auto;
   padding: 0.65rem 0.5rem;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: var(--chrome-muted) transparent;
 }
 .nav::-webkit-scrollbar {
   width: 5px;
 }
 .nav::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--chrome-border);
   border-radius: 4px;
 }
 .navGroup {
@@ -159,8 +159,8 @@
   padding: 0.55rem;
 }
 .navBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--chrome-hover);
+  color: var(--chrome-fg);
   opacity: 1;
   transform: scale(1.04);
 }
@@ -169,7 +169,7 @@
 }
 .active {
   background: color-mix(in srgb, var(--sidebar-active) 28%, transparent);
-  color: #fff;
+  color: var(--chrome-fg);
   opacity: 1;
   box-shadow: inset 3px 0 0 var(--sidebar-active);
   font-weight: 600;
@@ -209,8 +209,8 @@
 }
 .footer {
   padding: 0.65rem 0.5rem 0.85rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.12);
+  border-top: 1px solid var(--chrome-border);
+  background: color-mix(in srgb, #000 12%, transparent);
 }
 .userBlock {
   display: flex;
@@ -223,7 +223,7 @@
   height: 32px;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--sidebar-active) 35%, transparent);
-  color: #fff;
+  color: var(--chrome-fg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -237,20 +237,32 @@
 }
 .userMeta strong {
   display: block;
-  color: #fff;
+  color: var(--chrome-fg);
   font-size: 0.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .userMeta span {
   font-size: 0.68rem;
-  opacity: 0.55;
+  color: var(--chrome-muted);
   text-transform: capitalize;
 }
 .footerActions {
   display: flex;
   gap: 0.2rem;
   flex-wrap: wrap;
+}
+.footerActions :global(button) {
+  color: var(--chrome-fg);
+}
+.footerActions :global(button:hover:not(:disabled)) {
+  background: var(--chrome-hover);
+  color: var(--chrome-fg);
+  box-shadow: none;
+}
+.footerActions :global(button svg) {
+  color: inherit;
+  stroke: currentColor;
 }
 .collapsed .footerActions {
   flex-direction: column;
@@ -295,6 +307,8 @@
   font-weight: 600;
 }
 .topbar {
+  position: relative;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: space-between;

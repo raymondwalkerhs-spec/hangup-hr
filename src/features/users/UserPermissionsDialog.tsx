@@ -44,17 +44,21 @@ export function UserPermissionsDialog({
   const overrides = Object.fromEntries((permData?.overrides || []).map((o) => [o.permissionKey, o.allowed]));
   const defaults = permData?.defaults || {};
 
-  const getEffective = (key: string) => {
-    if (pending.has(key)) return pending.get(key)!;
+  const getStoredEffective = (key: string) => {
     if (overrides[key] !== undefined) return overrides[key];
     return defaults[key] ?? false;
   };
 
+  const getEffective = (key: string) => {
+    if (pending.has(key)) return pending.get(key)!;
+    return getStoredEffective(key);
+  };
+
   const toggle = (key: string, allowed: boolean) => {
-    const def = defaults[key] ?? false;
+    const stored = getStoredEffective(key);
     setPending((prev) => {
       const next = new Map(prev);
-      if (allowed === def) next.delete(key);
+      if (allowed === stored) next.delete(key);
       else next.set(key, allowed);
       return next;
     });

@@ -1,0 +1,377 @@
+.wrap {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.headerRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.titleBlock h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.modeGroup {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-elevated);
+}
+
+.modeBtn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.modeBtn + .modeBtn {
+  border-left: 1px solid var(--border);
+}
+
+.modeBtnActive {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.weekPills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.75rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.weekPill {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.weekPillActive {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* weekPillCurrent removed — only the active tab is highlighted; see "· current" hint on pill label */
+
+.banner {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  background: var(--surface-elevated);
+}
+
+.bannerWarn {
+  border-color: color-mix(in srgb, #c47a00 45%, var(--border));
+  color: color-mix(in srgb, #a35f00 70%, var(--text));
+}
+
+.updating {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.wrapRefreshing {
+  /* Keep layout stable while background polls refresh data. */
+}
+
+.liveDot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+  vertical-align: middle;
+  opacity: 0.55;
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+}
+
+.sectionTitle {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.cardRow {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.card {
+  flex: 0 0 auto;
+  min-width: 9.5rem;
+  max-width: 14rem;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  color: inherit;
+}
+
+.card:hover {
+  border-color: var(--primary);
+}
+
+.cardExpanded {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.rank {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.15rem;
+}
+
+.count {
+  display: block;
+  margin-top: 0.25rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  font-weight: 650;
+}
+
+.detail {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.mutedNote {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.empty {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.errorBox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+}
+
+.skeletonGrid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.skeletonRow {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.skelCard {
+  width: 9.5rem;
+  height: 4.25rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border) 55%, transparent) 0%,
+    color-mix(in srgb, var(--border) 25%, transparent) 50%,
+    color-mix(in srgb, var(--border) 55%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+.skelTeam {
+  height: 2.5rem;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--border) 55%, transparent) 0%,
+    color-mix(in srgb, var(--border) 25%, transparent) 50%,
+    color-mix(in srgb, var(--border) 55%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.teamList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.teamRow {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-elevated);
+}
+
+.teamTop {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  align-items: baseline;
+}
+
+.teamName {
+  font-weight: 600;
+}
+
+.teamMeta {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.barTrack {
+  margin-top: 0.4rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.bandRed {
+  color: #b42318;
+}
+.bandAmber {
+  color: #b54708;
+}
+.bandGreen {
+  color: #067647;
+}
+.bandTeal {
+  color: #0e7490;
+}
+
+.fillRed {
+  background: #f04438;
+}
+.fillAmber {
+  background: #f79009;
+}
+.fillGreen {
+  background: #12b76a;
+}
+.fillTeal {
+  background: #15b8a6;
+}
+
+.editRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.editInput {
+  width: 4.5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.85rem;
+}
+
+.fieldError {
+  width: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  color: #b42318;
+}
+
+.dimmed {
+  opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .card {
+    min-width: 8.25rem;
+  }
+}

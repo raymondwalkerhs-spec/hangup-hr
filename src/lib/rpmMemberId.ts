@@ -63,15 +63,14 @@ export function validateMemberId(
     return { ok: false, message: "Member ID is required" };
   }
   if (s.length !== 11) {
-    return { ok: false, message: "Member ID must be 11 characters (XXXX-XXX-XXXX)" };
+    return { ok: false, message: "Wrong MCN" };
   }
   for (let i = 0; i < 11; i++) {
     const c = s[i];
     const slot = PATTERN[i];
-    const displayPos = i + 1;
-    if (slot === "N" && !isDigit(c)) return { ok: false, message: slotReason(slot, displayPos) };
-    if (slot === "L" && !isAllowedLetter(c)) return { ok: false, message: slotReason(slot, displayPos) };
-    if (slot === "A" && !isAllowedAlnum(c)) return { ok: false, message: slotReason(slot, displayPos) };
+    if (slot === "N" && !isDigit(c)) return { ok: false, message: "Wrong MCN" };
+    if (slot === "L" && !isAllowedLetter(c)) return { ok: false, message: "Wrong MCN" };
+    if (slot === "A" && !isAllowedAlnum(c)) return { ok: false, message: "Wrong MCN" };
   }
   return { ok: true, value: s, display: formatMemberId(s) };
 }

@@ -1,0 +1,320 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.formCard {
+  margin-bottom: 1rem;
+}
+
+.cardHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.cardHeading h2,
+.cardHeading p {
+  margin: 0;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+}
+
+.formGrid label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.formGrid input,
+.formGrid select,
+.toolbar input,
+.toolbar select {
+  min-height: 38px;
+  padding: 0.5rem 0.65rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.statusFieldset {
+  padding: 0;
+  margin: 1rem 0;
+  border: 0;
+}
+
+.statusFieldset legend {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.chips,
+.filterChips,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.statusChip,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.statusChip {
+  position: relative;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.statusChip input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.selected {
+  border-color: currentColor;
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.q {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+}
+
+.periodBar {
+  margin-bottom: 0.85rem;
+}
+
+.saleRow {
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 35%, transparent),
+    0 0 12px color-mix(in srgb, var(--ok) 28%, transparent);
+}
+
+.saleRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+
+.sale {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.dropped_with_client {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+
+.noFeedback {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+}
+
+.callback {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+.not_int {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.retransfer {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.feedbackView {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.feedbackView span.muted,
+.feedbackInfo span.muted {
+  display: block;
+  font-size: 0.75rem;
+  margin-bottom: 0.2rem;
+}
+
+.feedbackInfo p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.nq {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+
+.age_limit {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+}
+
+.under_age {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.duplicate {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.toolbar input {
+  flex: 1 1 240px;
+}
+
+.filterChips button {
+  padding: 0.42rem 0.7rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.filterChips .activeFilter {
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 0.65rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tableWrap th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.error {
+  color: var(--err);
+}
+
+.invalidField input,
+.invalidField :global(button[aria-haspopup="listbox"]) {
+  border-color: var(--err) !important;
+}
+
+.fieldHint {
+  display: block;
+  color: var(--err);
+  font-size: 0.72rem;
+  font-style: normal;
+  margin-top: 0.2rem;
+}
+
+.invalidField input,
+.invalidField select {
+  border-color: var(--danger, #c0392b);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger, #c0392b) 35%, transparent);
+}
+
+.feedbackShortcut {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--border, #c8d0d4);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--surface, #fff) 94%, var(--accent, #0c343d) 6%);
+}
+
+.feedbackShortcutLead {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.feedbackShortcutGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.feedbackShortcutGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.feedbackShortcutGrid select {
+  min-height: 36px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #c8d0d4);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.feedbackCloserHint,
+.feedbackShortcutNote {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+@media (max-width: 700px) {
+  .cardHeading,
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

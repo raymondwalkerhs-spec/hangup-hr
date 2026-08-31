@@ -88,6 +88,64 @@ test("dashboard ops sales scope matrix", () => {
   assert.equal(ids(ops.filterSalesForDashboardOps(sales, closerTl)), "s1,s3");
 });
 
+test("TL closer split: closed vs team slices", () => {
+  assert.equal(ops.shouldSplitTlClosedTeam(closerTl), true);
+  assert.equal(ops.shouldSplitTlClosedTeam(tl), false);
+  assert.equal(ops.shouldSplitTlClosedTeam(closer), false);
+  assert.equal(ids(ops.filterSalesForDashboardOps(sales, closerTl, "closed")), "s1,s3");
+  assert.equal(ids(ops.filterSalesForDashboardOps(sales, closerTl, "team")), "s1");
+});
+
+// Amy/Ria-style: app role TL + org closer, but not org tlEmployeeId (empty leadTeams)
+test("TL closer without leadTeams still splits Closed + Team", () => {
+  const amyStyle = {
+    role: "tl",
+    employeeId: "CL1",
+    username: "amy",
+    team: "Justin",
+    unit: "HS-3",
+    leadTeams: [],
+    closerTeams: [{ team: "Justin", unit: "HS-3" }],
+  };
+  assert.equal(ops.describeScope(amyStyle), "team+closed");
+  assert.equal(ops.shouldSplitTlClosedTeam(amyStyle), true);
+  assert.equal(ids(ops.filterSalesForDashboardOps(sales, amyStyle, "closed")), "s1,s3");
+  assert.equal(ids(ops.filterSalesForDashboardOps(sales, amyStyle, "team")), "s1");
+  const month = ops.buildOpsMonth({
+    month: "2026-08",
+    sales,
+    employees,
+    attendanceRecords: attendance,
+    userRole: amyStyle,
+  });
+  assert.equal(month.split, true);
+  assert.ok(month.closed);
+  assert.ok(month.team);
+});
+
+test("company roles never split — keep combined status + month curve", () => {
+  for (const role of ["admin", "rtm", "ceo", "hr", "quality", "finance"]) {
+    const ur = {
+      role,
+      employeeId: "CL1",
+      username: role,
+      leadTeams: [{ team: "Justin", unit: "HS-3" }],
+      closerTeams: [{ team: "Jude", unit: "HS-3" }],
+    };
+    assert.equal(ops.describeScope(ur), "company");
+    assert.equal(ops.shouldSplitTlClosedTeam(ur), false);
+    const month = ops.buildOpsMonth({
+      month: "2026-08",
+      sales,
+      employees,
+      attendanceRecords: attendance,
+      userRole: ur,
+    });
+    assert.equal(month.split, undefined);
+    assert.equal(month.closed, undefined);
+  }
+});
+
 test("dashboard ops month daily series and attendance", () => {
   const agentMonth = ops.buildOpsMonth({
     month: "2026-08",

@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 8, 14, 0.55);
+  background: var(--dialog-scrim);
   backdrop-filter: blur(3px);
   z-index: 1000;
 }

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { api } from "@/api/client";
 import { Button } from "@/ui/Button";
+import { formatTimeAmPm } from "@/lib/breakTime";
 import styles from "./BreakOverlay.module.css";
 
 type Break = {
@@ -29,6 +31,7 @@ function formatCountdown(ms: number) {
 }
 
 export function BreakOverlay() {
+  const location = useLocation();
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const [countdown, setCountdown] = useState("");
 
@@ -42,6 +45,15 @@ export function BreakOverlay() {
   const visible = brk && !dismissed.has(brk.id);
 
   useEffect(() => {
+    if (!brk) return;
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(brk.id);
+      return next;
+    });
+  }, [location.pathname, location.key]);
+
+  useEffect(() => {
     if (!visible || !brk) return;
     const endMs = parseEndMs(brk.startTime || "", brk.durationMinutes || 15);
     const tick = () => setCountdown(formatCountdown(endMs - Date.now()));
@@ -50,18 +62,50 @@ export function BreakOverlay() {
     return () => clearInterval(id);
   }, [visible, brk]);
 
+  useEffect(() => {
+    if (!visible || !brk) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest(`.${styles.card}`)) return;
+      setDismissed((s) => new Set(s).add(brk.id));
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDismissed((s) => new Set(s).add(brk.id));
+    };
+    document.addEventListener("mousedown", onPointerDown, true);
+    document.addEventListener("touchstart", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown, true);
+      document.removeEventListener("touchstart", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [visible, brk]);
+
+  const dismiss = () => {
+    if (!brk) return;
+    setDismissed((s) => new Set(s).add(brk.id));
+  };
+
   if (!visible || !brk) return null;
 
   return (
-    <div className={styles.overlay}>
-      <div className={styles.card}>
-        <Button className={styles.close} size="sm" variant="ghost" onClick={() => setDismissed((s) => new Set(s).add(brk.id))}>✕</Button>
+    <div className={styles.overlay} onClick={dismiss} role="presentation">
+      <div
+        className={styles.card}
+        role="dialog"
+        aria-label="Break time"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button className={styles.close} size="sm" variant="ghost" onClick={dismiss}>✕</Button>
         <h2>Break time</h2>
         <p>{brk.name || "Scheduled break"}</p>
         <div className={styles.timer}>{countdown}</div>
-        <p className="muted">{brk.durationMinutes || 15} min · ends ~{brk.endTime || ""}</p>
+        <p className="muted">{brk.durationMinutes || 15} min · ends ~{formatTimeAmPm(brk.endTime)}</p>
         {brk.message && <p>{brk.message}</p>}
-        <p className="muted" style={{ fontSize: "0.8rem", marginTop: "1rem" }}>Reopen from Breaks in the sidebar.</p>
+        <p className="muted" style={{ fontSize: "0.8rem", marginTop: "1rem" }}>
+          Click outside or open Breaks in the sidebar to dismiss.
+        </p>
       </div>
     </div>
   );

@@ -37,6 +37,15 @@ export function opIdsForUnit(
   return [...new Set(ids.filter(Boolean))];
 }
 
+export function checkerIdsForUnit(unit: string, unitCheckers: Record<string, string[]>) {
+  const key = String(unit || "").trim();
+  const ids: string[] = [];
+  for (const [u, list] of Object.entries(unitCheckers || {})) {
+    if (String(u || "").trim() === key) ids.push(...(list || []));
+  }
+  return [...new Set(ids.filter(Boolean))];
+}
+
 export function opCandidates(unit: string, employees: Employee[]) {
   const unitKey = String(unit || "").replace(/\s+/g, "").toUpperCase();
   const inUnit = employees.filter((e) => String(e.unit || "").replace(/\s+/g, "").toUpperCase() === unitKey);
@@ -46,6 +55,25 @@ export function opCandidates(unit: string, employees: Employee[]) {
   const seen = new Set<string>();
   const out: Employee[] = [];
   for (const e of [...ops, ...inUnit]) {
+    if (!e?.id || seen.has(e.id)) continue;
+    if (String(e.status || "").toLowerCase() === "out" || String(e.status || "").toLowerCase() === "deleted") continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+  return out.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+export function checkerCandidates(unit: string, employees: Employee[]) {
+  const unitKey = String(unit || "").replace(/\s+/g, "").toUpperCase();
+  const inUnit = employees.filter((e) => String(e.unit || "").replace(/\s+/g, "").toUpperCase() === unitKey);
+  const checkers = employees.filter(
+    (e) =>
+      String(e.role || "").toLowerCase() === "checker" ||
+      /^CHK/i.test(String(e.id || ""))
+  );
+  const seen = new Set<string>();
+  const out: Employee[] = [];
+  for (const e of [...checkers, ...inUnit]) {
     if (!e?.id || seen.has(e.id)) continue;
     if (String(e.status || "").toLowerCase() === "out" || String(e.status || "").toLowerCase() === "deleted") continue;
     seen.add(e.id);

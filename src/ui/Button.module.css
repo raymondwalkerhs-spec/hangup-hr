@@ -41,7 +41,7 @@
 }
 .primary {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .primary:hover:not(:disabled) {
   background: var(--primary-hover);
@@ -61,7 +61,7 @@
 }
 .danger {
   background: var(--err);
-  color: #fff;
+  color: var(--badge-fg, #fff);
 }
 .outline {
   background: transparent;

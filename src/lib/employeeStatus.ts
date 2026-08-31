@@ -1,3 +1,12 @@
+/** Local calendar YYYY-MM-DD (not UTC). */
+export function localTodayIso(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function isOutEmployeeStatus(status: string | undefined | null | unknown): boolean {
   const s = String(status || "").trim().toLowerCase();
   return s === "out" || s === "out_still_paid" || s.includes("out but still") || s.includes("out still");
@@ -22,6 +31,7 @@ export function noticeTypeLabel(value: string | undefined | null): string {
 
 export type DepartFormState = {
   departDate: string;
+  /** @deprecated always true — date is always visible; kept for call-site compat */
   useCustomDate: boolean;
   status: "out" | "out_still_paid";
   notice_type: NoticeType;
@@ -29,17 +39,18 @@ export type DepartFormState = {
 
 export function defaultDepartForm(statusLabel = "out"): DepartFormState {
   return {
-    departDate: "",
-    useCustomDate: false,
+    departDate: localTodayIso(),
+    useCustomDate: true,
     status: statusLabel === "out_still_paid" ? "out_still_paid" : "out",
     notice_type: "with_notice",
   };
 }
 
 export function departRequestBody(form: DepartFormState) {
+  const date = String(form.departDate || localTodayIso()).slice(0, 10);
   return {
-    departDate: form.useCustomDate ? form.departDate : undefined,
-    skipDepartDate: !form.useCustomDate,
+    departDate: date,
+    skipDepartDate: false,
     status: form.status,
     notice_type: form.notice_type,
   };

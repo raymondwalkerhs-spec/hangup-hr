@@ -1,0 +1,26 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted, var(--muted));
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.sep {
+  font-weight: 600;
+}

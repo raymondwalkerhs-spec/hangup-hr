@@ -284,7 +284,7 @@ export function CoachingPage() {
     ].filter((s) => s.people.length);
     const known = new Set(sections.flatMap((s) => s.people.map((p) => p.id)));
     const defaultId = form.coachEmployeeId || options?.defaultCoachId || "";
-    const options = [
+    const coachOptions = [
       { value: "", label: "Select coach" },
       ...(defaultId && !known.has(defaultId)
         ? [{ value: defaultId, label: `${empLabel(agentMap[defaultId], defaultId)} (me)` }]
@@ -298,7 +298,7 @@ export function CoachingPage() {
         value={form.coachEmployeeId}
         onChange={(value) => setForm((f) => ({ ...f, coachEmployeeId: value }))}
         disabled={disabled}
-        options={options}
+        options={coachOptions}
         placeholder="Select coach"
       />
     );

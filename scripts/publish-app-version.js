@@ -39,7 +39,7 @@ function parseArgs() {
     else if (a === "--force-field-min" && args[i + 1]) opts.forceFieldMin = args[++i];
   }
   if (!opts.notes) {
-    opts.notes = `Hangup Portal ${opts.version} — install latest EXE from Admin`;
+    opts.notes = `Hangup Portal ${opts.version} — use Update now to install`;
   }
   if (opts.breaking) {
     opts.minCompatible = opts.minCompatible || opts.version;

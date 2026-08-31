@@ -91,6 +91,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $ghExe release edit $Tag --latest --prerelease=false
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Running publish-app-version.js..." -ForegroundColor Cyan
-node scripts/publish-app-version.js
-Write-Host "Done - $Tag is Latest on GitHub." -ForegroundColor Green
+Write-Host "Running publish-app-version.js (optional / non-breaking)..." -ForegroundColor Cyan
+$pubNotes = if ($Notes) { $Notes } else { "Optional update - Hangup Portal $version. Use Update now when convenient." }
+node scripts/publish-app-version.js --min-compatible 1.0.0 --notes $pubNotes
+Write-Host "Done - $Tag is Latest on GitHub (optional update)." -ForegroundColor Green

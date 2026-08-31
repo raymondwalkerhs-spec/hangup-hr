@@ -4,9 +4,11 @@ import { api } from "@/api/client";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAppStore } from "@/stores/theme-store";
 import { downloadApiFile, fileToBase64 } from "@/lib/files";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { DepartDateDialog } from "./DepartDateDialog";
+import { defaultDepartForm, departRequestBody, type DepartFormState } from "@/lib/employeeStatus";
 import { EmployeeHrmsLifecycle } from "./EmployeeHrmsLifecycle";
 import styles from "./EmployeeLifecyclePanel.module.css";
 
@@ -29,6 +31,7 @@ export function EmployeeLifecyclePanel({
   const id = String(employee.id);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [departOpen, setDepartOpen] = useState(false);
+  const [releaseConfirm, setReleaseConfirm] = useState(false);
   const [changeIdOpen, setChangeIdOpen] = useState(false);
   const [promoteForm, setPromoteForm] = useState({
     leadRole: "TL",
@@ -38,12 +41,7 @@ export function EmployeeLifecyclePanel({
     effectiveFromMonth: month,
     enforcePrefix: true,
   });
-  const [departForm, setDepartForm] = useState({
-    departDate: "",
-    useCustomDate: false,
-    status: "out",
-    notice_type: "with_notice",
-  });
+  const [departForm, setDepartForm] = useState<DepartFormState>(defaultDepartForm());
   const [newAppId, setNewAppId] = useState(String(employee.id));
 
   const { data: rates } = useQuery({
@@ -83,12 +81,7 @@ export function EmployeeLifecyclePanel({
     mutationFn: () =>
       api(path(`/hrms/employment-periods/${id}/depart`), {
         method: "POST",
-        body: JSON.stringify({
-          departDate: departForm.useCustomDate ? departForm.departDate : undefined,
-          skipDepartDate: !departForm.useCustomDate,
-          status: departForm.status,
-          notice_type: departForm.notice_type,
-        }),
+        body: JSON.stringify(departRequestBody(departForm)),
       }),
     onSuccess: () => {
       setDepartOpen(false);
@@ -163,9 +156,7 @@ export function EmployeeLifecyclePanel({
           {employee.promoted_from_id && !employee.promoted_to_id && (
             <Button size="sm" variant="secondary" onClick={() => revertPromotion.mutate()}>Revert promotion</Button>
           )}
-          <Button size="sm" variant="danger" onClick={() => {
-            if (confirm("Release this app ID?")) releaseId.mutate();
-          }}>Release app ID</Button>
+          <Button size="sm" variant="danger" onClick={() => setReleaseConfirm(true)}>Release app ID</Button>
         </div>
       )}
 
@@ -211,50 +202,29 @@ export function EmployeeLifecyclePanel({
         </FormGrid>
       </Dialog>
 
-      <Dialog open={departOpen} onOpenChange={setDepartOpen} title="Mark depart" footer={
-        <>
-          <Button variant="secondary" onClick={() => setDepartOpen(false)}>Cancel</Button>
-          <Button onClick={() => depart.mutate()}>Save depart</Button>
-        </>
-      }>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Skip the date to use today. You can change the depart date later. Days after depart are locked in attendance until re-hire.
-        </p>
-        <FormGrid>
-          <FormField label="Depart date">
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-              <input
-                type="checkbox"
-                checked={departForm.useCustomDate}
-                onChange={(e) => setDepartForm({
-                  ...departForm,
-                  useCustomDate: e.target.checked,
-                  departDate: e.target.checked ? (departForm.departDate || new Date().toISOString().slice(0, 10)) : "",
-                })}
-              />
-              Choose a specific depart date
-            </label>
-            {departForm.useCustomDate ? (
-              <input type="date" value={departForm.departDate} onChange={(e) => setDepartForm({ ...departForm, departDate: e.target.value })} />
-            ) : (
-              <span className="muted">Today ({new Date().toISOString().slice(0, 10)})</span>
-            )}
-          </FormField>
-          <FormField label="Status">
-            <select value={departForm.status} onChange={(e) => setDepartForm({ ...departForm, status: e.target.value })}>
-              <option value="out">Out</option>
-              <option value="out_still_paid">Out — still get paid</option>
-            </select>
-          </FormField>
-          <FormField label="Leaving type">
-            <select value={departForm.notice_type} onChange={(e) => setDepartForm({ ...departForm, notice_type: e.target.value })}>
-              <option value="with_notice">Leaving with two weeks notice</option>
-              <option value="without_notice">Leaving without two weeks notice</option>
-              <option value="company_decision">Leaving — company decision</option>
-            </select>
-          </FormField>
-        </FormGrid>
-      </Dialog>
+      <DepartDateDialog
+        open={departOpen}
+        onOpenChange={(o) => {
+          setDepartOpen(o);
+          if (o) setDepartForm(defaultDepartForm());
+        }}
+        form={departForm}
+        onFormChange={setDepartForm}
+        onConfirm={() => {
+          if (!depart.isPending) depart.mutate();
+        }}
+        isPending={depart.isPending}
+      />
+
+      <ConfirmDialog
+        open={releaseConfirm}
+        onOpenChange={setReleaseConfirm}
+        title="Release this app ID?"
+        message="History stays in the database; the ID can be reused."
+        danger
+        confirmLabel="Release"
+        onConfirm={() => releaseId.mutate()}
+      />
 
       <Dialog open={changeIdOpen} onOpenChange={setChangeIdOpen} title="Change app ID" footer={
         <>

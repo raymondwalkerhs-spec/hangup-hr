@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.4.9 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.5.0 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -20,6 +20,12 @@
 | **Governance** | Role-based access, field-level sales permissions, full audit trail |
 
 **One-line pitch:** A fast, offline-friendly desktop HR system that keeps workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
+
+### New in 2.5.0
+- **Sales Rankings** — Reports tab: agents / closers / checks with sales + checks filters; All checks shows per-status counts; closers hide Team.
+- **Premium themes** — admin unlock targets; quality / checker / hr / admin / it / accounting / rtm unlock without sales.
+- **Checks Q feedback shortcut** on New check (Q); **Out → inactive login** sync + backfill.
+- HR Monthly reports restored alongside rankings; company-scoped rankings / theme counts / auto-link.
 
 ### New in 2.4.9
 - **Turtle Grove** premium theme — moss/earth art; spinning turtle loader; slow turtles on `/cats`.
@@ -256,7 +262,7 @@ Full operational reference: [`SALES_LOG.md`](SALES_LOG.md)
 - Per-sale records with dynamic MLA-Ray form (all fields in `form_data`) for MLA; RPM has its own form and field catalog
 - Day / week / month dashboards with status filters and stat cards
 - **Working day rule** — sales until 3 AM Cairo count on previous day
-- **RPM Checks + Q Feedback** — `/checks`, `/q-feedback`, Duplicate separated list; Team Dashboard checks KPIs + notes; Day-OFF excluded from target N; main Dashboard cards; auto-link Sale ↔ Q **same working day** (disposed Q may become Sale); **one live MCN per company+day** (409 if duplicate); **Admin/OP can edit** Q Feedback rows with same MCN/phone/name rules; **TL** sees own/team Q Feedback only; closer-target editor OP/RTM/Admin only; Checks: **Q** needs name+DOB, other statuses agent+member+phone only; RPM create: red glow on empty requireds + soft warn on duplicate MCN/phone (Quality/RTM/Admin notify); optional Airtable **Q Feedback** (completed) + **NQ Checks** (NQ / Age limit / Duplicate / Under Age)
+- **RPM Checks + Q Feedback** — `/checks`, `/q-feedback`, Duplicate separated list; optional **Q feedback shortcut** on New check (Q only — set disposition + closer in one submit if you already know it; **Q Feedback** page unchanged for the queue); Team Dashboard checks KPIs + notes; Day-OFF excluded from target N; main Dashboard cards; auto-link Sale ↔ Q **same working day** (disposed Q may become Sale); **one live MCN per company+day** (409 if duplicate); **Admin/OP can edit** Q Feedback rows with same MCN/phone/name rules; **TL** sees own/team Q Feedback only; closer-target editor OP/RTM/Admin only; Checks: **Q** needs name+DOB, other statuses agent+member+phone only; RPM create: red glow on empty requireds + soft warn on duplicate MCN/phone (Quality/RTM/Admin notify); optional Airtable **Q Feedback** (completed) + **NQ Checks** (NQ / Age limit / Duplicate / Under Age)
 - **Hide all OUT** — Employees / Payroll / Attendance toggle for TL/HR/RTM/Quality/Admin/OP (includes outs who worked this month)
 - **Bonuses / deductions** — Add bonus & Add deduction are HR/Admin only; others use Request bonus
 - Toolbar filters: client, agent, closer, client status, reviewer status
@@ -409,6 +415,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 | Report | Output |
 |--------|--------|
 | **Analytics** | Leave, costs, sales, and training widgets with company scope (v2.2.0) |
+| **Sales Rankings** | Period-filtered top agents (RPM sent), closers (RPM closed), and check agents (Q/NQ/Duplicate); hover Passed/Pending/Denied + attendance anomalies. Access Control: `viewSalesRankings` |
 | Monthly HR report | PDF + Markdown |
 | Headcount & turnover | In-app summary |
 | Attendance rankings | NSNC / lateness CSV |
@@ -432,7 +439,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 ### Access Control
 
-- Admin UI for **50+ permissions** across pages, sales, payroll, costs, settings
+- Admin UI for **50+ permissions** across pages, sales, payroll, costs, settings, reports
 - Per-role defaults with database overrides (`app_role_permissions`)
 - Per-user exceptions with live inheritance from role defaults
 
@@ -446,7 +453,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 
 ### Settings
 
-- Free themes plus premiums: **Gotham Night**, **Hello Kitty**, **Spiderman** (10 RPM sent or 10 closed), **Turtle Grove** (15 sent or 15 closed); includes **Emerald** (jade on mint)
+- Free themes plus premiums: **Gotham Night**, **Hello Kitty**, **Spiderman**, **Turtle Grove** — unlock thresholds configurable per theme (Admin/HR/CEO via **`settingsThemeUnlocks`**); defaults 10 sent or 10 closed (Turtle Grove 15); includes **Emerald** (jade on mint)
 - **Page loading overlay** — cat orbit by default; **spinning turtle** under Turtle Grove. `/cats` playground shows cats, or slow turtles on Turtle Grove
 - Federal holidays, tax rules, break schedules (timed pop-up reminders)
 - Sales catalog (clients, products, prices)

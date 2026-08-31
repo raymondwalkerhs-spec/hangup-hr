@@ -20,6 +20,12 @@ window.AccessControlModule = (function () {
     return `${role}::${permissionKey}`;
   }
 
+  function getStoredEffective(role, permissionKey) {
+    const eff = effective?.[role]?.[permissionKey];
+    if (eff && typeof eff.effective === "boolean") return eff.effective;
+    return catalog?.defaults?.[role]?.[permissionKey] ?? false;
+  }
+
   function getEffective(role, permissionKey) {
     const pk = pendingKey(role, permissionKey);
     if (pending.has(pk)) return pending.get(pk);
@@ -108,9 +114,9 @@ window.AccessControlModule = (function () {
     root.querySelectorAll("[data-perm-toggle]").forEach((input) => {
       input.addEventListener("change", () => {
         const key = input.dataset.permToggle;
-        const def = catalog?.defaults?.[selectedRole]?.[key];
+        const stored = getStoredEffective(selectedRole, key);
         const allowed = input.checked;
-        if (allowed === def) {
+        if (allowed === stored) {
           pending.delete(pendingKey(selectedRole, key));
         } else {
           pending.set(pendingKey(selectedRole, key), allowed);

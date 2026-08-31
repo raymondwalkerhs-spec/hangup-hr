@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, fmt } from "@/api/client";
+import { useAuth } from "@/app/AuthProvider";
 import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { Dialog, ConfirmDialog } from "@/ui/Dialog";
@@ -110,13 +111,42 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
   const storeMonth = useAppStore((s) => s.month);
   const month = monthOverride || storeMonth;
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { path, companyContext } = useCompanyScope();
+  const role = String(user?.role || "").toLowerCase();
+  const canManagePayrollEvents =
+    user?.canManageEmployees === true || ["admin", "ceo", "hr"].includes(role);
+  const showPayment = role !== "tl";
   const [profile, setProfile] = useState<Record<string, string | boolean>>({});
   const [slipTab, setSlipTab] = useState<SlipTab>("combined");
   const profileHydratedFor = useRef("");
   const profileEditing = useRef(false);
   const [bonusForm, setBonusForm] = useState({ type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+  const [editingBonus, setEditingBonus] = useState<{
+    type: string;
+    amount: number;
+    date: string;
+    reason?: string;
+  } | null>(null);
+  const [deleteBonusRow, setDeleteBonusRow] = useState<{
+    type: string;
+    amount: number;
+    date: string;
+    reason?: string;
+  } | null>(null);
   const [dedForm, setDedForm] = useState({ type: "", amount: "", date: "", reason: "" });
+  const [editingDeduction, setEditingDeduction] = useState<{
+    type: string;
+    amount: number;
+    date: string;
+    reason?: string;
+  } | null>(null);
+  const [deleteDeductionRow, setDeleteDeductionRow] = useState<{
+    type: string;
+    amount: number;
+    date: string;
+    reason?: string;
+  } | null>(null);
   const [splitForm, setSplitForm] = useState({
     amount: "",
     splitKind: "payment",
@@ -297,40 +327,106 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
   });
 
   const addBonus = useMutation({
-    mutationFn: () =>
-      api(path("/bonuses"), {
+    mutationFn: () => {
+      const body = {
+        employeeId,
+        type: bonusForm.type || "Other Bonus",
+        amount: Number(bonusForm.amount),
+        date: bonusForm.date || `${month}-01`,
+        reason: bonusForm.reason,
+        deductFromEmployeeId:
+          bonusForm.type === TL_BONUS_TYPE ? bonusForm.deductFromEmployeeId || undefined : undefined,
+      };
+      if (editingBonus) {
+        return api(path("/bonuses"), {
+          method: "PATCH",
+          body: JSON.stringify({
+            originalEmployeeId: employeeId,
+            originalDate: String(editingBonus.date || "").slice(0, 10),
+            originalType: editingBonus.type,
+            ...body,
+          }),
+        });
+      }
+      return api(path("/bonuses"), {
         method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payslip-bundle", employeeId, month] });
+      qc.invalidateQueries({ queryKey: ["bonuses"] });
+      qc.invalidateQueries({ queryKey: ["deductions"] });
+      setBonusForm({ type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+      setEditingBonus(null);
+    },
+  });
+
+  const deleteBonus = useMutation({
+    mutationFn: (row: { type: string; date: string }) =>
+      api(path("/bonuses"), {
+        method: "DELETE",
         body: JSON.stringify({
           employeeId,
-          type: bonusForm.type || "Other Bonus",
-          amount: Number(bonusForm.amount),
-          date: bonusForm.date || `${month}-01`,
-          reason: bonusForm.reason,
-          deductFromEmployeeId:
-            bonusForm.type === TL_BONUS_TYPE ? bonusForm.deductFromEmployeeId || undefined : undefined,
+          date: String(row.date || "").slice(0, 10),
+          type: row.type,
         }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payslip-bundle", employeeId, month] });
-      setBonusForm({ type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+      qc.invalidateQueries({ queryKey: ["bonuses"] });
+      qc.invalidateQueries({ queryKey: ["deductions"] });
+      setDeleteBonusRow(null);
     },
   });
 
   const addDeduction = useMutation({
-    mutationFn: () =>
-      api(path("/deductions"), {
+    mutationFn: () => {
+      const body = {
+        employeeId,
+        type: dedForm.type || "Other Deductions",
+        amount: Number(dedForm.amount),
+        date: dedForm.date || `${month}-01`,
+        reason: dedForm.reason,
+      };
+      if (editingDeduction) {
+        return api(path("/deductions"), {
+          method: "PATCH",
+          body: JSON.stringify({
+            originalEmployeeId: employeeId,
+            originalDate: String(editingDeduction.date || "").slice(0, 10),
+            originalType: editingDeduction.type,
+            ...body,
+          }),
+        });
+      }
+      return api(path("/deductions"), {
         method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payslip-bundle", employeeId, month] });
+      qc.invalidateQueries({ queryKey: ["deductions"] });
+      setDedForm({ type: "", amount: "", date: "", reason: "" });
+      setEditingDeduction(null);
+    },
+  });
+
+  const deleteDeduction = useMutation({
+    mutationFn: (row: { type: string; date: string }) =>
+      api(path("/deductions"), {
+        method: "DELETE",
         body: JSON.stringify({
           employeeId,
-          type: dedForm.type || "Other Deductions",
-          amount: Number(dedForm.amount),
-          date: dedForm.date || `${month}-01`,
-          reason: dedForm.reason,
+          date: String(row.date || "").slice(0, 10),
+          type: row.type,
         }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payslip-bundle", employeeId, month] });
-      setDedForm({ type: "", amount: "", date: "", reason: "" });
+      qc.invalidateQueries({ queryKey: ["deductions"] });
+      setDeleteDeductionRow(null);
     },
   });
 
@@ -1001,13 +1097,15 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                   options={["pending", "approved", "paid", "hold", "no payroll"].map((s) => ({ value: s, label: s }))}
                 />
               </FormField>
-              <FormField label="Payment method">
-                <Select
-                  value={String(profile.paymentMethod || "")}
-                  onChange={(v) => set("paymentMethod", v)}
-                  options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
-                />
-              </FormField>
+              {showPayment && (
+                <FormField label="Payment method">
+                  <Select
+                    value={String(profile.paymentMethod || "")}
+                    onChange={(v) => set("paymentMethod", v)}
+                    options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
+                  />
+                </FormField>
+              )}
               {showAgentProfile && (
                 <FormField label="2-week hold">
                   <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", minHeight: "2.25rem" }}>
@@ -1155,11 +1253,42 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
           <CardBlock title="Bonuses">
             <ul className={styles.list}>
               {bonuses.map((b, i) => (
-                <li key={i}>{b.type}: {fmt(b.amount)} — {b.date}{b.reason ? ` · ${b.reason}` : ""}</li>
+                <li key={i} className={styles.splitRow}>
+                  <span>
+                    {b.type}: {fmt(b.amount)} — {b.date}
+                    {b.reason ? ` · ${b.reason}` : ""}
+                  </span>
+                  {canManagePayrollEvents && (
+                    <span style={{ display: "flex", gap: "0.25rem" }}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const reason = String(b.reason || "");
+                          const deductMatch = reason.match(/deducted from\s+(\S+)\)/i);
+                          setEditingBonus(b);
+                          setBonusForm({
+                            type: b.type || "",
+                            amount: b.amount != null ? String(b.amount) : "",
+                            date: String(b.date || "").slice(0, 10),
+                            reason: reason.replace(/\s*\(deducted from[^)]+\)\s*/i, "").trim(),
+                            deductFromEmployeeId: deductMatch ? deductMatch[1] : "",
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => setDeleteBonusRow(b)}>
+                        Delete
+                      </Button>
+                    </span>
+                  )}
+                </li>
               ))}
               {!bonuses.length && <li className="muted">No bonuses</li>}
             </ul>
-            <FormSection title="Add bonus">
+            {canManagePayrollEvents && (
+            <FormSection title={editingBonus ? "Edit bonus" : "Add bonus"}>
               <FormGrid>
                 <FormField label="Type">
                   <Select
@@ -1184,18 +1313,67 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                 <FormField label="Date"><input type="date" value={bonusForm.date} onChange={(e) => setBonusForm({ ...bonusForm, date: e.target.value })} /></FormField>
                 <FormField label="Reason" span="full"><input value={bonusForm.reason} onChange={(e) => setBonusForm({ ...bonusForm, reason: e.target.value })} /></FormField>
               </FormGrid>
-              <Button size="sm" onClick={() => addBonus.mutate()} disabled={!bonusForm.amount || (isTlBonusForm && !bonusForm.deductFromEmployeeId)}>Add bonus</Button>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <Button
+                  size="sm"
+                  onClick={() => addBonus.mutate()}
+                  disabled={!bonusForm.amount || addBonus.isPending || (isTlBonusForm && !bonusForm.deductFromEmployeeId)}
+                >
+                  {editingBonus ? "Save bonus" : "Add bonus"}
+                </Button>
+                {editingBonus && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingBonus(null);
+                      setBonusForm({ type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+                    }}
+                  >
+                    Cancel edit
+                  </Button>
+                )}
+              </div>
             </FormSection>
+            )}
           </CardBlock>
 
           <CardBlock title="Deductions">
             <ul className={styles.list}>
               {deductions.map((d, i) => (
-                <li key={i}>{d.type}: {fmt(d.amount)} — {d.date}{d.reason ? ` · ${d.reason}` : ""}</li>
+                <li key={i} className={styles.splitRow}>
+                  <span>
+                    {d.type}: {fmt(d.amount)} — {d.date}
+                    {d.reason ? ` · ${d.reason}` : ""}
+                  </span>
+                  {canManagePayrollEvents && (
+                    <span style={{ display: "flex", gap: "0.25rem" }}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingDeduction(d);
+                          setDedForm({
+                            type: d.type || "",
+                            amount: d.amount != null ? String(d.amount) : "",
+                            date: String(d.date || "").slice(0, 10),
+                            reason: d.reason || "",
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => setDeleteDeductionRow(d)}>
+                        Delete
+                      </Button>
+                    </span>
+                  )}
+                </li>
               ))}
               {!deductions.length && <li className="muted">No deductions</li>}
             </ul>
-            <FormSection title="Add deduction">
+            {canManagePayrollEvents && (
+            <FormSection title={editingDeduction ? "Edit deduction" : "Add deduction"}>
               <FormGrid>
                 <FormField label="Type">
                   <Select
@@ -1208,8 +1386,25 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                 <FormField label="Date"><input type="date" value={dedForm.date} onChange={(e) => setDedForm({ ...dedForm, date: e.target.value })} /></FormField>
                 <FormField label="Reason" span="full"><input value={dedForm.reason} onChange={(e) => setDedForm({ ...dedForm, reason: e.target.value })} /></FormField>
               </FormGrid>
-              <Button size="sm" onClick={() => addDeduction.mutate()} disabled={!dedForm.amount}>Add deduction</Button>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <Button size="sm" onClick={() => addDeduction.mutate()} disabled={!dedForm.amount || addDeduction.isPending}>
+                  {editingDeduction ? "Save deduction" : "Add deduction"}
+                </Button>
+                {editingDeduction && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingDeduction(null);
+                      setDedForm({ type: "", amount: "", date: "", reason: "" });
+                    }}
+                  >
+                    Cancel edit
+                  </Button>
+                )}
+              </div>
             </FormSection>
+            )}
           </CardBlock>
 
           <CardBlock title="Payment splits">
@@ -1275,9 +1470,9 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
           </CardBlock>
         </div>
       )}
-      {(saveProfile.isError || addBonus.isError || addDeduction.isError || addLoan.isError || addExtraPayroll.isError || deleteExtraPayroll.isError) && (
+      {(saveProfile.isError || addDeduction.isError || deleteDeduction.isError || addBonus.isError || deleteBonus.isError || addLoan.isError || addExtraPayroll.isError || deleteExtraPayroll.isError) && (
         <p style={{ color: "var(--err)" }}>
-          {(saveProfile.error || addBonus.error || addDeduction.error || addLoan.error || addExtraPayroll.error || deleteExtraPayroll.error as Error)?.message}
+          {(saveProfile.error || addDeduction.error || deleteDeduction.error || addBonus.error || deleteBonus.error || addLoan.error || addExtraPayroll.error || deleteExtraPayroll.error as Error)?.message}
         </p>
       )}
       <ConfirmDialog
@@ -1287,6 +1482,36 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
         message={undo.confirmMessage}
         danger
         onConfirm={undo.confirmDelete}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteBonusRow)}
+        onOpenChange={(o) => !o && setDeleteBonusRow(null)}
+        title="Delete bonus?"
+        message={
+          deleteBonusRow
+            ? `Remove ${deleteBonusRow.type} (${fmt(deleteBonusRow.amount)} EGP) on ${String(deleteBonusRow.date || "").slice(0, 10)}?`
+            : ""
+        }
+        danger
+        confirmLabel={deleteBonus.isPending ? "Deleting…" : "Delete"}
+        onConfirm={() => {
+          if (deleteBonusRow && !deleteBonus.isPending) deleteBonus.mutate(deleteBonusRow);
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteDeductionRow)}
+        onOpenChange={(o) => !o && setDeleteDeductionRow(null)}
+        title="Delete deduction?"
+        message={
+          deleteDeductionRow
+            ? `Remove ${deleteDeductionRow.type} (${fmt(deleteDeductionRow.amount)} EGP) on ${String(deleteDeductionRow.date || "").slice(0, 10)}?`
+            : ""
+        }
+        danger
+        confirmLabel={deleteDeduction.isPending ? "Deleting…" : "Delete"}
+        onConfirm={() => {
+          if (deleteDeductionRow && !deleteDeduction.isPending) deleteDeduction.mutate(deleteDeductionRow);
+        }}
       />
     </Dialog>
   );

@@ -95,7 +95,13 @@ export function PeriodPicker({
       </button>
       {open &&
         createPortal(
-          <div className={styles.panel} style={{ top: pos.top, left: pos.left }} onMouseUp={() => setDrag(null)}>
+          <div
+            className={styles.panel}
+            data-hangup-floating=""
+            style={{ top: pos.top, left: pos.left }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseUp={() => setDrag(null)}
+          >
             <div className={styles.presets}>
               {cairoPeriodPresets().map((p) => (
                 <button

@@ -4,7 +4,7 @@ import styles from "./Card.module.css";
 
 export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={clsx(styles.card, className)} {...props}>
+    <div className={clsx(styles.card, className)} data-ui="card" {...props}>
       {children}
     </div>
   );

@@ -22,13 +22,37 @@ window.HRSalesConfigBreaks = (function () {
   }
 
   function calcEndTime(startTime, durationMinutes) {
-    const m = String(startTime || "10:00").match(/^(\d{1,2}):(\d{2})/);
+    const normalized = parseStartTimeTo24(startTime) || startTime;
+    const m = String(normalized || "10:00").match(/^(\d{1,2}):(\d{2})/);
     if (!m) return "10:15";
     let mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + (Number(durationMinutes) || 15);
     mins = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
     const h = Math.floor(mins / 60);
     const mi = mins % 60;
     return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  }
+
+  function parseStartTimeTo24(input) {
+    const raw = String(input || "").trim();
+    if (!raw) return null;
+    const ampm = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (ampm) {
+      let h = parseInt(ampm[1], 10);
+      const mi = parseInt(ampm[2], 10);
+      const isPm = ampm[3].toUpperCase() === "PM";
+      if (h < 1 || h > 12 || mi < 0 || mi > 59) return null;
+      if (h === 12) h = isPm ? 12 : 0;
+      else if (isPm) h += 12;
+      return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+    }
+    const h24 = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (h24) {
+      const h = parseInt(h24[1], 10);
+      const mi = parseInt(h24[2], 10);
+      if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
+      return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+    }
+    return null;
   }
 
   function canManage(state) {
@@ -1266,9 +1290,9 @@ window.HRSalesConfigBreaks = (function () {
       openModal(`<div class="modal-header"><h2>${brk ? "Edit" : "Add"} break</h2><button class="btn btn-sm" data-close>✕</button></div>
         <form id="sc-break-form" class="form-grid modal-body">
           <label class="field"><span>Name</span><input name="name" required value="${escapeHtml(b.name || "")}" /></label>
-          <label class="field"><span>Start (HH:MM)</span><input name="startTime" id="sc-break-start" required value="${escapeHtml(b.startTime || "10:00")}" /></label>
+          <label class="field"><span>Start time</span><input name="startTime" id="sc-break-start" required placeholder="10:00 AM" value="${escapeHtml(b.startTime ? formatTimeAmPm(b.startTime) : "10:00 AM")}" /></label>
           <label class="field"><span>Duration (minutes)</span><input name="durationMinutes" id="sc-break-duration" type="number" min="1" value="${b.durationMinutes || 15}" /></label>
-          <label class="field"><span>End time (calculated)</span><input id="sc-break-end-preview" type="text" readonly value="${escapeHtml(b.endTime || endPreview)}" class="muted" /></label>
+          <label class="field"><span>End time (calculated)</span><input id="sc-break-end-preview" type="text" readonly value="${escapeHtml(formatTimeAmPm(b.endTime || endPreview))}" class="muted" /></label>
           <input type="hidden" name="endTime" id="sc-break-end" value="${escapeHtml(b.endTime || endPreview)}" />
           <label class="field" style="grid-column:1/-1"><span>Message</span><textarea name="message">${escapeHtml(b.message || "")}</textarea></label>
           <label class="toggle-label"><input type="checkbox" name="active" ${b.active !== false ? "checked" : ""} /> Active</label>
@@ -1281,7 +1305,8 @@ window.HRSalesConfigBreaks = (function () {
         const fd = new FormData(e.target);
         const units = [...fd.getAll("units")];
         const roles = [...fd.getAll("roles")];
-        const startTime = fd.get("startTime");
+        const startRaw = String(fd.get("startTime") || "");
+        const startTime = parseStartTimeTo24(startRaw) || startRaw;
         const durationMinutes = Number(fd.get("durationMinutes")) || 15;
         const body = {
           name: fd.get("name"),
@@ -1299,12 +1324,13 @@ window.HRSalesConfigBreaks = (function () {
         refreshBreaks();
       };
       const syncEnd = () => {
-        const start = document.getElementById("sc-break-start")?.value || "10:00";
+        const startRaw = document.getElementById("sc-break-start")?.value || "10:00 AM";
+        const start = parseStartTimeTo24(startRaw) || startRaw;
         const dur = document.getElementById("sc-break-duration")?.value || 15;
         const end = calcEndTime(start, dur);
         const preview = document.getElementById("sc-break-end-preview");
         const hidden = document.getElementById("sc-break-end");
-        if (preview) preview.value = end;
+        if (preview) preview.value = formatTimeAmPm(end);
         if (hidden) hidden.value = end;
       };
       document.getElementById("sc-break-start")?.addEventListener("input", syncEnd);

@@ -7,7 +7,24 @@ export type GitHubUpdateInfo = {
   updateDescription?: string;
   assetSize?: number;
   assetName?: string | null;
+  assetUrl?: string | null;
+  assetId?: number | null;
+  releaseUrl?: string | null;
 };
+
+export const GITHUB_RELEASES_LATEST =
+  "https://github.com/raymondwalkerhs-spec/hangup-hr/releases/latest";
+
+export function canApplyDesktopUpdate(info?: GitHubUpdateInfo | null, opts?: { requireAvailable?: boolean }) {
+  const desktop = Boolean(getHrDesktop()?.applyGitHubUpdate);
+  if (!desktop) return false;
+  if (opts?.requireAvailable === false) return true;
+  return Boolean(info?.updateAvailable && (info.assetUrl || info.assetId || info.assetName));
+}
+
+export function githubReleasePageUrl(info?: GitHubUpdateInfo | null) {
+  return info?.releaseUrl || GITHUB_RELEASES_LATEST;
+}
 
 export type VersionCheck = {
   status?: string;

@@ -17,6 +17,8 @@ export function CommandPalette() {
   const canCosts = user?.canAccessCosts === true || user?.canSubmitExpense === true;
   const canSales = user?.canSubmitSales === true;
   const canIt = user?.canViewItRequests === true || user?.canSubmitItRequest === true;
+  const canChecks = user?.canSubmitRpmChecks === true;
+  const canQFeedback = user?.canSubmitRpmQFeedback === true;
   const requestNewSale = useSalesIntentStore((s) => s.requestNewSale);
 
   useEffect(() => {
@@ -58,6 +60,12 @@ export function CommandPalette() {
             </Command.Group>
             <Command.Group heading="Actions">
               {canSales && <Command.Item onSelect={goNewSale}>+ New sale</Command.Item>}
+              {canChecks && (
+                <Command.Item onSelect={() => go("/checks?action=new")}>+ New check</Command.Item>
+              )}
+              {canQFeedback && (
+                <Command.Item onSelect={() => go("/q-feedback?action=new")}>+ Q feedback</Command.Item>
+              )}
               <Command.Item onSelect={() => go("/requests")}>+ Leave request</Command.Item>
               {canIt && <Command.Item onSelect={() => go("/it-requests?action=new")}>+ IT ticket</Command.Item>}
               {canCosts && <Command.Item onSelect={() => go("/costs")}>View costs</Command.Item>}

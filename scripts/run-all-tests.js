@@ -11,6 +11,7 @@ const scripts = [
   "test-sales-submit-required.js",
   "test-employee-id-reuse.js",
   "test-airtable-sales-sync.js",
+  "test-airtable-rpm-sync.js",
   "test-rbac-defaults.js",
   "test-coaching-scope.js",
   "test-announcements-audience.js",

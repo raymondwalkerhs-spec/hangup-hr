@@ -2,7 +2,7 @@ import { Dialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid } from "@/ui/FormGrid";
 import type { DepartFormState } from "@/lib/employeeStatus";
-import { NOTICE_TYPE_OPTIONS } from "@/lib/employeeStatus";
+import { NOTICE_TYPE_OPTIONS, localTodayIso } from "@/lib/employeeStatus";
 
 export function DepartDateDialog({
   open,
@@ -27,7 +27,7 @@ export function DepartDateDialog({
   isPending?: boolean;
   secondaryAction?: { label: string; onClick: () => void; disabled?: boolean };
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localTodayIso();
 
   return (
     <Dialog
@@ -48,7 +48,7 @@ export function DepartDateDialog({
               {secondaryAction.label}
             </Button>
           )}
-          <Button onClick={onConfirm} disabled={isPending}>
+          <Button onClick={onConfirm} disabled={isPending || !form.departDate}>
             {isPending ? "Saving…" : confirmLabel}
           </Button>
         </>
@@ -56,33 +56,24 @@ export function DepartDateDialog({
     >
       <p className="muted" style={{ marginTop: 0 }}>
         {subtitle ||
-          "Skip the date to use today. You can change the depart date later. Days after depart are locked in attendance until re-hire."}
+          "Pick the depart date (defaults to today). Days after depart are locked in attendance until re-hire."}
       </p>
       <FormGrid>
         <FormField label="Depart date">
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-            <input
-              type="checkbox"
-              checked={form.useCustomDate}
-              onChange={(e) =>
-                onFormChange({
-                  ...form,
-                  useCustomDate: e.target.checked,
-                  departDate: e.target.checked ? form.departDate || today : "",
-                })
-              }
-            />
-            Choose a specific depart date
-          </label>
-          {form.useCustomDate ? (
-            <input
-              type="date"
-              value={form.departDate}
-              onChange={(e) => onFormChange({ ...form, departDate: e.target.value })}
-            />
-          ) : (
-            <span className="muted">Today ({today})</span>
-          )}
+          <input
+            type="date"
+            value={form.departDate || today}
+            onChange={(e) =>
+              onFormChange({
+                ...form,
+                useCustomDate: true,
+                departDate: e.target.value || today,
+              })
+            }
+          />
+          <span className="muted" style={{ fontSize: "0.8rem", display: "block", marginTop: "0.25rem" }}>
+            Today is {today}
+          </span>
         </FormField>
         <FormField label="Status">
           <select
@@ -99,25 +90,18 @@ export function DepartDateDialog({
           <select
             value={form.notice_type}
             onChange={(e) =>
-              onFormChange({ ...form, notice_type: e.target.value as DepartFormState["notice_type"] })
+              onFormChange({
+                ...form,
+                notice_type: e.target.value as DepartFormState["notice_type"],
+              })
             }
           >
-            {NOTICE_TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {NOTICE_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
               </option>
             ))}
           </select>
-          {form.notice_type === "without_notice" && (
-            <span className="muted" style={{ fontSize: "0.75rem", display: "block", marginTop: "0.25rem" }}>
-              Two weeks basic + transport will be deducted from final pay.
-            </span>
-          )}
-          {form.notice_type === "company_decision" && (
-            <span className="muted" style={{ fontSize: "0.75rem", display: "block", marginTop: "0.25rem" }}>
-              Full final pay — no leaving deductions.
-            </span>
-          )}
         </FormField>
       </FormGrid>
     </Dialog>

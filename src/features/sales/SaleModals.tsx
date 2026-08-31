@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAppStatus } from "@/hooks/useAppStatus";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { api, getSessionId } from "@/api/client";
@@ -12,6 +13,9 @@ import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
 import { uploadWithProgress } from "@/lib/uploadWithProgress";
 import { saleCellValue } from "@/lib/salesCells";
 import { filterEmployeesForSaleField, type SalePickerEmployee } from "@/lib/salesEmployeeFilters";
+import { applyMemberIdInput, formatMemberId, validateMemberId } from "@/lib/rpmMemberId";
+import { digitsOnlyPhone, parseFlexibleIsoDate } from "@/lib/rpmSaleInput";
+import { validateDigitsPhone, validatePersonName } from "@/lib/rpmPersonFields";
 import {
   downloadApiFile,
   fileToBase64,
@@ -24,6 +28,7 @@ import {
 const PLAYABLE_ATTACH_KINDS = new Set(["recording", "raw_call", "quality_record"]);
 import { SaleCatalogPicker } from "./SaleCatalogPicker";
 import { SaleAssignmentPicker, initAssignmentFromScope, initAssignmentFromSale, useSaleSubmitScope, useRpmSubmitScope } from "./SaleAssignmentPicker";
+import { ImportFromOpenQ } from "./ImportFromOpenQ";
 import styles from "./SaleModals.module.css";
 
 type Sale = Record<string, unknown>;
@@ -45,6 +50,31 @@ type CatalogField = {
 type AttachKind = { key: string; label?: string; canView?: boolean; canEdit?: boolean; canUpload?: boolean };
 
 type EmpMap = Map<string, SalePickerEmployee>;
+
+const RPM_REQUIRED_SUBMIT_KEYS = [
+  "client",
+  "fullName",
+  "phoneNumber",
+  "alternativePhone",
+  "dateOfBirth",
+  "memberId",
+  "email",
+  "address",
+  "gender",
+  "medicalConditions",
+  "emergencyFullName",
+  "emergencyPhone",
+  "emergencyRelation",
+] as const;
+
+type RpmFieldErrors = Record<string, string>;
+type RpmDuplicatePrior = {
+  id: string;
+  date?: string;
+  clientFeedback?: string;
+  phoneNumber?: string;
+  memberId?: string;
+};
 
 function sectionTitle(sec: string) {
   if (sec === "internal") return "Internal feedback";
@@ -228,6 +258,7 @@ function SubmissionCorrectionPanel({
       onSaved?.();
     },
   });
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <FormSection title="Admin / RTM / CEO submission correction">
@@ -241,7 +272,7 @@ function SubmissionCorrectionPanel({
         </FormField>
         <FormField label="Working day">
           <div className={styles.readonlyUnit}>
-            Recalculated from the corrected Cairo timestamp when saved (2 AM Cairo grace).
+            Recalculated from the corrected Cairo timestamp when saved (3 AM Cairo grace).
           </div>
         </FormField>
       </FormGrid>
@@ -250,10 +281,7 @@ function SubmissionCorrectionPanel({
       </p>
       <Button
         variant="secondary"
-        onClick={() => {
-          if (!confirm("Correct submission date & time? This updates working day and list month placement.")) return;
-          correctSubmissionDate.mutate();
-        }}
+        onClick={() => setConfirmOpen(true)}
         disabled={!submissionDateTime || correctSubmissionDate.isPending}
       >
         Save corrected date & time
@@ -261,6 +289,14 @@ function SubmissionCorrectionPanel({
       {correctSubmissionDate.isError && (
         <p style={{ color: "var(--err)" }}>{(correctSubmissionDate.error as Error).message}</p>
       )}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Correct submission date?"
+        message="This updates working day and list month placement."
+        confirmLabel="Save correction"
+        onConfirm={() => correctSubmissionDate.mutate()}
+      />
     </FormSection>
   );
 }
@@ -288,6 +324,7 @@ function FieldGrid({
   form,
   setForm,
   editable,
+  fieldErrors,
 }: {
   fields: CatalogField[];
   sale: Sale;
@@ -295,6 +332,7 @@ function FieldGrid({
   form: Record<string, string>;
   setForm: (k: string, v: string) => void;
   editable: boolean;
+  fieldErrors?: RpmFieldErrors;
 }) {
   const sections = [...new Set(fields.map((f) => f.section || "general"))];
   const fd = (sale.formData as Record<string, unknown>) || {};
@@ -320,14 +358,14 @@ function FieldGrid({
                     display = cell && cell !== "—" ? cell : val;
                   }
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                       <div className={styles.readonly}>{display || "—"}</div>
                     </FormField>
                   );
                 }
                 if (f.type === "select" && f.options) {
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                       <Select
                         value={val}
                         placeholder="—"
@@ -342,29 +380,53 @@ function FieldGrid({
                 }
                 if (f.type === "textarea") {
                   return (
-                    <FormField key={f.key} label={f.label || f.key} span="full">
+                    <FormField key={f.key} label={f.label || f.key} span="full" error={fieldErrors?.[f.key]}>
                       <textarea rows={4} value={val} onChange={(e) => setForm(f.key, e.target.value)} />
                     </FormField>
                   );
                 }
                 if (f.type === "date") {
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
-                      <input type="date" value={val} onChange={(e) => setForm(f.key, e.target.value)} />
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
+                      <input
+                        type="date"
+                        value={val}
+                        onChange={(e) => setForm(f.key, e.target.value)}
+                        onPaste={(e) => {
+                          const text = e.clipboardData?.getData("text") || "";
+                          const iso = parseFlexibleIsoDate(text);
+                          if (!iso) return;
+                          e.preventDefault();
+                          setForm(f.key, iso);
+                        }}
+                      />
                     </FormField>
                   );
                 }
                 if (f.type === "email") {
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                       <input type="email" value={val} onChange={(e) => setForm(f.key, e.target.value)} />
                     </FormField>
                   );
                 }
                 if (f.type === "tel") {
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
-                      <input type="tel" value={val} onChange={(e) => setForm(f.key, e.target.value)} />
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        value={val}
+                        onChange={(e) => setForm(f.key, digitsOnlyPhone(e.target.value))}
+                        onPaste={(e) => {
+                          const text = e.clipboardData?.getData("text") || "";
+                          const digits = digitsOnlyPhone(text);
+                          if (!digits) return;
+                          e.preventDefault();
+                          setForm(f.key, digits);
+                        }}
+                      />
                     </FormField>
                   );
                 }
@@ -377,13 +439,13 @@ function FieldGrid({
                   );
                   if (!editable || !f.canEdit) {
                     return (
-                      <FormField key={f.key} label={f.label || f.key} span="full">
+                      <FormField key={f.key} label={f.label || f.key} span="full" error={fieldErrors?.[f.key]}>
                         <div className={styles.readonly}>{[...selected].join(", ") || "—"}</div>
                       </FormField>
                     );
                   }
                   return (
-                    <FormField key={f.key} label={f.label || f.key} span="full">
+                    <FormField key={f.key} label={f.label || f.key} span="full" error={fieldErrors?.[f.key]}>
                       <div className={styles.checkboxGrid}>
                         {f.options.map((o) => (
                           <label key={o} className={styles.checkboxItem}>
@@ -407,7 +469,7 @@ function FieldGrid({
                 if (f.type === "employee") {
                   const options = filterEmployeesForSaleField([...empById.values()], f.employeeFilter, val);
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                       <Select
                         value={val}
                         placeholder="—"
@@ -428,7 +490,7 @@ function FieldGrid({
                 if (f.key === "memberId") {
                   const display = formatMemberId(val);
                   return (
-                    <FormField key={f.key} label={f.label || f.key}>
+                    <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                       <input
                         value={display}
                         onChange={(e) => {
@@ -449,7 +511,7 @@ function FieldGrid({
                   );
                 }
                 return (
-                  <FormField key={f.key} label={f.label || f.key}>
+                  <FormField key={f.key} label={f.label || f.key} error={fieldErrors?.[f.key]}>
                     <input value={val} onChange={(e) => setForm(f.key, e.target.value)} />
                   </FormField>
                 );
@@ -597,20 +659,24 @@ function SaleAttachmentsPanel({
     commit: (id) => onDelete?.(id),
     message: "Attachment removed",
   });
+  const [fileAlert, setFileAlert] = useState<string | null>(null);
   const kindEditable = (k: AttachKind) => k.canEdit === true || k.canUpload === true;
   const kindCanEdit = useMemo(
     () => Object.fromEntries(attachKinds.map((k) => [k.key, k.canEdit === true || k.canUpload === true])),
     [attachKinds]
   );
+  // View-only surfaces pass no onUpload; still show kinds for playback even when canEdit is true.
   const uploadable = onUpload ? attachKinds.filter((k) => kindEditable(k) && k.canView !== false) : [];
-  const viewOnlyKinds = attachKinds.filter((k) => k.canView !== false && !kindEditable(k));
+  const viewOnlyKinds = onUpload
+    ? attachKinds.filter((k) => k.canView !== false && !kindEditable(k))
+    : attachKinds.filter((k) => k.canView !== false);
   if (!uploadable.length && !attachments.length && !viewOnlyKinds.length && !loadingKinds) return null;
 
   const onPickFile = (file: File, kind: string) => {
     if (!onUpload) return;
     if (file.size > MAX_SALE_ATTACHMENT_BYTES) {
       const mb = Math.round(MAX_SALE_ATTACHMENT_BYTES / (1024 * 1024));
-      window.alert(`File is too large (max ~${mb} MB). Try a shorter recording or compress the file.`);
+      setFileAlert(`File is too large (max ~${mb} MB). Try a shorter recording or compress the file.`);
       return;
     }
     onUpload(file, kind);
@@ -670,6 +736,15 @@ function SaleAttachmentsPanel({
         message="It goes to the recycle bin for 20 days. You can undo for 6 seconds."
         danger
         onConfirm={deferred.confirmDelete}
+      />
+      <ConfirmDialog
+        open={Boolean(fileAlert)}
+        onOpenChange={(o) => !o && setFileAlert(null)}
+        title="File too large"
+        message={fileAlert || ""}
+        confirmLabel="OK"
+        cancelLabel="Close"
+        onConfirm={() => setFileAlert(null)}
       />
     </FormSection>
   );
@@ -1083,7 +1158,7 @@ export function RpmViewSaleModal({
     queryFn: () => api<{ employees: { id: string; american_name?: string }[] }>(path("/employees")),
     enabled: open,
   });
-  const { data: attachments } = useQuery({
+  const { data: attachments, isError: viewAttIsError, error: viewAttError } = useQuery({
     queryKey: ["rpm-sale-attachments-view", sale?.id, companyContext],
     queryFn: () =>
       api<{ attachments: { id: string; kind: string; fileName: string }[] }>(
@@ -1106,6 +1181,11 @@ export function RpmViewSaleModal({
       <RpmSaleSummary sale={sale} empById={empById} />
       <FieldGrid fields={fields} sale={sale} empById={empById} form={{}} setForm={() => {}} editable={false} />
       <SaleHistoryPanel program="rpm" saleId={String(sale.id || "")} open={open} />
+      {viewAttIsError && (
+        <p style={{ color: "var(--err)" }}>
+          {(viewAttError as Error)?.message || "Could not load recordings"}
+        </p>
+      )}
       <SaleAttachmentsPanel
         attachments={attachments?.attachments || []}
         attachKinds={attachKinds}
@@ -1148,17 +1228,38 @@ export function RpmSaleFormModal({
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipDraftPersist = useRef(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState<"idle" | "ask" | "done">("idle");
+  const [fieldErrors, setFieldErrors] = useState<RpmFieldErrors>({});
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [formBanner, setFormBanner] = useState("");
+  const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
+  const [duplicatePriors, setDuplicatePriors] = useState<RpmDuplicatePrior[]>([]);
+  const pendingSubmitRef = useRef<Record<string, unknown> | null>(null);
+  const pendingDraftRef = useRef<{
+    fields?: Record<string, string>;
+    agentId?: string;
+    closerId?: string;
+    unit?: string;
+    team?: string;
+  } | null>(null);
 
   const { user: meUser } = useAppStatus();
   const draftUsername = meUser?.username as string | undefined;
   const canReassign = Boolean(meUser?.canReassignSaleLead);
+  const canDeleteSales = Boolean(meUser?.canDeleteSales);
   const canCorrectSubmissionDate = canCorrectSubmissionDateRole(meUser?.role);
   const { path, withCompany, companyContext } = useSaleApiScope();
   const [submissionDateTime, setSubmissionDateTime] = useState("");
+  const saleUndo = useConfirmUndo();
 
   const { data: catalog } = useQuery({
-    queryKey: ["rpm-sale-catalog-form", sale?.id, open],
-    queryFn: () => api<{ fields: CatalogField[] }>(path(`/rpm-sales/field-catalog?surface=${isEdit ? `main&saleId=${encodeURIComponent(String(sale?.id))}` : "submit"}`)),
+    queryKey: ["rpm-sale-catalog-form", sale?.id, open, companyContext],
+    queryFn: () =>
+      api<{ fields: CatalogField[]; attachmentKinds?: AttachKind[] }>(
+        path(
+          `/rpm-sales/field-catalog?surface=${isEdit ? `main&saleId=${encodeURIComponent(String(sale?.id))}` : "submit"}`
+        )
+      ),
     enabled: open,
   });
   const { data: clientsData } = useQuery({
@@ -1172,7 +1273,16 @@ export function RpmSaleFormModal({
     queryFn: () => api<{ employees: { id: string; american_name?: string }[] }>(path("/employees")),
     enabled: open,
   });
+  const { data: attachments, isError: attachmentsIsError, error: attachmentsError } = useQuery({
+    queryKey: ["rpm-sale-attachments-edit", sale?.id, companyContext],
+    queryFn: () =>
+      api<{ attachments: { id: string; kind: string; fileName: string }[] }>(
+        path(`/rpm-sales/${sale?.id}/attachments`)
+      ),
+    enabled: open && isEdit && !!sale?.id,
+  });
   const empById = useMemo(() => new Map((empData?.employees || []).map((e) => [e.id, e])), [empData?.employees]);
+  const attachKinds = (catalog?.attachmentKinds || []).filter((k) => k.canView !== false);
 
   const fields = useMemo(() => {
     return (catalog?.fields || []).filter((f) => {
@@ -1190,6 +1300,14 @@ export function RpmSaleFormModal({
     if (!open) {
       formInitialized.current = false;
       setDraftReady(false);
+      setDraftPrompt("idle");
+      pendingDraftRef.current = null;
+      setFieldErrors({});
+      setAttemptedSubmit(false);
+      setFormBanner("");
+      setDupConfirmOpen(false);
+      setDuplicatePriors([]);
+      pendingSubmitRef.current = null;
       return;
     }
     skipDraftPersist.current = false;
@@ -1215,31 +1333,18 @@ export function RpmSaleFormModal({
       formInitialized.current = true;
       return;
     }
-    let assignment = initAssignmentFromScope(submitScope!);
+    const assignment = initAssignmentFromScope(submitScope!);
+    let pendingDraft: typeof pendingDraftRef.current = null;
     if (draftUsername) {
       try {
         const raw = localStorage.getItem(rpmSaleDraftKey(draftUsername, companyContext));
         if (raw) {
-          const draft = JSON.parse(raw) as {
-            fields?: Record<string, string>;
-            agentId?: string;
-            closerId?: string;
-            unit?: string;
-            team?: string;
-          };
-          if (saleDraftHasContent(draft.fields) && confirm("Resume your saved RPM sale draft?")) {
-            Object.assign(init, draft.fields);
-            assignment = {
-              agentId: draft.agentId || assignment.agentId,
-              closerId: draft.closerId || assignment.closerId,
-              unit: draft.unit || assignment.unit,
-              team: draft.team || assignment.team,
-            };
-          } else {
-            localStorage.removeItem(rpmSaleDraftKey(draftUsername, companyContext));
-          }
+          const draft = JSON.parse(raw) as NonNullable<typeof pendingDraftRef.current>;
+          if (saleDraftHasContent(draft.fields)) pendingDraft = draft;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     setForm(init);
     setAgentId(assignment.agentId);
@@ -1247,9 +1352,35 @@ export function RpmSaleFormModal({
     setUnit(assignment.unit);
     setTeam(assignment.team);
     formInitialized.current = true;
+    if (pendingDraft) {
+      pendingDraftRef.current = pendingDraft;
+      setDraftPrompt("ask");
+      return;
+    }
     setDraftReady(true);
+    setDraftPrompt("done");
   }, [open, isEdit, submitScope, catalog, fields, sale, draftUsername, companyContext]);
 
+  const applyRpmDraft = () => {
+    const draft = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    if (draft?.fields) {
+      setForm((f) => ({ ...f, ...draft.fields }));
+      if (draft.agentId) setAgentId(draft.agentId);
+      if (draft.closerId) setCloserId(draft.closerId);
+      if (draft.unit) setUnit(draft.unit);
+      if (draft.team) setTeam(draft.team);
+    }
+    setDraftPrompt("done");
+    setDraftReady(true);
+  };
+
+  const discardRpmDraft = () => {
+    pendingDraftRef.current = null;
+    if (draftUsername) localStorage.removeItem(rpmSaleDraftKey(draftUsername, companyContext));
+    setDraftPrompt("done");
+    setDraftReady(true);
+  };
   useEffect(() => {
     if (!open || isEdit || !draftUsername || !draftReady) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
@@ -1273,31 +1404,23 @@ export function RpmSaleFormModal({
   }, [open, isEdit, draftUsername, draftReady, companyContext, form, agentId, closerId, unit, team]);
 
   const save = useMutation({
-    mutationFn: () => {
-      const formData: Record<string, unknown> = { ...form };
-      if (form.medicalConditions) {
-        formData.medicalConditions = String(form.medicalConditions).split(",").map((s) => s.trim()).filter(Boolean);
-      }
-      const body: Record<string, unknown> = {
-        edit: isEdit,
-        formData,
-        phoneNumber: form.phoneNumber,
-        fullName: form.fullName,
-        client: form.client,
-        memberId: form.memberId,
-      };
-      if (!isEdit || canReassign) {
-        body.agentId = agentId;
-        body.closerId = closerId;
-        body.unit = unit;
-        body.team = team;
-      }
-      if (isEdit) return api(path(`/rpm-sales/${sale?.id}`), { method: "PATCH", body: JSON.stringify(withCompany(body)) });
-      return api(path("/rpm-sales"), { method: "POST", body: JSON.stringify(withCompany(body)) });
+    mutationFn: (body: Record<string, unknown>) => {
+      if (isEdit) return api<{ duplicateWarning?: { count?: number; priors?: RpmDuplicatePrior[] } | null }>(
+        path(`/rpm-sales/${sale?.id}`),
+        { method: "PATCH", body: JSON.stringify(withCompany(body)) }
+      );
+      return api<{ duplicateWarning?: { count?: number; priors?: RpmDuplicatePrior[] } | null }>(
+        path("/rpm-sales"),
+        { method: "POST", body: JSON.stringify(withCompany(body)) }
+      );
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       skipDraftPersist.current = true;
       if (!isEdit && draftUsername) localStorage.removeItem(rpmSaleDraftKey(draftUsername, companyContext));
+      if (response.duplicateWarning) {
+        const count = response.duplicateWarning.count || response.duplicateWarning.priors?.length || 0;
+        toast.warning(`RPM sale submitted with ${count || "prior"} matching sale${count === 1 ? "" : "s"}.`);
+      }
       invalidateSalesQueries(qc);
       qc.invalidateQueries({ queryKey: ["sale-history"] });
       onSaved?.();
@@ -1305,7 +1428,123 @@ export function RpmSaleFormModal({
     },
   });
 
-  const setField = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const deleteSale = useMutation({
+    mutationFn: () => api(path(`/rpm-sales/${sale?.id}`), { method: "DELETE" }),
+    onSuccess: () => {
+      invalidateSalesQueries(qc);
+      onSaved?.();
+      onOpenChange(false);
+    },
+  });
+
+  const setField = (k: string, v: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[k]) return prev;
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
+    setForm((f) => ({ ...f, [k]: v }));
+  };
+
+  const buildRpmBody = () => {
+    const formData: Record<string, unknown> = { ...form };
+    if (form.medicalConditions) {
+      formData.medicalConditions = String(form.medicalConditions).split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    const body: Record<string, unknown> = {
+      edit: isEdit,
+      formData,
+      phoneNumber: form.phoneNumber,
+      fullName: form.fullName,
+      client: form.client,
+      memberId: form.memberId,
+    };
+    if (!isEdit || canReassign) {
+      body.agentId = agentId;
+      body.closerId = closerId;
+      body.unit = unit;
+      body.team = team;
+    }
+    return body;
+  };
+
+  const validateRpmForm = () => {
+    const errors: RpmFieldErrors = {};
+    const labels = new Map((catalog?.fields || []).map((field) => [field.key, field.label || field.key]));
+    if (!isEdit) {
+      for (const key of RPM_REQUIRED_SUBMIT_KEYS) {
+        const value = form[key];
+        if (key === "medicalConditions") {
+          if (!String(value || "").split(",").some((item) => item.trim())) {
+            errors[key] = "Select at least one medical condition";
+          }
+        } else if (!String(value || "").trim()) {
+          errors[key] = `${labels.get(key) || key} is required`;
+        }
+      }
+      if (!agentId) errors.agentId = "Agent is required";
+      if (!closerId) errors.closerId = "Closer is required";
+    }
+
+    const originalForm = ((sale?.formData as Record<string, unknown>) || {});
+    const changed = (key: string) =>
+      !isEdit || String(form[key] || "") !== String(originalForm[key] ?? sale?.[key] ?? "");
+    if (changed("memberId") && String(form.memberId || "").trim()) {
+      const check = validateMemberId(form.memberId);
+      if (!check.ok) errors.memberId = check.message || "Wrong MCN";
+    }
+    for (const key of ["fullName", "emergencyFullName"]) {
+      if (!changed(key) || !String(form[key] || "").trim()) continue;
+      const check = validatePersonName(form[key], { required: false, label: labels.get(key) || key });
+      if (!check.ok) errors[key] = check.message || `${labels.get(key) || key} is invalid`;
+    }
+    for (const key of ["phoneNumber", "alternativePhone", "emergencyPhone"]) {
+      if (!changed(key) || !String(form[key] || "").trim()) continue;
+      const check = validateDigitsPhone(form[key], { required: false, label: labels.get(key) || key });
+      if (!check.ok) errors[key] = check.message || `${labels.get(key) || key} is invalid`;
+    }
+    return errors;
+  };
+
+  const submitRpmSale = async () => {
+    if (save.isPending) return;
+    if (!isEdit) setAttemptedSubmit(true);
+    setFormBanner("");
+    const errors = validateRpmForm();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setFormBanner(errors.memberId === "Wrong MCN" ? "Wrong MCN" : "Fix highlighted fields");
+      return;
+    }
+    const body = buildRpmBody();
+    if (isEdit) {
+      save.mutate(body);
+      return;
+    }
+    pendingSubmitRef.current = body;
+    try {
+      const query = new URLSearchParams({
+        memberId: form.memberId || "",
+        phone: form.phoneNumber || "",
+        alternativePhone: form.alternativePhone || "",
+      });
+      const result = await api<{ priors?: RpmDuplicatePrior[] }>(
+        path(`/rpm-sales/identity-check?${query.toString()}`),
+        {},
+        8000
+      );
+      const priors = result.priors || [];
+      if (priors.length) {
+        setDuplicatePriors(priors);
+        setDupConfirmOpen(true);
+        return;
+      }
+    } catch {
+      // Duplicate lookup is advisory; submission remains available if it fails.
+    }
+    save.mutate(body);
+  };
 
   return (
     <Dialog
@@ -1316,8 +1555,23 @@ export function RpmSaleFormModal({
       scrollBody
       footer={
         <>
+          {isEdit && canDeleteSales && (
+            <Button
+              variant="danger"
+              onClick={() =>
+                saleUndo.confirmUndo({
+                  title: "Delete this RPM sale?",
+                  message: "This permanently removes the sale after 6 seconds. Undo from the toast if you change your mind.",
+                  toast: "RPM sale deleted",
+                  commit: () => deleteSale.mutateAsync(),
+                })
+              }
+            >
+              Delete
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>{isEdit ? "Save" : "Submit sale"}</Button>
+          <Button onClick={submitRpmSale} disabled={save.isPending}>{isEdit ? "Save" : "Submit sale"}</Button>
         </>
       }
     >
@@ -1342,11 +1596,27 @@ export function RpmSaleFormModal({
           team={team}
           agentId={agentId}
           closerId={closerId}
+          fieldErrors={fieldErrors}
           onChange={(patch) => {
             if (patch.unit !== undefined) setUnit(patch.unit);
             if (patch.team !== undefined) setTeam(patch.team);
-            if (patch.agentId !== undefined) setAgentId(patch.agentId);
-            if (patch.closerId !== undefined) setCloserId(patch.closerId);
+            if (patch.agentId !== undefined) {
+              setAgentId(patch.agentId);
+              setFieldErrors((prev) => ({ ...prev, agentId: "" }));
+            }
+            if (patch.closerId !== undefined) {
+              setCloserId(patch.closerId);
+              setFieldErrors((prev) => ({ ...prev, closerId: "" }));
+            }
+          }}
+        />
+      )}
+      {!isEdit && (
+        <ImportFromOpenQ
+          agentId={agentId}
+          enabled={open && Boolean(agentId) && meUser?.canImportRpmSaleFromCheck === true}
+          onImport={(fields) => {
+            setForm((prev) => ({ ...prev, ...fields }));
           }}
         />
       )}
@@ -1368,7 +1638,7 @@ export function RpmSaleFormModal({
       {!isEdit && (clientsData?.clients?.length || 0) > 0 && (
         <FormSection title="Client">
           <FormGrid wide>
-            <FormField label="Client Name">
+            <FormField label="Client Name" error={fieldErrors.client}>
               <Select
                 value={form.client || ""}
                 placeholder="—"
@@ -1382,7 +1652,31 @@ export function RpmSaleFormModal({
           </FormGrid>
         </FormSection>
       )}
-      <FieldGrid fields={fields} sale={sale || {}} empById={empById} form={form} setForm={setField} editable />
+      <FieldGrid
+        fields={fields}
+        sale={sale || {}}
+        empById={empById}
+        form={form}
+        setForm={setField}
+        editable
+        fieldErrors={fieldErrors}
+      />
+      {isEdit && (
+        <>
+          {attachmentsIsError && (
+            <p style={{ color: "var(--err)" }}>
+              {(attachmentsError as Error)?.message || "Could not load recordings"}
+            </p>
+          )}
+          <SaleAttachmentsPanel
+            attachments={attachments?.attachments || []}
+            attachKinds={attachKinds}
+            downloadPath={(id) => path(`/rpm-sales/attachments/${id}/download`)}
+            streamPath={(id) => path(`/rpm-sales/attachments/${id}/file`)}
+            inlinePlayback={attachKinds.some((k) => PLAYABLE_ATTACH_KINDS.has(k.key) && k.canView !== false)}
+          />
+        </>
+      )}
       <FormSection title="Notes">
         <FormGrid wide>
           <FormField label="Notes" span="full">
@@ -1395,7 +1689,42 @@ export function RpmSaleFormModal({
           </FormField>
         </FormGrid>
       </FormSection>
+      {(isEdit || attemptedSubmit) && formBanner && <p style={{ color: "var(--err)" }}>{formBanner}</p>}
       {save.isError && <p style={{ color: "var(--err)" }}>{(save.error as Error).message}</p>}
+      {deleteSale.isError && <p style={{ color: "var(--err)" }}>{(deleteSale.error as Error).message}</p>}
+      <ConfirmDialog
+        open={dupConfirmOpen}
+        onOpenChange={setDupConfirmOpen}
+        title="Prior RPM sale found"
+        message={`This MCN/phone already exists on ${duplicatePriors.length} prior sale${
+          duplicatePriors.length === 1 ? "" : "s"
+        }. You can still submit.`}
+        confirmLabel="Submit anyway"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          const pending = pendingSubmitRef.current;
+          if (pending) save.mutate(pending);
+        }}
+      />
+      <ConfirmDialog
+        open={draftPrompt === "ask"}
+        onOpenChange={(o) => {
+          if (!o && draftPrompt === "ask") discardRpmDraft();
+        }}
+        title="Resume RPM sale draft?"
+        message="You have a saved draft. Resume it, or start fresh (discards the draft)."
+        confirmLabel="Resume"
+        cancelLabel="Start fresh"
+        onConfirm={applyRpmDraft}
+      />
+      <ConfirmDialog
+        open={saleUndo.confirmOpen}
+        onOpenChange={saleUndo.setConfirmOpen}
+        title={saleUndo.confirmTitle}
+        message={saleUndo.confirmMessage}
+        danger
+        onConfirm={saleUndo.confirmDelete}
+      />
     </Dialog>
   );
 }
@@ -1434,6 +1763,15 @@ export function SaleFormModal({
   const [catalogIds, setCatalogIds] = useState({ clientId: "", productId: "", priceId: "" });
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formInitialized = useRef(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState<"idle" | "ask" | "done">("idle");
+  const pendingDraftRef = useRef<{
+    fields?: Record<string, string>;
+    agentId?: string;
+    closerId?: string;
+    unit?: string;
+    team?: string;
+  } | null>(null);
 
   const { user: meUser } = useAppStatus();
   const draftUsername = meUser?.username as string | undefined;
@@ -1486,6 +1824,9 @@ export function SaleFormModal({
   useEffect(() => {
     if (!open) {
       formInitialized.current = false;
+      setDraftReady(false);
+      setDraftPrompt("idle");
+      pendingDraftRef.current = null;
       return;
     }
     if (!isEdit && !submitScope) return;
@@ -1494,7 +1835,9 @@ export function SaleFormModal({
 
     const fd = (sale?.formData as Record<string, unknown>) || {};
     const init: Record<string, string> = {};
-    fields.forEach((f) => { init[f.key] = String(fd[f.key] ?? sale?.[f.key] ?? ""); });
+    fields.forEach((f) => {
+      init[f.key] = String(fd[f.key] ?? sale?.[f.key] ?? "");
+    });
 
     if (isEdit) {
       setForm(init);
@@ -1507,29 +1850,18 @@ export function SaleFormModal({
       return;
     }
 
-    let assignment = initAssignmentFromScope(submitScope!);
+    const assignment = initAssignmentFromScope(submitScope!);
+    let pendingDraft: typeof pendingDraftRef.current = null;
     if (draftUsername) {
       try {
         const raw = localStorage.getItem(saleDraftKey(draftUsername));
         if (raw) {
-          const draft = JSON.parse(raw) as {
-            fields?: Record<string, string>;
-            agentId?: string;
-            closerId?: string;
-            unit?: string;
-            team?: string;
-          };
-          if (draft.fields && Object.keys(draft.fields).length && confirm("Resume your saved sale draft?")) {
-            Object.assign(init, draft.fields);
-            assignment = {
-              agentId: draft.agentId || assignment.agentId,
-              closerId: draft.closerId || assignment.closerId,
-              unit: draft.unit || assignment.unit,
-              team: draft.team || assignment.team,
-            };
-          }
+          const draft = JSON.parse(raw) as NonNullable<typeof pendingDraftRef.current>;
+          if (draft.fields && Object.keys(draft.fields).length) pendingDraft = draft;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     setForm(init);
@@ -1538,16 +1870,49 @@ export function SaleFormModal({
     setUnit(assignment.unit);
     setTeam(assignment.team);
     formInitialized.current = true;
+    if (pendingDraft) {
+      pendingDraftRef.current = pendingDraft;
+      setDraftPrompt("ask");
+      return;
+    }
+    setDraftReady(true);
+    setDraftPrompt("done");
   }, [open, sale, fields, isEdit, draftUsername, submitScope, catalog]);
 
+  const applyMlaDraft = () => {
+    const draft = pendingDraftRef.current;
+    pendingDraftRef.current = null;
+    if (draft?.fields) {
+      setForm((f) => ({ ...f, ...draft.fields }));
+      if (draft.agentId) setAgentId(draft.agentId);
+      if (draft.closerId) setCloserId(draft.closerId);
+      if (draft.unit) setUnit(draft.unit);
+      if (draft.team) setTeam(draft.team);
+    }
+    setDraftPrompt("done");
+    setDraftReady(true);
+  };
+
+  const discardMlaDraft = () => {
+    pendingDraftRef.current = null;
+    if (draftUsername) localStorage.removeItem(saleDraftKey(draftUsername));
+    setDraftPrompt("done");
+    setDraftReady(true);
+  };
+
   useEffect(() => {
-    if (!open || isEdit || !draftUsername) return;
+    if (!open || isEdit || !draftUsername || !draftReady) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
-      localStorage.setItem(saleDraftKey(draftUsername), JSON.stringify({ savedAt: Date.now(), fields: form, agentId, closerId, unit, team }));
+      localStorage.setItem(
+        saleDraftKey(draftUsername),
+        JSON.stringify({ savedAt: Date.now(), fields: form, agentId, closerId, unit, team })
+      );
     }, 800);
-    return () => { if (draftTimer.current) clearTimeout(draftTimer.current); };
-  }, [open, isEdit, draftUsername, form, agentId, closerId, unit, team]);
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+  }, [open, isEdit, draftUsername, draftReady, form, agentId, closerId, unit, team]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -1630,7 +1995,7 @@ export function SaleFormModal({
       scrollBody
       footer={
         <>
-          {isEdit && (
+          {isEdit && meUser?.canDeleteSales && (
             <Button variant="danger" onClick={() => saleUndo.confirmUndo({
               title: "Delete this sale?",
               message: "This permanently removes the sale after 6 seconds. Undo from the toast if you change your mind.",
@@ -1731,6 +2096,17 @@ export function SaleFormModal({
         </FormSection>
       )}
       {save.isError && <p style={{ color: "var(--err)" }}>{(save.error as Error).message}</p>}
+      <ConfirmDialog
+        open={draftPrompt === "ask"}
+        onOpenChange={(o) => {
+          if (!o && draftPrompt === "ask") discardMlaDraft();
+        }}
+        title="Resume sale draft?"
+        message="You have a saved draft. Resume it, or start fresh (discards the draft)."
+        confirmLabel="Resume"
+        cancelLabel="Start fresh"
+        onConfirm={applyMlaDraft}
+      />
       <ConfirmDialog
         open={saleUndo.confirmOpen}
         onOpenChange={saleUndo.setConfirmOpen}

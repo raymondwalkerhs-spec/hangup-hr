@@ -4,6 +4,16 @@ import styles from "./AttendanceStatusCell.module.css";
 
 const TRANSPORT_STATUSES = new Set(["Half Day", "Quarter Day-Off", "Lateness A", "Lateness B", "NSNC Half Day"]);
 
+const TRANSPORT_DEFAULT_NONE = new Set(["Lateness B", "Half Day", "Quarter Day-Off"]);
+
+function defaultTransportForStatus(status: string, current?: string) {
+  if (!TRANSPORT_STATUSES.has(status)) return "";
+  const cur = String(current || "").trim();
+  if (cur) return cur;
+  if (TRANSPORT_DEFAULT_NONE.has(status)) return "none";
+  return "";
+}
+
 function isWeekend(date: string) {
   const d = new Date(date + "T12:00:00");
   const day = d.getDay();
@@ -36,6 +46,7 @@ export function AttendanceStatusCell({
   selected,
   onChange,
   onPointerSelect,
+  canEditTransport,
 }: {
   empId: string;
   date: string;
@@ -47,6 +58,7 @@ export function AttendanceStatusCell({
   selected?: boolean;
   onChange: (status: string, transport?: string) => void;
   onPointerSelect?: (empId: string, date: string, mode: "start" | "move" | "end") => void;
+  canEditTransport?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
@@ -103,7 +115,7 @@ export function AttendanceStatusCell({
   }, [open]);
 
   if (!canEdit || locked) {
-    return <span className={styles.readonly}>{st || "—"}</span>;
+    return <span className={styles.readonly}>{st || (locked ? "OUT" : "—")}</span>;
   }
 
   return (
@@ -148,7 +160,7 @@ export function AttendanceStatusCell({
               className={`${styles.menuItem} ${x === st ? styles.menuActive : ""}`}
               onClick={() => {
                 const needsTransport = TRANSPORT_STATUSES.has(x);
-                onChange(x, needsTransport ? transportOverride : "");
+                onChange(x, needsTransport ? defaultTransportForStatus(x, transportOverride) : "");
                 setOpen(false);
               }}
             >
@@ -158,18 +170,25 @@ export function AttendanceStatusCell({
         </div>
       )}
       {showTransport && (
-        <Select
-          className={styles.transport}
-          value={transportOverride || ""}
-          onChange={(v) => onChange(st, v)}
-          aria-label="Transport"
-          options={[
-            { value: "", label: "Transport" },
-            { value: "full", label: "Full" },
-            { value: "half", label: "Half" },
-            { value: "none", label: "None" },
-          ]}
-        />
+        <>
+          <Select
+            className={styles.transport}
+            value={transportOverride || defaultTransportForStatus(st, transportOverride) || "none"}
+            onChange={(v) => onChange(st, v)}
+            aria-label="Transport"
+            disabled={!canEditTransport}
+            options={[
+              { value: "none", label: "None" },
+              { value: "half", label: "Half" },
+              { value: "full", label: "Full" },
+            ]}
+          />
+          {canEditTransport ? (
+            <span className={styles.transportNote}>HR can adjust</span>
+          ) : (
+            <span className={styles.transportNote}>Default: none · HR can adjust</span>
+          )}
+        </>
       )}
     </div>
   );

@@ -1,4 +1,13 @@
-import { Plus, FileText, RefreshCw, PieChart, Headphones, Building2 } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  RefreshCw,
+  PieChart,
+  Headphones,
+  Building2,
+  ClipboardCheck,
+  MessageSquare,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -9,13 +18,27 @@ import { useAppStore } from "@/stores/theme-store";
 import { setCompanyContext as persistCompany } from "@/api/client";
 import styles from "./BottomDock.module.css";
 
-const BASE_ACTIONS = [
+type DockAction = {
+  icon: typeof Plus;
+  label: string;
+  path: string | null;
+  openForm?: boolean;
+  requiresSales?: boolean;
+  requiresIt?: boolean;
+  requiresCosts?: boolean;
+  requiresChecks?: boolean;
+  requiresQFeedback?: boolean;
+};
+
+const BASE_ACTIONS: DockAction[] = [
   { icon: Plus, label: "Sale", path: "/sales", openForm: true, requiresSales: true },
+  { icon: ClipboardCheck, label: "Check", path: "/checks", openForm: true, requiresChecks: true },
+  { icon: MessageSquare, label: "Q Feedback", path: "/q-feedback", openForm: true, requiresQFeedback: true },
   { icon: FileText, label: "Leave", path: "/requests" },
   { icon: Headphones, label: "IT", path: "/it-requests", openForm: true, requiresIt: true },
   { icon: PieChart, label: "Costs", path: "/costs", requiresCosts: true },
   { icon: RefreshCw, label: "Sync", path: null },
-] as const;
+];
 
 export function BottomDock({ onSync }: { onSync?: () => void }) {
   const navigate = useNavigate();
@@ -29,13 +52,17 @@ export function BottomDock({ onSync }: { onSync?: () => void }) {
   const canCosts = user?.canAccessCosts === true || user?.canSubmitExpense === true;
   const canSales = user?.canSubmitSales === true;
   const canIt = user?.canViewItRequests === true || user?.canSubmitItRequest === true;
+  const canChecks = user?.canSubmitRpmChecks === true;
+  const canQFeedback = user?.canSubmitRpmQFeedback === true;
   const canSwitchCompany = user?.canManageHs2Company === true;
   const isHs2 = companyContext === "hs2";
 
   const actions = BASE_ACTIONS.filter((a) => {
-    if ("requiresCosts" in a && a.requiresCosts) return canCosts;
-    if ("requiresSales" in a && a.requiresSales) return canSales;
-    if ("requiresIt" in a && a.requiresIt) return canIt;
+    if (a.requiresCosts) return canCosts;
+    if (a.requiresSales) return canSales;
+    if (a.requiresIt) return canIt;
+    if (a.requiresChecks) return canChecks;
+    if (a.requiresQFeedback) return canQFeedback;
     return true;
   });
 
@@ -60,6 +87,7 @@ export function BottomDock({ onSync }: { onSync?: () => void }) {
   return (
     <motion.div
       className={styles.dock}
+      data-chrome="dock"
       initial={{ y: 80, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.3, type: "spring", stiffness: 300, damping: 25 }}
@@ -75,21 +103,18 @@ export function BottomDock({ onSync }: { onSync?: () => void }) {
           <span>{isHs2 ? "Main" : "HS-2"}</span>
         </button>
       )}
-      {actions.map(({ icon: Icon, label, path, ...rest }) => {
-        const openForm = "openForm" in rest && rest.openForm;
-        return (
-          <button
-            key={label}
-            type="button"
-            className={`${styles.item} interactive`}
-            onClick={() => (path ? go(path, openForm) : onSync?.())}
-            title={label}
-          >
-            <Icon size={20} />
-            <span>{label}</span>
-          </button>
-        );
-      })}
+      {actions.map(({ icon: Icon, label, path, openForm }) => (
+        <button
+          key={label}
+          type="button"
+          className={`${styles.item} interactive`}
+          onClick={() => (path ? go(path, openForm) : onSync?.())}
+          title={label}
+        >
+          <Icon size={20} />
+          <span>{label}</span>
+        </button>
+      ))}
     </motion.div>
   );
 }

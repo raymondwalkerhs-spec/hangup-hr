@@ -4,7 +4,7 @@ import { api } from "@/api/client";
 import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { fileToBase64 } from "@/lib/files";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { Button } from "@/ui/Button";
 import { FormField, FormGrid, FormSection } from "@/ui/FormGrid";
 
@@ -21,6 +21,8 @@ export function FpImportDialog({
   const [file, setFile] = useState<File | null>(null);
   const [policy, setPolicy] = useState("skip_manual");
   const [preview, setPreview] = useState<{ preview?: { fpNumber?: string; date: string; checkIn?: string; checkOut?: string; status: string }[]; unmatchedFp?: string[] } | null>(null);
+  const [confirmApply, setConfirmApply] = useState(false);
+  const [resultMsg, setResultMsg] = useState<string | null>(null);
 
   const previewMut = useMutation({
     mutationFn: async () => {
@@ -44,18 +46,19 @@ export function FpImportDialog({
       });
     },
     onSuccess: (res) => {
-      alert(`Imported ${res.rowsApplied || 0} day(s). Skipped ${res.rowsSkipped || 0}.`);
+      setResultMsg(`Imported ${res.rowsApplied || 0} day(s). Skipped ${res.rowsSkipped || 0}.`);
       onDone?.();
       onOpenChange(false);
     },
   });
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange} title="Import fingerprint attendance" wide scrollBody footer={
       <>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button variant="secondary" onClick={() => previewMut.mutate()} disabled={!file}>Preview</Button>
-        <Button onClick={() => { if (confirm("Apply FP import?")) applyMut.mutate(); }} disabled={!file}>Apply import</Button>
+        <Button onClick={() => setConfirmApply(true)} disabled={!file || applyMut.isPending}>Apply import</Button>
       </>
     }>
       <FormGrid>
@@ -83,6 +86,24 @@ export function FpImportDialog({
         </div>
       ) : null}
     </Dialog>
+    <ConfirmDialog
+      open={confirmApply}
+      onOpenChange={setConfirmApply}
+      title="Apply FP import?"
+      message="This writes attendance rows for the selected month."
+      confirmLabel="Apply"
+      onConfirm={() => applyMut.mutate()}
+    />
+    <ConfirmDialog
+      open={Boolean(resultMsg)}
+      onOpenChange={(o) => !o && setResultMsg(null)}
+      title="Import complete"
+      message={resultMsg || ""}
+      confirmLabel="OK"
+      cancelLabel="Close"
+      onConfirm={() => setResultMsg(null)}
+    />
+    </>
   );
 }
 

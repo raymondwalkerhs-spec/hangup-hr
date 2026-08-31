@@ -5,8 +5,10 @@ import { api } from "@/api/client";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAppStore } from "@/stores/theme-store";
 import { Button } from "@/ui/Button";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
+import { DepartDateDialog } from "./DepartDateDialog";
+import { defaultDepartForm, departRequestBody, type DepartFormState } from "@/lib/employeeStatus";
 import styles from "./EmployeeHrmsLifecycle.module.css";
 
 type Emp = Record<string, unknown>;
@@ -64,10 +66,11 @@ export function EmployeeHrmsLifecycle({
   const id = String(employee.id);
   const [rehireOpen, setRehireOpen] = useState(false);
   const [departOpen, setDepartOpen] = useState(false);
+  const [clearDepartConfirm, setClearDepartConfirm] = useState(false);
   const [periodOpen, setPeriodOpen] = useState(false);
   const [aipOpen, setAipOpen] = useState(false);
   const [rehireForm, setRehireForm] = useState({ startDate: "", status: "Active", notes: "" });
-  const [departForm, setDepartForm] = useState({ departDate: "", useCustomDate: false, notice_type: "with_notice", notes: "" });
+  const [departForm, setDepartForm] = useState<DepartFormState>(defaultDepartForm());
   const [periodForm, setPeriodForm] = useState({ startDate: "", endDate: "", notes: "" });
   const [aipForm, setAipForm] = useState({ weekStart: "", weekEnd: "", notes: "" });
   const [phase1Start, setPhase1Start] = useState("");
@@ -168,12 +171,7 @@ export function EmployeeHrmsLifecycle({
     mutationFn: () =>
       api(path(`/hrms/employment-periods/${id}/depart`), {
         method: "POST",
-        body: JSON.stringify({
-          departDate: departForm.useCustomDate ? departForm.departDate : undefined,
-          skipDepartDate: !departForm.useCustomDate,
-          status: "out",
-          notice_type: departForm.notice_type,
-        }),
+        body: JSON.stringify(departRequestBody(departForm)),
       }),
     onSuccess: () => {
       setDepartOpen(false);
@@ -311,11 +309,7 @@ export function EmployeeHrmsLifecycle({
                   size="sm"
                   variant="danger"
                   disabled={clearDepart.isPending}
-                  onClick={() => {
-                    if (confirm(`Clear depart date (${departDate})? Post-depart OUT days will be removed and status set to Active.`)) {
-                      clearDepart.mutate();
-                    }
-                  }}
+                  onClick={() => setClearDepartConfirm(true)}
                 >
                   Clear depart date
                 </Button>
@@ -537,45 +531,29 @@ export function EmployeeHrmsLifecycle({
         </section>
       )}
 
-      <Dialog open={departOpen} onOpenChange={setDepartOpen} title="Mark depart" footer={
-        <>
-          <Button variant="secondary" onClick={() => setDepartOpen(false)}>Cancel</Button>
-          <Button onClick={() => depart.mutate()}>Save</Button>
-        </>
-      }>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Leave the date unchecked to use today. Attendance after the depart date is locked until re-hire.
-        </p>
-        <FormGrid>
-          <FormField label="Depart date">
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-              <input
-                type="checkbox"
-                checked={departForm.useCustomDate}
-                onChange={(e) => setDepartForm({
-                  ...departForm,
-                  useCustomDate: e.target.checked,
-                  departDate: e.target.checked ? (departForm.departDate || new Date().toISOString().slice(0, 10)) : "",
-                })}
-              />
-              Choose a specific depart date
-            </label>
-            {departForm.useCustomDate ? (
-              <input type="date" value={departForm.departDate} onChange={(e) => setDepartForm({ ...departForm, departDate: e.target.value })} />
-            ) : (
-              <span className="muted">Today ({new Date().toISOString().slice(0, 10)})</span>
-            )}
-          </FormField>
-          <FormField label="Leaving type">
-            <select value={departForm.notice_type} onChange={(e) => setDepartForm({ ...departForm, notice_type: e.target.value })}>
-              <option value="with_notice">Leaving with two weeks notice</option>
-              <option value="without_notice">Leaving without two weeks notice</option>
-              <option value="company_decision">Leaving — company decision</option>
-            </select>
-          </FormField>
-          <FormField label="Notes" span="full"><textarea value={departForm.notes} onChange={(e) => setDepartForm({ ...departForm, notes: e.target.value })} /></FormField>
-        </FormGrid>
-      </Dialog>
+      <DepartDateDialog
+        open={departOpen}
+        onOpenChange={(o) => {
+          setDepartOpen(o);
+          if (o) setDepartForm(defaultDepartForm());
+        }}
+        form={departForm}
+        onFormChange={setDepartForm}
+        onConfirm={() => {
+          if (!depart.isPending) depart.mutate();
+        }}
+        isPending={depart.isPending}
+      />
+
+      <ConfirmDialog
+        open={clearDepartConfirm}
+        onOpenChange={setClearDepartConfirm}
+        title="Clear depart date?"
+        message={`Clear depart date (${departDate})? Post-depart OUT days will be removed and status set to Active.`}
+        danger
+        confirmLabel="Clear depart"
+        onConfirm={() => clearDepart.mutate()}
+      />
 
       <Dialog open={rehireOpen} onOpenChange={setRehireOpen} title="Re-hire" footer={
         <>

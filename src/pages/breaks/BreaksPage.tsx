@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
+import { formatTimeAmPm, calcEndTime24 } from "@/lib/breakTime";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { StatusPill } from "@/ui/StatusPill";
@@ -16,14 +17,6 @@ type Break = {
   unit?: string;
   role?: string;
 };
-
-function formatTimeAmPm(t?: string) {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hr = h % 12 || 12;
-  return `${hr}:${String(m).padStart(2, "0")} ${ampm}`;
-}
 
 export function BreaksPage() {
   const { path, companyContext } = useCompanyScope();
@@ -43,8 +36,12 @@ export function BreaksPage() {
         <h3>Current break</h3>
         {active ? (
           <>
-            <p><strong>{active.name}</strong> until {formatTimeAmPm(active.endTime)}</p>
-            <p className="muted">{active.durationMinutes} minutes · {active.unit || "All units"}</p>
+            <p>
+              <strong>{active.name}</strong> until {formatTimeAmPm(active.endTime)}
+            </p>
+            <p className="muted">
+              {active.durationMinutes} minutes · {active.unit || "All units"}
+            </p>
           </>
         ) : (
           <p className="muted">No active break for your unit/role right now.</p>
@@ -52,7 +49,7 @@ export function BreaksPage() {
       </Card>
 
       <Card className={styles.section}>
-        <h3>Today's schedules</h3>
+        <h3>Today&apos;s schedules</h3>
         {isLoading && <p className="muted">Loading…</p>}
         {error && <p style={{ color: "var(--err)" }}>{(error as Error).message}</p>}
         {!isLoading && !error && (
@@ -61,7 +58,12 @@ export function BreaksPage() {
               <li key={b.id || b.name} className={styles.item}>
                 <div>
                   <strong>{b.name}</strong>
-                  <span className="muted"> · {formatTimeAmPm(b.startTime)} – {formatTimeAmPm(b.endTime)}</span>
+                  <span className="muted">
+                    {" · "}
+                    {formatTimeAmPm(b.startTime)}
+                    {" – "}
+                    {formatTimeAmPm(b.endTime || calcEndTime24(b.startTime || "00:00", b.durationMinutes || 15))}
+                  </span>
                 </div>
                 <div className={styles.meta}>
                   <StatusPill variant="ok">{b.durationMinutes || 0} min</StatusPill>

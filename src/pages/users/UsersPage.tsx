@@ -18,8 +18,12 @@ type PendingReg = {
   id: string;
   fullName?: string;
   americanName?: string;
+  legalName?: string;
+  arabicName?: string;
   phone?: string;
+  email?: string;
   unit?: string;
+  team?: string;
   company?: string;
   nationality?: string;
   nationalId?: string;
@@ -64,6 +68,11 @@ export function UsersPage() {
   const [activateUser, setActivateUser] = useState<UserRow | null>(null);
   const [activateForm, setActivateForm] = useState({ password: "", role: "agent" });
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "agent", status: "active", employeeId: "", isIt: false });
+  const [approveRegTarget, setApproveRegTarget] = useState<PendingReg | null>(null);
+  const [approveUnit, setApproveUnit] = useState("");
+  const [approveTeam, setApproveTeam] = useState("");
+  const [editRegTarget, setEditRegTarget] = useState<PendingReg | null>(null);
+  const [editRegForm, setEditRegForm] = useState({ americanName: "", legalName: "", phone: "", email: "", unit: "", team: "" });
 
   const { user: appUser } = useAppStatus();
 
@@ -135,8 +144,22 @@ export function UsersPage() {
     },
   });
 
+  const { data: teamsRes } = useQuery({
+    queryKey: ["org-teams-users", companyContext],
+    queryFn: () => api<{ teams?: { name?: string; unit?: string }[] }>(path("/hrms/teams")),
+    enabled: appUser?.canApproveRegistration === true,
+  });
+  const allTeams = teamsRes?.teams || [];
+  const companyUnits = companyContext === "hs2" ? ["HS-2"] : ["HS-1", "HS-3"];
+  const approveTeamOptions = allTeams.filter((t) => t.unit === approveUnit).map((t) => t.name || "").filter(Boolean);
+  const editTeamOptions = allTeams.filter((t) => t.unit === editRegForm.unit).map((t) => t.name || "").filter(Boolean);
+
   const approveReg = useMutation({
-    mutationFn: (id: string) => api(path(`/registration/${encodeURIComponent(id)}/approve`), { method: "POST", body: "{}" }),
+    mutationFn: ({ id, unit, team }: { id: string; unit?: string; team?: string }) =>
+      api(path(`/registration/${encodeURIComponent(id)}/approve`), {
+        method: "POST",
+        body: JSON.stringify({ unit: unit || "", team: team || "" }),
+      }),
     onSuccess: (res) => {
       const r = res as {
         username?: string;
@@ -156,12 +179,24 @@ export function UsersPage() {
       qc.invalidateQueries({ queryKey: ["registration-pending"] });
       qc.invalidateQueries({ queryKey: ["admin-users"] });
       qc.invalidateQueries({ queryKey: ["org-full"] });
+      setApproveRegTarget(null);
+      setApproveTeam("");
+      setApproveUnit("");
     },
   });
 
   const rejectReg = useMutation({
     mutationFn: (id: string) => api(path(`/registration/${encodeURIComponent(id)}/reject`), { method: "POST", body: "{}" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["registration-pending"] }),
+  });
+
+  const patchReg = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, string> }) =>
+      api(path(`/registration/${encodeURIComponent(id)}`), { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      setEditRegTarget(null);
+      qc.invalidateQueries({ queryKey: ["registration-pending"] });
+    },
   });
 
   const activate = useMutation({
@@ -237,7 +272,33 @@ export function UsersPage() {
                     <td>{p.phone || "—"}</td>
                     <td>{p.company === "hs2" ? "HS-2" : "Hang-Up"}</td>
                     <td align="right" style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
-                      <Button size="sm" onClick={() => approveReg.mutate(p.id)}>Approve</Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditRegTarget(p);
+                          setEditRegForm({
+                            americanName: p.americanName || "",
+                            legalName: p.legalName || p.arabicName || p.fullName || "",
+                            phone: p.phone || "",
+                            email: p.email || "",
+                            unit: p.unit || companyUnits[0] || "HS-3",
+                            team: p.team || "",
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setApproveRegTarget(p);
+                          setApproveUnit(p.unit || companyUnits[0] || "HS-3");
+                          setApproveTeam(p.team || "");
+                        }}
+                      >
+                        Approve
+                      </Button>
                       <Button size="sm" variant="danger" onClick={() => { if (confirm("Reject registration?")) rejectReg.mutate(p.id); }}>Reject</Button>
                     </td>
                   </tr>
@@ -391,6 +452,102 @@ export function UsersPage() {
             : "Login is inactive — contact IT."}
         </p>
       </Dialog>
+      <Dialog
+        open={!!approveRegTarget}
+        onOpenChange={(o) => { if (!o) { setApproveRegTarget(null); setApproveTeam(""); setApproveUnit(""); } }}
+        title="Approve registration"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setApproveRegTarget(null); setApproveTeam(""); setApproveUnit(""); }}>Cancel</Button>
+            <Button
+              onClick={() => approveRegTarget && approveReg.mutate({ id: approveRegTarget.id, unit: approveUnit, team: approveTeam })}
+              disabled={approveReg.isPending}
+            >
+              Approve
+            </Button>
+          </>
+        }
+      >
+        <p className="muted" style={{ marginTop: 0 }}>
+          Employee ID prefix comes from the selected unit (HS-1 → HS1-…).
+        </p>
+        <FormGrid>
+          <FormField label="Unit">
+            <Select
+              value={approveUnit}
+              onChange={(v) => { setApproveUnit(v); setApproveTeam(""); }}
+              options={companyUnits.map((u) => ({ value: u, label: u }))}
+            />
+          </FormField>
+          <FormField label="Team (optional)">
+            <Select
+              value={approveTeam}
+              onChange={setApproveTeam}
+              options={[{ value: "", label: "— Unassigned —" }, ...approveTeamOptions.map((name) => ({ value: name, label: name }))]}
+            />
+          </FormField>
+        </FormGrid>
+      </Dialog>
+
+      <Dialog
+        open={!!editRegTarget}
+        onOpenChange={(o) => { if (!o) setEditRegTarget(null); }}
+        title="Edit pending registration"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditRegTarget(null)}>Cancel</Button>
+            <Button
+              onClick={() =>
+                editRegTarget &&
+                patchReg.mutate({
+                  id: editRegTarget.id,
+                  body: {
+                    americanName: editRegForm.americanName,
+                    legalName: editRegForm.legalName,
+                    phone: editRegForm.phone,
+                    email: editRegForm.email,
+                    unit: editRegForm.unit,
+                    team: editRegForm.team,
+                  },
+                })
+              }
+              disabled={patchReg.isPending}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <FormField label="American name">
+            <input value={editRegForm.americanName} onChange={(e) => setEditRegForm((f) => ({ ...f, americanName: e.target.value }))} />
+          </FormField>
+          <FormField label="Legal name">
+            <input value={editRegForm.legalName} onChange={(e) => setEditRegForm((f) => ({ ...f, legalName: e.target.value }))} />
+          </FormField>
+          <FormField label="Phone">
+            <input value={editRegForm.phone} onChange={(e) => setEditRegForm((f) => ({ ...f, phone: e.target.value }))} />
+          </FormField>
+          <FormField label="Email">
+            <input value={editRegForm.email} onChange={(e) => setEditRegForm((f) => ({ ...f, email: e.target.value }))} />
+          </FormField>
+          <FormField label="Unit">
+            <Select
+              value={editRegForm.unit}
+              onChange={(v) => setEditRegForm((f) => ({ ...f, unit: v, team: "" }))}
+              options={companyUnits.map((u) => ({ value: u, label: u }))}
+            />
+          </FormField>
+          <FormField label="Team (optional)">
+            <Select
+              value={editRegForm.team}
+              onChange={(v) => setEditRegForm((f) => ({ ...f, team: v }))}
+              options={[{ value: "", label: "— Unassigned —" }, ...editTeamOptions.map((name) => ({ value: name, label: name }))]}
+            />
+          </FormField>
+        </FormGrid>
+      </Dialog>
+
       <ConfirmDialog
         open={undo.confirmOpen}
         onOpenChange={undo.setConfirmOpen}

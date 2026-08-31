@@ -61,17 +61,27 @@ function filterRpmForRequest(sales, req) {
 }
 
 function enrichRpmDisplayNames(sales, employees) {
-  const byId = new Map((employees || []).map((e) => [e.id, e]));
-  return (sales || []).map((s) => ({
-    ...s,
-    agentDisplayName: byId.get(s.agentId)?.american_name || "",
-    closerDisplayName: byId.get(s.closerId)?.american_name || "",
-    formData: {
-      ...(s.formData || {}),
-      agentName: byId.get(s.agentId)?.american_name || s.formData?.agentName || "",
-      closerName: byId.get(s.closerId)?.american_name || s.formData?.closerName || "",
-    },
-  }));
+  const list = employees?.length ? employees : store.getEmployees();
+  const byId = new Map((list || []).map((e) => [e.id, e]));
+  return (sales || []).map((s) => {
+    const fd = s.formData || {};
+    const reviewerId = fd.reviewer || "";
+    const verifierId = fd.assignVerifier || "";
+    return {
+      ...s,
+      agentDisplayName: byId.get(s.agentId)?.american_name || "",
+      closerDisplayName: byId.get(s.closerId)?.american_name || "",
+      reviewerDisplayName: byId.get(reviewerId)?.american_name || "",
+      verifierDisplayName: byId.get(verifierId)?.american_name || "",
+      formData: {
+        ...fd,
+        agentName: byId.get(s.agentId)?.american_name || fd.agentName || "",
+        closerName: byId.get(s.closerId)?.american_name || fd.closerName || "",
+        reviewerName: byId.get(reviewerId)?.american_name || fd.reviewerName || "",
+        verifierName: byId.get(verifierId)?.american_name || fd.verifierName || "",
+      },
+    };
+  });
 }
 
 function rpmRedactOpts(req) {
@@ -106,6 +116,8 @@ async function canUserManageRpmAttachmentKind(userRole, kind) {
 
 async function recalcAgentSalesFromRpmSale(sale, actor) {
   if (!sale?.agentId) return;
+  const { isOtherAgentId } = require("../lib/other-agent");
+  if (isOtherAgentId(sale.agentId)) return;
   const wd = sale.workingDay || workingDayLib.computeWorkingDay(sale.submissionDate);
   const ym = String(wd || "").slice(0, 7);
   if (!ym) return;
@@ -165,16 +177,51 @@ router.get("/submit-scope", async (req, res) => {
   }
 });
 
+router.get("/identity-check", async (req, res) => {
+  if (!roles.canSubmitSales(req.userRole) || !(await canPerformRpmAction(req.userRole, "submit_sale"))) {
+    return res.status(403).json({ error: "You may not submit new sales" });
+  }
+  try {
+    const identity = require("../lib/rpm-sale-identity");
+    const phoneNumbers = [
+      req.query.phone,
+      req.query.phoneNumber,
+      req.query.alternativePhone,
+    ].filter(Boolean);
+    let priors = await rpmRepo.findIdentityDuplicateRpmSales({
+      phoneNumbers,
+      memberId: req.query.memberId,
+      limit: 25,
+    });
+    priors = filterRpmForRequest(priors, req);
+    res.json({
+      priors: priors.slice(0, 12).map((sale) => ({
+        id: sale.id,
+        date: identity.saleDateLabel(sale),
+        clientFeedback: identity.clientFeedbackLabel(sale),
+        phoneNumber: sale.phoneNumber,
+        memberId: sale.memberId,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/", async (req, res) => {
   if (!roles.canSubmitSales(req.userRole) || !(await canPerformRpmAction(req.userRole, "submit_sale"))) {
     return res.status(403).json({ error: "You may not submit new sales" });
   }
   const { agentId, closerId } = req.body;
   if (!agentId) return res.status(400).json({ error: "agentId required" });
+  const { isOtherAgentId } = require("../lib/other-agent");
+  const otherAgent = isOtherAgentId(agentId);
   const emp = store.getEmployeeById(agentId);
   if (!emp) return res.status(404).json({ error: "Agent not found" });
-  const programCheck = saleProgramAccess.assertAgentProgramEnabled(emp, "rpm", req.userRole);
-  if (!programCheck.ok) return res.status(403).json({ error: programCheck.error });
+  if (!otherAgent) {
+    const programCheck = saleProgramAccess.assertAgentProgramEnabled(emp, "rpm", req.userRole);
+    if (!programCheck.ok) return res.status(403).json({ error: programCheck.error });
+  }
   const saleCompany = companyContext.resolveCompanyContextForUser(req.body.company || req.query.company, req.userRole);
   const employeeAppRole = require("../lib/employee-app-role");
   const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(
@@ -197,11 +244,20 @@ router.post("/", async (req, res) => {
     }
   );
   if (!assignment.ok) return res.status(403).json({ error: assignment.error });
-  const unitTeam = await validateSaleUnitTeam(
-    emp.unit || assignment.unit || req.body.unit || req.body.formData?.unit,
-    emp.team || assignment.team || req.body.team || req.body.formData?.team
-  );
-  if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
+  let unitTeam;
+  if (otherAgent) {
+    unitTeam = {
+      ok: true,
+      unit: String(req.body.unit || req.body.formData?.unit || assignment.unit || "").trim(),
+      team: String(req.body.team || req.body.formData?.team || assignment.team || "").trim(),
+    };
+  } else {
+    unitTeam = await validateSaleUnitTeam(
+      emp.unit || assignment.unit || req.body.unit || req.body.formData?.unit,
+      emp.team || assignment.team || req.body.team || req.body.formData?.team
+    );
+    if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
+  }
   try {
     const sanitizedForm = await rpmFieldAccess.sanitizeIncomingFormData(req.body.formData || req.body, req.userRole, {
       create: true,
@@ -224,13 +280,35 @@ router.post("/", async (req, res) => {
     if (!submitValidation.ok) {
       return res.status(400).json({ error: "Validation failed", errors: submitValidation.errors });
     }
+    const egyptSubmission = egyptDatetime.egyptNowFormatted();
+    const dates = workingDayLib.enrichSaleDates({}, egyptSubmission);
     const dup = await rpmRepo.findRecentDuplicateRpmSale({
       phoneNumber: built.phoneNumber,
       agentId,
+      ignoreAgent: otherAgent,
+      workingDay: dates.workingDay,
     });
     if (dup) return res.status(409).json({ error: "Sale already submitted", saleId: dup.id });
-    const egyptSubmission = egyptDatetime.egyptNowFormatted();
-    const dates = workingDayLib.enrichSaleDates({}, egyptSubmission);
+
+    const identity = require("../lib/rpm-sale-identity");
+    const phoneCandidates = [
+      built.phoneNumber,
+      sanitizedForm.alternativePhone,
+      sanitizedForm.alternativePhoneNumber,
+      sanitizedForm.altPhone,
+      sanitizedForm.phoneNumber,
+    ].filter(Boolean);
+    let priorDupes = [];
+    try {
+      priorDupes = await rpmRepo.findIdentityDuplicateRpmSales({
+        phoneNumbers: phoneCandidates,
+        memberId: built.memberId || sanitizedForm.memberId,
+        limit: 25,
+      });
+    } catch (dupErr) {
+      console.warn("rpm identity duplicate check failed:", dupErr?.message || dupErr);
+    }
+
     const initialStatus = salesScope.initialSaleStatus(req.userRole.role, undefined);
     const sale = await rpmRepo.createRpmSale(
       {
@@ -250,11 +328,20 @@ router.post("/", async (req, res) => {
           ...sanitizedForm,
           unit: unitTeam.unit,
           team: unitTeam.team,
-          agentName: emp.american_name || "",
+          agentName: emp.american_name || (otherAgent ? "Other" : ""),
         },
       },
       req.username
     );
+    try {
+      const autoLink = require("../lib/rpm-check-auto-link");
+      await autoLink.linkSaleToMatchingCheck(sale, {
+        company: companyContext.getCompanyForUnit(sale.unit || sale.formData?.unit) ||
+          companyContext.resolveCompanyContextForUser(req.body?.company, req.userRole),
+      });
+    } catch (linkErr) {
+      console.warn("rpm check auto-link failed:", linkErr?.message || linkErr);
+    }
     const closerEmp = store.getEmployeeById(assignment.closerId);
     if (closerEmp?.american_name) {
       await rpmRepo.updateRpmSale(
@@ -263,9 +350,53 @@ router.post("/", async (req, res) => {
         req.username
       );
     }
+    if (priorDupes.length) {
+      try {
+        const dispatch = require("../lib/notify-dispatch");
+        const closerName = closerEmp?.american_name || assignment.closerId || req.username || "Closer";
+        const reasons = [];
+        const newPhones = identity.collectRpmSalePhones({
+          phoneNumber: built.phoneNumber,
+          formData: sanitizedForm,
+        });
+        const newMid = identity.normalizeMemberIdKey(built.memberId || sanitizedForm.memberId);
+        const phoneHit = priorDupes.some((p) => identity.phonesOverlap(newPhones, identity.collectRpmSalePhones(p)));
+        const midHit = newMid && priorDupes.some((p) => identity.normalizeMemberIdKey(p.memberId) === newMid);
+        if (phoneHit) reasons.push("phone");
+        if (midHit) reasons.push("Member ID");
+        const summary = identity.formatDuplicatePriorSummary(priorDupes.slice(0, 12));
+        await dispatch.dispatchNotification({
+          actionKey: "rpm_sale_duplicate",
+          type: "rpm_sale_duplicate",
+          title: "RPM duplicate sale submitted",
+          body: `${closerName} submitted ${built.fullName || "a sale"} with duplicate ${reasons.join(" / ") || "identity"}. Previous sales: ${summary || "see Sales log"}.`,
+          entityType: "sale",
+          entityId: String(sale.id),
+          actor: req.username,
+          context: { company: saleCompany },
+        });
+      } catch (notifyErr) {
+        console.warn("rpm duplicate notify failed:", notifyErr?.message || notifyErr);
+      }
+    }
     await recalcAgentSalesFromRpmSale(sale, req.username);
     const [redacted] = await rpmFieldAccess.redactSalesForRole([sale], req.userRole, rpmRedactOpts(req));
-    res.json({ ok: true, sale: redacted });
+    res.json({
+      ok: true,
+      sale: redacted,
+      duplicateWarning: priorDupes.length
+        ? {
+            count: priorDupes.length,
+            priors: priorDupes.slice(0, 12).map((p) => ({
+              id: p.id,
+              date: identity.saleDateLabel(p),
+              clientFeedback: identity.clientFeedbackLabel(p),
+              phoneNumber: p.phoneNumber,
+              memberId: p.memberId,
+            })),
+          }
+        : null,
+    });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -278,16 +409,23 @@ router.get("/", async (req, res) => {
   try {
     const employees = scopedEmployees(req);
     const grants = await business.readSalesVisibilityGrants(req.username);
+    const role = String(req.userRole?.role || "agent").toLowerCase();
+    const restrictToToday =
+      (role === "agent" || role === "tl") && roles.canViewSalesThisMonth(req.userRole) !== true;
+    const todayWorkingDay = workingDayLib.currentWorkingDay();
+    const qFrom = restrictToToday ? undefined : req.query.from;
+    const qTo = restrictToToday ? undefined : req.query.to;
+    const qDay = restrictToToday ? todayWorkingDay : req.query.day;
     let sales = await rpmRepo.readRpmSales({
-      from: req.query.from,
-      to: req.query.to,
+      from: qFrom,
+      to: qTo,
       agentId: req.query.agentId,
       closerId: req.query.closerId,
       team: req.query.team,
       unit: req.query.unit,
       status: req.query.status,
       retransfer: req.query.retransfer,
-      day: req.query.day,
+      day: qDay,
       client: req.query.client,
       reviewerFeedback: req.query.reviewerFeedback,
       clientFeedback: req.query.clientFeedback,
@@ -295,6 +433,9 @@ router.get("/", async (req, res) => {
     });
     sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
     sales = filterRpmForRequest(sales, req);
+    if (req.query.duplicates === "1" || req.query.duplicates === "true") {
+      sales = rpmRepo.filterAndGroupDuplicateRpmSales(sales);
+    }
     sales = enrichRpmDisplayNames(sales, store.getEmployees());
     sales = await rpmFieldAccess.redactSalesForRole(sales, req.userRole, rpmRedactOpts(req));
     const listColumns = await rpmListColumns.getVisibleColumnsForUser(req.userRole?.role);
@@ -806,6 +947,23 @@ router.get("/:id/history", async (req, res) => {
     res.json({ history: entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  if (!roles.canDeleteSales(req.userRole)) {
+    return res.status(403).json({ error: "No permission to delete sales" });
+  }
+  try {
+    const access = await assertRpmSaleAccess(req, req.params.id);
+    if (access.error) return res.status(access.status).json({ error: access.error });
+    await rpmRepo.deleteRpmSaleCompletely(req.params.id, req.username);
+    if (access.sale?.agentId) {
+      await recalcAgentSalesFromRpmSale(access.sale, req.username);
+    }
+    res.json({ ok: true, id: req.params.id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

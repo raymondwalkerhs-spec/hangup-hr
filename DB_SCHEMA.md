@@ -45,7 +45,8 @@ Apply in filename order:
 | 27 | `20260720_training_payroll.sql` | Training payroll tables |
 | 28 | `20260721_sales_airtable_sync.sql` | Airtable sync columns |
 | 29 | `20260722_v128_phase1_rules_it_meetings_separation.sql` | Rules, IT requests, meeting requests, team_tls, unit_ops |
-| 30 | `20260723_v129_multi_feature_sprint.sql` | IT routing, half/quarter-day leave, price tier, companies table |
+| 30 | `20260830_unit_checkers.sql` | `unit_checkers` — assign RPM checkers per unit |
+| 31 | `20260723_v129_multi_feature_sprint.sql` | IT routing, half/quarter-day leave, price tier, companies table |
 | 31 | `20260724_v130_finance_company_scope.sql` | Finance tables unit/company columns |
 | 32 | `20260724_interview_schema.sql` | Interviews/training module tables |
 | 33 | `20260725_interview_training_updates.sql` | Interview/training schema updates (status rename, batch_number, company, metrics) |
@@ -53,6 +54,9 @@ Apply in filename order:
 | 35 | `20260801_v220_interview_training_status.sql` | Training status v2 (`on hold`, `cancelled`; migrates `no show no call` → `on hold`) |
 | 36 | `20260801_v220_expense_category.sql` | `expense_requests.category` with constrained values |
 | 37 | `20260801_v220_interview_feedbacks_company_backfill.sql` | One-time `interview_feedbacks.company` alignment (optional) |
+| — | `20260901`–`20260903` | RPM Airtable meta + Supabase→Airtable Edge sync + catch-up cron |
+| — | `20260904_rpm_checks_closer_from_sale.sql` | Keep `rpm_checks.closer_id` in sync from linked `rpm_sales` |
+| — | `20260906_rpm_google_form_sync.sql` | RPM1 Google Form: `google_form_*` cols + INSERT trigger `trg_rpm_google_form_sync` |
 
 ## RLS pattern
 
@@ -132,8 +136,8 @@ These tables exist in production; DDL was applied outside early migration stubs.
 
 | Table | PK | Purpose |
 |-------|-----|---------|
-| `sales` | `id` uuid | **MLA** sales log; `form_data` jsonb |
-| `rpm_sales` | `id` uuid | **RPM** sales log (separate table from MLA) |
+| `sales` | `id` uuid | **MLA** sales log; `form_data` jsonb; `airtable_record_id` / `airtable_synced_at` / `airtable_sync_error` |
+| `rpm_sales` | `id` uuid | **RPM** sales log (separate table from MLA); same Airtable meta columns for Hangup RPM base |
 | `sales_field_permissions` | `field_key` | MLA column view/edit roles (`main_view_roles`, `quality_view_roles`, `edit_roles`) |
 | `rpm_sales_field_permissions` | `field_key` | RPM field ACL (separate from MLA) |
 | `sales_attachment_permissions` | `attachment_key` | MLA attachment kind view/edit roles |
@@ -144,13 +148,16 @@ These tables exist in production; DDL was applied outside early migration stubs.
 | `rpm_sales_list_column_config` | `field_key` | RPM log column visibility |
 | `sales_attachments` | `id` uuid | MLA attachment refs; `dropbox_path` → `mla-sales-attachments/…` or legacy `sales-attachments/…` |
 | `rpm_sales_attachments` | `id` uuid | RPM attachment refs; `dropbox_path` → `rpm-sales-attachments/{rpm_sale_id}/quality_record/…` etc. |
+| `rpm_team_week_targets` | `id` uuid | Weekly per-team RPM sales targets |
+| `rpm_checks` | `id` uuid | Checks + Q Feedback funnel (`check_status`, `feedback_status`, `linked_rpm_sale_id`, `closer_id`); unique live `(company, member_id_normalized, working_day)` via `uq_rpm_checks_company_member_day` (`20260905`); sale-linked rows keep `closer_id` in sync from `rpm_sales` via triggers (`20260904_rpm_checks_closer_from_sale`) |
+| `team_dashboard_agent_notes` | `id` uuid | Per agent per working-day notes on Team Dashboard |
 | `sales_visibility_grants` | `id` uuid | Temporary wider view; `expires_at` |
 | `bonus_requests` | `id` uuid | Bonus approval workflow |
 | `expense_requests` | `id` uuid | Petty cash / expenses; `category` (v2.2.0) |
 | `petty_cash_funds`, `petty_cash_ledger` | uuid | Petty cash |
 | `monthly_bills` | `id` uuid | Recurring bills |
 | `app_notifications` | `id` uuid | In-app notifications |
-| `notification_routing_rules` | `action_key` | Configurable notification recipients per action |
+| `notification_routing_rules` | `action_key` | Configurable notification recipients per action (incl. `rpm_sale_duplicate` → quality, rtm, admin) |
 | `employee_quality_notes` | `id` uuid | Quality-team notes (separate from HR warnings) |
 
 ## Org, registration & training
@@ -297,7 +304,7 @@ Migration `20260816_sales_program_storage_isolation.sql` documents table separat
 
 ## Roles convention
 
-App roles (stored in `app_users.role`): `none`, `agent`, `office_assistant`, `quality`, `rtm`, `public_relations`, `tl`, `op`, `finance`, `it`, `hr`, `admin`, `ceo`.
+App roles (stored in `app_users.role`): `none`, `agent`, `office_assistant`, `checker`, `quality`, `rtm`, `public_relations`, `tl`, `op`, `finance`, `it`, `hr`, `admin`, `ceo`.
 
 Login requires rank ≥ `agent`. Username-based gates (Users tab, leave/loan approvers) are **not** in `app_role_permissions`.
 

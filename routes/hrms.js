@@ -192,9 +192,25 @@ router.post("/employment-periods/:employeeId/rehire", async (req, res) => {
   if (!roles.canManageAll(req.userRole)) return res.status(403).json({ error: "HR/admin only" });
   try {
     const { startDate, notes } = req.body;
+    const employeeDepart = require("../lib/employee-depart");
+    const emp = store.getEmployeeById(req.params.employeeId);
+    const oldDepart = String(emp?.depart_date || "").slice(0, 10);
     const period = await hrms.addEmploymentPeriod(req.params.employeeId, { startDate, notes }, req.username);
     await store.updateEmployee(req.params.employeeId, { status: "Active", employment_date: startDate, depart_date: null }, req.username);
-    res.json({ ok: true, period });
+    let clearedOutCount = 0;
+    if (oldDepart) {
+      try {
+        clearedOutCount = await employeeDepart.clearPostDepartAutoOut(
+          req.params.employeeId,
+          oldDepart,
+          store,
+          req.username
+        );
+      } catch (clearErr) {
+        console.warn("[hrms] rehire clear post-depart OUT failed:", clearErr.message);
+      }
+    }
+    res.json({ ok: true, period, clearedOutCount });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -1253,20 +1269,23 @@ router.post("/notification-routing/seed", async (req, res) => {
   }
 });
 
-router.post("/notifications/:id/read", async (req, res) => {
-  try {
-    await require("../lib/notify-store").markNotificationRead(req.params.id, req.username);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
-
 router.post("/notifications/read-all", async (req, res) => {
   try {
     const company = parseCompany(req);
     await require("../lib/notify-store").markAllRead(req.username, { company });
     res.json({ ok: true, company });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/notifications/:id/read", async (req, res) => {
+  if (req.params.id === "read-all") {
+    return res.status(400).json({ error: "Use POST /notifications/read-all" });
+  }
+  try {
+    await require("../lib/notify-store").markNotificationRead(req.params.id, req.username);
+    res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

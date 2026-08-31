@@ -399,10 +399,14 @@ function validateBulkAttendanceAgainstDepartDate(employees, month, status, usern
   };
 }
 
-async function buildEnrichedPayrollForMonth(month, req, { unit = "", hideOut, skipAttendanceRefresh } = {}) {
+async function buildEnrichedPayrollForMonth(month, req, { unit = "", hideOut, hideAllOut, skipAttendanceRefresh } = {}) {
   const enrichedPayroll = require("../lib/enriched-payroll");
   const hide = hideOut ?? parseHideOut(req);
-  let employees = store.getEmployeesForMonth(month, { hideOut: hide });
+  const hideAll = hideAllOut === true || req.query.hideAllOut === "true" || req.query.hideAllOut === "1";
+  let employees = store.getEmployeesForMonth(month, {
+    hideOut: hideAll ? false : hide,
+    hideAllOut: hideAll,
+  });
   employees = filterEmployeesForRequest(employees, req);
   if (unit) employees = employees.filter((e) => e.unit === unit);
   const company = parseCompany(req);
@@ -477,10 +481,15 @@ router.get("/version-info", async (req, res) => {
     }
     let githubUpdate = null;
     try {
-      const githubUpdater = require("../lib/github-updater");
-      githubUpdate = await githubUpdater.checkForGitHubUpdate();
+      const cloudUpdater = require("../lib/cloud-updater");
+      githubUpdate = await cloudUpdater.checkForUpdate();
     } catch {
-      /* non-fatal */
+      try {
+        const githubUpdater = require("../lib/github-updater");
+        githubUpdate = await githubUpdater.checkForGitHubUpdate();
+      } catch {
+        /* non-fatal */
+      }
     }
     let installHealth = { ok: true };
     try {
@@ -502,8 +511,8 @@ router.get("/version-info", async (req, res) => {
 
 router.get("/github-update", async (req, res) => {
   try {
-    const githubUpdater = require("../lib/github-updater");
-    const info = await githubUpdater.checkForGitHubUpdate();
+    const cloudUpdater = require("../lib/cloud-updater");
+    const info = await cloudUpdater.checkForUpdate();
     res.json(info);
   } catch (err) {
     res.status(500).json({ enabled: false, error: err.message });
@@ -859,6 +868,8 @@ router.get("/status", async (req, res) => {
       employeeId: req.userRole.employeeId,
       leadTeams: req.userRole.leadTeams || [],
       closerTeams: req.userRole.closerTeams || [],
+      opUnits: req.userRole.opUnits || [],
+      checkerUnits: req.userRole.checkerUnits || [],
       closeTeamCount: roles.uniqueCloserTeamCount(req.userRole),
       usesCloseTeamsDashboardKpi: roles.usesCloseTeamsDashboardKpi(req.userRole),
       opUnits: req.userRole.opUnits || [],
@@ -875,6 +886,9 @@ router.get("/status", async (req, res) => {
       canSubmitBonusRequest: roles.canSubmitBonusRequest(req.userRole),
       canApproveBonusRequest: roles.canApproveBonusRequest(req.userRole),
       canViewSales: roles.canViewSales(req.userRole),
+      canViewSalesThisMonth: roles.canViewSalesThisMonth(req.userRole),
+      canViewSalesLogFilters: roles.canViewSalesLogFilters(req.userRole),
+      canViewSalesRankings: roles.canViewSalesRankings(req.userRole),
       canSubmitSales: roles.canSubmitSales(req.userRole),
       canEditSales: roles.canEditSale(req.userRole),
       canViewSale: roles.canViewSale(req.userRole),
@@ -888,6 +902,7 @@ router.get("/status", async (req, res) => {
       canApproveLoan: roles.canApproveLoanRequest(req.realUsername || req.username),
       canManageOrg: roles.canManageOrgStructure(req.userRole),
       canManageEmployees: roles.canManageEmployees(req.userRole),
+      canViewEmployeeDirectory: roles.canViewEmployeeDirectory(req.userRole),
       canViewEmployeeNotes: roles.canViewEmployeeNotes(req.userRole),
       canWriteEmployeeNotes: roles.canWriteEmployeeNotes(req.userRole),
       canViewQualityNotes: roles.canViewQualityNotes(req.userRole),
@@ -895,6 +910,18 @@ router.get("/status", async (req, res) => {
       canExportSales: roles.canExportSales(req.userRole),
       canViewDashboardUnits: roles.canViewDashboardUnits(req.userRole),
       canViewTeamDashboard: roles.canViewTeamDashboard(req.userRole),
+      canViewRpmWeeklyDashboard: roles.canViewRpmWeeklyDashboard(req.userRole),
+      canEditRpmWeeklyTargets: roles.canEditRpmWeeklyTargets(req.userRole),
+      canSubmitRpmChecks: roles.canSubmitRpmChecks(req.userRole),
+      canSubmitRpmQFeedback: roles.canSubmitRpmQFeedback(req.userRole),
+      canEditRpmChecks: roles.canEditRpmChecks(req.userRole),
+      canEditRpmQFeedback: roles.canEditRpmQFeedback(req.userRole),
+      canViewRpmChecks: roles.canViewRpmChecks(req.userRole),
+      canViewRpmQFeedback: roles.canViewRpmQFeedback(req.userRole),
+      canViewRpmQFeedbackAnalysis: roles.canViewRpmQFeedbackAnalysis(req.userRole),
+      canViewRpmChecksDashboard: roles.canViewRpmChecksDashboard(req.userRole),
+      canViewRpmCheckDuplicates: roles.canViewRpmCheckDuplicates(req.userRole),
+      canImportRpmSaleFromCheck: roles.canImportRpmSaleFromCheck(req.userRole),
       canIssueEquipment: roles.canIssueEquipment(req.userRole),
       canViewEquipment: roles.canViewEquipment(req.userRole),
       canViewEquipmentAll: roles.canViewEquipmentAll(req.userRole),
@@ -916,6 +943,7 @@ router.get("/status", async (req, res) => {
       canViewSettingsHideOut: roles.canViewSettingsSection(req.userRole, "hideOut"),
       canViewSettingsSync: roles.canViewSettingsSection(req.userRole, "sync"),
       canViewSettingsTheme: roles.canViewSettingsSection(req.userRole, "theme"),
+      canViewSettingsThemeUnlocks: roles.canViewSettingsSection(req.userRole, "themeUnlocks"),
       canViewSettingsProfilePhoto: roles.canViewSettingsSection(req.userRole, "profilePhoto"),
       canViewSettingsManagingUnits: roles.canViewSettingsSection(req.userRole, "managingUnits"),
       canGrantSalesVisibility: roles.canGrantSalesVisibility(req.userRole),
@@ -969,6 +997,14 @@ router.get("/status", async (req, res) => {
     dropbox: dropboxHealth,
     supabaseUrl: process.env.SUPABASE_URL || null,
     cacheDir: getCacheDir(),
+    themeUnlocks: await (async () => {
+      try {
+        const themeUnlocks = require("../lib/theme-unlocks");
+        return await themeUnlocks.computeThemeUnlocks(req.userRole);
+      } catch {
+        return require("../lib/theme-unlocks").emptyUnlocks();
+      }
+    })(),
   });
 });
 
@@ -1170,6 +1206,25 @@ router.use("/rpm-sales", (req, res, next) => {
     })
     .catch(next);
 }, require("./rpm-sales"));
+router.use("/rpm-checks", (req, res, next) => {
+  if (req.userRole?.employeeId) {
+    req.userRole.username = req.username;
+    return next();
+  }
+  const empLink = store.getAppUserEmployeeId(req.username);
+  roles
+    .enrichUserRoleWithOrgTeams(
+      req.userRole || roles.resolveUserRole(req.username, req.appSession?.role),
+      store.getEmployees(),
+      empLink ? { employee_id: empLink } : null
+    )
+    .then((ur) => {
+      req.userRole = ur;
+      req.userRole.username = req.username;
+      next();
+    })
+    .catch(next);
+}, require("./rpm-checks"));
 router.use("/sales-config", (req, res, next) => {
   if (req.userRole?.employeeId) {
     req.userRole.username = req.username;
@@ -1284,13 +1339,27 @@ router.post("/registration/:id/reject", async (req, res) => {
   }
 });
 
+router.patch("/registration/:id", async (req, res) => {
+  if (!registration.canApproveRegistration(req.userRole?.role)) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  if (!(await assertRegistrationInContext(req, res, req.params.id))) return;
+  try {
+    const pending = await registration.updatePendingRegistration(req.params.id, req.body || {});
+    res.json({ ok: true, pending });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get("/org/managers", async (req, res) => {
   try {
-    const [managers, allTls, allClosers, allOps, allTeams] = await Promise.all([
+    const [managers, allTls, allClosers, allOps, allCheckers, allTeams] = await Promise.all([
       orgHierarchy.readUnitManagers().catch(() => []),
       teamTlsRepo.readAllTeamTls().catch(() => ({})),
       teamClosersRepo.readAllTeamClosers().catch(() => ({})),
       teamTlsRepo.readAllUnitOps().catch(() => ({})),
+      teamTlsRepo.readAllUnitCheckers().catch(() => ({})),
       hrms.readOrgTeams().catch(() => []),
     ]);
     const company = parseCompany(req);
@@ -1311,12 +1380,14 @@ router.get("/org/managers", async (req, res) => {
       teamTlsRepo.mergeUnitOpsMaps(allOps, filteredManagers),
       company
     );
+    const filteredCheckers = teamTlsRepo.filterUnitCheckersByCompany(allCheckers, company);
     res.json({
       managers: filteredManagers,
       unitRules: orgHierarchy.UNIT_RULES,
       teamTls: filteredTls,
       teamClosers: filteredClosers,
       unitOps: filteredOps,
+      unitCheckers: filteredCheckers,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1473,6 +1544,52 @@ router.delete("/org/unit-ops/:unit/:employeeId", async (req, res) => {
   }
   try {
     await teamTlsRepo.removeUnitOp(req.params.unit, req.params.employeeId);
+    roles.invalidateOrgTeamsCache();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/org/unit-checkers/:unit", async (req, res) => {
+  try {
+    if (!unitInCompanyContext(req.params.unit, req)) {
+      return res.status(404).json({ error: "Unit not found" });
+    }
+    const checkers = await teamTlsRepo.readUnitCheckers(req.params.unit);
+    res.json({ unit: req.params.unit, checkers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/org/unit-checkers/:unit", async (req, res) => {
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
+  const { employeeId } = req.body;
+  if (!employeeId) return res.status(400).json({ error: "employeeId required" });
+  if (!unitInCompanyContext(req.params.unit, req)) {
+    return res.status(404).json({ error: "Unit not found" });
+  }
+  const emp = store.getEmployeeById(employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Employee not found" });
+  }
+  try {
+    await teamTlsRepo.addUnitChecker(req.params.unit, employeeId);
+    roles.invalidateOrgTeamsCache();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/org/unit-checkers/:unit/:employeeId", async (req, res) => {
+  if (!roles.canManageOrgStructure(req.userRole)) return res.status(403).json({ error: "Admin/HR only" });
+  if (!unitInCompanyContext(req.params.unit, req)) {
+    return res.status(404).json({ error: "Unit not found" });
+  }
+  try {
+    await teamTlsRepo.removeUnitChecker(req.params.unit, req.params.employeeId);
     roles.invalidateOrgTeamsCache();
     res.json({ ok: true });
   } catch (err) {
@@ -1727,6 +1844,8 @@ router.post("/recycle-bin/:id/restore", async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
+router.patch("/it-requests/:id", async (req, res) => {
   if (!roles.canViewItRequests(req.userRole)) return res.status(403).json({ error: "Access denied" });
   const {
     status, assignedTo, resolutionNotes, notesHiddenFromRequester,
@@ -2155,6 +2274,7 @@ function nationalityOptionsFromEmployees(employees) {
 
 router.get("/employees", async (req, res) => {
   const hideOut = parseHideOut(req);
+  const hideAllOut = req.query.hideAllOut === "true" || req.query.hideAllOut === "1";
   const showLegacyEmployees = parseShowLegacy(req);
   const month = req.query.month || roles.localYearMonth();
   const companyContext = require("../lib/company-context");
@@ -2164,7 +2284,11 @@ router.get("/employees", async (req, res) => {
     companyContext.filterEmployeesByCompany(store.getEmployees({ hideOut: false }), company),
     req.userRole
   );
-  let employees = store.getEmployeesForMonth(month, { hideOut, showLegacyEmployees });
+  let employees = store.getEmployeesForMonth(month, {
+    hideOut: hideAllOut ? false : hideOut,
+    hideAllOut,
+    showLegacyEmployees,
+  });
   employees = companyContext.filterEmployeesByCompany(employees, company);
   employees = roles.filterEmployeesForUser(employees, req.userRole);
   employees = require("../lib/employee-app-role").enrichEmployeesWithAppRole(employees);
@@ -2403,20 +2527,24 @@ router.put("/employees/:id", async (req, res) => {
         if (useSupabase()) {
           await hrms.closeEmploymentPeriod(req.params.id, newDepart, req.username);
         }
-        await employeeDepart.persistDepartAutoOut(req.params.id, newDepart, store, req.username);
+        // Virtual OUT paint + locks only — do not materialize multi-month attendance rows.
       } catch (syncErr) {
         console.warn("[api] depart sync on employee update failed:", syncErr.message);
       }
     }
     const loginSync = require("../lib/employee-login-sync");
+    let loginDisabled = null;
+    let loginWarning = null;
     if (loginSync.shouldDisableLoginForEmployee(emp)) {
       try {
-        await loginSync.disableLoginForDepartedEmployee(emp.id, req.username);
+        loginDisabled = await loginSync.disableLoginForDepartedEmployee(emp.id, req.username);
+        loginWarning = loginSync.loginDisableWarning(loginDisabled);
       } catch (e) {
         console.warn("[api] disable login on employee update failed:", e.message);
+        loginWarning = e.message || "Login deactivation failed";
       }
     }
-    res.json({ ok: true, employee: emp });
+    res.json({ ok: true, employee: emp, loginDisabled, loginWarning });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -2448,14 +2576,18 @@ router.patch("/employees/:id/status", async (req, res) => {
     }
     const emp = await store.updateEmployee(req.params.id, { status }, req.username);
     const loginSync = require("../lib/employee-login-sync");
-    if (loginSync.shouldDisableLoginForEmployee(emp) || loginSync.isOutStatus(status)) {
+    let loginDisabled = null;
+    let loginWarning = null;
+    if (loginSync.shouldDisableLoginForEmployee(emp)) {
       try {
-        await loginSync.disableLoginForDepartedEmployee(emp.id, req.username);
+        loginDisabled = await loginSync.disableLoginForDepartedEmployee(emp.id, req.username);
+        loginWarning = loginSync.loginDisableWarning(loginDisabled);
       } catch (e) {
         console.warn("[api] disable login on status change failed:", e.message);
+        loginWarning = e.message || "Login deactivation failed";
       }
     }
-    res.json({ ok: true, employee: emp });
+    res.json({ ok: true, employee: emp, loginDisabled, loginWarning });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -2579,12 +2711,18 @@ router.get("/attendance", async (req, res) => {
   const unit = req.query.unit || "";
   const team = req.query.team || "";
   const hideOut = parseHideOut(req);
+  const hideAllOut = req.query.hideAllOut === "true" || req.query.hideAllOut === "1";
   const showLegacyEmployees = parseShowLegacy(req);
 
   const config = store.getConfig();
   let records = await store.readAttendanceEventsForMonth(month);
 
-  let employees = store.getEmployeesForMonth(month, { hideOut, showLegacyEmployees, attendanceRecords: records });
+  let employees = store.getEmployeesForMonth(month, {
+    hideOut: hideAllOut ? false : hideOut,
+    hideAllOut,
+    showLegacyEmployees,
+    attendanceRecords: records,
+  });
   employees = filterEmployeesForRequest(employees, req);
   if (unit) employees = employees.filter((e) => e.unit === unit);
   if (team) employees = employees.filter((e) => e.team === team);
@@ -2749,7 +2887,12 @@ router.post("/attendance", async (req, res) => {
       req.username,
       store,
       record.status,
-      { notice_type: req.body.notice_type }
+      {
+        notice_type: req.body.notice_type,
+        departDate: req.body.departDate,
+        status: req.body.departStatus || req.body.employeeDepartStatus,
+        force: req.body.forceDepart === true,
+      }
     );
   }
 
@@ -4020,6 +4163,28 @@ router.get("/settings/tax-rules", (req, res) => {
   res.json({ taxRules: scopedConfig.taxRules, company });
 });
 
+router.get("/settings/theme-unlocks", (req, res) => {
+  if (!roles.canSettingsThemeUnlocks(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const themeUnlocks = require("../lib/theme-unlocks");
+  const thresholds = themeUnlocks.getThemeUnlockThresholds(store.getConfig());
+  res.json({ thresholds });
+});
+
+router.put("/settings/theme-unlocks", async (req, res) => {
+  if (!roles.canSettingsThemeUnlocks(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  try {
+    const themeUnlocks = require("../lib/theme-unlocks");
+    const saved = await store.updateThemeUnlockThresholds(req.body?.thresholds || req.body, req.username);
+    res.json({ ok: true, thresholds: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
 router.get("/payroll-adjustments", (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);
   const adjustments = store.getPayrollAdjustments(month);
@@ -4972,6 +5137,60 @@ router.post("/documents", async (req, res) => {
     } catch {
       /* ignore */
     }
+  }
+});
+
+router.get("/reports/sales-rankings", async (req, res) => {
+  if (!roles.canViewSalesRankings(req.userRole)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const rankings = require("../lib/sales-rankings-report");
+    const { currentWorkingDay } = require("../lib/sales-working-day");
+    let from = String(req.query.from || "").slice(0, 10);
+    let to = String(req.query.to || "").slice(0, 10);
+    if (!from || !to) {
+      const today = currentWorkingDay();
+      from = today;
+      to = today;
+    }
+    const dateBasis = String(req.query.dateBasis || "submission").toLowerCase() === "workingday"
+      ? "workingDay"
+      : "submission";
+    const checksFilter = String(req.query.checksFilter || "all").toLowerCase();
+    const salesMode = rankings.normalizeSalesMode(req.query.salesMode);
+    const company = parseCompany(req);
+    let employees = companyContext.filterEmployeesByCompany(
+      store.getEmployees({ hideOut: false }),
+      company
+    );
+    const rpmRepo = require("../lib/rpm-sales-repo");
+    const rpmChecksRepo = require("../lib/rpm-checks-repo");
+    const rpmSalesRaw = await rpmRepo.readRpmSales({ from, to, dateBasis: dateBasis === "workingDay" ? "workingDay" : undefined });
+    const rpmSales = companyContext.filterSalesByCompanyContext(rpmSalesRaw || [], company);
+    const { checks } = await rpmChecksRepo.listChecks({
+      company,
+      fromDay: from,
+      toDay: to,
+      limit: 5000,
+    });
+    const attendance = rankings.loadAttendanceForRange(store, from, to, {
+      employeeIds: employees.map((e) => e.id),
+    });
+    const report = rankings.buildSalesRankingsReport({
+      from,
+      to,
+      dateBasis,
+      checksFilter,
+      salesMode,
+      employees,
+      rpmSales,
+      checks: checks || [],
+      attendance,
+    });
+    res.json({ report });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
   }
 });
 

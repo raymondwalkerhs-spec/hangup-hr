@@ -129,3 +129,8 @@ textarea {
 body.company-hs2 {
   --sidebar-active: #c084fc;
 }
+
+/* Sonner toasts + undo banners — above page cards, below dialogs/selects */
+[data-sonner-toaster] {
+  z-index: 1500 !important;
+}

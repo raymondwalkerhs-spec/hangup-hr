@@ -1,6 +1,6 @@
 import styles from "./PageToolbar.module.css";
 import { Select } from "./Select";
-import { clearUiBlockers } from "@/lib/uiBlockers";
+import { clearUiBlockersIfResidue } from "@/lib/uiBlockers";
 
 export type FilterOption = string | { value: string; label: string };
 
@@ -39,8 +39,8 @@ export function SearchField({
         className={styles.search}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => clearUiBlockers()}
-        onMouseDown={() => clearUiBlockers()}
+        onFocus={() => clearUiBlockersIfResidue()}
+        onMouseDown={() => clearUiBlockersIfResidue()}
         placeholder={placeholder}
       />
     </label>

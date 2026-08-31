@@ -306,7 +306,7 @@ window.HRMSFeatures = (function () {
 
     window.__hrRefreshNotifications = refresh;
     await refresh(false);
-    setInterval(() => refresh(true), 30000);
+    setInterval(() => refresh(true), 5000);
   }
 
   async function openNotificationRoutingModal(api, helpers) {

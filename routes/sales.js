@@ -4,6 +4,7 @@ const salesScope = require("../lib/sales-scope");
 const periodGrid = require("../lib/sales-period-grid");
 const opsMonth = require("../lib/sales-ops-month");
 const teamDashboard = require("../lib/team-dashboard");
+const teamDashboardRoster = require("../lib/team-dashboard-roster");
 const rpmRepo = require("../lib/rpm-sales-repo");
 const usersAdmin = require("../lib/users-admin");
 const hrmsRepo = require("../lib/hrms-repo");
@@ -61,15 +62,24 @@ function filterSalesByCompany(sales, employees) {
 function enrichSalesDisplayNames(sales, employees) {
   const allEmployees = employees || store.getEmployees();
   const empById = new Map(allEmployees.map((e) => [e.id, e]));
-  return (sales || []).map((s) => ({
-    ...s,
-    agentDisplayName: empById.get(s.agentId)?.american_name || "",
-    closerDisplayName: empById.get(s.closerId)?.american_name || "",
-  }));
+  return (sales || []).map((s) => {
+    const fd = s.formData || {};
+    const reviewerId = fd.reviewer || s.reviewer || "";
+    const verifierId = fd.assignVerifier || s.assignVerifier || "";
+    return {
+      ...s,
+      agentDisplayName: empById.get(s.agentId)?.american_name || "",
+      closerDisplayName: empById.get(s.closerId)?.american_name || "",
+      reviewerDisplayName: empById.get(reviewerId)?.american_name || "",
+      verifierDisplayName: empById.get(verifierId)?.american_name || "",
+    };
+  });
 }
 
 async function recalcAgentSalesFromSale(sale, actor) {
   if (!sale?.agentId) return;
+  const { isOtherAgentId } = require("../lib/other-agent");
+  if (isOtherAgentId(sale.agentId)) return;
   const wd = sale.workingDay || workingDayLib.computeWorkingDay(sale.submissionDate);
   const ym = String(wd || "").slice(0, 7);
   if (!ym) return;
@@ -340,9 +350,11 @@ router.get("/team-dashboard", async (req, res) => {
     employees = companyContext.filterEmployeesByCompany(employees, company);
     employees = roles.filterEmployeesForTeamDashboard(employees, req.userRole);
     const grants = await business.readSalesVisibilityGrants(req.username);
-    const period = req.query.period || "day";
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
-    const { from, to } = periodGrid.buildPeriodBounds(period === "week" ? "week" : "day", date);
+    const workingDayLib = require("../lib/sales-working-day");
+    const period = String(req.query.period || "day").toLowerCase();
+    const date = req.query.date || workingDayLib.currentWorkingDay();
+    const periodKey = period === "week" || period === "month" ? period : "day";
+    const { from, to } = periodGrid.buildPeriodBounds(periodKey, date);
 
     const padDate = (iso, delta) => {
       const d = new Date(`${iso}T12:00:00`);
@@ -360,6 +372,32 @@ router.get("/team-dashboard", async (req, res) => {
     } catch {
       teamsMeta = [];
     }
+    // Company-scope teamsMeta (mirror RPM weekly)
+    teamsMeta = (teamsMeta || []).filter((t) => {
+      const unit = String(t.unit || "");
+      if (company === "hs2") return companyContext.isHs2SaleUnit(unit);
+      return !companyContext.isHs2SaleUnit(unit);
+    });
+    if (req.userRole?.role === "op") {
+      const units = new Set(req.userRole.opUnits || []);
+      if (req.userRole.unit) units.add(req.userRole.unit);
+      if (units.size) teamsMeta = teamsMeta.filter((t) => units.has(t.unit));
+    } else if (
+      req.userRole?.role === "tl" ||
+      (req.userRole?.leadTeams || []).length ||
+      (req.userRole?.teamDashboardExtraTeams || []).length
+    ) {
+      const rpmWeekly = require("../lib/rpm-weekly-dashboard");
+      const { teamsMatch } = require("../lib/team-names");
+      const allowed = rpmWeekly.leadTeamEntriesForUser(req.userRole);
+      if (allowed.length) {
+        teamsMeta = teamsMeta.filter((t) =>
+          allowed.some(
+            (lt) => (!lt.unit || t.unit === lt.unit) && teamsMatch(t.name, lt.team)
+          )
+        );
+      }
+    }
 
     let appUsers = [];
     try {
@@ -374,8 +412,59 @@ router.get("/team-dashboard", async (req, res) => {
     }
     const attendance = periodGrid.filterAttendanceForRange(attendanceRecords, from, to);
 
-    if (period === "week") {
-      const dashboard = teamDashboard.buildWeekDashboard({
+    const emptyCk = () => ({ q: 0, nq: 0, age_limit: 0, under_age: 0, duplicate: 0 });
+    let checksByAgent = {};
+    let checksByAgentByDay = {};
+    try {
+      const rpmChecksRepo = require("../lib/rpm-checks-repo");
+      const { checks } = await rpmChecksRepo.listChecks({
+        company,
+        fromDay: from,
+        toDay: to,
+        limit: 5000,
+      });
+      const allowedIds = new Set(employees.map((e) => e.id));
+      for (const c of checks || []) {
+        if (!allowedIds.has(c.agentId)) continue;
+        if (rpmChecksRepo.isQFeedbackSheetImport(c)) continue;
+        if (!checksByAgent[c.agentId]) checksByAgent[c.agentId] = emptyCk();
+        if (checksByAgent[c.agentId][c.checkStatus] != null) {
+          checksByAgent[c.agentId][c.checkStatus] += 1;
+        }
+        const day = String(c.workingDay || "").slice(0, 10);
+        if (day) {
+          if (!checksByAgentByDay[day]) checksByAgentByDay[day] = {};
+          if (!checksByAgentByDay[day][c.agentId]) checksByAgentByDay[day][c.agentId] = emptyCk();
+          if (checksByAgentByDay[day][c.agentId][c.checkStatus] != null) {
+            checksByAgentByDay[day][c.agentId][c.checkStatus] += 1;
+          }
+        }
+      }
+    } catch {
+      checksByAgent = {};
+      checksByAgentByDay = {};
+    }
+
+    let notesByAgent = {};
+    if (periodKey === "day") {
+      try {
+        const notesRepo = require("../lib/team-dashboard-notes-repo");
+        const { notes } = await notesRepo.listNotes({
+          company,
+          workingDay: from,
+          agentIds: employees.map((e) => e.id),
+        });
+        for (const n of notes || []) {
+          notesByAgent[n.agentId] = n.note || "";
+        }
+      } catch {
+        notesByAgent = {};
+      }
+    }
+
+    if (periodKey === "week" || periodKey === "month") {
+      const targetDivisor = teamDashboardRoster.targetDivisorForPeriod(periodKey, from, to);
+      const dashboard = teamDashboard.buildPeriodTotalsDashboard({
         from,
         to,
         sales,
@@ -383,8 +472,20 @@ router.get("/team-dashboard", async (req, res) => {
         attendanceRecords: attendance,
         teamsMeta,
         appUsers,
+        checksByAgent,
+        targetDivisor,
       });
-      return res.json({ period: "week", program: "rpm", ...dashboard });
+      const agentRows = (dashboard.agentRows || []).map((row) => ({
+        ...row,
+        note: row.agentId ? notesByAgent[row.agentId] || "" : "",
+      }));
+      return res.json({
+        period: periodKey,
+        program: "rpm",
+        ...dashboard,
+        agentRows,
+        notesByAgent,
+      });
     }
 
     const dashboard = teamDashboard.buildDayDashboard({
@@ -394,10 +495,240 @@ router.get("/team-dashboard", async (req, res) => {
       attendanceRecords: attendance,
       teamsMeta,
       appUsers,
+      checksByAgent,
+      targetDivisor: 1,
     });
-    res.json({ period: "day", program: "rpm", ...dashboard });
+    const agentRows = (dashboard.agentRows || []).map((row) => ({
+      ...row,
+      note: row.agentId ? notesByAgent[row.agentId] || "" : "",
+    }));
+    res.json({ period: "day", program: "rpm", ...dashboard, agentRows, notesByAgent });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/team-dashboard/notes", async (req, res) => {
+  if (!roles.canViewTeamDashboard(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const agentId = String(req.body?.agentId || "").trim();
+    const workingDay = String(req.body?.workingDay || "").slice(0, 10);
+    if (!agentId || !workingDay) {
+      return res.status(400).json({ error: "agentId and workingDay required" });
+    }
+    let employees = store.getEmployees({ hideOut: false });
+    const company = companyContext.resolveCompanyContextForUser(req.body?.company, req.userRole);
+    employees = companyContext.filterEmployeesByCompany(employees, company);
+    employees = roles.filterEmployeesForTeamDashboard(employees, req.userRole);
+    if (!employees.some((e) => e.id === agentId)) {
+      return res.status(403).json({ error: "Agent out of scope" });
+    }
+    const notesRepo = require("../lib/team-dashboard-notes-repo");
+    const note = await notesRepo.upsertNote({
+      company,
+      agentId,
+      workingDay,
+      note: req.body?.note || "",
+      updatedBy: req.userRole?.employeeId || req.username,
+    });
+    res.json({ note });
+  } catch (err) {
+    if (err.code === "TABLE_MISSING") {
+      return res.status(503).json({ error: err.message, available: false });
+    }
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/rpm-weekly", async (req, res) => {
+  if (!roles.canViewRpmWeeklyDashboard(req.userRole)) {
+    return res.status(403).json({ error: "No permission for RPM weekly dashboard" });
+  }
+  try {
+    const rpmWeekly = require("../lib/rpm-weekly-dashboard");
+    const targetsRepo = require("../lib/rpm-team-week-targets-repo");
+    const { normalizeCountMode } = require("../lib/rpm-sale-bucket");
+
+    const month = String(req.query.month || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month=YYYY-MM required" });
+    }
+    const mode = normalizeCountMode(req.query.mode);
+    const teamFilter = String(req.query.team || "").trim() || null;
+    const company = companyContext.resolveCompanyContextForUser(req.query.company, req.userRole);
+
+    let employees = store.getEmployees({ hideOut: false });
+    employees = companyContext.filterEmployeesByCompany(employees, company);
+
+    const weeks = rpmWeekly.listWeeksForMonth(month);
+    if (!weeks.length) {
+      return res.json({
+        month,
+        mode,
+        company,
+        weeks: [],
+        targetsAvailable: true,
+        truncated: false,
+      });
+    }
+    const from = weeks[0].monday;
+    const to = weeks[weeks.length - 1].friday;
+    const padDate = (iso, delta) => {
+      const d = new Date(`${iso}T12:00:00`);
+      d.setDate(d.getDate() + delta);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const loaded = await rpmRepo.readRpmSales({
+      from: padDate(from, -1),
+      to: padDate(to, 1),
+      withMeta: true,
+      maxRows: 20000,
+    });
+    let sales = loaded.rows || [];
+    const truncated = Boolean(loaded.truncated);
+
+    const grants = await business.readSalesVisibilityGrants(req.username);
+    sales = salesScope.filterSalesForUser(sales, req.userRole, employees, grants);
+    sales = filterSalesByCompany(sales, employees);
+    sales = filterSalesForRequest(sales, req);
+
+    const leadEntries = rpmWeekly.leadTeamEntriesForUser(req.userRole);
+    const tlScoped = rpmWeekly.isTlScopedRpmWeeklyViewer(req.userRole);
+    if (tlScoped) {
+      sales = sales.filter((s) => rpmWeekly.saleMatchesLeadTeams(s, leadEntries));
+      if (teamFilter) {
+        const allowed = leadEntries.some((lt) => {
+          const { teamsMatch } = require("../lib/team-names");
+          return teamsMatch(lt.team, teamFilter);
+        });
+        if (!allowed) {
+          return res.status(403).json({ error: "Team filter outside your led teams" });
+        }
+      }
+    }
+
+    let teamsMeta = [];
+    try {
+      teamsMeta = await hrmsRepo.readOrgTeams();
+      teamsMeta = (teamsMeta || []).filter(
+        (t) => companyContext.getCompanyForUnit(t.unit) === company
+      );
+      if (req.userRole?.role === "op") {
+        const units = new Set([...(req.userRole.opUnits || []), req.userRole.unit].filter(Boolean));
+        teamsMeta = teamsMeta.filter((t) => units.has(t.unit));
+      } else if (tlScoped) {
+        const { teamsMatch } = require("../lib/team-names");
+        teamsMeta = teamsMeta.filter((t) =>
+          leadEntries.some(
+            (lt) =>
+              teamsMatch(t.name, lt.team) && (!lt.unit || !t.unit || t.unit === lt.unit)
+          )
+        );
+      }
+    } catch {
+      teamsMeta = [];
+    }
+
+    let targets = [];
+    let targetsAvailable = true;
+    try {
+      const listed = await targetsRepo.listTargets({
+        company,
+        fromWeek: from,
+        toWeek: to,
+      });
+      targets = listed.targets || [];
+      targetsAvailable = listed.available !== false;
+      if (req.userRole?.role === "op") {
+        const units = new Set([...(req.userRole.opUnits || []), req.userRole.unit].filter(Boolean));
+        targets = targets.filter((t) => !t.unit || units.has(t.unit));
+      } else if (tlScoped) {
+        const { teamsMatch } = require("../lib/team-names");
+        targets = targets.filter((t) =>
+          leadEntries.some(
+            (lt) =>
+              teamsMatch(t.team, lt.team) && (!lt.unit || !t.unit || t.unit === lt.unit)
+          )
+        );
+      }
+    } catch (err) {
+      if (targetsRepo.isTableMissing?.(err)) {
+        targetsAvailable = false;
+        targets = [];
+      } else {
+        throw err;
+      }
+    }
+
+    const dashboard = rpmWeekly.buildRpmWeeklyDashboard({
+      month,
+      mode,
+      sales,
+      employees,
+      teamsMeta,
+      targets,
+      targetsAvailable,
+      userRole: req.userRole,
+      company,
+      teamFilter,
+      truncated,
+    });
+    res.json(dashboard);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/rpm-weekly/targets", async (req, res) => {
+  if (!roles.canEditRpmWeeklyTargets(req.userRole)) {
+    return res.status(403).json({ error: "No permission to edit RPM weekly targets" });
+  }
+  try {
+    const targetsRepo = require("../lib/rpm-team-week-targets-repo");
+    const company = companyContext.resolveCompanyContextForUser(
+      req.body?.company || req.query.company,
+      req.userRole
+    );
+    const team = String(req.body?.team || "").trim();
+    const unit = String(req.body?.unit || "").trim();
+    const weekStart = String(req.body?.weekStart || "").trim();
+    const rawCount = req.body?.targetCount;
+
+    if (!team) return res.status(400).json({ error: "team required" });
+    if (!weekStart) return res.status(400).json({ error: "weekStart required" });
+
+    if (req.userRole?.role === "op") {
+      const units = new Set([...(req.userRole.opUnits || []), req.userRole.unit].filter(Boolean));
+      if (unit && !units.has(unit)) {
+        return res.status(403).json({ error: "Cannot set targets outside your unit" });
+      }
+      if (!unit && units.size) {
+        return res.status(400).json({ error: "unit required for OP" });
+      }
+    }
+
+    if (rawCount === null || rawCount === undefined || rawCount === "") {
+      await targetsRepo.deleteTarget({ company, unit, team, weekStart });
+      return res.json({ ok: true, cleared: true });
+    }
+
+    const target = await targetsRepo.upsertTarget({
+      company,
+      unit,
+      team,
+      weekStart,
+      targetCount: rawCount,
+      updatedBy: req.username,
+    });
+    res.json({ ok: true, target });
+  } catch (err) {
+    if (err.code === "TARGETS_UNAVAILABLE") {
+      return res.status(503).json({ error: err.message });
+    }
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -459,16 +790,39 @@ router.get("/dashboard", async (req, res) => {
       rpmSales = [];
     }
     sales = [...sales, ...rpmSales];
-    sales = opsMonth.filterSalesForDashboardOps(sales, req.userRole);
-    sales = filterSalesForRequest(sales, req);
-    sales = await salesFieldAccess.redactSalesForRole(sales, req.userRole, salesRedactOpts(req));
-    const dashboard = salesScope.buildSalesDashboard(sales, {
+    const allForUser = opsMonth.filterSalesForDashboardOps(sales, req.userRole);
+    let scoped = filterSalesForRequest(allForUser, req);
+    scoped = await salesFieldAccess.redactSalesForRole(scoped, req.userRole, salesRedactOpts(req));
+    const dashboard = salesScope.buildSalesDashboard(scoped, {
       period: range.period || "month",
       date: range.date,
       groupBy: req.query.groupBy || "team",
     });
     dashboard.byStatus = dashboard.totals;
     dashboard.scope = opsMonth.describeScope(req.userRole);
+
+    if (opsMonth.shouldSplitTlClosedTeam(req.userRole)) {
+      let closed = opsMonth.filterSalesForDashboardOps(sales, req.userRole, "closed");
+      let team = opsMonth.filterSalesForDashboardOps(sales, req.userRole, "team");
+      closed = filterSalesForRequest(closed, req);
+      team = filterSalesForRequest(team, req);
+      closed = await salesFieldAccess.redactSalesForRole(closed, req.userRole, salesRedactOpts(req));
+      team = await salesFieldAccess.redactSalesForRole(team, req.userRole, salesRedactOpts(req));
+      const closedDash = salesScope.buildSalesDashboard(closed, {
+        period: range.period || "month",
+        date: range.date,
+        groupBy: req.query.groupBy || "team",
+      });
+      const teamDash = salesScope.buildSalesDashboard(team, {
+        period: range.period || "month",
+        date: range.date,
+        groupBy: req.query.groupBy || "team",
+      });
+      dashboard.split = true;
+      dashboard.closed = { ...closedDash, byStatus: closedDash.totals, scope: "closer" };
+      dashboard.team = { ...teamDash, byStatus: teamDash.totals, scope: "team" };
+    }
+
     res.json(dashboard);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -563,10 +917,14 @@ router.post("/", async (req, res) => {
   if (!agentId) {
     return res.status(400).json({ error: "agentId required" });
   }
+  const { isOtherAgentId } = require("../lib/other-agent");
+  const otherAgent = isOtherAgentId(agentId);
   const emp = store.getEmployeeById(agentId);
   if (!emp) return res.status(404).json({ error: "Agent not found" });
-  const programCheck = saleProgramAccess.assertAgentProgramEnabled(emp, "mla", req.userRole);
-  if (!programCheck.ok) return res.status(403).json({ error: programCheck.error });
+  if (!otherAgent) {
+    const programCheck = saleProgramAccess.assertAgentProgramEnabled(emp, "mla", req.userRole);
+    if (!programCheck.ok) return res.status(403).json({ error: programCheck.error });
+  }
   const employeeAppRole = require("../lib/employee-app-role");
   const employees = employeeAppRole.enrichEmployeesWithLiveAppRole(
     companyContext.filterEmployeesByCompany(
@@ -604,11 +962,20 @@ router.post("/", async (req, res) => {
     const paymentCheck = validatePaymentForm(payload.formData || sanitizedForm);
     if (!paymentCheck.ok) return res.status(400).json({ error: paymentCheck.error });
 
-    const unitTeam = await validateSaleUnitTeam(
-      emp.unit || assignment.unit || req.body.unit || payload.formData?.unit,
-      emp.team || assignment.team || req.body.team || payload.formData?.team
-    );
-    if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
+    let unitTeam;
+    if (otherAgent) {
+      unitTeam = {
+        ok: true,
+        unit: String(req.body.unit || payload.formData?.unit || assignment.unit || "").trim(),
+        team: String(req.body.team || payload.formData?.team || assignment.team || "").trim(),
+      };
+    } else {
+      unitTeam = await validateSaleUnitTeam(
+        emp.unit || assignment.unit || req.body.unit || payload.formData?.unit,
+        emp.team || assignment.team || req.body.team || payload.formData?.team
+      );
+      if (!unitTeam.ok) return res.status(400).json({ error: unitTeam.error });
+    }
 
     const mergedForm = scrubPaymentForm(
       { ...sanitizedForm, ...(payload.formData || {}), unit: unitTeam.unit, team: unitTeam.team },
@@ -657,23 +1024,27 @@ router.post("/", async (req, res) => {
     if (!submitValidation.ok) {
       return res.status(400).json({ error: "Validation failed", errors: submitValidation.errors });
     }
+    const egyptSubmission = egyptDatetime.egyptNowFormatted();
+    const dates = workingDayLib.enrichSaleDates({}, egyptSubmission);
     const dup = await business.findRecentDuplicateSale({
       phoneNumber: catalogResolved.phoneNumber || payload.phoneNumber,
       agentId,
+      ignoreAgent: otherAgent,
+      workingDay: dates.workingDay,
     });
     if (dup) {
       return res.status(409).json({ error: "Sale already submitted", saleId: dup.id });
     }
     if (!agentId) return res.status(400).json({ error: "agentId required" });
-    const agentEmp = store.getEmployeeById(agentId);
-    if (agentEmp?.team && unitTeam.team && agentEmp.team !== unitTeam.team) {
-      const { teamsMatch } = require("../lib/team-names");
-      if (!teamsMatch(agentEmp.team, unitTeam.team)) {
-        return res.status(400).json({ error: "Agent must belong to the selected team" });
+    if (!otherAgent) {
+      const agentEmp = store.getEmployeeById(agentId);
+      if (agentEmp?.team && unitTeam.team && agentEmp.team !== unitTeam.team) {
+        const { teamsMatch } = require("../lib/team-names");
+        if (!teamsMatch(agentEmp.team, unitTeam.team)) {
+          return res.status(400).json({ error: "Agent must belong to the selected team" });
+        }
       }
     }
-    const egyptSubmission = egyptDatetime.egyptNowFormatted();
-    const dates = workingDayLib.enrichSaleDates({}, egyptSubmission);
     const sale = await business.createSale(
       {
         phoneNumber: payload.phoneNumber,

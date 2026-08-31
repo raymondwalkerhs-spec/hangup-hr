@@ -19,7 +19,8 @@
 
 .panel {
   position: fixed;
-  z-index: 1100;
+  z-index: 1400;
+  pointer-events: auto;
   background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

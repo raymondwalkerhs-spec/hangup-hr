@@ -71,6 +71,7 @@ export function SaleAssignmentPicker({
   agentId,
   closerId,
   onChange,
+  fieldErrors,
 }: {
   scope: SubmitScope;
   unit: string;
@@ -78,6 +79,7 @@ export function SaleAssignmentPicker({
   agentId: string;
   closerId: string;
   onChange: (patch: { unit?: string; team?: string; agentId?: string; closerId?: string }) => void;
+  fieldErrors?: Partial<Record<"agentId" | "closerId", string>>;
 }) {
   const { orgTeams, agents, closers, lockAgent, lockUnit, allowedUnits = [] } = scope;
 
@@ -126,21 +128,32 @@ export function SaleAssignmentPicker({
         <FormField label="Team">
           <div className={styles.readonlyUnit}>{team || "— (from agent)"}</div>
         </FormField>
-        <FormField label="Agent">
+        <FormField label="Agent" error={fieldErrors?.agentId}>
           <Select
             value={agentId}
             disabled={lockAgent}
+            searchable
             placeholder="— Select agent —"
             options={[
               { value: "", label: "— Select agent —" },
-              ...agentOptions.map((e) => ({ value: e.id, label: agentOptionLabel(e) })),
+              { value: "OTHER", label: "Other (unassigned)" },
+              ...agentOptions
+                .filter((e) => String(e.id).toUpperCase() !== "OTHER")
+                .map((e) => ({ value: e.id, label: agentOptionLabel(e) })),
             ]}
-            onChange={(v) => syncFromAgent(v)}
+            onChange={(v) => {
+              if (String(v).toUpperCase() === "OTHER") {
+                onChange({ agentId: "OTHER" });
+                return;
+              }
+              syncFromAgent(v);
+            }}
           />
         </FormField>
-        <FormField label="Closer">
+        <FormField label="Closer" error={fieldErrors?.closerId}>
           <Select
             value={closerId}
+            searchable
             placeholder="— Select closer —"
             options={[
               { value: "", label: "— Select closer —" },

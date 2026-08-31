@@ -20,6 +20,7 @@ import { FpImportDialog, FpRulesDialog } from "@/features/attendance/AttendanceD
 import { AttendanceStatusCell } from "@/features/attendance/AttendanceStatusCell";
 import { parseIsoDate, isAfterIsoDate } from "@/lib/dateIso";
 import styles from "./AttendancePage.module.css";
+import { LIVE_REFETCH_MS } from "@/lib/liveRefresh";
 
 const DEFAULT_STATUSES = [
   "Attended", "Day-OFF", "Half Day", "Quarter Day-Off", "WFH",
@@ -77,6 +78,7 @@ export function AttendancePage() {
   const [unit, setUnit] = useState("");
   const [team, setTeam] = useState("");
   const [hideOut, setHideOut] = useState(true);
+  const [hideAllOut, setHideAllOut] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [fpImportOpen, setFpImportOpen] = useState(false);
   const [fpRulesOpen, setFpRulesOpen] = useState(false);
@@ -102,14 +104,22 @@ export function AttendancePage() {
   }, [appStatus?.hideOutEmployees]);
 
   const canManage = (appStatus?.user as { canManageEmployees?: boolean })?.canManageEmployees === true;
+  const canEditTransport =
+    (appStatus?.user as { canViewTransportControls?: boolean })?.canViewTransportControls === true;
   const showFilters = (appStatus?.user as { canUseEmployeeFilters?: boolean })?.canUseEmployeeFilters === true;
+  const role = String((appStatus?.user as { role?: string })?.role || "").toLowerCase();
+  const canHideAllOut = ["tl", "hr", "rtm", "quality", "admin", "op", "ceo"].includes(role);
 
-  const attendanceQueryKey = ["attendance-grid", month, unit, team, hideOut, companyContext] as const;
+  const attendanceQueryKey = ["attendance-grid", month, unit, team, hideOut, hideAllOut, companyContext] as const;
 
   const { data, isLoading, error } = useQuery({
     queryKey: attendanceQueryKey,
     queryFn: () => {
-      const q = new URLSearchParams({ month, hideOut: hideOut ? "true" : "false" });
+      const q = new URLSearchParams({
+        month,
+        hideOut: hideOut && !hideAllOut ? "true" : "false",
+      });
+      if (hideAllOut) q.set("hideAllOut", "true");
       if (unit) q.set("unit", unit);
       if (team) q.set("team", team);
       return api<AttData>(path(`/attendance?${q}`));
@@ -117,7 +127,8 @@ export function AttendancePage() {
     // Roster data is shared across desktops; pick up team/status moves without
     // requiring the attendance user to restart or manually refresh.
     refetchOnWindowFocus: true,
-    refetchInterval: 30_000,
+    refetchInterval: LIVE_REFETCH_MS,
+    refetchIntervalInBackground: false,
   });
 
   const patchAttendanceRecords = useCallback(
@@ -150,6 +161,9 @@ export function AttendancePage() {
       transportOverride?: string;
       confirmDepart?: boolean;
       notice_type?: string;
+      departDate?: string;
+      departStatus?: string;
+      forceDepart?: boolean;
     }) =>
       api<{ record?: AttRecord; departSync?: { updated?: boolean; departDate?: string } }>("/attendance", {
         method: "POST",
@@ -314,6 +328,9 @@ export function AttendancePage() {
   const confirmDepartSave = useCallback(
     (asDepart: boolean) => {
       if (!departConfirm) return;
+      const formDate = String(departConfirm.form.departDate || "").slice(0, 10);
+      const departDate = /^\d{4}-\d{2}-\d{2}$/.test(formDate) ? formDate : departConfirm.date;
+
       if (departConfirm.extraDates && departConfirm.extraDates.length > 1 && !asDepart) {
         saveBatch.mutate(
           departConfirm.extraDates.map((t) => ({
@@ -327,6 +344,40 @@ export function AttendancePage() {
         setSelectedCells(new Set());
         return;
       }
+
+      if (asDepart && departConfirm.extraDates && departConfirm.extraDates.length > 1) {
+        // OUT all selected cells, then set employee depart from the form date.
+        const cells = departConfirm.extraDates;
+        void (async () => {
+          try {
+            await saveBatch.mutateAsync(
+              cells.map((t) => ({
+                employeeId: t.employeeId,
+                date: t.date,
+                status: departConfirm.status,
+                transportOverride: departConfirm.transportOverride,
+              }))
+            );
+            await saveCell.mutateAsync({
+              employeeId: departConfirm.employeeId,
+              date: departConfirm.date,
+              status: departConfirm.status,
+              transportOverride: departConfirm.transportOverride,
+              confirmDepart: true,
+              notice_type: departConfirm.form.notice_type,
+              departDate,
+              departStatus: departConfirm.form.status,
+              forceDepart: true,
+            });
+          } catch {
+            /* errors toasted by mutations */
+          }
+        })();
+        setDepartConfirm(null);
+        setSelectedCells(new Set());
+        return;
+      }
+
       saveCell.mutate({
         employeeId: departConfirm.employeeId,
         date: departConfirm.date,
@@ -334,6 +385,9 @@ export function AttendancePage() {
         transportOverride: departConfirm.transportOverride,
         confirmDepart: asDepart,
         notice_type: asDepart ? departConfirm.form.notice_type : undefined,
+        departDate: asDepart ? departDate : undefined,
+        departStatus: asDepart ? departConfirm.form.status : undefined,
+        forceDepart: asDepart,
       });
       setDepartConfirm(null);
       setSelectedCells(new Set());
@@ -394,7 +448,8 @@ export function AttendancePage() {
         <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem" }}>
           <input
             type="checkbox"
-            checked={hideOut}
+            checked={hideOut && !hideAllOut}
+            disabled={hideAllOut}
             onChange={(e) => {
               const next = e.target.checked;
               setHideOut(next);
@@ -405,6 +460,20 @@ export function AttendancePage() {
           />
           Hide OUT employees (left previous month)
         </label>
+        {canHideAllOut && (
+          <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem" }}>
+            <input
+              type="checkbox"
+              checked={hideAllOut}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setHideAllOut(on);
+                if (on) setHideOut(true);
+              }}
+            />
+            Hide all OUT (incl. worked this month)
+          </label>
+        )}
         {canEdit && (
           <Button variant="secondary" size="sm" onClick={() => setBulkOpen(!bulkOpen)}>
             {bulkOpen ? "Hide bulk actions" : "Bulk actions"}
@@ -545,6 +614,7 @@ export function AttendancePage() {
                               selected={selectedCells.has(`${emp.id}|${d}`)}
                               onPointerSelect={canEdit ? onPointerSelect : undefined}
                               onChange={(newSt, transport) => onStatusChange(emp.id, d, newSt, transport)}
+                              canEditTransport={canEditTransport}
                             />
                           </td>
                         );

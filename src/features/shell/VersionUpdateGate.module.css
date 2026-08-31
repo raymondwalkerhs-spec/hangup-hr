@@ -29,14 +29,36 @@
 
 .blockedActions {
   margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .linkBtn {
-  background: var(--primary);
-  color: #fff;
-  border: none;
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.5rem 1rem;
   cursor: pointer;
   font: inherit;
+}
+
+.downloadLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.status {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
 }

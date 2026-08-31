@@ -15,6 +15,12 @@ const BACKGROUND_QUERY_ROOTS = new Set([
   "status",
   "announcement-unread",
   "connectivity",
+  "sales-dashboard",
+  "sales-ops-month",
+  "rpm-weekly",
+  "rpm-checks-dashboard-summary",
+  "employees",
+  "payroll",
 ]);
 
 const SHOW_DELAY_MS = 90;

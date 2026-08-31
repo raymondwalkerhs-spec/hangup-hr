@@ -13,7 +13,7 @@ import { InspectorDetail } from "@/ui/InspectorDetail";
 import { Dialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
 import { Select } from "@/ui/Select";
-import { confirmAddTl, confirmAddCloser, tlCandidates, closerCandidates, opCandidates, opIdsForUnit } from "./orgHelpers";
+import { confirmAddTl, confirmAddCloser, tlCandidates, closerCandidates, opCandidates, opIdsForUnit, checkerCandidates, checkerIdsForUnit } from "./orgHelpers";
 import { canManageOrgPage } from "./orgAccess";
 import { OrgStructureEditor } from "./OrgStructureEditor";
 import type { Agent, Employee, TeamMeta, UnitSection } from "./orgTypes";
@@ -57,6 +57,16 @@ export function OrgPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [approveRegTarget, setApproveRegTarget] = useState<Record<string, unknown> | null>(null);
   const [approveTeam, setApproveTeam] = useState("");
+  const [approveUnit, setApproveUnit] = useState("");
+  const [editRegTarget, setEditRegTarget] = useState<Record<string, unknown> | null>(null);
+  const [editRegForm, setEditRegForm] = useState({
+    americanName: "",
+    legalName: "",
+    phone: "",
+    email: "",
+    unit: "",
+    team: "",
+  });
 
   const { user: statusUser } = useAppStatus();
 
@@ -67,18 +77,34 @@ export function OrgPage() {
         api<{ units?: UnitSection[]; unassigned?: Agent[] }>(path("/hrms/org-structure")),
         api<{ employees: Employee[] }>(path("/employees")).catch(() => ({ employees: [] })),
         api<{ teams?: TeamMeta[]; orgUnits?: string[] }>(path("/hrms/teams")).catch(() => ({ teams: [] })),
-        api<{ managers?: { unit: string; opEmployeeId?: string }[]; teamTls?: Record<string, string[]>; teamClosers?: Record<string, string[]>; unitOps?: Record<string, string[]> }>(path("/org/managers")),
+        api<{ managers?: { unit: string; opEmployeeId?: string }[]; teamTls?: Record<string, string[]>; teamClosers?: Record<string, string[]>; unitOps?: Record<string, string[]>; unitCheckers?: Record<string, string[]> }>(path("/org/managers")),
       ]);
-      return { structure, employees: empData.employees || [], teams: teamsRes.teams || [], mgr: mgrRes };
+      return {
+        structure,
+        employees: empData.employees || [],
+        teams: teamsRes.teams || [],
+        orgUnits: teamsRes.orgUnits || [],
+        mgr: mgrRes,
+      };
     },
   });
 
   const employees = data?.employees || [];
   const unitOps = data?.mgr?.unitOps || {};
+  const unitCheckers = data?.mgr?.unitCheckers || {};
   const managers = data?.mgr?.managers || [];
   const teamTls = data?.mgr?.teamTls || {};
   const teamClosers = data?.mgr?.teamClosers || {};
   const allTeams = data?.teams || [];
+  const defaultOrgUnits =
+    companyContext === "hs2" ? ["HS-2"] : ["HS-1", "HS-3", "HS-Back-End", "HS-MGMT"];
+  const orgUnits = [
+    ...new Set([
+      ...(data?.orgUnits || []),
+      ...defaultOrgUnits,
+      ...allTeams.map((t) => t.unit || "").filter(Boolean),
+    ]),
+  ];
 
   const invalidateOrg = () => {
     qc.invalidateQueries({ queryKey: ["org-full"] });
@@ -99,11 +125,15 @@ export function OrgPage() {
   });
 
   const approveReg = useMutation({
-    mutationFn: ({ id, team }: { id: string; team?: string }) =>
-      api(path(`/registration/${id}/approve`), { method: "POST", body: JSON.stringify({ team: team || "" }) }),
+    mutationFn: ({ id, team, unit }: { id: string; team?: string; unit?: string }) =>
+      api(path(`/registration/${id}/approve`), {
+        method: "POST",
+        body: JSON.stringify({ team: team || "", unit: unit || "" }),
+      }),
     onSuccess: () => {
       setApproveRegTarget(null);
       setApproveTeam("");
+      setApproveUnit("");
       qc.invalidateQueries({ queryKey: ["pending-regs"] });
       qc.invalidateQueries({ queryKey: ["registration-pending"] });
       invalidateOrg();
@@ -116,6 +146,18 @@ export function OrgPage() {
       qc.invalidateQueries({ queryKey: ["pending-regs"] });
       qc.invalidateQueries({ queryKey: ["registration-pending"] });
     },
+  });
+
+  const patchReg = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, string> }) =>
+      api(path(`/registration/${id}`), { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      setEditRegTarget(null);
+      qc.invalidateQueries({ queryKey: ["pending-regs"] });
+      qc.invalidateQueries({ queryKey: ["registration-pending"] });
+      toast.success("Registration updated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not update registration"),
   });
 
   const addOp = useMutation({
@@ -133,6 +175,23 @@ export function OrgPage() {
       api(path(`/org/unit-ops/${encodeURIComponent(unit)}/${encodeURIComponent(employeeId)}`), { method: "DELETE" }),
     onSuccess: invalidateOrg,
     onError: (err) => toast.error(err instanceof Error ? err.message : "Could not remove OP"),
+  });
+
+  const addChecker = useMutation({
+    mutationFn: ({ unit, employeeId }: { unit: string; employeeId: string }) =>
+      api(path(`/org/unit-checkers/${encodeURIComponent(unit)}`), { method: "POST", body: JSON.stringify({ employeeId }) }),
+    onSuccess: () => {
+      toast.success("Checker assigned");
+      invalidateOrg();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not add checker"),
+  });
+
+  const removeChecker = useMutation({
+    mutationFn: ({ unit, employeeId }: { unit: string; employeeId: string }) =>
+      api(path(`/org/unit-checkers/${encodeURIComponent(unit)}/${encodeURIComponent(employeeId)}`), { method: "DELETE" }),
+    onSuccess: invalidateOrg,
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not remove checker"),
   });
 
   const addTl = useMutation({
@@ -208,12 +267,84 @@ export function OrgPage() {
     },
   });
 
+  const toggleDials = useMutation({
+    mutationFn: ({ teamId, dialsSales }: { teamId: string; dialsSales: boolean }) =>
+      api(path(`/hrms/teams/${teamId}`), {
+        method: "PATCH",
+        body: JSON.stringify({ dialsSales }),
+      }),
+    onSuccess: (_data, vars) => {
+      toast.success(vars.dialsSales ? "Marked as dialing team" : "Marked as non-dialing team");
+      invalidateOrg();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not update dialing flag"),
+  });
+
+  const relocateTeam = useMutation({
+    mutationFn: ({
+      teamId,
+      unit,
+      reassignIds,
+    }: {
+      teamId: string;
+      unit: string;
+      reassignIds: boolean;
+    }) =>
+      api<{ changes?: { from: string; to: string }[]; skipped?: unknown[] }>(
+        path(`/hrms/teams/${teamId}/relocate`),
+        {
+          method: "POST",
+          body: JSON.stringify({ unit, reassignIds }),
+        }
+      ),
+    onSuccess: (res) => {
+      const moved = res?.changes?.length || 0;
+      toast.success(moved ? `Team moved · ${moved} agent update(s)` : "Team moved");
+      invalidateOrg();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not move team"),
+  });
+
+  const deleteTeam = useMutation({
+    mutationFn: (teamId: string) =>
+      api<{ clearedEmployeeIds?: string[] }>(path(`/hrms/teams/${teamId}`), { method: "DELETE" }),
+    onSuccess: (res) => {
+      const n = res?.clearedEmployeeIds?.length || 0;
+      toast.success(n ? `Team deleted · ${n} agent(s) unassigned` : "Team deleted");
+      invalidateOrg();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not delete team"),
+  });
+
+  const createTeam = useMutation({
+    mutationFn: (payload: { name: string; unit: string; dialsSales: boolean }) =>
+      api(path("/hrms/teams"), {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      toast.success("Team created");
+      invalidateOrg();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Could not create team"),
+  });
+
   const canApproveReg = ["op", "admin", "hr", "ceo"].includes(String(statusUser?.role || "").toLowerCase());
   const registrationCode = pinData?.registrationCode;
   const pendingList = pendingRegs?.pending || [];
-  const approveUnit = String(approveRegTarget?.unit || "HS-3");
+  const companyUnits = companyContext === "hs2" ? ["HS-2"] : ["HS-1", "HS-3"];
   const approveTeamOptions = allTeams.filter((t) => t.unit === approveUnit).map((t) => t.name).filter(Boolean);
-  const orgBusy = addTl.isPending || removeTl.isPending || addCloser.isPending || removeCloser.isPending || assignTeam.isPending;
+  const editTeamOptions = allTeams.filter((t) => t.unit === editRegForm.unit).map((t) => t.name).filter(Boolean);
+  const orgBusy =
+    addTl.isPending ||
+    removeTl.isPending ||
+    addCloser.isPending ||
+    removeCloser.isPending ||
+    assignTeam.isPending ||
+    toggleDials.isPending ||
+    relocateTeam.isPending ||
+    deleteTeam.isPending ||
+    createTeam.isPending;
 
   const canManage = canManageOrgPage(statusUser);
 
@@ -279,14 +410,21 @@ export function OrgPage() {
           onOpenChange={setEditOpen}
           employees={employees}
           allTeams={allTeams}
+          orgUnits={orgUnits}
           teamTls={teamTls}
           teamClosers={teamClosers}
           busy={orgBusy}
-          onAssignTeam={(empId, teamName) => handleAssignTeam(empId, teamName)}
+          onAssignTeam={handleAssignTeam}
           onAddTl={handleAddTlDirect}
           onRemoveTl={(teamId, employeeId) => removeTl.mutate({ teamId, employeeId })}
           onAddCloser={(teamId, _teamName, employeeId) => addCloser.mutate({ teamId, employeeId })}
           onRemoveCloser={(teamId, employeeId) => removeCloser.mutate({ teamId, employeeId })}
+          onToggleDials={(teamId, dialsSales) => toggleDials.mutate({ teamId, dialsSales })}
+          onRelocateTeam={(teamId, unit, reassignIds) =>
+            relocateTeam.mutate({ teamId, unit, reassignIds })
+          }
+          onDeleteTeam={(teamId) => deleteTeam.mutate(teamId)}
+          onCreateTeam={(payload) => createTeam.mutate(payload)}
         />
       )}
 
@@ -327,7 +465,33 @@ export function OrgPage() {
                     <td>{String(p.phone || "—")}</td>
                     <td>{p.company === "hs2" ? "HS-2" : "Hang-Up"}</td>
                     <td>
-                      <Button size="sm" onClick={() => { setApproveRegTarget(p); setApproveTeam(""); }}>Approve</Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditRegTarget(p);
+                          setEditRegForm({
+                            americanName: String(p.americanName || ""),
+                            legalName: String(p.legalName || p.arabicName || p.fullName || ""),
+                            phone: String(p.phone || ""),
+                            email: String(p.email || ""),
+                            unit: String(p.unit || companyUnits[0] || "HS-3"),
+                            team: String(p.team || ""),
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setApproveRegTarget(p);
+                          setApproveUnit(String(p.unit || companyUnits[0] || "HS-3"));
+                          setApproveTeam(String(p.team || ""));
+                        }}
+                      >
+                        Approve
+                      </Button>
                       <Button size="sm" variant="danger" onClick={() => rejectReg.mutate(String(p.id))}>Reject</Button>
                     </td>
                   </tr>
@@ -343,10 +507,12 @@ export function OrgPage() {
 
       {units.map((section) => {
         const opIds = opIdsForUnit(section.unit, unitOps, managers);
+        const checkerIds = checkerIdsForUnit(section.unit, unitCheckers);
         return (
           <Card key={section.unit} style={{ marginBottom: "1rem" }}>
             <div className={styles.unitHeader}>
               <h2>{section.unit}</h2>
+              <div className={styles.unitMeta}>
               <div className={styles.chips}>
                 <span className="muted">OPs:</span>
                 {opIds.length ? opIds.map((id) => (
@@ -385,6 +551,46 @@ export function OrgPage() {
                     placeholder="+ Add OP"
                   />
                 )}
+              </div>
+              <div className={styles.chips}>
+                <span className="muted">Checkers:</span>
+                {checkerIds.length ? checkerIds.map((id) => (
+                  <span key={id} className={styles.chip}>
+                    {empName(employees, id, true)}
+                    {canManage && (
+                      <button
+                        type="button"
+                        className={styles.chipRemove}
+                        title="Remove checker"
+                        onClick={() => {
+                          if (confirm(`Remove ${empName(employees, id, true)} as checker for ${section.unit}?`)) {
+                            removeChecker.mutate({ unit: section.unit, employeeId: id });
+                          }
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                )) : <span className="muted">—</span>}
+                {canManage && (
+                  <Select
+                    className={styles.addSelect}
+                    value=""
+                    onChange={(employeeId) => {
+                      if (employeeId) addChecker.mutate({ unit: section.unit, employeeId });
+                    }}
+                    options={[
+                      { value: "", label: "+ Add checker" },
+                      ...checkerCandidates(section.unit, employees).map((emp) => ({
+                        value: emp.id,
+                        label: `${emp.id} — ${emp.american_name || emp.id}${emp.unit && emp.unit !== section.unit ? ` (${emp.unit})` : ""}`,
+                      })),
+                    ]}
+                    placeholder="+ Add checker"
+                  />
+                )}
+              </div>
               </div>
             </div>
 
@@ -589,13 +795,13 @@ export function OrgPage() {
 
       <Dialog
         open={approveRegTarget !== null}
-        onOpenChange={(o) => { if (!o) { setApproveRegTarget(null); setApproveTeam(""); } }}
+        onOpenChange={(o) => { if (!o) { setApproveRegTarget(null); setApproveTeam(""); setApproveUnit(""); } }}
         title="Approve registration"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setApproveRegTarget(null); setApproveTeam(""); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setApproveRegTarget(null); setApproveTeam(""); setApproveUnit(""); }}>Cancel</Button>
             <Button
-              onClick={() => approveRegTarget && approveReg.mutate({ id: String(approveRegTarget.id), team: approveTeam })}
+              onClick={() => approveRegTarget && approveReg.mutate({ id: String(approveRegTarget.id), team: approveTeam, unit: approveUnit })}
               disabled={approveReg.isPending}
             >
               Approve
@@ -605,11 +811,18 @@ export function OrgPage() {
       >
         <p className="muted" style={{ marginTop: 0 }}>
           Creates employee + active login for <strong>{String(approveRegTarget?.americanName || approveRegTarget?.fullName || "")}</strong>.
-          Optionally assign a team now (can be done later on Organization).
+          The employee ID prefix comes from the unit you select (HS-1 → HS1-…). Assign a team now or later.
         </p>
         <FormGrid>
           <FormField label="Unit">
-            <input value={approveUnit} readOnly />
+            <Select
+              value={approveUnit}
+              onChange={(v) => {
+                setApproveUnit(v);
+                setApproveTeam("");
+              }}
+              options={companyUnits.map((u) => ({ value: u, label: u }))}
+            />
           </FormField>
           <FormField label="Team (optional)">
             <Select
@@ -618,6 +831,80 @@ export function OrgPage() {
               options={[
                 { value: "", label: "— Unassigned (assign later) —" },
                 ...approveTeamOptions.map((name) => ({ value: name, label: name })),
+              ]}
+            />
+          </FormField>
+        </FormGrid>
+      </Dialog>
+
+      <Dialog
+        open={editRegTarget !== null}
+        onOpenChange={(o) => { if (!o) setEditRegTarget(null); }}
+        title="Edit pending registration"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditRegTarget(null)}>Cancel</Button>
+            <Button
+              onClick={() =>
+                editRegTarget &&
+                patchReg.mutate({
+                  id: String(editRegTarget.id),
+                  body: {
+                    americanName: editRegForm.americanName,
+                    legalName: editRegForm.legalName,
+                    phone: editRegForm.phone,
+                    email: editRegForm.email,
+                    unit: editRegForm.unit,
+                    team: editRegForm.team,
+                  },
+                })
+              }
+              disabled={patchReg.isPending}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <FormField label="American name">
+            <input
+              value={editRegForm.americanName}
+              onChange={(e) => setEditRegForm((f) => ({ ...f, americanName: e.target.value }))}
+            />
+          </FormField>
+          <FormField label="Legal name">
+            <input
+              value={editRegForm.legalName}
+              onChange={(e) => setEditRegForm((f) => ({ ...f, legalName: e.target.value }))}
+            />
+          </FormField>
+          <FormField label="Phone">
+            <input
+              value={editRegForm.phone}
+              onChange={(e) => setEditRegForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </FormField>
+          <FormField label="Email">
+            <input
+              value={editRegForm.email}
+              onChange={(e) => setEditRegForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </FormField>
+          <FormField label="Unit">
+            <Select
+              value={editRegForm.unit}
+              onChange={(v) => setEditRegForm((f) => ({ ...f, unit: v, team: "" }))}
+              options={companyUnits.map((u) => ({ value: u, label: u }))}
+            />
+          </FormField>
+          <FormField label="Team (optional)">
+            <Select
+              value={editRegForm.team}
+              onChange={(v) => setEditRegForm((f) => ({ ...f, team: v }))}
+              options={[
+                { value: "", label: "— Unassigned —" },
+                ...editTeamOptions.map((name) => ({ value: name, label: name })),
               ]}
             />
           </FormField>

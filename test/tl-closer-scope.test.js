@@ -74,6 +74,16 @@ assert.deepStrictEqual(itList, ["HS1-05", "HS1-10", "HS1-20"], "closer IT scope 
 const dashEmps = roles.filterEmployeesForTeamDashboard(employees, closerOnly).map((e) => e.id).sort();
 assert.ok(dashEmps.includes("HS1-10"), "closer sees team on dashboard");
 
+// Import-from-open-Q must use sale agent picker scope, not attendance filterEmployeesForUser
+const attendanceScope = roles.filterEmployeesForUser(employees, closerOnly).map((e) => e.id);
+assert.deepStrictEqual(attendanceScope, ["HS1-05"], "closer attendance roster is self-only");
+const saleAgents = saleScope
+  .employeesForAgentPicker(closerOnly, employees, { orgTeams })
+  .map((e) => e.id)
+  .sort();
+assert.ok(saleAgents.includes("HS1-10") && saleAgents.includes("HS1-20"), "closer sale agent picker includes team");
+assert.ok(roles.canImportRpmSaleFromCheck(closerOnly), "closer may import open Q");
+
 const closerWithTlAccess = userRole({
   role: "tl",
   employeeId: "HS1-05",

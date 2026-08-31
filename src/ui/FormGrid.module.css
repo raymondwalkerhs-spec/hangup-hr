@@ -32,6 +32,27 @@
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--theme-glow);
+}
+.field.invalid input,
+.field.invalid select,
+.field.invalid textarea,
+.field.invalid :global([data-radix-select-trigger]),
+.field.invalid :global(button[aria-haspopup="listbox"]) {
+  border-color: var(--err);
+}
+.fieldError {
+  color: var(--err);
+  font-size: 0.72rem;
+  font-style: normal;
+  margin: 0;
 }
 .field textarea {
   min-height: 4.5rem;

@@ -21,10 +21,13 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.4.9` (`package.json` → `version`)
-- **Previous:** `2.4.7`
-- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.4.9`); Supabase zip on third-segment (`2.4.1` → `2.4.2`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
-- **Premium themes:** Gotham / Hello Kitty / Spiderman unlock at **10** RPM sent as agent **or** 10 closed as closer this month; **Turtle Grove** (`turtles`) at **15** sent or 15 closed. Admin/CEO/HR always unlocked (`lib/theme-unlocks.js`).
+- **Current version:** `2.5.0` (`package.json` → `version`)
+- **Previous:** `2.4.9`
+- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.5.0`); Supabase zip on third-segment (`2.5.0` → `2.5.1`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Premium themes:** Per-theme RPM sent/closed unlock targets in `app_config.themeUnlockThresholds` (defaults: Gotham/Hello Kitty/Spiderman **10**, Turtle Grove **15**). Always unlocked without sales: **admin, ceo, hr, it, finance, quality, checker, rtm**. Settings admin card gated by **`settingsThemeUnlocks`**.
+- **Sales Rankings:** `GET /api/reports/sales-rankings` + Reports tab; gated by **`viewSalesRankings`** (`lib/sales-rankings-report.js`). Company-scoped roster/attendance.
+- **Out login sync:** `shouldDisableLoginForEmployee` uses Out status only; backfill `scripts/backfill-out-user-deactivation.js`.
+- **Checks Q feedback shortcut:** `POST /api/rpm-checks` accepts optional `feedbackStatus` + `closerId` on Q create. UI on Checks **New check**; **Q Feedback** page remains the main workflow.
 
 ---
 
@@ -520,7 +523,8 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.4.9** | **true** | Turtle Grove premium (15 RPM sent or 15 closed); spinning turtle loader + slow turtles on `/cats`; Gotham/Kitty/Spidey stay at 10. Optional update (`min_compatible=1.0.0`). GitHub Latest 2026-08-27. |
+| **2.5.0** | **true** | Sales Rankings; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill; Google Forms RPM1; company-scope hardenings. Optional update (`min_compatible=1.0.0`). GitHub Latest 2026-08-31. |
+| **2.4.9** | false | Turtle Grove premium (15 RPM sent or 15 closed); spinning turtle loader + slow turtles on `/cats`; Gotham/Kitty/Spidey stay at 10. Optional update (`min_compatible=1.0.0`). Was Latest before 2.5.0. |
 | **2.4.8** | false | Checks MCN uniqueness (409 same day); Wrong MCN / letters name / digits phone; RPM create red glow + soft dup warn (Quality/RTM/Admin); same-day Sale↔Q auto-link; Supabase→Airtable RPM Edge sync; Q closer from sale triggers. Optional update (`min_compatible=1.0.0`). Was Latest before 2.4.9. |
 | **2.4.7** | false | Dead form fields / Electron confirm residue; Employee Out lag + depart date; deductions/bonuses Edit-Delete; Select search lag in dialogs; RPM Airtable Client RPM3; Import from open Q closer scope. Was Latest before 2.4.8. |
 | **2.4.0** | false | Dropdowns work in dialogs (click, search, scroll) including RPM Add sale. Installer-only Latest 2026-08-18; in-app Update now from 2.3.29. |

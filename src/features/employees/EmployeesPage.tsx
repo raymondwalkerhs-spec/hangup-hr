@@ -60,17 +60,19 @@ export function EmployeesPage() {
   const [editEmp, setEditEmp] = useState<Emp | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [hideOut, setHideOut] = useState(true);
+  const [hideAllOut, setHideAllOut] = useState(false);
   const [docsEmp, setDocsEmp] = useState<string | null>(null);
   const [warnEmp, setWarnEmp] = useState<string | null>(null);
   const [qnoteEmp, setQnoteEmp] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["employees-list", hideOut, companyContext, month],
+    queryKey: ["employees-list", hideOut, hideAllOut, companyContext, month],
     queryFn: () =>
       api<Meta>(
         path("/employees", {
           month,
-          hideOut: hideOut ? "true" : "false",
+          hideOut: hideOut && !hideAllOut ? "true" : "false",
+          hideAllOut: hideAllOut ? "true" : "false",
           showLegacy: "false",
         })
       ),
@@ -91,6 +93,9 @@ export function EmployeesPage() {
 
   const canEdit = statusUser?.canManageEmployees === true || ["admin", "ceo", "hr"].includes(String(statusUser?.role || ""));
   const canAdd = statusUser?.canAddEmployee === true;
+  const role = String(statusUser?.role || "").toLowerCase();
+  const showPayment = role !== "tl";
+  const canHideAllOut = ["tl", "hr", "rtm", "quality", "admin", "op", "ceo"].includes(role);
   const myEmpId = statusUser?.employeeId as string | undefined;
   const username = statusUser?.username as string | undefined;
   const canViewNotes = statusUser?.canViewEmployeeNotes === true;
@@ -126,14 +131,18 @@ export function EmployeesPage() {
       { accessorKey: "unit", header: "Unit", cell: (c) => String(c.getValue() ?? "—") },
       { accessorKey: "team", header: "Team", cell: (c) => String(c.getValue() ?? "—") },
       { accessorKey: "position", header: "Position", cell: (c) => String(c.getValue() ?? "—") },
-      {
-        id: "paymentMethod",
-        header: "Payment",
-        cell: ({ row }) => {
-          const label = paymentMethodLabel(row.original.payment_method || row.original.paymentMethod);
-          return label === "—" ? <span className="muted">—</span> : label;
-        },
-      },
+      ...(showPayment
+        ? [
+            {
+              id: "paymentMethod",
+              header: "Payment",
+              cell: ({ row }: { row: { original: Emp } }) => {
+                const label = paymentMethodLabel(row.original.payment_method || row.original.paymentMethod);
+                return label === "—" ? <span className="muted">—</span> : label;
+              },
+            } as ColumnDef<Emp>,
+          ]
+        : []),
       ...(showNatCol
         ? [{ accessorKey: "nationality", header: "Nationality", cell: (c: { getValue: () => unknown }) => String(c.getValue() || "—") } as ColumnDef<Emp>]
         : []),
@@ -172,7 +181,7 @@ export function EmployeesPage() {
         },
       },
     ],
-    [canEdit, showNatCol, showComplianceCol, myEmpId, canViewNotes, canWriteNotes, canViewQNotes, canWriteQNotes]
+    [canEdit, showNatCol, showComplianceCol, showPayment, myEmpId, canViewNotes, canWriteNotes, canViewQNotes, canWriteQNotes]
   );
 
   const setFilter = <K extends keyof EmployeeFilters>(k: K, v: EmployeeFilters[K]) =>
@@ -198,7 +207,9 @@ export function EmployeesPage() {
         <FilterSelect label="Unit" value={filters.unit || ""} onChange={(v) => setFilter("unit", v)} options={meta?.units || []} allLabel="All units" />
         <FilterSelect label="Team" value={filters.team || ""} onChange={(v) => setFilter("team", v)} options={meta?.teams || []} allLabel="All teams" />
         <FilterSelect label="Position" value={filters.position || ""} onChange={(v) => setFilter("position", v)} options={meta?.positions || []} allLabel="All positions" />
-        <FilterSelect label="Payment" value={filters.paymentMethod || ""} onChange={(v) => setFilter("paymentMethod", v)} options={PAYMENT_METHOD_FILTER_OPTIONS} allLabel="All payment methods" />
+        {showPayment && (
+          <FilterSelect label="Payment" value={filters.paymentMethod || ""} onChange={(v) => setFilter("paymentMethod", v)} options={PAYMENT_METHOD_FILTER_OPTIONS} allLabel="All payment methods" />
+        )}
         <label className={styles.fpFilter}>
           <span className="muted">FP</span>
           <select value={filters.fpStatus || ""} onChange={(e) => setFilter("fpStatus", e.target.value as EmployeeFilters["fpStatus"])}>
@@ -219,11 +230,26 @@ export function EmployeesPage() {
         <label className={styles.hideOutToggle}>
           <input
             type="checkbox"
-            checked={hideOut}
+            checked={hideOut && !hideAllOut}
+            disabled={hideAllOut}
             onChange={(e) => toggleHideOut(e.target.checked)}
           />
           <span>Hide OUT (left previous month)</span>
         </label>
+        {canHideAllOut && (
+          <label className={styles.hideOutToggle}>
+            <input
+              type="checkbox"
+              checked={hideAllOut}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setHideAllOut(on);
+                if (on) setHideOut(true);
+              }}
+            />
+            <span>Hide all OUT (incl. worked this month)</span>
+          </label>
+        )}
       </PageToolbar>
 
       <Card>
@@ -271,6 +297,7 @@ export function EmployeesPage() {
         open={!!editEmp}
         onOpenChange={(o) => !o && setEditEmp(null)}
         canEdit={canEdit}
+        showPayment={showPayment}
       />
     </div>
   );

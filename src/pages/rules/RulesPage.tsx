@@ -103,7 +103,14 @@ export function RulesPage() {
                         >
                           {save.isPending ? "Saving…" : "Save"}
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingKey(null)}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setEditingKey(null);
+                            save.reset();
+                          }}
+                        >
                           Cancel
                         </Button>
                       </>
@@ -114,6 +121,7 @@ export function RulesPage() {
                         onClick={() => {
                           setEditingKey(id);
                           setDraft(sec.content || "");
+                          save.reset();
                         }}
                       >
                         Edit
@@ -122,6 +130,11 @@ export function RulesPage() {
                   </div>
                 )}
               </div>
+              {isEditing && save.isError && (
+                <p style={{ color: "var(--err)", margin: "0.35rem 0 0" }}>
+                  {(save.error as Error).message}
+                </p>
+              )}
               <div className={styles.ruleBody}>
                 {isEditing ? (
                   <RulesSectionEditor

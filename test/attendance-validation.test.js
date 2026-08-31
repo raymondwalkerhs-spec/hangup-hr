@@ -14,6 +14,13 @@ test('holiday Day-OFF is preserved for a weekday', () => {
   assert.equal(record.isWeekendDefault, false);
 });
 
+test('lateness B / half day / quarter day default transport to none', () => {
+  for (const status of ['Lateness B', 'Half Day', 'Quarter Day-Off']) {
+    const record = normalizeAttendanceRecord({ employeeId: 'HS1-05', date: '2026-07-03', status });
+    assert.equal(record.transportOverride, 'none');
+  }
+});
+
 test('lateness records without lateness values are normalized', () => {
   const record = normalizeAttendanceRecord({ employeeId: 'HS1-05', date: '2026-06-25', status: 'Lateness A', fpLateness: null });
   assert.equal(record.status, 'Lateness A');

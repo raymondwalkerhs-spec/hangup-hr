@@ -101,3 +101,72 @@
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--border);
 }
+.manageList {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.manageCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  background: var(--surface-elevated);
+}
+.manageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.55rem;
+}
+.manageTitle {
+  font-weight: 650;
+  margin: 0;
+}
+.manageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.inlineSelect {
+  min-width: 8rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: inherit;
+}
+.createRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: flex-end;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.createField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.createField input,
+.createField select {
+  min-width: 9rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+}
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}

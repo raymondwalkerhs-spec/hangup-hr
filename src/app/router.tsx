@@ -3,10 +3,14 @@ import { AppShell } from "./AppShell";
 import { RequireAccess } from "./RequireAccess";
 import { TrailingSlashRedirect } from "./TrailingSlashRedirect";
 import { LoginPage } from "@/pages/auth/LoginPage";
+import { CatsPage } from "@/pages/cats/CatsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { SalesPage } from "@/pages/SalesPage";
 import { CostsPage } from "@/pages/CostsPage";
+import ChecksPage from "@/pages/checks/ChecksPage";
+import QFeedbackPage from "@/pages/checks/QFeedbackPage";
+import CheckDuplicatesPage from "@/pages/checks/CheckDuplicatesPage";
 import {
   BonusesPage,
   DeductionsPage,
@@ -47,6 +51,7 @@ import { ClearancePage } from "@/pages/compliance/ClearancePage";
 import { RecycleBinPage } from "@/pages/settings/RecycleBinPage";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthProvider";
+import { getSessionId } from "@/api/client";
 import { firstAllowedPage, type StatusUser } from "@/lib/nav-access";
 import styles from "./RequireAccess.module.css";
 import { CatOrbitLoader } from "@/features/shell/PageLoadingOverlay";
@@ -107,6 +112,9 @@ export function AppRouter() {
           <Route path="loan-approvals" element={<Guard page="loan-approvals"><LoanApprovalsPage /></Guard>} />
           <Route path="payslip" element={<Guard page="payslip"><PayslipPage /></Guard>} />
           <Route path="sales" element={<Guard page="sales"><SalesPage /></Guard>} />
+          <Route path="checks" element={<Guard page="checks"><ChecksPage /></Guard>} />
+          <Route path="q-feedback" element={<Guard page="q-feedback"><QFeedbackPage /></Guard>} />
+          <Route path="check-duplicates" element={<Guard page="check-duplicates"><CheckDuplicatesPage /></Guard>} />
           <Route path="team-dashboard" element={<Guard page="team-dashboard"><TeamDashboardPage /></Guard>} />
           <Route path="costs" element={<Guard page="costs"><CostsPage /></Guard>} />
           <Route path="reports" element={<Guard page="reports"><ReportsPage /></Guard>} />

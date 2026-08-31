@@ -11,6 +11,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", children, ...props }, ref) => (
     <button
       ref={ref}
+      data-variant={variant}
       className={clsx(styles.btn, styles[variant], styles[size], className)}
       {...props}
     >

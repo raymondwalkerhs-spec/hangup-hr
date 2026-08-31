@@ -5,8 +5,8 @@ import {
   type GitHubUpdateInfo,
   type VersionCheck,
   applyDesktopUpdate,
+  canApplyDesktopUpdate,
   formatUpdateSize,
-  getHrDesktop,
   updateActionHint,
 } from "@/lib/desktopUpdate";
 import styles from "./UpdateNoticeDialog.module.css";
@@ -29,17 +29,13 @@ export function UpdateNoticeDialog({
 
   const latest = githubInfo?.latest || notice?.currentVersion;
   const current = notice?.appVersion || githubInfo?.current || "this version";
-  const canUpdate = Boolean(
-    githubInfo?.updateAvailable &&
-    (githubInfo.assetUrl || githubInfo.assetId || githubInfo.assetName) &&
-    getHrDesktop()?.applyGitHubUpdate
-  );
+  const canUpdate = canApplyDesktopUpdate(githubInfo);
 
   const message =
-    (githubInfo?.updateAvailable
-      ? `Version ${githubInfo.latest} is available on GitHub (you have ${githubInfo.current || current}).`
-      : "") ||
     notice?.message ||
+    (githubInfo?.updateAvailable
+      ? `Optional update: version ${githubInfo.latest} is available (you have ${githubInfo.current || current}). Dashboard interface updates included.`
+      : "") ||
     "A newer app version is available.";
 
   const handleUpdate = async () => {
@@ -62,7 +58,7 @@ export function UpdateNoticeDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Update available"
+      title={notice?.status === "update_recommended" || githubInfo?.updateAvailable ? "Optional update available" : "Update available"}
       footer={
         <>
           {canUpdate && (
@@ -88,7 +84,8 @@ export function UpdateNoticeDialog({
       </p>
       {canUpdate ? (
         <p className="muted">
-          Click <strong>Update now</strong> to {updateActionHint(githubInfo)}
+          This update is <strong>optional</strong> — you can Continue and update later. Click <strong>Update now</strong> to{" "}
+          {updateActionHint(githubInfo)}
           {githubInfo?.assetSize ? ` Download size: ${formatUpdateSize(githubInfo.assetSize)}.` : ""}
         </p>
       ) : (

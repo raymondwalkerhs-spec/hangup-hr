@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.4.9`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.5.0`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -181,7 +181,8 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 | Section | Who | What |
 |---------|-----|------|
-| **Appearance** | Everyone | Free themes + premiums: Gotham / Hello Kitty / Spiderman unlock at **10** RPM sent as agent or **10** closed as closer this month; **Turtle Grove** needs **15** sent or **15** closed (Admin/CEO/HR always unlocked). Turtle Grove uses a spinning turtle loader and slow turtles on Cats. |
+| **Appearance** | Everyone | Free themes + premiums; unlock counts shown from admin-configured RPM targets (see below). Turtle Grove uses a spinning turtle loader and slow turtles on Cats. |
+| **Premium theme unlock targets** | Admin / HR / CEO (`settingsThemeUnlocks`) | Per-theme RPM sent-as-agent and closed-as-closer thresholds (Gotham / Hello Kitty / Spiderman / Turtle Grove) |
 | **Change password** | Everyone | Current + new password |
 | **Display** | HR | Hide out / inactive employees |
 | **Federal holidays** | HR | Import USA 2024–2028, toggle per holiday, year accordion in Settings |
@@ -255,6 +256,9 @@ See [`SALES_LOG.md`](SALES_LOG.md) for the full reference.
 - **Access Control (1.6.6):** new keys — **Approve sales**, **Dashboard unit filters**, **Team dashboards**, **Issue equipment**. Sales **Edit** button follows **Edit sales records** only (not hardcoded OP/approver bypass).
 - **Access Control (RPM weekly):** **RPM weekly dashboard** (`viewRpmWeeklyDashboard`) — default Admin / RTM / Quality / OP / TL (and dual-role agents with led teams). **Edit RPM weekly team targets** (`editRpmWeeklyTargets`) — Admin / RTM / Quality / OP only (TL view-only). TL scoped to led team(s); OP to unit.
 - **Access Control (Sales log filters):** **Sales log filters** (`viewSalesLogFilters`) — period picker + team/agent/closer/client filters. Default on for OP/Admin/Quality/RTM/HR/CEO; off for TL/agent. Flip per role to show filters to TL or hide from OP. Chosen period stays when you leave Sales and come back.
+- **Access Control (Sales Rankings):** **Sales Rankings report** (`viewSalesRankings`) — Reports → **Sales Rankings** tab (period picker, agent/closer/check leaderboards). Same default roles as sales log filters; independent toggle. Reports sidebar shows if you have **View reports** *or* **Sales Rankings report**.
+- **Access Control (theme targets):** **Settings: premium theme unlock targets** (`settingsThemeUnlocks`) — edit RPM sent/closed thresholds per premium theme. Default Admin/CEO/HR.
+- **Checks (Q feedback shortcut):** On **New check** with status **Q**, users with **Submit Q Feedback** may optionally pick disposition + closer on the same submit. Skip leaves an open Q for the **Q Feedback** page — that page is not replaced.
 - **Dual-role TL:** assign TL on Organization (`team_tls` / `tl_employee_id`); agent login with `leadTeams` sees led team for leave/IT on behalf, not unit-wide sales unless also assigned as **closer** for that team.
 - **Add sale (1.6.13):** team auto-fills from selected agent; quality section hidden on submit.
 - **Add sale (1.6.12):** full editable submit form (`surface=submit`); role-scoped unit/agent/closer; agents default closer to self (own team leaders allowed). Org closers (e.g. Ria) keep agent login, stay in the closer list, default to themselves, and can submit their own sales. Closers/TLs assigned in Organization (e.g. Amy on Tris) pick that team even if their employee home team is Management.

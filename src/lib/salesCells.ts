@@ -20,6 +20,16 @@ export function saleCellValue(
   const closerName =
     empById.get(String(sale.closerId || ""))?.american_name || sale.closerDisplayName || fd.closerName || "";
 
+  const employeeCell = (idRaw: unknown, displayFallback?: unknown) => {
+    const id = String(idRaw || "").trim();
+    if (!id) return "—";
+    const name =
+      empById.get(id)?.american_name ||
+      String(displayFallback || "").trim() ||
+      "";
+    return name ? `${id} · ${name}` : id;
+  };
+
   switch (colKey) {
     case "workingDay":
       return String(sale.workingDay || String(sale.submissionDate || "").slice(0, 10) || sale.effectiveDate || "—");
@@ -42,11 +52,20 @@ export function saleCellValue(
     case "deviceType":
       return deviceLabel(sale.device || fd.deviceType);
     case "agent":
-    case "agentName":
+    case "agentName": {
+      if (String(sale.agentId || "").toUpperCase() === "OTHER") return "Unassigned";
       return `${sale.agentId || "—"} · ${agentName || ""}`.trim();
+    }
     case "closer":
     case "closerName":
       return `${sale.closerId || "—"} · ${closerName || ""}`.trim();
+    case "reviewer":
+      return employeeCell(fd.reviewer ?? sale.reviewer, sale.reviewerDisplayName || fd.reviewerName);
+    case "assignVerifier":
+      return employeeCell(
+        fd.assignVerifier ?? sale.assignVerifier,
+        sale.verifierDisplayName || fd.verifierName || fd.assignVerifierName
+      );
     case "team":
       return String(sale.team || fd.team || "—");
     case "unit":
@@ -104,12 +123,12 @@ function addUtcDays(isoDate: string, delta: number) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Current Cairo working day. 00:00–01:59 → previous calendar day. */
+/** Current Cairo working day. 00:00–02:59 → previous calendar day. */
 export function cairoWorkingDayToday(date = new Date()) {
   const p = cairoNowParts(date);
   let hour = parseInt(p.hour || "12", 10);
   if (hour === 24) hour = 0;
   const cal = `${p.year}-${p.month}-${p.day}`;
-  if (hour < 2) return addUtcDays(cal, -1);
+  if (hour < 3) return addUtcDays(cal, -1);
   return cal;
 }

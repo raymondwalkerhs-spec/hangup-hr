@@ -6,9 +6,11 @@ const COLORS = ["var(--primary)", "var(--accent)", "var(--ok)", "var(--warn)", "
 export function LinkedBarChart({
   data,
   filterKey,
+  animate = true,
 }: {
   data: { name: string; value: number }[];
   filterKey?: "team" | "status" | "category";
+  animate?: boolean;
 }) {
   const { filters, setFilter } = useCrossFilterStore();
 
@@ -20,6 +22,7 @@ export function LinkedBarChart({
         <Bar
           dataKey="value"
           radius={[4, 4, 0, 0]}
+          isAnimationActive={animate}
           onClick={(d) => {
             if (filterKey && d?.name) setFilter(filterKey, String(d.name));
           }}

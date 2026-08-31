@@ -5,12 +5,11 @@ import { api, fmt, monthLabel } from "@/api/client";
 import { useAppStore } from "@/stores/theme-store";
 import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { useAuth } from "@/app/AuthProvider";
-import { bonusCols } from "@/api/columnMaps";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { Card } from "@/ui/Card";
 import { Button } from "@/ui/Button";
 import { DataGrid } from "@/ui/DataGrid";
-import { Dialog } from "@/ui/Dialog";
+import { Dialog, ConfirmDialog } from "@/ui/Dialog";
 import { FormField, FormGrid } from "@/ui/FormGrid";
 import { Select } from "@/ui/Select";
 import { InspectorDetail } from "@/ui/InspectorDetail";
@@ -29,10 +28,52 @@ type BonusRequest = {
   status?: string;
 };
 
+type BonusForm = {
+  employeeId: string;
+  type: string;
+  amount: string;
+  date: string;
+  reason: string;
+  deductFromEmployeeId: string;
+};
+
 const TL_BONUS_TYPE = "Bonus from TL / OP";
 
 function isLeadershipEmployeeId(id: string) {
   return /^(TL|CL|OP|HR|RTM)/i.test(String(id || "").trim());
+}
+
+function parseTlSourceFromReason(reason: string | undefined | null) {
+  const m = String(reason || "").match(/\(deducted from\s+([^)]+)\)/i);
+  return m ? m[1].trim() : "";
+}
+
+function cleanBonusReason(reason: string | undefined | null) {
+  return String(reason || "")
+    .replace(/\s*\(deducted from[^)]+\)\s*/i, "")
+    .trim();
+}
+
+function emptyForm(month: string): BonusForm {
+  return {
+    employeeId: "",
+    type: "",
+    amount: "",
+    date: `${month}-01`,
+    reason: "",
+    deductFromEmployeeId: "",
+  };
+}
+
+function rowToForm(row: Row): BonusForm {
+  return {
+    employeeId: String(row.employeeId || ""),
+    type: String(row.type || ""),
+    amount: row.amount != null ? String(row.amount) : "",
+    date: String(row.date || "").slice(0, 10),
+    reason: cleanBonusReason(String(row.reason || "")),
+    deductFromEmployeeId: parseTlSourceFromReason(String(row.reason || "")),
+  };
 }
 
 function canSubmitBonusRequest(user: Record<string, unknown> | null | undefined) {
@@ -47,21 +88,30 @@ function canApproveBonusRequest(user: Record<string, unknown> | null | undefined
   return ["admin", "ceo", "hr"].includes(String(user.role || "").toLowerCase());
 }
 
+function canManageBonuses(user: Record<string, unknown> | null | undefined) {
+  if (!user) return false;
+  if (user.canManageEmployees === true) return true;
+  return ["admin", "ceo", "hr"].includes(String(user.role || "").toLowerCase());
+}
+
 export function BonusesPage() {
   const month = useAppStore((s) => s.month);
   const { path, companyContext } = useCompanyScope();
   const qc = useQueryClient();
   const { user } = useAuth();
   const openInspector = useInspectorStore((s) => s.openInspector);
-  const [addOpen, setAddOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [deleteRow, setDeleteRow] = useState<Row | null>(null);
   const [reqOpen, setReqOpen] = useState(false);
   const [denyOpen, setDenyOpen] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState("");
-  const [form, setForm] = useState({ employeeId: "", type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+  const [form, setForm] = useState<BonusForm>(() => emptyForm(month));
   const [reqForm, setReqForm] = useState({ employeeId: "", amount: "", date: "", reason: "" });
 
   const canSubmit = canSubmitBonusRequest(user);
   const canApprove = canApproveBonusRequest(user);
+  const canManage = canManageBonuses(user);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["bonuses", month, companyContext],
@@ -85,27 +135,61 @@ export function BonusesPage() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["bonuses", month] });
     qc.invalidateQueries({ queryKey: ["bonus-requests"] });
+    qc.invalidateQueries({ queryKey: ["payslip-bundle"] });
+    qc.invalidateQueries({ queryKey: ["payroll-full"] });
+    qc.invalidateQueries({ queryKey: ["deductions"] });
   };
 
-  const add = useMutation({
-    mutationFn: () =>
-      api(path("/bonuses"), {
+  const save = useMutation({
+    mutationFn: () => {
+      const body = {
+        employeeId: form.employeeId,
+        type: form.type || "Other Bonus",
+        amount: Number(form.amount),
+        date: form.date || `${month}-01`,
+        reason: form.reason,
+        deductFromEmployeeId:
+          form.type === TL_BONUS_TYPE ? form.deductFromEmployeeId || undefined : undefined,
+        ...(companyContext === "hs2" ? { company: "hs2" } : {}),
+      };
+      if (editing) {
+        return api(path("/bonuses"), {
+          method: "PATCH",
+          body: JSON.stringify({
+            originalEmployeeId: String(editing.employeeId || ""),
+            originalDate: String(editing.date || "").slice(0, 10),
+            originalType: String(editing.type || ""),
+            ...body,
+          }),
+        });
+      }
+      return api(path("/bonuses"), {
         method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      setDialogOpen(false);
+      setEditing(null);
+      setForm(emptyForm(month));
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (row: Row) =>
+      api(path("/bonuses"), {
+        method: "DELETE",
         body: JSON.stringify({
-          employeeId: form.employeeId,
-          type: form.type || "Other Bonus",
-          amount: Number(form.amount),
-          date: form.date || `${month}-01`,
-          reason: form.reason,
-          deductFromEmployeeId:
-            form.type === TL_BONUS_TYPE ? form.deductFromEmployeeId || undefined : undefined,
+          employeeId: String(row.employeeId || ""),
+          date: String(row.date || "").slice(0, 10),
+          type: String(row.type || ""),
           ...(companyContext === "hs2" ? { company: "hs2" } : {}),
         }),
       }),
     onSuccess: () => {
       invalidate();
-      setAddOpen(false);
-      setForm({ employeeId: "", type: "", amount: "", date: "", reason: "", deductFromEmployeeId: "" });
+      setDeleteRow(null);
     },
   });
 
@@ -130,7 +214,15 @@ export function BonusesPage() {
   });
 
   const reviewReq = useMutation({
-    mutationFn: ({ id, action, denyReason: reason }: { id: string; action: "approve" | "deny"; denyReason?: string }) =>
+    mutationFn: ({
+      id,
+      action,
+      denyReason: reason,
+    }: {
+      id: string;
+      action: "approve" | "deny";
+      denyReason?: string;
+    }) =>
       api(path(`/bonus-requests/${id}`), {
         method: "PATCH",
         body: JSON.stringify({ action, denyReason: reason }),
@@ -142,29 +234,96 @@ export function BonusesPage() {
     },
   });
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm(emptyForm(month));
+    setDialogOpen(true);
+  };
+
+  const openEdit = (row: Row) => {
+    setEditing(row);
+    setForm(rowToForm(row));
+    setDialogOpen(true);
+  };
+
   const rows = data?.bonuses || [];
   const requests = reqData?.requests || [];
   const agents = (emps?.employees || []).filter((e) => !isLeadershipEmployeeId(e.id));
   const tlPayers = (emps?.employees || []).filter((e) => isLeadershipEmployeeId(e.id));
-  const columns = useMemo<ColumnDef<Row>[]>(() => bonusCols, []);
   const isTlBonusForm = form.type === TL_BONUS_TYPE;
+
+  const columns = useMemo<ColumnDef<Row>[]>(() => {
+    const cols: ColumnDef<Row>[] = [
+      {
+        accessorKey: "date",
+        header: "Date",
+        cell: (c) => String(c.getValue() || "").slice(0, 10) || "—",
+      },
+      {
+        accessorKey: "employeeId",
+        header: "ID",
+        cell: (c) => String(c.getValue() || "—"),
+      },
+      {
+        accessorKey: "type",
+        header: "Type",
+        cell: (c) => String(c.getValue() || "—"),
+      },
+      {
+        accessorKey: "amount",
+        header: "Amount",
+        cell: (c) => fmt(c.getValue() as number),
+      },
+      {
+        accessorKey: "reason",
+        header: "Reason",
+        cell: (c) => String(c.getValue() || "—"),
+      },
+    ];
+    if (canManage) {
+      cols.push({
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <span style={{ display: "flex", gap: "0.25rem" }} onClick={(e) => e.stopPropagation()}>
+            <Button size="sm" variant="secondary" onClick={() => openEdit(row.original)}>
+              Edit
+            </Button>
+            <Button size="sm" variant="danger" onClick={() => setDeleteRow(row.original)}>
+              Delete
+            </Button>
+          </span>
+        ),
+      });
+    }
+    return cols;
+  }, [canManage, month]);
 
   return (
     <div>
       <SectionHeader
         title="Bonuses"
         subtitle={monthLabel(month)}
-        actions={<Button onClick={() => setAddOpen(true)}>Add bonus</Button>}
+        actions={canManage ? <Button onClick={openAdd}>Add bonus</Button> : undefined}
       />
 
       {(canSubmit || canApprove) && (
         <Card style={{ marginBottom: "1rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.75rem",
+            }}
+          >
             <h3 style={{ margin: 0 }}>
               Bonus requests {canApprove ? "(pending approval)" : ""}
             </h3>
             {canSubmit && (
-              <Button size="sm" onClick={() => setReqOpen(true)}>+ Request bonus for agent</Button>
+              <Button size="sm" onClick={() => setReqOpen(true)}>
+                + Request bonus for agent
+              </Button>
             )}
           </div>
           {requests.length ? (
@@ -188,11 +347,23 @@ export function BonusesPage() {
                     <td>{r.type}</td>
                     <td>{r.submittedBy || "—"}</td>
                     {canApprove && (
-                      <td align="right" style={{ display: "flex", gap: "0.35rem", justifyContent: "flex-end" }}>
-                        <Button size="sm" onClick={() => reviewReq.mutate({ id: r.id, action: "approve" })} disabled={reviewReq.isPending}>
+                      <td
+                        align="right"
+                        style={{ display: "flex", gap: "0.35rem", justifyContent: "flex-end" }}
+                      >
+                        <Button
+                          size="sm"
+                          onClick={() => reviewReq.mutate({ id: r.id, action: "approve" })}
+                          disabled={reviewReq.isPending}
+                        >
                           Approve
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => setDenyOpen(r.id)} disabled={reviewReq.isPending}>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setDenyOpen(r.id)}
+                          disabled={reviewReq.isPending}
+                        >
                           Deny
                         </Button>
                       </td>
@@ -216,20 +387,37 @@ export function BonusesPage() {
           <DataGrid
             data={rows}
             columns={columns}
-            onRowClick={(row) => openInspector(`Bonus — ${row.employeeId}`, <InspectorDetail row={row} />)}
+            onRowClick={(row) =>
+              openInspector(`Bonus — ${row.employeeId}`, <InspectorDetail row={row} />)
+            }
           />
         )}
       </Card>
 
       <Dialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        title="Add bonus"
+        open={dialogOpen}
+        onOpenChange={(o) => {
+          setDialogOpen(o);
+          if (!o) setEditing(null);
+        }}
+        title={editing ? "Edit bonus" : "Add bonus"}
         wide
         footer={
           <>
-            <Button variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => add.mutate()} disabled={add.isPending || !form.employeeId || !form.amount || (isTlBonusForm && !form.deductFromEmployeeId)}>Save</Button>
+            <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => save.mutate()}
+              disabled={
+                save.isPending ||
+                !form.employeeId ||
+                !form.amount ||
+                (isTlBonusForm && !form.deductFromEmployeeId)
+              }
+            >
+              {save.isPending ? "Saving…" : "Save"}
+            </Button>
           </>
         }
       >
@@ -240,7 +428,10 @@ export function BonusesPage() {
               onChange={(employeeId) => setForm({ ...form, employeeId })}
               options={[
                 { value: "", label: "—" },
-                ...(emps?.employees || []).map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+                ...(emps?.employees || []).map((e) => ({
+                  value: e.id,
+                  label: `${e.id} — ${e.american_name || ""}`,
+                })),
               ]}
             />
           </FormField>
@@ -248,7 +439,10 @@ export function BonusesPage() {
             <Select
               value={form.type}
               onChange={(type) => setForm({ ...form, type, deductFromEmployeeId: "" })}
-              options={[{ value: "", label: "—" }, ...(data?.types || []).map((t) => ({ value: t, label: t }))]}
+              options={[
+                { value: "", label: "—" },
+                ...(data?.types || []).map((t) => ({ value: t, label: t })),
+              ]}
             />
           </FormField>
           {isTlBonusForm && (
@@ -258,17 +452,50 @@ export function BonusesPage() {
                 onChange={(deductFromEmployeeId) => setForm({ ...form, deductFromEmployeeId })}
                 options={[
                   { value: "", label: "— Select TL/OP —" },
-                  ...tlPayers.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+                  ...tlPayers.map((e) => ({
+                    value: e.id,
+                    label: `${e.id} — ${e.american_name || ""}`,
+                  })),
                 ]}
               />
             </FormField>
           )}
-          <FormField label="Amount"><input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></FormField>
-          <FormField label="Date"><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></FormField>
-          <FormField label="Reason" span="full"><input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></FormField>
+          <FormField label="Amount">
+            <input
+              type="number"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Date">
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+          </FormField>
+          <FormField label="Reason" span="full">
+            <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+          </FormField>
         </FormGrid>
-        {add.isError && <p style={{ color: "var(--err)" }}>{(add.error as Error).message}</p>}
+        {save.isError && <p style={{ color: "var(--err)" }}>{(save.error as Error).message}</p>}
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteRow)}
+        onOpenChange={(o) => !o && setDeleteRow(null)}
+        title="Delete bonus?"
+        message={
+          deleteRow
+            ? `Remove ${String(deleteRow.type || "bonus")} (${fmt(Number(deleteRow.amount) || 0)} EGP) for ${String(deleteRow.employeeId)} on ${String(deleteRow.date || "").slice(0, 10)}?`
+            : ""
+        }
+        danger
+        confirmLabel={remove.isPending ? "Deleting…" : "Delete"}
+        onConfirm={() => {
+          if (deleteRow && !remove.isPending) remove.mutate(deleteRow);
+        }}
+      />
 
       <Dialog
         open={reqOpen}
@@ -277,8 +504,13 @@ export function BonusesPage() {
         wide
         footer={
           <>
-            <Button variant="secondary" onClick={() => setReqOpen(false)}>Cancel</Button>
-            <Button onClick={() => submitReq.mutate()} disabled={submitReq.isPending || !reqForm.employeeId || !reqForm.amount}>
+            <Button variant="secondary" onClick={() => setReqOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => submitReq.mutate()}
+              disabled={submitReq.isPending || !reqForm.employeeId || !reqForm.amount}
+            >
               Submit for approval
             </Button>
           </>
@@ -291,33 +523,63 @@ export function BonusesPage() {
               onChange={(employeeId) => setReqForm({ ...reqForm, employeeId })}
               options={[
                 { value: "", label: "—" },
-                ...agents.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
+                ...agents.map((e) => ({
+                  value: e.id,
+                  label: `${e.id} — ${e.american_name || ""}`,
+                })),
               ]}
             />
           </FormField>
           <FormField label="Date">
-            <input type="date" value={reqForm.date || `${month}-15`} onChange={(e) => setReqForm({ ...reqForm, date: e.target.value })} />
+            <input
+              type="date"
+              value={reqForm.date || `${month}-15`}
+              onChange={(e) => setReqForm({ ...reqForm, date: e.target.value })}
+            />
           </FormField>
           <FormField label="Amount">
-            <input type="number" step="0.01" value={reqForm.amount} onChange={(e) => setReqForm({ ...reqForm, amount: e.target.value })} />
+            <input
+              type="number"
+              step="0.01"
+              value={reqForm.amount}
+              onChange={(e) => setReqForm({ ...reqForm, amount: e.target.value })}
+            />
           </FormField>
           <FormField label="Type">
             <input value={TL_BONUS_TYPE} readOnly />
           </FormField>
           <FormField label="Reason" span="full">
-            <input value={reqForm.reason} onChange={(e) => setReqForm({ ...reqForm, reason: e.target.value })} />
+            <input
+              value={reqForm.reason}
+              onChange={(e) => setReqForm({ ...reqForm, reason: e.target.value })}
+            />
           </FormField>
         </FormGrid>
-        {submitReq.isError && <p style={{ color: "var(--err)" }}>{(submitReq.error as Error).message}</p>}
+        {submitReq.isError && (
+          <p style={{ color: "var(--err)" }}>{(submitReq.error as Error).message}</p>
+        )}
       </Dialog>
 
       <Dialog
         open={!!denyOpen}
-        onOpenChange={(o) => { if (!o) { setDenyOpen(null); setDenyReason(""); } }}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDenyOpen(null);
+            setDenyReason("");
+          }
+        }}
         title="Deny bonus request"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setDenyOpen(null); setDenyReason(""); }}>Cancel</Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDenyOpen(null);
+                setDenyReason("");
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               variant="danger"
               onClick={() => denyOpen && reviewReq.mutate({ id: denyOpen, action: "deny", denyReason })}
@@ -329,7 +591,11 @@ export function BonusesPage() {
         }
       >
         <FormField label="Optional reason for denial">
-          <input value={denyReason} onChange={(e) => setDenyReason(e.target.value)} placeholder="Reason" />
+          <input
+            value={denyReason}
+            onChange={(e) => setDenyReason(e.target.value)}
+            placeholder="Reason"
+          />
         </FormField>
       </Dialog>
     </div>

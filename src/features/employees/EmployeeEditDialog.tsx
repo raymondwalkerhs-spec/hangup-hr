@@ -74,6 +74,7 @@ export function EmployeeEditDialog({
   open,
   onOpenChange,
   canEdit,
+  showPayment = true,
 }: {
   employee: Emp | null;
   meta?: {
@@ -86,6 +87,7 @@ export function EmployeeEditDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canEdit?: boolean;
+  showPayment?: boolean;
 }) {
   const qc = useQueryClient();
   const { path } = useCompanyScope();
@@ -156,13 +158,19 @@ export function EmployeeEditDialog({
       });
       if (pendingBody) {
         const { status: _status, ...rest } = pendingBody;
-        await api(path(`/employees/${emp.id}`), {
-          method: "PUT",
-          body: JSON.stringify({
-            ...rest,
-            payroll_exempt: rest.payroll_exempt === true || rest.payroll_exempt === "1",
-          }),
-        });
+        try {
+          await api(path(`/employees/${emp.id}`), {
+            method: "PUT",
+            body: JSON.stringify({
+              ...rest,
+              payroll_exempt: rest.payroll_exempt === true || rest.payroll_exempt === "1",
+            }),
+          });
+        } catch (putErr) {
+          // Depart already committed — close depart UI and surface PUT failure.
+          const msg = putErr instanceof Error ? putErr.message : "Depart saved but other fields failed";
+          throw new Error(msg);
+        }
       }
     },
     onSuccess: () => {
@@ -171,6 +179,11 @@ export function EmployeeEditDialog({
       qc.invalidateQueries({ queryKey: ["employees-list"] });
       qc.invalidateQueries({ queryKey: ["attendance-grid"] });
       onOpenChange(false);
+    },
+    onError: () => {
+      setDepartOpen(false);
+      qc.invalidateQueries({ queryKey: ["employees-list"] });
+      qc.invalidateQueries({ queryKey: ["attendance-grid"] });
     },
   });
 
@@ -237,6 +250,7 @@ export function EmployeeEditDialog({
   };
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
@@ -247,7 +261,7 @@ export function EmployeeEditDialog({
         canEdit ? (
           <>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={submit} disabled={save.isPending}>Save</Button>
+            <Button onClick={submit} disabled={save.isPending || departAndSave.isPending}>Save</Button>
           </>
         ) : (
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Close</Button>
@@ -319,42 +333,46 @@ export function EmployeeEditDialog({
                 options={[{ value: "", label: "—" }, ...positions.map((p) => ({ value: p, label: p }))]}
               />
             </FormField>
-            <FormField label="Payment method">
-              <Select
-                value={form.payment_method || ""}
-                onChange={(v) => set("payment_method", v)}
-                disabled={!canEdit}
-                options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
-              />
-            </FormField>
-            {pm === "instapay" && (
-              <FormField label="Instapay / wallet details">
-                <input
-                  value={form.payment_details_insta_wallet || ""}
-                  onChange={(e) => set("payment_details_insta_wallet", e.target.value)}
-                  disabled={!canEdit}
-                  placeholder="Phone, username, or wallet ID"
-                />
-              </FormField>
-            )}
-            {pm === "cash" && (
-              <FormField label="Cash branch">
-                <Select
-                  value={form.alternative_payment || ""}
-                  onChange={(v) => set("alternative_payment", v)}
-                  disabled={!canEdit}
-                  options={[{ value: "", label: "—" }, ...["Makram", "Abbas", "Square", "Other"].map((b) => ({ value: b, label: b }))]}
-                />
-              </FormField>
-            )}
-            {pm === "bank" && (
+            {showPayment && (
               <>
-                <FormField label="Bank reference">
-                  <input value={form.bank_refrence_number || ""} onChange={(e) => set("bank_refrence_number", e.target.value)} disabled={!canEdit} />
+                <FormField label="Payment method">
+                  <Select
+                    value={form.payment_method || ""}
+                    onChange={(v) => set("payment_method", v)}
+                    disabled={!canEdit}
+                    options={[{ value: "", label: "—" }, ...PAYMENT_METHOD_OPTIONS]}
+                  />
                 </FormField>
-                <FormField label="Bank name (as on sheet)">
-                  <input value={form.bank_name_as_bank_sheet || ""} onChange={(e) => set("bank_name_as_bank_sheet", e.target.value)} disabled={!canEdit} />
-                </FormField>
+                {pm === "instapay" && (
+                  <FormField label="Instapay / wallet details">
+                    <input
+                      value={form.payment_details_insta_wallet || ""}
+                      onChange={(e) => set("payment_details_insta_wallet", e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="Phone, username, or wallet ID"
+                    />
+                  </FormField>
+                )}
+                {pm === "cash" && (
+                  <FormField label="Cash branch">
+                    <Select
+                      value={form.alternative_payment || ""}
+                      onChange={(v) => set("alternative_payment", v)}
+                      disabled={!canEdit}
+                      options={[{ value: "", label: "—" }, ...["Makram", "Abbas", "Square", "Other"].map((b) => ({ value: b, label: b }))]}
+                    />
+                  </FormField>
+                )}
+                {pm === "bank" && (
+                  <>
+                    <FormField label="Bank reference">
+                      <input value={form.bank_refrence_number || ""} onChange={(e) => set("bank_refrence_number", e.target.value)} disabled={!canEdit} />
+                    </FormField>
+                    <FormField label="Bank name (as on sheet)">
+                      <input value={form.bank_name_as_bank_sheet || ""} onChange={(e) => set("bank_name_as_bank_sheet", e.target.value)} disabled={!canEdit} />
+                    </FormField>
+                  </>
+                )}
               </>
             )}
           </FormGrid>
@@ -496,25 +514,28 @@ export function EmployeeEditDialog({
         </p>
         <p>You must choose a team in the new company before saving. The current team will be cleared.</p>
       </Dialog>
-      <DepartDateDialog
-        open={departOpen}
-        onOpenChange={(next) => {
-          setDepartOpen(next);
-          if (!next) setPendingBody(null);
-        }}
-        title="Mark depart"
-        subtitle={`Setting status to ${form.status || "Out"} requires a depart date. Skip to use today, or pick a date below.`}
-        form={departForm}
-        onFormChange={setDepartForm}
-        onConfirm={() => departAndSave.mutate()}
-        confirmLabel="Save depart"
-        isPending={departAndSave.isPending}
-      />
       {(save.isError || departAndSave.isError) && (
         <p style={{ color: "var(--err)", marginTop: "0.5rem" }}>
           {((save.error || departAndSave.error) as Error).message}
         </p>
       )}
     </Dialog>
+    <DepartDateDialog
+      open={departOpen}
+      onOpenChange={(next) => {
+        setDepartOpen(next);
+        if (!next) setPendingBody(null);
+      }}
+      title="Mark depart"
+      subtitle={`Setting status to ${form.status || "Out"} requires a depart date. Defaults to today — change it below if needed.`}
+      form={departForm}
+      onFormChange={setDepartForm}
+      onConfirm={() => {
+        if (!departAndSave.isPending) departAndSave.mutate();
+      }}
+      confirmLabel="Save depart"
+      isPending={departAndSave.isPending}
+    />
+    </>
   );
 }

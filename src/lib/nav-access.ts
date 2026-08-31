@@ -5,7 +5,23 @@ export type StatusUser = Record<string, unknown> & {
   canViewPayroll?: boolean;
   canViewBonuses?: boolean;
   canViewSales?: boolean;
+  canViewSalesThisMonth?: boolean;
+  canViewSalesLogFilters?: boolean;
+  canViewSalesRankings?: boolean;
   canViewTeamDashboard?: boolean;
+  canViewRpmWeeklyDashboard?: boolean;
+  canEditRpmWeeklyTargets?: boolean;
+  canSubmitRpmChecks?: boolean;
+  canSubmitRpmQFeedback?: boolean;
+  canEditRpmChecks?: boolean;
+  canEditRpmQFeedback?: boolean;
+  canViewRpmChecks?: boolean;
+  canViewRpmQFeedback?: boolean;
+  canViewRpmQFeedbackAnalysis?: boolean;
+  canViewRpmChecksDashboard?: boolean;
+  canViewRpmCheckDuplicates?: boolean;
+  canImportRpmSaleFromCheck?: boolean;
+  canViewEmployeeDirectory?: boolean;
   canAccessCosts?: boolean;
   canSubmitExpense?: boolean;
   canApproveLoan?: boolean;
@@ -50,16 +66,19 @@ function role(user: StatusUser | undefined | null): string {
 function canViewBonusesDeductions(user: StatusUser | undefined | null): boolean {
   if (user?.canViewBonuses === true) return true;
   return [
-    "admin", "ceo", "hr", "finance", "op", "tl", "quality", "rtm", "agent", "office_assistant",
+    "admin", "ceo", "hr", "finance", "op", "tl", "quality", "rtm", "agent", "office_assistant", "checker",
   ].includes(role(user));
 }
 
 function canViewSales(user: StatusUser | undefined | null): boolean {
-  return user?.canViewSales !== false || canViewBonusesDeductions(user);
+  if (user?.canViewSales === false) return false;
+  return user?.canViewSales === true || canViewBonusesDeductions(user);
 }
 
 function canViewTeamDashboard(user: StatusUser | undefined | null): boolean {
-  return user?.canViewTeamDashboard !== false && canViewSales(user);
+  if (user?.canViewTeamDashboard === true) return true;
+  if (user?.canViewTeamDashboard === false) return false;
+  return canViewSales(user);
 }
 
 export function canAccessPage(user: StatusUser | undefined | null, page: string): boolean {
@@ -75,7 +94,31 @@ export function canAccessPage(user: StatusUser | undefined | null, page: string)
   }
   if (BONUS_PAGES.has(page)) return canViewBonusesDeductions(user);
   if (page === "sales") return canViewSales(user);
+  if (page === "checks") {
+    return (
+      user?.canSubmitRpmChecks === true ||
+      user?.canViewRpmChecks === true ||
+      user?.canViewRpmChecksDashboard === true
+    );
+  }
+  if (page === "q-feedback") {
+    return (
+      user?.canSubmitRpmQFeedback === true ||
+      user?.canViewRpmQFeedback === true ||
+      user?.canViewRpmChecksDashboard === true
+    );
+  }
+  if (page === "check-duplicates") {
+    return user?.canViewRpmCheckDuplicates === true;
+  }
   if (page === "team-dashboard") return canViewTeamDashboard(user);
+  if (page === "employees") {
+    if (user?.canViewEmployeeDirectory === false) return false;
+    return role(user) !== "checker";
+  }
+  if (page === "org") {
+    return role(user) !== "checker";
+  }
   if (page === "costs") return user?.canAccessCosts === true || user?.canSubmitExpense === true;
   if (page === "loan-approvals") {
     return user?.canApproveLoan === true && !["agent", "office_assistant", "tl"].includes(role(user));
@@ -83,7 +126,9 @@ export function canAccessPage(user: StatusUser | undefined | null, page: string)
   if (page === "equipment") {
     return user?.canViewEquipmentInventory === true || user?.hasAssignedEquipment === true;
   }
-  if (page === "reports" || page === "analytics") return user?.canViewReports === true;
+  if (page === "reports" || page === "analytics") {
+    return user?.canViewReports === true || user?.canViewSalesRankings === true;
+  }
   if (page === "recycle") {
     return ["hr", "admin", "ceo", "rtm", "it"].includes(role(user));
   }

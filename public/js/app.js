@@ -1128,10 +1128,10 @@ function showVersionBlockedScreen(message, details) {
                Required version: <strong>${escapeHtml(details.currentVersion || "unknown")}</strong></p>`
             : ""
         }
-        <p class="muted">${canAutoUpdate ? "Install the update below or contact your Admin." : "Contact your Admin to install the latest version. The app cannot be used until then."}</p>
+        <p class="muted">${canAutoUpdate ? "Use Update now to install the latest version." : "Download the latest installer, then install it over this copy."}</p>
         <div id="version-block-status" class="muted" style="margin:.5rem 0"></div>
         <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap">
-          ${canAutoUpdate ? `<button class="btn btn-primary" id="version-block-update">Update now</button>` : ""}
+          ${canAutoUpdate ? `<button class="btn btn-primary" id="version-block-update">Update now</button>` : `<a class="btn btn-primary" id="version-block-download" href="https://github.com/raymondwalkerhs-spec/hangup-hr/releases/latest" target="_blank" rel="noreferrer">Download latest installer</a>`}
           <button class="btn" id="version-block-logout">Return to sign in</button>
         </div>
       </div>

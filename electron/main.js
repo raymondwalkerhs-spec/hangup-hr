@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 
 const path = require("path");
 
@@ -99,6 +99,13 @@ function createWindow() {
 
   mainWindow.once("ready-to-show", () => {
     if (mainWindow) mainWindow.show();
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 
   mainWindow.webContents.on(
@@ -261,24 +268,26 @@ let allowedWriteRoot = null;
 
   ipcMain.handle("check-github-update", async () => {
     try {
-      return await githubUpdater.checkForGitHubUpdate();
+      const cloudUpdater = require("../lib/cloud-updater");
+      return await cloudUpdater.checkForUpdate();
     } catch (err) {
       return { enabled: false, error: err.message || String(err) };
     }
   });
 
   ipcMain.handle("apply-github-update", async () => {
-    const info = await githubUpdater.checkForGitHubUpdate();
+    const cloudUpdater = require("../lib/cloud-updater");
+    const info = await cloudUpdater.checkForUpdate();
     if (!info?.updateAvailable) throw new Error("No update available");
     if (!info.assetUrl && !info.assetId) throw new Error("No update package found for this platform");
-    const result = await githubUpdater.applyGitHubUpdate(info);
+    const result = await cloudUpdater.applyUpdate(info);
     if (result?.needsQuit) {
       setTimeout(() => app.quit(), 500);
     }
     return {
       ok: true,
       version: info.latest,
-      installRoot: githubUpdater.getInstallRoot(),
+      installRoot: require("../lib/github-updater").getInstallRoot(),
       method: result?.method,
       needsQuit: Boolean(result?.needsQuit),
       needsRelaunch: Boolean(result?.needsRelaunch),

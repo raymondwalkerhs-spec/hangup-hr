@@ -1,0 +1,2 @@
+[functions.airtable-rpm-sync]
+verify_jwt = false

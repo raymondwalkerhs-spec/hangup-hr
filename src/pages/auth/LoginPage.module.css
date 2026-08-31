@@ -284,6 +284,12 @@
   border-color: color-mix(in srgb, var(--err) 40%, var(--border));
   background: color-mix(in srgb, var(--err) 8%, var(--surface));
 }
+.downloadLink {
+  display: inline-block;
+  margin-top: 0.15rem;
+  font-weight: 600;
+  color: var(--primary);
+}
 
 @media (max-width: 768px) {
   .page {

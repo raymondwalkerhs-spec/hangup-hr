@@ -4,8 +4,26 @@ All notable changes to the Hangup Portal desktop app.
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-08-31
+
 ### Added
-- **RPM1 → Google Forms** — new RPM1 sales are submitted by **Supabase only** (INSERT trigger → Edge Function → **both** Google Forms: TEST Tracking + [Direct Tracking](https://docs.google.com/forms/d/e/1FAIpQLSdd4mYSuHJ4mAiY7hLusQsA62EHN_0ILTMUY-blEGoo9rJC-w/viewform)). No historical backfill when a form is added. Team Code **HS3**. Configure via `GOOGLE_FORM_TARGETS_JSON`. Deploy: `npm run deploy:rpm-google-form`.
+- **Sales Rankings report** — Reports tab with period filter: top agents (RPM sent), top closers (RPM closed), top check agents. Separate sales filters (All / Passed / Passed+Pending / Denied) with Passed % / Denied %; All checks shows Q / NQ / Age / Under / Dup counts. Closers table hides Team. Hover tooltips. Access Control: **`viewSalesRankings`**.
+- **Premium theme unlock targets (admin)** — Settings card for per-theme RPM sent/closed thresholds (`app_config.themeUnlockThresholds`). Access Control: **`settingsThemeUnlocks`**.
+- **Staff premium themes without sales** — quality, checker, hr, admin, it, finance (accounting), rtm (+ ceo) unlock all premiums without RPM quotas.
+- **Checks Q feedback shortcut** — On **New check** with status **Q**, optional disposition + editable closer (defaults to you; TL / Closers). Does not replace **Q Feedback** page.
+- **Out → inactive login sync** — Out employees disable app login even when `depart_date` was missing; `loginWarning` on failure. Backfill: `node scripts/backfill-out-user-deactivation.js`.
+- **RPM1 → Google Forms** — new RPM1 sales submitted by Supabase only (INSERT → Edge Function → TEST + Direct Tracking forms). Team Code **HS3**. Deploy: `npm run deploy:rpm-google-form`.
+- **HR Monthly reports restored** — Reports default tab remains full HR Monthly (NSNC, payroll by unit, markdown/PDF, turnover, attendance CSV, custom reports) alongside Sales Rankings.
+
+### Changed
+- Reports nav when user has **View reports** *or* **Sales Rankings report**.
+- Dashboard RPM weekly section: no layout shake on reload (skeleton only on cold load).
+- Notification panel portals above cards (z-index).
+- Google Form DOB formatted **MM/DD/YYYY** with slashes.
+- RPM medical conditions catalog expanded (high cholesterol, depression, anxiety, dementia, Alzheimer’s, etc.).
+
+### Fixed
+- Company scope for rankings (roster + attendance), theme unlock RPM counts, sale→Q auto-link company from sale unit, Q-feedback closer name enrichment within company.
 
 ## [2.4.9] — 2026-08-27
 

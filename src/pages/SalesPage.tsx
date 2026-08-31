@@ -19,10 +19,12 @@ import { useSalesIntentStore } from "@/stores/sales-intent-store";
 import { companyForUnit } from "@/lib/companyUnit";
 import { SectionHeader } from "@/ui/SectionHeader";
 import { DataGrid } from "@/ui/DataGrid";
+import gridStyles from "@/ui/DataGrid.module.css";
 import { Card, StatTile } from "@/ui/Card";
 import { Button } from "@/ui/Button";
 import { PageToolbar, SearchField, FilterSelect } from "@/ui/PageToolbar";
 import { PeriodPicker } from "@/ui/PeriodPicker";
+import { LIVE_REFETCH_MS } from "@/lib/liveRefresh";
 
 type Row = Record<string, unknown>;
 type ListColumn = { columnKey: string; label?: string };
@@ -30,7 +32,7 @@ type Emp = { id: string; american_name?: string; team?: string; unit?: string; r
 type OrgUnitSection = { unit?: string; teams?: { name?: string; dialsSales?: boolean }[] };
 
 const CLOSER_ROLES = new Set(["agent", "tl", "op"]);
-const RPM_LOG_FILTER_ROLES = new Set(["quality", "hr", "rtm", "admin", "op", "ceo"]);
+const SALES_PERIOD_STORAGE_KEY = "hangup-sales-period-session-v1";
 const NON_DIALING_TEAM_NAMES = new Set([
   "hr",
   "quality",
@@ -105,12 +107,62 @@ function saleMatchesCustomerSearch(sale: Row, query: string) {
   return phones.some((p) => p.includes(qDigits) || qDigits.includes(p.slice(-Math.min(10, qDigits.length))));
 }
 
+type DateRange = { from: string; to: string };
+
+function loadStoredSalesPeriod(program: SalesProgram): DateRange | null {
+  try {
+    const raw = sessionStorage.getItem(SALES_PERIOD_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Record<SalesProgram, DateRange>>;
+    const range = parsed?.[program];
+    if (
+      range &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(range.from || "")) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(range.to || ""))
+    ) {
+      return { from: range.from, to: range.to };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveStoredSalesPeriod(program: SalesProgram, range: DateRange | null) {
+  try {
+    const raw = sessionStorage.getItem(SALES_PERIOD_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, DateRange | null>) : {};
+    if (!range) delete parsed[program];
+    else parsed[program] = range;
+    sessionStorage.setItem(SALES_PERIOD_STORAGE_KEY, JSON.stringify(parsed));
+  } catch {
+    /* ignore */
+  }
+}
+
+function defaultSalesPeriod(opts: {
+  program: SalesProgram;
+  canViewSalesThisMonth: boolean;
+  canUseRpmLogFilters: boolean;
+  monthRange: DateRange;
+}): DateRange | null {
+  if (opts.program !== "rpm") return null;
+  const stored = loadStoredSalesPeriod("rpm");
+  if (stored) return stored;
+  if (opts.canViewSalesThisMonth && !opts.canUseRpmLogFilters) {
+    return { from: opts.monthRange.from, to: opts.monthRange.to };
+  }
+  const d = cairoWorkingDayToday();
+  return { from: d, to: d };
+}
+
 export function SalesPage() {
   const month = useAppStore((s) => s.month);
   const { path, companyContext, isHs2 } = useCompanyScope();
   const { user } = useAppStatus();
   const userRole = String(user?.role || "").toLowerCase();
-  const canUseRpmLogFilters = RPM_LOG_FILTER_ROLES.has(userRole);
+  const canUseRpmLogFilters = user?.canViewSalesLogFilters === true;
+  const canViewSalesThisMonth = user?.canViewSalesThisMonth === true;
   const [searchParams, setSearchParams] = useSearchParams();
   const [program, setProgram] = useState<SalesProgram>("rpm");
   const [search, setSearch] = useState("");
@@ -124,6 +176,7 @@ export function SalesPage() {
   const [clientFeedbackFilter, setClientFeedbackFilter] = useState("");
   const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
   const [retransferOnly, setRetransferOnly] = useState(false);
+  const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [viewSale, setViewSale] = useState<Row | null>(null);
   const [qualitySale, setQualitySale] = useState<Row | null>(null);
   const [formSale, setFormSale] = useState<Row | null | undefined>(undefined);
@@ -189,7 +242,23 @@ export function SalesPage() {
   }, [searchParams]);
 
   const monthRange = monthDateRange(month);
-  const [period, setPeriod] = useState<{ from: string; to: string } | null>(null);
+  const [period, setPeriodState] = useState<DateRange | null>(() =>
+    defaultSalesPeriod({
+      program: "rpm",
+      canViewSalesThisMonth: false,
+      canUseRpmLogFilters: false,
+      monthRange: monthDateRange(month),
+    })
+  );
+
+  const setPeriod = useCallback(
+    (range: DateRange | null) => {
+      setPeriodState(range);
+      saveStoredSalesPeriod(program, range);
+    },
+    [program]
+  );
+
   const from = period?.from || monthRange.from;
   const to = period?.to || monthRange.to;
   const salesBase = path(program === "rpm" ? "/rpm-sales" : "/sales");
@@ -204,9 +273,9 @@ export function SalesPage() {
 
   useEffect(() => {
     if (!submitScopeReady) return;
-    if (program === "rpm" && !canSubmitRpm && canSubmitMla) setProgram("mla");
-    if (program === "mla" && !canSubmitMla && canSubmitRpm) setProgram("rpm");
-  }, [submitScopeReady, program, canSubmitMla, canSubmitRpm]);
+    // MLA submit is retired for new work — stay on RPM (historical MLA still loadable via admin tools).
+    if (program === "mla") setProgram("rpm");
+  }, [submitScopeReady, program]);
 
   useEffect(() => {
     setAgentFilter("");
@@ -216,12 +285,30 @@ export function SalesPage() {
     setClientFeedbackFilter("");
     setSortOrder("latest");
     if (program === "rpm") {
-      const d = cairoWorkingDayToday();
-      setPeriod({ from: d, to: d });
+      setPeriodState(
+        defaultSalesPeriod({
+          program: "rpm",
+          canViewSalesThisMonth,
+          canUseRpmLogFilters,
+          monthRange,
+        })
+      );
     } else {
-      setPeriod(null);
+      const storedMla = loadStoredSalesPeriod("mla");
+      setPeriodState(storedMla);
     }
-  }, [program]);
+    // Restore period when switching RPM/MLA; do not depend on monthRange or we wipe a custom range every month change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program, canUseRpmLogFilters, canViewSalesThisMonth]);
+
+  // Keep month-default agents in sync when global month changes and they have no stored custom period
+  useEffect(() => {
+    if (program !== "rpm") return;
+    if (canUseRpmLogFilters) return;
+    if (!canViewSalesThisMonth) return;
+    if (loadStoredSalesPeriod("rpm")) return;
+    setPeriodState({ from: monthRange.from, to: monthRange.to });
+  }, [program, canUseRpmLogFilters, canViewSalesThisMonth, monthRange.from, monthRange.to]);
 
   const { data: salesRes, isLoading, error, refetch } = useQuery({
     queryKey: [
@@ -232,6 +319,7 @@ export function SalesPage() {
       statusFilter,
       teamFilter,
       retransferOnly,
+      duplicatesOnly,
       agentFilter,
       closerFilter,
       dayFilter,
@@ -255,6 +343,7 @@ export function SalesPage() {
       if (program !== "rpm" && teamFilter) q.set("team", teamFilter);
       if (program === "rpm") {
         if (sortOrder) q.set("sort", sortOrder);
+        if (duplicatesOnly) q.set("duplicates", "1");
         if (applyRpmExtraFilters) {
           if (teamFilter) q.set("team", teamFilter);
           if (retransferOnly) q.set("retransfer", "1");
@@ -269,7 +358,8 @@ export function SalesPage() {
     },
     staleTime: 0,
     refetchOnWindowFocus: true,
-    refetchInterval: program === "rpm" ? 30_000 : false,
+    refetchInterval: LIVE_REFETCH_MS,
+    refetchIntervalInBackground: false,
   });
 
   const { data: empData } = useQuery({
@@ -388,6 +478,24 @@ export function SalesPage() {
             if (key === "clientFeedback" && program === "rpm" && val === "Retransfer") {
               return <span style={{ color: "var(--warn, #c47a00)", fontWeight: 600 }}>Retransfer</span>;
             }
+            if ((key === "agent" || key === "agentName") && String(ctx.row.original.agentId || "").toUpperCase() === "OTHER") {
+              return (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      padding: "0.1rem 0.4rem",
+                      borderRadius: 4,
+                      background: "color-mix(in srgb, #d97706 22%, transparent)",
+                      color: "#92400e",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Unassigned
+                  </span>
+                </span>
+              );
+            }
             return val;
           },
         };
@@ -464,20 +572,6 @@ export function SalesPage() {
           >
             RPM
           </Tabs.Trigger>
-          <Tabs.Trigger
-            value="mla"
-            title={!canSubmitMla ? "View existing MLA sales (new MLA submit disabled)" : undefined}
-            style={{
-              padding: "0.35rem 0.75rem",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: program === "mla" ? "var(--accent, #2563eb)" : "transparent",
-              color: program === "mla" ? "#fff" : "inherit",
-              fontWeight: program === "mla" ? 600 : 400,
-            }}
-          >
-            MLA
-          </Tabs.Trigger>
         </Tabs.List>
       </Tabs.Root>
 
@@ -537,6 +631,16 @@ export function SalesPage() {
             Retransfer only
           </label>
         )}
+        {program === "rpm" && (
+          <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
+            <input
+              type="checkbox"
+              checked={duplicatesOnly}
+              onChange={(e) => setDuplicatesOnly(e.target.checked)}
+            />
+            Show duplicates
+          </label>
+        )}
       </PageToolbar>
 
       <div className="stat-grid">
@@ -558,6 +662,9 @@ export function SalesPage() {
             columns={columns}
             virtualize={false}
             emptyMessage={`No ${program.toUpperCase()} sales for this period`}
+            getRowClassName={(row) =>
+              String(row.agentId || "").toUpperCase() === "OTHER" ? gridStyles.unassignedRow : undefined
+            }
           />
         )}
       </Card>

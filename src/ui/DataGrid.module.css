@@ -39,6 +39,17 @@
 .table tbody tr:hover {
   background: color-mix(in srgb, var(--primary) 6%, transparent);
 }
+
+@keyframes hangupUnassignedPulse {
+  0%, 100% { background: color-mix(in srgb, #d97706 16%, transparent); }
+  50% { background: color-mix(in srgb, #d97706 36%, transparent); }
+}
+.unassignedRow {
+  animation: hangupUnassignedPulse 1.6s ease-in-out infinite;
+}
+.unassignedRow:hover {
+  background: color-mix(in srgb, #d97706 28%, transparent);
+}
 .clickable {
   cursor: pointer;
 }

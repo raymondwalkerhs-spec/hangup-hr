@@ -199,7 +199,190 @@ async function probeState(db) {
   const rb = await db.from("recycle_bin").select("id").limit(1);
   const ftg = await db.from("payroll_adjustments").select("full_transport_grant").limit(1);
   state.recycle_bin_transport_grant = !rb.error && !ftg.error;
+  state.rpm_status_from_client_feedback = await probeRpmStatusFromClientFeedback();
+  state.rpm_client_feedback_default_pending = await probeRpmClientFeedbackDefaultPending();
+  state.app_update_assets = await probeAppUpdateAssets(db);
+  const twt = await db.from("rpm_team_week_targets").select("id").limit(1);
+  state.rpm_team_week_targets = !twt.error;
+  const rpmChecks = await db.from("rpm_checks").select("id").limit(1);
+  state.rpm_checks = !rpmChecks.error;
+  const tdNotes = await db.from("team_dashboard_agent_notes").select("id").limit(1);
+  state.team_dashboard_agent_notes = !tdNotes.error;
+  const checkFlags = await db
+    .from("employees")
+    .select("can_submit_checks_q_feedback, checks_submit_scope, team_dashboard_extra_teams")
+    .limit(1);
+  state.rpm_checks_employee_flags = !checkFlags.error;
+  const unitCheckers = await db.from("unit_checkers").select("id").limit(1);
+  state.unit_checkers = !unitCheckers.error;
+  const rpmAt = await db.from("rpm_sales").select("airtable_record_id").limit(1);
+  const checkAt = await db.from("rpm_checks").select("airtable_record_id").limit(1);
+  state.rpm_airtable_sync = !rpmAt.error && !checkAt.error;
+  state.rpm_airtable_realtime = await probeRpmAirtableRealtime();
+  state.rpm_airtable_supabase_sync = await probeNamedTrigger("trg_airtable_rpm_sales");
+  state.rpm_airtable_catchup_cron = await probeNamedFunction("run_airtable_rpm_catchup");
+  state.rpm_checks_closer_from_sale = await probeNamedTrigger("trg_rpm_check_closer_from_linked_sale");
+  state.rpm_checks_unique_member_day = await probeNamedIndex("uq_rpm_checks_company_member_day");
+  const gform = await db.from("rpm_sales").select("google_form_submitted_at").limit(1);
+  state.rpm_google_form_sync = !gform.error && (await probeNamedTrigger("trg_rpm_google_form_sync"));
   return state;
+}
+
+async function probeAppUpdateAssets(db) {
+  const table = await db.from("app_update_assets").select("version").limit(1);
+  if (table.error) return false;
+  const other = await db.from("employees").select("id").eq("id", "OTHER").maybeSingle();
+  return Boolean(other.data?.id);
+}
+
+async function probeNamedFunction(functionName) {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT proname FROM pg_proc WHERE proname = '${String(functionName).replace(/'/g, "''")}' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeNamedTrigger(triggerName) {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT tgname FROM pg_trigger WHERE tgname = '${String(triggerName).replace(/'/g, "''")}' AND NOT tgisinternal LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeNamedIndex(indexName) {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT indexname FROM pg_indexes WHERE indexname = '${String(indexName).replace(/'/g, "''")}' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeRpmAirtableRealtime() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'rpm_sales' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeRpmClientFeedbackDefaultPending() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT 1 FROM pg_proc WHERE proname = 'sync_rpm_sales_status_from_client_feedback' AND prosrc ILIKE '%blank clientFeedback defaults to Pending%' LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeRpmStatusFromClientFeedback() {
+  const url = process.env.SUPABASE_URL || "";
+  const projectRef = url.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+  if (!projectRef) return false;
+  const accessToken = await loadAccessToken();
+  if (!accessToken) return false;
+  try {
+    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query: `SELECT tgname FROM pg_trigger WHERE tgname = 'trg_rpm_sales_status_from_client_feedback' AND NOT tgisinternal LIMIT 1`,
+      }),
+    });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return Array.isArray(body) && body.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function probeEquipmentClearanceIntegrity() {
@@ -354,6 +537,49 @@ function filesToApply(state) {
   if (!state.training_anchor_override) files.push("20260820_training_anchor_override.sql");
   if (!state.equipment_clearance_integrity) files.push("20260823_equipment_clearance_integrity.sql");
   if (!state.recycle_bin_transport_grant) files.push("20260824_recycle_bin_and_transport_grant.sql");
+  if (!state.rpm_status_from_client_feedback) {
+    files.push("20260825_rpm_sales_status_from_client_feedback.sql");
+  }
+  if (!state.rpm_client_feedback_default_pending) {
+    files.push("20260826_rpm_client_feedback_default_pending.sql");
+  }
+  if (!state.app_update_assets) {
+    files.push("20260827_app_update_assets.sql");
+  }
+  if (!state.rpm_team_week_targets) {
+    files.push("20260828_rpm_team_week_targets.sql");
+  }
+  if (
+    !state.rpm_checks ||
+    !state.team_dashboard_agent_notes ||
+    !state.rpm_checks_employee_flags
+  ) {
+    files.push("20260829_rpm_checks_and_team_notes.sql");
+  }
+  if (!state.unit_checkers) {
+    files.push("20260830_unit_checkers.sql");
+  }
+  if (!state.rpm_airtable_sync) {
+    files.push("20260831_rpm_airtable_sync.sql");
+  }
+  if (!state.rpm_airtable_realtime) {
+    files.push("20260901_rpm_airtable_realtime.sql");
+  }
+  if (!state.rpm_airtable_supabase_sync) {
+    files.push("20260902_airtable_rpm_supabase_sync.sql");
+  }
+  if (!state.rpm_airtable_catchup_cron) {
+    files.push("20260903_airtable_rpm_catchup_cron.sql");
+  }
+  if (!state.rpm_checks_closer_from_sale) {
+    files.push("20260904_rpm_checks_closer_from_sale.sql");
+  }
+  if (!state.rpm_checks_unique_member_day) {
+    files.push("20260905_rpm_checks_unique_member_day.sql");
+  }
+  if (!state.rpm_google_form_sync) {
+    files.push("20260906_rpm_google_form_sync.sql");
+  }
   return files;
 }
 

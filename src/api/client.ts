@@ -41,16 +41,20 @@ export async function api<T = unknown>(
   const sessionId = getSessionId();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Pull headers out so `...rest` cannot wipe Content-Type / session
+  // (Checks + Q Feedback pass Idempotency-Key; that used to replace headers and
+  // Express left req.body empty → "agentId required").
+  const { headers: optionHeaders, skipSilentRefresh: _skip, ...rest } = options;
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       credentials: "same-origin",
+      ...rest,
       headers: {
         "Content-Type": "application/json",
         ...(sessionId ? { "x-session-id": sessionId } : {}),
-        ...(options.headers as Record<string, string>),
+        ...((optionHeaders as Record<string, string>) || {}),
       },
-      ...options,
       signal: controller.signal,
     });
   } catch (e) {
@@ -68,8 +72,27 @@ export async function api<T = unknown>(
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = (data as { error?: string }).error || res.statusText;
-    throw new Error(msg);
+    const body = data as {
+      error?: string;
+      errors?: { field?: string; message?: string }[];
+      code?: string;
+      existing?: unknown;
+      field?: string;
+    };
+    const msg = body.error || res.statusText;
+    const err = new Error(msg) as Error & {
+      errors?: { field?: string; message?: string }[];
+      code?: string;
+      existing?: unknown;
+      field?: string;
+      status?: number;
+    };
+    err.errors = body.errors;
+    err.code = body.code;
+    err.existing = body.existing;
+    err.field = body.field;
+    err.status = res.status;
+    throw err;
   }
   return data as T;
 }

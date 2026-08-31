@@ -83,20 +83,24 @@ export function AccessControlPage() {
     return m;
   }, [data?.permissions]);
 
-  const getEffective = (permissionKey: string) => {
-    const pk = `${role}::${permissionKey}`;
-    if (pending.has(pk)) return pending.get(pk)!;
+  const getStoredEffective = (permissionKey: string) => {
     const eff = data?.effective?.[role]?.[permissionKey];
     if (eff && typeof eff.effective === "boolean") return eff.effective;
     return data?.defaults?.[role]?.[permissionKey] ?? false;
   };
 
+  const getEffective = (permissionKey: string) => {
+    const pk = `${role}::${permissionKey}`;
+    if (pending.has(pk)) return pending.get(pk)!;
+    return getStoredEffective(permissionKey);
+  };
+
   const toggle = (permissionKey: string, allowed: boolean) => {
     const pk = `${role}::${permissionKey}`;
-    const def = data?.defaults?.[role]?.[permissionKey] ?? false;
+    const stored = getStoredEffective(permissionKey);
     setPending((prev) => {
       const next = new Map(prev);
-      if (allowed === def) next.delete(pk);
+      if (allowed === stored) next.delete(pk);
       else next.set(pk, allowed);
       return next;
     });

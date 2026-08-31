@@ -4,9 +4,9 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `2.4.9`
+**Current version:** `2.5.0`
 
-**Latest installer:** GitHub release [v2.4.9](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.9) (`Hangup-Portal-Setup-2.4.9.exe`). Same-line hotfixes after a GitHub baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+**Latest installer:** GitHub release [v2.5.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.5.0) (`Hangup-Portal-Setup-2.5.0.exe`). Same-line hotfixes after a GitHub baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
 
 | Document | Purpose |
 |----------|---------|
@@ -262,7 +262,9 @@ App updates are **not** delivered via Supabase Storage (installers are ~90 MB). 
 
 ## Appearance
 
-Settings → **Appearance** — free themes plus premiums: Gotham Night, Hello Kitty, Spiderman (10 RPM sent or 10 closed this month), and **Turtle Grove** (15 sent or 15 closed). Saved per device.
+Settings → **Appearance** — free themes plus premiums (Gotham Night, Hello Kitty, Spiderman, Turtle Grove). Unlock thresholds are admin-configurable under **Premium theme unlock targets** (Admin/HR/CEO). Saved per device.
+
+**2.5.0:** Reports → **Sales Rankings**; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill. See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).
 
 ---
 

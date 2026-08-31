@@ -9,7 +9,7 @@ import { Button } from "@/ui/Button";
 import { Select } from "@/ui/Select";
 import { useConfirmUndo } from "@/ui/useDeferredDelete";
 import { ConfirmDialog } from "@/ui/Dialog";
-import { useThemeStore, THEMES, type Theme, isThemeUnlocked, type ThemeUnlocks } from "@/stores/theme-store";
+import { useThemeStore, THEMES, type Theme, isThemeUnlocked, premiumThemeDesc, type ThemeUnlocks } from "@/stores/theme-store";
 import { fileToBase64 } from "@/lib/files";
 import { SettingsAdminExtras } from "./SettingsAdminExtras";
 import styles from "./SettingsPage.module.css";
@@ -127,6 +127,32 @@ export function SettingsPage() {
         }),
       }),
     onSuccess: () => refreshStatus(),
+  });
+
+  const { data: themeThresholdsData, refetch: refetchThemeThresholds } = useQuery({
+    queryKey: ["settings-theme-unlocks"],
+    queryFn: () => api<{ thresholds: Record<string, { agentSent: number; closerClosed: number }> }>("/settings/theme-unlocks"),
+    enabled: user.canViewSettingsThemeUnlocks === true,
+  });
+
+  const [themeThresholdDraft, setThemeThresholdDraft] = useState<Record<string, { agentSent: number; closerClosed: number }> | null>(null);
+
+  useEffect(() => {
+    if (themeThresholdsData?.thresholds) {
+      setThemeThresholdDraft(themeThresholdsData.thresholds);
+    }
+  }, [themeThresholdsData]);
+
+  const saveThemeThresholds = useMutation({
+    mutationFn: () =>
+      api("/settings/theme-unlocks", {
+        method: "PUT",
+        body: JSON.stringify({ thresholds: themeThresholdDraft }),
+      }),
+    onSuccess: () => {
+      refreshStatus();
+      refetchThemeThresholds();
+    },
   });
 
   const revokeSession = useMutation({
@@ -267,31 +293,26 @@ export function SettingsPage() {
           <Card>
             <h3>Appearance</h3>
             <p className="muted">
-              Color theme for this device. Most premium themes unlock at 10 RPM sent as agent or 10 closed as closer this month.
-              Turtle Grove needs 15 sent or 15 closed.
+              Color theme for this device. Premium themes unlock when you hit the RPM sent-as-agent or closed-as-closer targets set by admin this month.
             </p>
             <div className={styles.themePicker}>
               {THEMES.map((t) => {
                 const unlocks = (status as Status | null)?.themeUnlocks;
                 const unlocked = isThemeUnlocked(t.id, unlocks);
-                const isTurtle = t.id === "turtles";
-                const thresh = isTurtle
-                  ? unlocks?.turtleThreshold ?? 15
-                  : unlocks?.agentThreshold ?? 10;
-                const closerThresh = isTurtle
-                  ? unlocks?.turtleThreshold ?? 15
-                  : unlocks?.closerThreshold ?? 10;
+                const row = unlocks?.thresholds?.[t.id];
+                const thresh = row?.agentSent ?? (t.id === "turtles" ? 15 : 10);
+                const closerThresh = row?.closerClosed ?? (t.id === "turtles" ? 15 : 10);
                 const progress = t.premium
                   ? `${unlocks?.agentSalesThisMonth ?? 0}/${thresh} sent · ${unlocks?.closerSalesThisMonth ?? 0}/${closerThresh} closed`
                   : null;
-                const needN = isTurtle ? 15 : 10;
-                const lockHint = `Need ${needN} RPM sent as agent or ${needN} closed as closer (${progress})`;
+                const lockHint = `Need ${thresh} RPM sent as agent or ${closerThresh} closed as closer (${progress})`;
+                const desc = t.premium ? premiumThemeDesc(t.id, unlocks) : t.desc;
                 return (
                   <button
                     key={t.id}
                     type="button"
                     disabled={!unlocked}
-                    title={unlocked ? t.desc : lockHint}
+                    title={unlocked ? desc : lockHint}
                     className={`${styles.themeOption} ${theme === t.id ? styles.themeActive : ""} ${!unlocked ? styles.themeLocked : ""}`}
                     onClick={() => {
                       if (unlocked) setTheme(t.id as Theme);
@@ -304,7 +325,7 @@ export function SettingsPage() {
                         {t.premium ? <span className={styles.premiumBadge}>Premium</span> : null}
                       </strong>
                       <small className="muted">
-                        {unlocked ? t.desc : `Locked · ${progress}`}
+                        {unlocked ? desc : `Locked · ${progress}`}
                       </small>
                     </span>
                   </button>
@@ -393,6 +414,68 @@ export function SettingsPage() {
                 <input type="number" min={0} max={100} step={0.01} value={taxSocial} onChange={(e) => setTaxSocial(e.target.value)} />
               </label>
               <Button size="sm" onClick={() => saveTax.mutate()} disabled={saveTax.isPending}>Save tax rules</Button>
+            </div>
+          </Card>
+        )}
+
+        {user.canViewSettingsThemeUnlocks === true && themeThresholdDraft && (
+          <Card>
+            <h3>Premium theme unlock targets</h3>
+            <p className="muted">RPM sent-as-agent or closed-as-closer needed this month to unlock each premium theme.</p>
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              {(
+                [
+                  ["gotham", "Gotham Night"],
+                  ["hello-kitty", "Hello Kitty"],
+                  ["spiderman", "Spiderman"],
+                  ["turtles", "Turtle Grove"],
+                ] as const
+              ).map(([id, label]) => (
+                <div key={id} style={{ display: "grid", gridTemplateColumns: "1fr 5rem 5rem", gap: "0.5rem", alignItems: "center" }}>
+                  <span>{label}</span>
+                  <label className={styles.toggle}>
+                    Sent
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={themeThresholdDraft[id]?.agentSent ?? 10}
+                      onChange={(e) =>
+                        setThemeThresholdDraft({
+                          ...themeThresholdDraft,
+                          [id]: {
+                            ...themeThresholdDraft[id],
+                            agentSent: Number(e.target.value) || 1,
+                            closerClosed: themeThresholdDraft[id]?.closerClosed ?? 10,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.toggle}>
+                    Closed
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={themeThresholdDraft[id]?.closerClosed ?? 10}
+                      onChange={(e) =>
+                        setThemeThresholdDraft({
+                          ...themeThresholdDraft,
+                          [id]: {
+                            ...themeThresholdDraft[id],
+                            closerClosed: Number(e.target.value) || 1,
+                            agentSent: themeThresholdDraft[id]?.agentSent ?? 10,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              ))}
+              <Button size="sm" onClick={() => saveThemeThresholds.mutate()} disabled={saveThemeThresholds.isPending}>
+                Save theme targets
+              </Button>
             </div>
           </Card>
         )}

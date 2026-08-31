@@ -1,6 +1,30 @@
+## v2.5.0 release checklist
+
+**Shipped 2026-08-31 (optional installer / not breaking):** GitHub [v2.5.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.5.0) is **Latest**. Supabase `app_versions` `2.5.0` is `is_current` with `min_compatible_version=1.0.0`.
+
+### Shipped in 2.5.0
+- Sales Rankings (filters, check status columns, no Team on closers)
+- Theme unlock admin + staff roles unlock premiums without sales
+- Checks Q feedback shortcut; Out to inactive login + backfill
+- RPM1 Google Forms; HR Monthly reports restored; company-scope hardenings
+
+### Checklist
+- [x] Bump `package.json` to **2.5.0**; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`, `SALES_LOG`)
+- [ ] `npm run build:web`; `npm run test:pages`
+- [ ] NSIS + web installer + GitHub Latest + Supabase `is_current`
+- [ ] Run backfill: `node scripts/backfill-out-user-deactivation.js`
+
+### Access Control keys
+| Key | Default roles | Gates |
+|-----|---------------|--------|
+| `viewSalesRankings` | OP, Admin, CEO, HR, RTM, Quality | Reports → Sales Rankings tab + API |
+| `settingsThemeUnlocks` | Admin, CEO, HR | Settings → Premium theme unlock targets |
+
+---
+
 ## v2.4.9 release checklist
 
-**Shipped 2026-08-27 (optional installer + patch from 2.4.8 / not breaking):** GitHub [v2.4.9](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.9) is **Latest**. Supabase `app_versions` `2.4.9` is `is_current` with `min_compatible_version=1.0.0`.
+**Shipped 2026-08-27 (optional installer + patch from 2.4.8 / not breaking):** GitHub [v2.4.9](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.4.9) was **Latest**. Supabase `app_versions` `2.4.9` was `is_current` with `min_compatible_version=1.0.0`.
 
 ### Shipped in 2.4.9
 - **Turtle Grove** premium theme (moss/earth); spinning turtle loader; slow turtles on `/cats`

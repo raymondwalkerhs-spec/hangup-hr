@@ -17,16 +17,19 @@ export function FormField({
   label,
   children,
   span,
+  error,
 }: {
   label: string;
   children: ReactNode;
   span?: "full" | 2;
+  error?: string;
 }) {
   const spanClass = span === "full" ? styles.full : span === 2 ? styles.span2 : "";
   return (
-    <label className={`${styles.field} ${spanClass}`}>
+    <label className={`${styles.field} ${spanClass} ${error ? styles.invalid : ""}`}>
       <span>{label}</span>
       {children}
+      {error ? <em className={styles.fieldError}>{error}</em> : null}
     </label>
   );
 }

@@ -222,7 +222,6 @@ async function loadVersionInfo() {
     }
     if (data.versionCheck?.status === "blocked") {
       setLoginBlocked(data.versionCheck.message);
-      return;
     }
     if (data.installHealth && !data.installHealth.ok) {
       showLoginUpdateBanner({
@@ -234,7 +233,16 @@ async function loadVersionInfo() {
     const githubInfo =
       data.githubUpdate ||
       (await fetch("/api/github-update").then((r) => (r.ok ? r.json() : null)).catch(() => null));
-    if (githubInfo?.enabled && githubInfo.updateAvailable) {
+    const blocked = data.versionCheck?.status === "blocked";
+    if (blocked) {
+      showLoginUpdateBanner({
+        title: "Update required",
+        message: githubInfo?.latest
+          ? `Version ${githubInfo.latest} is ready (you have ${githubInfo.current || data.appVersion}). Use Update now to continue.`
+          : `${data.versionCheck?.message || "This app version is no longer supported."} Use Update now to install the latest version.`,
+        urgent: true,
+      });
+    } else if (githubInfo?.enabled && githubInfo.updateAvailable) {
       if (data.installHealth && !data.installHealth.ok) {
         const msg = document.getElementById("login-update-msg");
         if (msg) {

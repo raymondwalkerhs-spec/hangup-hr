@@ -5,6 +5,7 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import type { ReactNode } from "react";
+import clsx from "clsx";
 import { EmptyState } from "@/ui/EmptyState";
 import styles from "./DataGrid.module.css";
 
@@ -15,6 +16,7 @@ export function DataGrid<T>({
   emptyMessage = "No data",
   footer,
   className,
+  getRowClassName,
 }: {
   data: T[];
   columns: ColumnDef<T, unknown>[];
@@ -24,6 +26,7 @@ export function DataGrid<T>({
   emptyMessage?: string;
   footer?: ReactNode;
   className?: string;
+  getRowClassName?: (row: T) => string | undefined;
 }) {
   const table = useReactTable({
     data,
@@ -54,7 +57,7 @@ export function DataGrid<T>({
           {rows.map((row) => (
             <tr
               key={row.id}
-              className={onRowClick ? styles.clickable : undefined}
+              className={clsx(onRowClick && styles.clickable, getRowClassName?.(row.original))}
               onClick={() => onRowClick?.(row.original)}
             >
               {row.getVisibleCells().map((cell) => (

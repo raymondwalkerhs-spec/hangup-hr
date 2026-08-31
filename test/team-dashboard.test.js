@@ -104,9 +104,75 @@ test("buildDayDashboard excludes org TL and paused agents from roster", () => {
   assert.ok(!names.some((n) => String(n).includes("Paused")));
 });
 
-test("team target percentage is approved over active agents", () => {
+test("team conversion is sent sales over Q checks", () => {
+  const day = teamDashboard.buildDayDashboard({
+    date: "2026-08-04",
+    sales: [
+      {
+        agentId: "HS1-10",
+        status: "passed",
+        submissionDate: "2026-08-04",
+        workingDay: "2026-08-04",
+        effectiveDate: "2026-08-04",
+        team: "Phoenix",
+        unit: "HS-1",
+        formData: { clientFeedback: "Approved" },
+      },
+      {
+        agentId: "HS1-10",
+        status: "pending",
+        submissionDate: "2026-08-04",
+        workingDay: "2026-08-04",
+        effectiveDate: "2026-08-04",
+        team: "Phoenix",
+        unit: "HS-1",
+        formData: { clientFeedback: "Pending" },
+      },
+      {
+        agentId: "HS1-10",
+        status: "denied",
+        submissionDate: "2026-08-04",
+        workingDay: "2026-08-04",
+        effectiveDate: "2026-08-04",
+        team: "Phoenix",
+        unit: "HS-1",
+        formData: { clientFeedback: "Denied" },
+      },
+    ],
+    employees,
+    attendanceRecords: [],
+    teamsMeta,
+    appUsers,
+    checksByAgent: {
+      "HS1-10": { q: 8, nq: 0, age_limit: 0, under_age: 0, duplicate: 0 },
+    },
+  });
+  const phoenix = (day.teamSummaries || []).find((t) => t.team === "Phoenix");
+  assert.equal(phoenix?.approved, 1);
+  assert.equal(phoenix?.pending, 1);
+  assert.equal(phoenix?.passedPending, 2);
+  assert.equal(phoenix?.total, 3);
+  assert.equal(phoenix?.checksQ, 8);
+  // Sent Sales 3 / Q 8 = 37.50%
+  assert.equal(phoenix?.conversion, "37.50%");
+  assert.equal(phoenix?.targetPercentage, "300.00%");
+});
+
+test("team target percentage is sent sales over active agents", () => {
   const pct = teamDashboardRoster.teamTargetPercentage(2, 4);
   assert.equal(pct, "50.00%");
+
+  const weekPct = teamDashboardRoster.teamTargetPercentage(10, 2, 5);
+  assert.equal(weekPct, "100.00%");
+
+  const monthPct = teamDashboardRoster.teamTargetPercentage(40, 2, 20);
+  assert.equal(monthPct, "100.00%");
+
+  assert.equal(teamDashboardRoster.targetDivisorForPeriod("day"), 1);
+  assert.equal(teamDashboardRoster.targetDivisorForPeriod("week"), 5);
+  const augWeeks = teamDashboardRoster.targetDivisorForPeriod("month", "2026-08-01", "2026-08-31");
+  assert.equal(augWeeks % 5, 0);
+  assert.ok(augWeeks >= 5);
 
   const day = teamDashboard.buildDayDashboard({
     date: "2026-08-04",
@@ -138,4 +204,42 @@ test("team target percentage is approved over active agents", () => {
   const phoenix = (day.teamSummaries || []).find((t) => t.team === "Phoenix");
   assert.equal(phoenix?.activeAgentsCount, 1);
   assert.equal(phoenix?.targetPercentage, "200.00%");
+});
+
+test("period totals aggregate week like HS3", () => {
+  const dash = teamDashboard.buildPeriodTotalsDashboard({
+    from: "2026-08-03",
+    to: "2026-08-09",
+    sales: [
+      {
+        agentId: "HS1-10",
+        workingDay: "2026-08-04",
+        submissionDate: "2026-08-04",
+        team: "Phoenix",
+        unit: "HS-1",
+        formData: { clientFeedback: "Approved" },
+      },
+      {
+        agentId: "HS1-10",
+        workingDay: "2026-08-05",
+        submissionDate: "2026-08-05",
+        team: "Phoenix",
+        unit: "HS-1",
+        formData: { clientFeedback: "Pending" },
+      },
+    ],
+    employees,
+    attendanceRecords: [],
+    teamsMeta,
+    appUsers,
+    checksByAgent: {
+      "HS1-10": { q: 4, nq: 2, age_limit: 0, under_age: 0, duplicate: 1 },
+    },
+  });
+  const row = (dash.agentRows || []).find((r) => r.agentId === "HS1-10");
+  assert.equal(row?.totalSent, 2);
+  assert.equal(row?.checksQ, 4);
+  assert.equal(row?.checksTotal, 7);
+  const phoenix = (dash.teamSummaries || []).find((t) => t.team === "Phoenix");
+  assert.equal(phoenix?.conversion, "50.00%");
 });

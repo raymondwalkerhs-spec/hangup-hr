@@ -1,0 +1,93 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.toolbar input,
+.toolbar select,
+.reviewControls select {
+  min-height: 38px;
+  padding: 0.5rem 0.65rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.toolbar input {
+  flex: 1 1 280px;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.87rem;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tableWrap th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.tableWrap small {
+  display: block;
+  max-width: 220px;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+
+.duplicatePill {
+  display: inline-flex;
+  padding: 0.25rem 0.55rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.reviewControls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.reviewControls select {
+  min-height: 32px;
+  padding-block: 0.25rem;
+}
+
+.error {
+  color: var(--err);
+}
+
+@media (max-width: 700px) {
+  .toolbar {
+    flex-direction: column;
+  }
+}

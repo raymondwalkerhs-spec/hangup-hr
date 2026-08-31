@@ -9,6 +9,12 @@
 .unitHeader h2 {
   margin: 0;
 }
+.unitMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-end;
+}
 .chips {
   display: flex;
   align-items: center;

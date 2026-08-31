@@ -15,10 +15,22 @@ test("strips dashes spaces and junk", () => {
   assert.equal(stripMemberId("1a23-cd4-ef56 extra!"), "1A23CD4EF56");
 });
 
-test("rejects banned letters even in L slots", () => {
+test("rejects banned letters with Wrong MCN", () => {
   const r = validateMemberId("1L23A45CD67");
   assert.equal(r.ok, false);
-  assert.match(r.message, /Character 2 must be a letter \(not L,O,B,I,Z,S\)/);
+  assert.equal(r.message, "Wrong MCN");
+});
+
+test("rejects wrong length with Wrong MCN", () => {
+  const r = validateMemberId("1A2");
+  assert.equal(r.ok, false);
+  assert.equal(r.message, "Wrong MCN");
+});
+
+test("rejects digit in letter slot with Wrong MCN", () => {
+  const r = validateMemberId("1123CD4EF56");
+  assert.equal(r.ok, false);
+  assert.equal(r.message, "Wrong MCN");
 });
 
 test("accepts valid NLAN-LAN-LLNN", () => {
@@ -33,7 +45,8 @@ test("caret maps through grouping on paste", () => {
   assert.equal(caret, 13);
 });
 
-test("half-typed draft is not valid but formats", () => {
-  assert.equal(formatMemberId("1A2"), "1A2");
-  assert.equal(validateMemberId("1A2").ok, false);
+test("empty required member id", () => {
+  const r = validateMemberId("");
+  assert.equal(r.ok, false);
+  assert.equal(r.message, "Member ID is required");
 });

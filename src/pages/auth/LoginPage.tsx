@@ -7,8 +7,10 @@ import { useAuth } from "@/app/AuthProvider";
 import { Button } from "@/ui/Button";
 import {
   applyDesktopUpdate,
+  canApplyDesktopUpdate,
   fetchGitHubUpdateInfo,
   fetchVersionInfo,
+  githubReleasePageUrl,
   type GitHubUpdateInfo,
   getHrDesktop,
   updateActionHint,
@@ -322,7 +324,6 @@ export function LoginPage() {
         if (data.appVersion) setAppVersion(data.appVersion);
         if (data.versionCheck?.status === "blocked") {
           setLoginBlocked(data.versionCheck.message || "This app version is no longer supported.");
-          return;
         }
         if (data.installHealth && data.installHealth.ok === false) {
           setUpdateBanner({
@@ -341,6 +342,19 @@ export function LoginPage() {
           }
         }
         setGithubUpdate(gh);
+        const blocked = data.versionCheck?.status === "blocked";
+        if (blocked) {
+          const latest = gh?.latest || data.versionCheck?.currentVersion;
+          const hasPackage = Boolean(gh?.assetUrl || gh?.assetId || gh?.assetName);
+          setUpdateBanner({
+            title: "Update required",
+            message: hasPackage
+              ? `Version ${latest} is ready (you have ${gh?.current || data.appVersion}). ${updateActionHint(gh)}`
+              : `${data.versionCheck?.message || "This app version is no longer supported."} Use Update now, or download the latest installer.`,
+            urgent: true,
+          });
+          return;
+        }
         if (gh?.enabled && gh.updateAvailable) {
           const hasPackage = Boolean(gh.assetUrl || gh.assetId || gh.assetName);
           setUpdateBanner({
@@ -357,11 +371,7 @@ export function LoginPage() {
     })();
   }, []);
 
-  const canLoginUpdate = Boolean(
-    getHrDesktop()?.applyGitHubUpdate &&
-    githubUpdate?.updateAvailable &&
-    (githubUpdate.assetUrl || githubUpdate.assetId || githubUpdate.assetName)
-  );
+  const canLoginUpdate = canApplyDesktopUpdate(githubUpdate, { requireAvailable: !loginBlocked });
 
   const handleLoginUpdate = async () => {
     setUpdateBusy(true);
@@ -492,6 +502,16 @@ export function LoginPage() {
                   <Button size="sm" onClick={handleLoginUpdate} disabled={updateBusy}>
                     {updateBusy ? "Downloading…" : "Update now"}
                   </Button>
+                )}
+                {!canLoginUpdate && (
+                  <a
+                    href={githubReleasePageUrl(githubUpdate)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.downloadLink}
+                  >
+                    Download latest installer
+                  </a>
                 )}
               </div>
             )}

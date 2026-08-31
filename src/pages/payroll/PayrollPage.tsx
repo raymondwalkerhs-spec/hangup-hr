@@ -39,6 +39,7 @@ import { downloadApiFile } from "@/lib/files";
 import { buildApiQuery, scopedPath } from "@/lib/apiQuery";
 
 import styles from "./PayrollPage.module.css";
+import { LIVE_REFETCH_MS } from "@/lib/liveRefresh";
 
 type Row = Record<string, unknown>;
 
@@ -98,6 +99,7 @@ export function PayrollPage() {
   const { status: appStatus } = useAppStatus();
 
   const [hideOut, setHideOut] = useState(true);
+  const [hideAllOut, setHideAllOut] = useState(false);
   const showLegacyEmployees = appStatus?.showLegacyEmployees === true;
 
 
@@ -108,19 +110,31 @@ export function PayrollPage() {
 
   }, [appStatus?.hideOutEmployees]);
 
+  const role = String((appStatus?.user as { role?: string })?.role || "").toLowerCase();
+  const canHideAllOut = ["tl", "hr", "rtm", "quality", "admin", "op", "ceo"].includes(role);
+
 
 
   const { data, isLoading, isFetching, error } = useQuery({
 
-    queryKey: ["payroll-full", month, companyContext, hideOut],
+    queryKey: ["payroll-full", month, companyContext, hideOut, hideAllOut],
 
     queryFn: () =>
       api<PayrollData>(
-        path("/payroll", { month, ...(hideOut ? { hideOut: "true" } : { showOut: "true" }) })
+        path("/payroll", {
+          month,
+          ...(hideAllOut
+            ? { hideAllOut: "true", showOut: "true" }
+            : hideOut
+              ? { hideOut: "true" }
+              : { showOut: "true" }),
+        })
       ),
-    staleTime: 60_000,
+    staleTime: 0,
     placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: LIVE_REFETCH_MS,
+    refetchIntervalInBackground: false,
 
   });
 
@@ -515,7 +529,9 @@ export function PayrollPage() {
 
             type="checkbox"
 
-            checked={hideOut}
+            checked={hideOut && !hideAllOut}
+
+            disabled={hideAllOut}
 
             onChange={(e) => {
 
@@ -536,6 +552,21 @@ export function PayrollPage() {
           Hide OUT (left previous month only)
 
         </label>
+
+        {canHideAllOut && (
+          <label className={styles.toggle}>
+            <input
+              type="checkbox"
+              checked={hideAllOut}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setHideAllOut(on);
+                if (on) setHideOut(true);
+              }}
+            />
+            Hide all OUT (incl. worked this month)
+          </label>
+        )}
 
         <label className={styles.toggle}>
 
