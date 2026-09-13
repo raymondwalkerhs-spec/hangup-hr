@@ -12,8 +12,8 @@
 
 ### Checklist
 - [x] Bump `package.json` to **2.6.0**; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`)
-- [ ] Apply migrations: office_po, loan_schedule, loan_month_overrides, auth_google_mfa, clear_training_quarter_extra_days
-- [ ] `gh workflow run "Release (update packages)"` → Latest + `publish-app-version.js` + web installer
+- [x] Apply migrations: office_po, loan_schedule, loan_month_overrides, auth_google_mfa; clear_training_quarter_extra_days (HS3-81/27)
+- [x] `gh workflow run "Release (update packages)"` → Latest + `publish-app-version.js` + web installer
 - [ ] Ops: Google OAuth client + `AUTH_BACKEND=dual` when ready (`docs/AUTH_MFA_OPS.md`)
 - [ ] Optional: `node scripts/backfill-loan-schedules.js`
 
