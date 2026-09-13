@@ -34,6 +34,9 @@ type PendingReg = {
 type UserRow = {
   username: string;
   email?: string;
+  emailClaimed?: string;
+  googleEmail?: string;
+  mfaEnrolledAt?: string | null;
   role?: string;
   status?: string;
   employeeId?: string;
@@ -140,6 +143,15 @@ export function UsersPage() {
     onSuccess: (res) => {
       const released = (res as { releasedAppId?: string }).releasedAppId;
       alert(released ? `Purged — ID ${released} released` : "User purged");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+
+  const resetMfa = useMutation({
+    mutationFn: (username: string) =>
+      api(`/auth/mfa/admin-reset/${encodeURIComponent(username)}`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      alert("MFA cleared — user must re-enroll on next login.");
       qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -336,6 +348,12 @@ export function UsersPage() {
                       {u.hasExceptionAccess && <StatusPill variant="warn">Exception</StatusPill>}
                       {u.isIt && <StatusPill variant="muted">IT</StatusPill>}
                       <div className="muted" style={{ fontSize: "0.75rem" }}>{u.email || "—"}</div>
+                      {u.googleEmail ? (
+                        <div className="muted" style={{ fontSize: "0.75rem" }}>Google: {u.googleEmail}</div>
+                      ) : null}
+                      {u.mfaEnrolledAt ? (
+                        <div className="muted" style={{ fontSize: "0.75rem" }}>MFA enrolled</div>
+                      ) : null}
                     </td>
                     <td>{u.employeeId ? `${u.employeeId} — ${u.employeeName || ""}` : "—"}</td>
                     <td className="muted">{u.employeeUnit || "—"} / {u.employeeTeam || "—"}</td>
@@ -346,6 +364,16 @@ export function UsersPage() {
                       {editUser?.username !== u.username && (
                         <Button size="sm" variant="secondary" onClick={() => setPermUser(u)}>Permissions</Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (!confirm(`Reset Authenticator MFA for ${u.username}? They must re-enroll.`)) return;
+                          resetMfa.mutate(u.username);
+                        }}
+                      >
+                        Reset MFA
+                      </Button>
                       {u.status === "inactive" && u.employeeId && (
                         <Button size="sm" onClick={() => { setActivateUser(u); setActivateForm({ password: "", role: u.role || "agent" }); }}>Activate</Button>
                       )}

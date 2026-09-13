@@ -1339,11 +1339,10 @@ router.get("/alerts/employment", async (req, res) => {
   try {
     const companyCtx = require("../lib/company-context");
     const company = companyCtx.resolveCompanyContextForUser(req.query.company, req.userRole);
+    const { todayLocalIsoDate, addCalendarDays } = require("../lib/date-iso");
     const days = Math.min(Number(req.query.days) || 60, 180);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + days);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIsoDate();
+    const cutoffStr = addCalendarDays(today, days);
     const alerts = [];
     let employees = store.getEmployees();
     if (company) {

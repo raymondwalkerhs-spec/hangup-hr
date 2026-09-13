@@ -5,6 +5,8 @@ const { formatDobForGoogleForm, pickSaleFields, buildGoogleFormBody } = require(
 test("formatDobForGoogleForm converts ISO to MM/DD/YYYY", () => {
   assert.equal(formatDobForGoogleForm("1990-01-15"), "01/15/1990");
   assert.equal(formatDobForGoogleForm("1950-08-06"), "08/06/1950");
+  assert.equal(formatDobForGoogleForm("1949-01-03"), "01/03/1949");
+  assert.equal(formatDobForGoogleForm("1949-01-03T00:00:00.000Z"), "01/03/1949");
 });
 
 test("formatDobForGoogleForm normalizes slash input", () => {

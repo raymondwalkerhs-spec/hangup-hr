@@ -390,11 +390,25 @@ export function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const data = await api<{ sessionId: string }>("/login", {
+      const data = await api<{
+        sessionId: string;
+        needsSetup?: boolean;
+        needsMfaEnroll?: boolean;
+        needsGoogleLink?: boolean;
+      }>("/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
       setSessionId(data.sessionId);
+      getHrDesktop()?.setSession?.(data.sessionId);
+      if (data.needsMfaEnroll) {
+        navigate("/setup-2fa", { replace: true });
+        return;
+      }
+      if (data.needsGoogleLink || data.needsSetup) {
+        navigate("/link-google", { replace: true });
+        return;
+      }
       const status = await refreshStatus();
       const user = (status?.user as StatusUser) || undefined;
       const from = (location.state as { from?: string } | null)?.from;
@@ -404,6 +418,28 @@ export function LoginPage() {
           ? from
           : `/${firstAllowedPage(user)}`;
       navigate(target, { replace: true });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await api<{ url: string }>("/auth/google/cold-start", {
+        method: "POST",
+        body: "{}",
+      });
+      const desktop = getHrDesktop();
+      if (desktop?.openExternal) {
+        await desktop.openExternal(data.url);
+      } else {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      }
+      navigate("/oauth-pending", { replace: true, state: { mode: "cold" } });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -537,6 +573,18 @@ export function LoginPage() {
                 <span className={styles.btnDnaText}>{loading ? "Signing in…" : "Sign in"}</span>
               </Button>
             </form>
+            <Button
+              type="button"
+              variant="secondary"
+              className={styles.submit}
+              disabled={loading || Boolean(loginBlocked)}
+              onClick={handleGoogleLogin}
+            >
+              Sign in with Google
+            </Button>
+            <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.35rem" }}>
+              Google works only after you link it once (password login → Link Google). No Authenticator code at login.
+            </p>
             <p className="muted">
               New agent?{" "}
               <button type="button" className={styles.link} onClick={() => { setView("register"); setError(""); setRegStep(1); }}>

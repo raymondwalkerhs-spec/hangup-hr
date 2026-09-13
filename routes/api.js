@@ -4,6 +4,7 @@ const {
   validateLogin,
   checkSession,
 } = require("../lib/auth");
+const authBridge = require("../lib/auth-bridge");
 const { createSession, getSession, destroySession, validateSession, updateSession } = require("../lib/session-store");
 const { requireOnline, isOnline, verifyBackendAccess } = require("../lib/network");
 const { authDebug, authDebugError, isAuthDebug, maskSessionId } = require("../lib/auth-debug");
@@ -164,6 +165,27 @@ function requireAuth(req, res, next) {
       return res.status(401).json({ error: "Session expired or revoked", sessionRevoked: true });
     }
     req.appSession = valid;
+    if (
+      authBridge.isAuthBridgeEnabled() &&
+      valid.sessionKind === "pending_setup" &&
+      !authBridge.pendingSetupPathAllowlist(req.path)
+    ) {
+      authDebug("requireAuth.pending_setup_block", { path: req.path, username: valid.username });
+      let needs = { needsMfaEnroll: true, needsGoogleLink: true, needsSetup: true };
+      try {
+        const row = await authBridge.fetchAppUserAuthRow(valid.username);
+        needs = authBridge.setupNeeds(row);
+      } catch {
+        /* ignore */
+      }
+      return res.status(403).json({
+        error: "Complete account security setup first",
+        needsSetup: true,
+        needsMfaEnroll: needs.needsMfaEnroll,
+        needsGoogleLink: needs.needsGoogleLink,
+        sessionKind: "pending_setup",
+      });
+    }
     const realUsername = valid.username;
     let effectiveUsername = realUsername;
     let impersonatingAs = valid.impersonatingAs || null;
@@ -306,7 +328,13 @@ async function loadEmployeePayslipBundle(emp, month, req = null) {
       actionPlans.filter((p) => p.employeeId === emp.id && p.status === "active")
     );
     const co = reqCtx ? parseCompany(reqCtx) : companyContext.getCompanyForUnit(emp.unit);
-    const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month, co);
+    const {
+      commissionTiers,
+      loans,
+      loanPayments,
+      loanMonthOverrides = [],
+      loanScheduleLines = [],
+    } = store.getPayrollExtras(month, co);
     const allPayrollSplits = store.getAllPayrollSplits();
     const splitMaps = buildSplitMaps(allPayrollSplits, month);
     payslip = applyPayrollSplits(
@@ -326,7 +354,9 @@ async function loadEmployeePayslipBundle(emp, month, req = null) {
         actionPlans,
         gate.payslipNotes || [],
         {},
-        extraPayrollEntries
+        extraPayrollEntries,
+        loanMonthOverrides,
+        loanScheduleLines
       ),
       splitMaps.byEmployeeMonth.get(emp.id) || [],
       splitMaps.deferredIn.get(emp.id) || []
@@ -414,6 +444,19 @@ async function buildEnrichedPayrollForMonth(month, req, { unit = "", hideOut, hi
 }
 
 async function upsertTlBonusPair(req, { employeeId, date, amount, reason, unit, deductFromEmployeeId }) {
+  const emp = store.getEmployeeById(employeeId);
+  const fromEmp = store.getEmployeeById(deductFromEmployeeId);
+  const company = parseCompany(req);
+  const allEmps = companyContext.filterEmployeesByCompany(
+    store.getEmployees({ hideOut: false }),
+    company
+  );
+  const bonusScope = require("../lib/bonus-scope");
+  if (!bonusScope.canGrantBonusTransfer(req.userRole, emp, fromEmp, allEmps)) {
+    const err = new Error("No access to one of the employees");
+    err.status = 403;
+    throw err;
+  }
   await applyTlBonusTransfer(
     { employeeId, deductFromEmployeeId, date, amount, reason, unit },
     req.username
@@ -628,6 +671,39 @@ router.post("/login", async (req, res) => {
       }
     }
     const authRecord = users.find((u) => u.user.toLowerCase() === result.user.toLowerCase());
+
+    // Dual-run: bcrypt → Auth password sync (non-fatal). Soft pending_setup when MFA/Google needed.
+    let sessionKind = "full";
+    let loginMethod = "password";
+    let authUserId = null;
+    let supabaseAccessToken = null;
+    let supabaseRefreshToken = null;
+    let needsMfaEnroll = false;
+    let needsGoogleLink = false;
+    if (authBridge.isAuthBridgeEnabled()) {
+      try {
+        const sync = await authBridge.syncPasswordToAuth(result.user, password);
+        authUserId = sync.authUserId || sync.appUser?.auth_user_id || null;
+        if (sync.synced && sync.syntheticEmail) {
+          try {
+            const signed = await authBridge.signInAuthWithPassword(sync.syntheticEmail, password);
+            supabaseAccessToken = signed.session?.access_token || null;
+            supabaseRefreshToken = signed.session?.refresh_token || null;
+            authUserId = signed.user?.id || authUserId;
+          } catch (err) {
+            authDebugError("login.authSignIn", err, { username: result.user });
+          }
+        }
+        const row = sync.appUser || (await authBridge.fetchAppUserAuthRow(result.user));
+        const needs = authBridge.setupNeeds(row);
+        needsMfaEnroll = needs.needsMfaEnroll;
+        needsGoogleLink = needs.needsGoogleLink;
+        if (needs.needsSetup) sessionKind = "pending_setup";
+      } catch (err) {
+        authDebugError("login.authBridge", err, { username: result.user });
+      }
+    }
+
     try {
       await new Promise((resolve, reject) => {
         if (!req.session) return resolve();
@@ -643,6 +719,11 @@ router.post("/login", async (req, res) => {
       deviceLabel: req.body.deviceLabel || "Desktop",
       ip: req.ip,
       passwordChangedAtSnapshot: authRecord?.passwordChangedAt || result.passwordChangedAt || null,
+      sessionKind,
+      authUserId,
+      loginMethod,
+      supabaseAccessToken,
+      supabaseRefreshToken,
     });
     if (useSupabase()) {
       try {
@@ -660,6 +741,12 @@ router.post("/login", async (req, res) => {
       username: result.user,
       appVersion: getAppVersion(),
       authDebug: isAuthDebug(),
+      sessionKind,
+      loginMethod,
+      needsMfaEnroll,
+      needsGoogleLink,
+      needsSetup: sessionKind === "pending_setup",
+      authBackend: authBridge.getAuthBackendMode(),
     };
     const notice = versionPayload(versionCheck);
     if (notice?.status === "update_recommended") {
@@ -675,7 +762,12 @@ router.post("/login", async (req, res) => {
       authDebugError("login.session_save", err, { sessionId: session.id });
       throw err;
     }
-    authDebug("login.success", { username: result.user, sessionId: session.id, role: normalizedRole });
+    authDebug("login.success", {
+      username: result.user,
+      sessionId: session.id,
+      role: normalizedRole,
+      sessionKind,
+    });
     res.json(payload);
   } catch (err) {
     authDebugError("login.exception", err, { username: loginUser });
@@ -691,6 +783,128 @@ router.post("/logout", (req, res) => {
   const session = sessionFromRequest(req);
   if (session) destroySession(session.id);
   req.session.destroy(() => res.json({ ok: true }));
+});
+
+/** Cold Google login (public) — only if google_email already linked; never auto-creates users. */
+router.post("/auth/google/cold-start", async (req, res) => {
+  try {
+    if (!authBridge.isAuthBridgeEnabled()) {
+      return res.status(400).json({
+        error: "Auth MFA/Google bridge is off. Set AUTH_BACKEND=dual to enable.",
+        code: "auth_bridge_off",
+      });
+    }
+    const rateLimit = rateLimiter.checkLogin(req);
+    if (rateLimit.limited) {
+      return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
+    }
+    const oauth = await authBridge.getGoogleAuthUrlViaClient({});
+    if (!oauth.url) {
+      return res.status(500).json({ error: "Could not build Google OAuth URL", code: "oauth_url_missing" });
+    }
+    res.json({ ok: true, url: oauth.url, redirectTo: oauth.redirectTo, mode: "cold" });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("google.cold-start", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+router.post("/auth/google/cold-complete", async (req, res) => {
+  try {
+    if (!authBridge.isAuthBridgeEnabled()) {
+      return res.status(400).json({
+        error: "Auth MFA/Google bridge is off. Set AUTH_BACKEND=dual to enable.",
+        code: "auth_bridge_off",
+      });
+    }
+    const rateLimit = rateLimiter.checkLogin(req);
+    if (rateLimit.limited) {
+      return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
+    }
+    await requireOnline();
+    const code = String(req.body?.code || "").trim();
+    if (!code) return res.status(400).json({ error: "Missing OAuth code", code: "oauth_code_missing" });
+
+    const exchanged = await authBridge.exchangeOAuthCode(code);
+    const identities = exchanged.user?.identities || exchanged.session?.user?.identities || [];
+    const googleIdent = identities.find((i) => i.provider === "google");
+    const googleEmail = authBridge.normalizeEmail(
+      googleIdent?.identity_data?.email ||
+        exchanged.user?.email ||
+        exchanged.user?.user_metadata?.email ||
+        exchanged.session?.user?.email
+    );
+    if (!googleEmail) {
+      return res.status(403).json({
+        error: "Google account did not return an email",
+        code: "google_not_linked",
+      });
+    }
+    const appUser = await authBridge.findAppUserByGoogleEmail(googleEmail);
+    if (!appUser || String(appUser.status || "").toLowerCase() !== "active") {
+      return res.status(403).json({
+        error: "This Google account is not linked to a Hangup user. Sign in with password and link Google first.",
+        code: "google_not_linked",
+      });
+    }
+    if (!roles.hasAppAccess(roles.resolveUserRole(appUser.username, appUser.role))) {
+      return res.status(403).json({ error: "No access assigned. Contact Admin." });
+    }
+    const normalizedRole = roles.normalizeRole(appUser.role);
+    const needs = authBridge.setupNeeds(appUser);
+    const sessionKind = needs.needsSetup ? "pending_setup" : "full";
+    try {
+      await new Promise((resolve, reject) => {
+        if (!req.session) return resolve();
+        req.session.regenerate((err) => (err ? reject(err) : resolve()));
+      });
+    } catch {
+      /* ignore */
+    }
+    const session = createSession(appUser.username, normalizedRole, {
+      deviceLabel: req.body.deviceLabel || "Desktop",
+      ip: req.ip,
+      passwordChangedAtSnapshot: appUser.password_changed_at || null,
+      sessionKind,
+      authUserId: exchanged.user?.id || appUser.auth_user_id || null,
+      loginMethod: "google",
+      supabaseAccessToken: exchanged.session?.access_token || null,
+      supabaseRefreshToken: exchanged.session?.refresh_token || null,
+    });
+    if (useSupabase()) {
+      try {
+        await hrms.upsertAppSession(session);
+        await hrms.revokeOtherSessionsForUser(appUser.username, session.id);
+        await require("../lib/users-admin").touchLastLogin(appUser.username);
+      } catch (err) {
+        authDebugError("google.cold-complete.session", err);
+      }
+    }
+    req.session.appSessionId = session.id;
+    try {
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+    } catch (err) {
+      throw err;
+    }
+    res.json({
+      ok: true,
+      sessionId: session.id,
+      username: appUser.username,
+      sessionKind,
+      loginMethod: "google",
+      needsMfaEnroll: needs.needsMfaEnroll,
+      needsGoogleLink: needs.needsGoogleLink,
+      needsSetup: needs.needsSetup,
+      authBackend: authBridge.getAuthBackendMode(),
+    });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("google.cold-complete", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
 });
 
 router.use("/registration", require("./registration"));
@@ -834,6 +1048,29 @@ router.get("/status", async (req, res) => {
   }
   const company = parseCompany(req);
   const scopedConfig = store.getConfigForCompany(company);
+  let authSecurity = null;
+  if (authBridge.isAuthBridgeEnabled()) {
+    try {
+      const row = await authBridge.fetchAppUserAuthRow(req.username);
+      const needs = authBridge.setupNeeds(row);
+      authSecurity = {
+        authBackend: authBridge.getAuthBackendMode(),
+        sessionKind: req.appSession?.sessionKind || "full",
+        loginMethod: req.appSession?.loginMethod || "password",
+        mfaEnrolled: Boolean(row?.mfa_enrolled_at),
+        googleLinked: Boolean(row?.google_linked_at && row?.google_email),
+        googleEmail: row?.google_email || null,
+        emailClaimed: row?.email_claimed || row?.email || null,
+        needsMfaEnroll: needs.needsMfaEnroll,
+        needsGoogleLink: needs.needsGoogleLink,
+        needsSetup: needs.needsSetup || req.appSession?.sessionKind === "pending_setup",
+      };
+    } catch {
+      authSecurity = { authBackend: authBridge.getAuthBackendMode(), needsSetup: false };
+    }
+  } else {
+    authSecurity = { authBackend: "legacy", needsSetup: false };
+  }
   let hasAssignedEquipment = false;
   if (!roles.canViewEquipmentInventory(req.userRole) && req.userRole?.employeeId) {
     try {
@@ -856,6 +1093,7 @@ router.get("/status", async (req, res) => {
     showLegacyEmployees: config.showLegacyEmployees === true,
     taxRules: scopedConfig.taxRules || { incomeTaxRate: 0, socialInsuranceRate: 0 },
     company,
+    authSecurity,
     canManageHs2Company: roles.canManageHs2Company(req.userRole),
     canAccessHs2Company: roles.canAccessHs2CompanyContext(req.userRole),
     canManageSessions: roles.canManageSessions(req.realUsername || req.username),
@@ -899,6 +1137,9 @@ router.get("/status", async (req, res) => {
       canApproveRegistration: registration.canApproveRegistration(req.userRole?.role),
       canAccessCosts: roles.canAccessCostsFull(req.userRole, req.username),
       canSubmitExpense: roles.canSubmitExpense(req.userRole, req.username),
+      canViewOfficePo: roles.canViewOfficePo(req.userRole),
+      canManageOfficePoItems: roles.canManageOfficePoItems(req.userRole),
+      canEditOfficePoPurchases: roles.canEditOfficePoPurchases(req.userRole),
       canApproveLoan: roles.canApproveLoanRequest(req.realUsername || req.username),
       canManageOrg: roles.canManageOrgStructure(req.userRole),
       canManageEmployees: roles.canManageEmployees(req.userRole),
@@ -1248,6 +1489,10 @@ router.use("/expenses", (req, res, next) => {
   req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
   next();
 }, require("./expenses"));
+router.use("/office-po", (req, res, next) => {
+  req.userRole = req.userRole || roles.resolveUserRole(req.username, req.appSession?.role);
+  next();
+}, require("./office-po"));
 router.use("/loan-requests", (req, res, next) => {
   if (req.userRole?.employeeId) {
     req.userRole.username = req.username;
@@ -3694,6 +3939,21 @@ router.get("/bonuses", (req, res) => {
   });
 });
 
+router.get("/bonuses/picker-scope", (req, res) => {
+  if (!roles.canViewBonusesDeductions(req.userRole) && !roles.canTransferBonus(req.userRole)) {
+    return res.status(403).json({ error: "No permission" });
+  }
+  try {
+    const company = parseCompany(req);
+    const bonusScope = require("../lib/bonus-scope");
+    let employees = store.getEmployees({ hideOut: false });
+    employees = companyContext.filterEmployeesByCompany(employees, company);
+    res.json(bonusScope.buildBonusPickerScope(req.userRole, employees));
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 router.post("/bonuses", async (req, res) => {
   const { employeeId, date, amount, reason, type, unit, deductFromEmployeeId } = req.body;
   const bonusType = type || "Other Bonus";
@@ -3765,7 +4025,13 @@ router.post("/bonuses", async (req, res) => {
     if (!assertEmployeeInCompanyContext(fromEmp, req)) {
       return res.status(404).json({ error: "Deduction employee not found" });
     }
-    if (!roles.canGrantTransferBonus(req.userRole, emp, fromEmp)) {
+    const company = parseCompany(req);
+    const allEmps = companyContext.filterEmployeesByCompany(
+      store.getEmployees({ hideOut: false }),
+      company
+    );
+    const bonusScope = require("../lib/bonus-scope");
+    if (!bonusScope.canGrantBonusTransfer(req.userRole, emp, fromEmp, allEmps)) {
       return res.status(403).json({ error: "No access to one of the employees" });
     }
     await applyTlBonusTransfer(
@@ -3867,14 +4133,18 @@ router.patch("/bonuses", async (req, res) => {
   });
 
   if (isTlTransfer) {
-    await upsertTlBonusPair(req, {
-      employeeId,
-      date,
-      amount,
-      reason,
-      unit,
-      deductFromEmployeeId,
-    });
+    try {
+      await upsertTlBonusPair(req, {
+        employeeId,
+        date,
+        amount,
+        reason,
+        unit,
+        deductFromEmployeeId,
+      });
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message || String(err) });
+    }
   } else {
     const emp = store.getEmployeeById(employeeId);
     await store.upsertBonus(
@@ -4936,7 +5206,7 @@ router.get("/loans", (req, res) => {
   let loans = store.getEmployeeLoans(employeeId || undefined);
   const employees = filterEmployeesForRequest(store.getEmployees({ hideOut: false }), req);
   const empIds = new Set(employees.map((e) => e.id));
-  loans = loans.filter((l) => empIds.has(l.employeeId));
+  loans = loans.filter((l) => empIds.has(l.employeeId)).map((l) => store.enrichLoanWithBalance(l));
   res.json({ loans });
 });
 
@@ -4995,6 +5265,140 @@ router.post("/loans/:id/cancel", async (req, res) => {
   }
   const saved = await store.cancelEmployeeLoan(req.params.id, req.username);
   res.json({ ok: true, loan: saved });
+});
+
+router.put("/loans/:id/payment-override", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    const saved = await store.upsertLoanPaymentOverride(
+      req.params.id,
+      {
+        yearMonth: req.body.yearMonth,
+        amount: req.body.amount,
+        note: req.body.note,
+      },
+      req.username
+    );
+    res.json({
+      ok: true,
+      override: saved,
+      loan: store.enrichLoanWithBalance(
+        store.getEmployeeLoans().find((l) => l.id === req.params.id)
+      ),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+router.delete("/loans/:id/payment-override/:yearMonth", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    await store.removeLoanPaymentOverride(req.params.id, req.params.yearMonth, req.username);
+    res.json({
+      ok: true,
+      loan: store.enrichLoanWithBalance(
+        store.getEmployeeLoans().find((l) => l.id === req.params.id)
+      ),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+router.get("/loans/:id/schedule", (req, res) => {
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    res.json(store.getLoanSchedule(req.params.id));
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+router.post("/loans/:id/schedule/skip", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    const result = await store.skipLoanScheduleMonth(
+      req.params.id,
+      req.body.yearMonth,
+      req.body.reason || "",
+      req.username
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+router.put("/loans/:id/schedule/start-month", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    const result = await store.setLoanStartMonth(
+      req.params.id,
+      req.body.startYearMonth || req.body.yearMonth,
+      req.username
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
+});
+
+router.post("/loans/:id/schedule/regenerate", async (req, res) => {
+  if (!roles.canManageAll(req.userRole)) {
+    return res.status(403).json({ error: "HR/admin only" });
+  }
+  const existing = store.getEmployeeLoans().find((l) => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ error: "Loan not found" });
+  const emp = store.getEmployeeById(existing.employeeId);
+  if (!emp || !assertEmployeeInCompanyContext(emp, req)) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+  try {
+    const result = await store.regenerateLoanSchedule(req.params.id, req.username, {
+      startYearMonth: req.body.startYearMonth,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message || String(err) });
+  }
 });
 
 router.delete("/loans/:id", async (req, res) => {
@@ -5209,7 +5613,13 @@ router.get("/reports/monthly", async (req, res) => {
   const records = store.getAttendanceEvents(month);
   const adjustments = store.getPayrollAdjustments(month);
   const attendanceMap = store.buildAttendanceMap(month);
-  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month, company);
+  const {
+    commissionTiers,
+    loans,
+    loanPayments,
+    loanMonthOverrides = [],
+    loanScheduleLines = [],
+  } = store.getPayrollExtras(month, company);
   const allPayrollSplits = store.getAllPayrollSplits();
   const summaries = employees.map((emp) =>
     summarizeEmployeeMonth(
@@ -5234,7 +5644,9 @@ router.get("/reports/monthly", async (req, res) => {
     allPayrollSplits,
     [],
     new Map(),
-    useSupabase() ? await loadExtraPayrollEntriesForMonth(employees, month) : []
+    useSupabase() ? await loadExtraPayrollEntriesForMonth(employees, month) : [],
+    loanMonthOverrides,
+    loanScheduleLines
   );
   const { buildMonthlyReport, reportToMarkdown } = require("../lib/reports");
   const report = buildMonthlyReport({ employees, payroll, summaries, month, adjustments });
@@ -5423,7 +5835,13 @@ router.get("/reports/monthly/pdf", async (req, res) => {
   const records = store.getAttendanceEvents(month);
   const adjustments = store.getPayrollAdjustments(month);
   const attendanceMap = store.buildAttendanceMap(month);
-  const { commissionTiers, loans, loanPayments } = store.getPayrollExtras(month, company);
+  const {
+    commissionTiers,
+    loans,
+    loanPayments,
+    loanMonthOverrides = [],
+    loanScheduleLines = [],
+  } = store.getPayrollExtras(month, company);
   const allPayrollSplits = store.getAllPayrollSplits();
   const summaries = employees.map((emp) =>
     summarizeEmployeeMonth(
@@ -5448,7 +5866,9 @@ router.get("/reports/monthly/pdf", async (req, res) => {
     allPayrollSplits,
     [],
     new Map(),
-    useSupabase() ? await loadExtraPayrollEntriesForMonth(employees, month) : []
+    useSupabase() ? await loadExtraPayrollEntriesForMonth(employees, month) : [],
+    loanMonthOverrides,
+    loanScheduleLines
   );
   const { buildMonthlyReport } = require("../lib/reports");
   const { buildMonthlyReportPdf } = require("../lib/pdf-export");

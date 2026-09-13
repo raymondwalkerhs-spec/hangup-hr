@@ -44,6 +44,10 @@ export type HrDesktop = {
   checkGitHubUpdate?: () => Promise<GitHubUpdateInfo>;
   applyGitHubUpdate?: () => Promise<{ needsQuit?: boolean }>;
   relaunchApp?: () => Promise<void>;
+  setSession?: (id: string) => Promise<void> | void;
+  clearSession?: () => Promise<void> | void;
+  openExternal?: (url: string) => Promise<void> | void;
+  onOAuthCallback?: (cb: (payload: { code?: string; url?: string }) => void) => () => void;
   isDesktop?: boolean;
 };
 

@@ -113,8 +113,29 @@ export function SettingsPage() {
   });
 
   const changePassword = useMutation({
-    mutationFn: (body: { currentPassword: string; newPassword: string }) =>
+    mutationFn: (body: { currentPassword: string; newPassword: string; totpCode?: string }) =>
       api("/auth/change-password", { method: "PUT", body: JSON.stringify(body) }),
+  });
+
+  const { data: securityStatus } = useQuery({
+    queryKey: ["auth-security-status"],
+    queryFn: () =>
+      api<{
+        bridgeEnabled?: boolean;
+        mfaEnrolled?: boolean;
+        googleLinked?: boolean;
+        googleEmail?: string | null;
+        emailClaimed?: string | null;
+      }>("/auth/security-status"),
+  });
+
+  const unlinkGoogle = useMutation({
+    mutationFn: (body: { password: string; totpCode: string }) =>
+      api("/auth/google/unlink", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["auth-security-status"] });
+      window.location.href = "/link-google";
+    },
   });
 
   const saveTax = useMutation({
@@ -482,19 +503,66 @@ export function SettingsPage() {
 
         {user.canViewSettingsChangePassword !== false && (
           <Card>
-            <h3>Change password</h3>
+            <h3>Account security</h3>
+            {securityStatus?.bridgeEnabled ? (
+              <div style={{ display: "grid", gap: "0.35rem", marginBottom: "0.85rem", fontSize: "0.9rem" }}>
+                <div>Authenticator: {securityStatus.mfaEnrolled ? "Enrolled" : "Not enrolled"}</div>
+                <div>
+                  Google:{" "}
+                  {securityStatus.googleLinked
+                    ? securityStatus.googleEmail || "Linked"
+                    : "Not linked"}
+                </div>
+                {securityStatus.emailClaimed ? (
+                  <div className="muted">Claimed (unconfirmed) email: {securityStatus.emailClaimed}</div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="muted" style={{ marginBottom: "0.75rem" }}>
+                MFA/Google bridge is off (AUTH_BACKEND=legacy). Password change works without Authenticator.
+              </p>
+            )}
+            <h4 style={{ margin: "0 0 0.5rem" }}>Change password</h4>
             <form onSubmit={(e) => {
               e.preventDefault();
               const fd = new FormData(e.currentTarget);
               changePassword.mutate({
                 currentPassword: String(fd.get("current") || ""),
                 newPassword: String(fd.get("new") || ""),
+                totpCode: String(fd.get("totp") || "") || undefined,
               });
             }} style={{ display: "grid", gap: "0.5rem" }}>
               <input name="current" type="password" placeholder="Current password" required />
               <input name="new" type="password" placeholder="New password" required />
+              {securityStatus?.mfaEnrolled ? (
+                <input name="totp" inputMode="numeric" placeholder="Authenticator code (required)" required />
+              ) : null}
               <Button type="submit" size="sm" disabled={changePassword.isPending}>Update password</Button>
+              {changePassword.isError ? (
+                <p className="muted" style={{ color: "var(--err)" }}>{(changePassword.error as Error).message}</p>
+              ) : null}
+              {changePassword.isSuccess ? <p className="muted">Password updated.</p> : null}
             </form>
+            {securityStatus?.googleLinked ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  unlinkGoogle.mutate({
+                    password: String(fd.get("pw") || ""),
+                    totpCode: String(fd.get("totp") || ""),
+                  });
+                }}
+                style={{ display: "grid", gap: "0.5rem", marginTop: "1rem" }}
+              >
+                <h4 style={{ margin: 0 }}>Unlink Google</h4>
+                <input name="pw" type="password" placeholder="Password" required />
+                <input name="totp" inputMode="numeric" placeholder="Authenticator code" required />
+                <Button type="submit" size="sm" variant="danger" disabled={unlinkGoogle.isPending}>
+                  Unlink Google
+                </Button>
+              </form>
+            ) : null}
           </Card>
         )}
       </div>

@@ -1,0 +1,108 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.monthInput {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.tab {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab[data-state="active"] {
+  border-color: var(--border, #ccc);
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+}
+
+.actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.formGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.formGrid input[type="text"],
+.formGrid input:not([type]) {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.hint {
+  margin-top: 0.75rem;
+  opacity: 0.75;
+  font-size: 0.85rem;
+}
+
+.stale {
+  color: var(--warning, #b45309);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.over {
+  color: var(--danger, #b91c1c);
+  font-weight: 600;
+}
+
+.under {
+  color: var(--success, #15803d);
+}
+
+.catalogBar {
+  margin-bottom: 0.75rem;
+}
+
+.error {
+  grid-column: 1 / -1;
+  color: var(--danger, #b91c1c);
+  margin: 0;
+}

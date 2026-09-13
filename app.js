@@ -56,6 +56,11 @@ function createApp() {
     console.warn("[startup] live-sync unavailable:", e?.message || e);
   }
   try {
+    require("./lib/training-phase-outcome-notify").startTrainingPhaseOutcomeNotifyLoop();
+  } catch (e) {
+    console.warn("[startup] training phase outcome notify unavailable:", e?.message || e);
+  }
+  try {
     require("./lib/role-permissions")
       .loadOverrides()
       .catch((err) => console.warn("[startup] RBAC preload:", err.message || err));

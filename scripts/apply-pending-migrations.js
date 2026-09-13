@@ -225,6 +225,14 @@ async function probeState(db) {
   state.rpm_checks_unique_member_day = await probeNamedIndex("uq_rpm_checks_company_member_day");
   const gform = await db.from("rpm_sales").select("google_form_submitted_at").limit(1);
   state.rpm_google_form_sync = !gform.error && (await probeNamedTrigger("trg_rpm_google_form_sync"));
+  const officePo = await db.from("office_po_items").select("id").limit(1);
+  state.office_po = !officePo.error;
+  const loanSched = await db.from("loan_schedule_lines").select("id").limit(1);
+  state.loan_schedule_lines = !loanSched.error;
+  const loanOv = await db.from("loan_month_overrides").select("id").limit(1);
+  state.loan_month_overrides = !loanOv.error;
+  const authCols = await db.from("app_users").select("auth_user_id,google_email,mfa_required").limit(1);
+  state.app_users_auth_google_mfa = !authCols.error;
   return state;
 }
 
@@ -579,6 +587,18 @@ function filesToApply(state) {
   }
   if (!state.rpm_google_form_sync) {
     files.push("20260906_rpm_google_form_sync.sql");
+  }
+  if (!state.office_po) {
+    files.push("20260913_office_po.sql");
+  }
+  if (!state.loan_month_overrides) {
+    files.push("20260913_loan_month_overrides.sql");
+  }
+  if (!state.loan_schedule_lines) {
+    files.push("20260913_loan_schedule_lines.sql");
+  }
+  if (!state.app_users_auth_google_mfa) {
+    files.push("20260913_app_users_auth_google_mfa.sql");
   }
   return files;
 }

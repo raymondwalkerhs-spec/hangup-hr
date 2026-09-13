@@ -14,6 +14,7 @@ import { FormField, FormGrid } from "@/ui/FormGrid";
 import { Select } from "@/ui/Select";
 import { InspectorDetail } from "@/ui/InspectorDetail";
 import { useInspectorStore } from "@/stores/cross-filter-store";
+import { isBonusTransferPayerId, isLeadershipEmployeeId } from "@/lib/bonusTransferPayer";
 
 type Row = Record<string, unknown>;
 
@@ -38,10 +39,6 @@ type BonusForm = {
 };
 
 const TL_BONUS_TYPE = "Bonus from TL / OP";
-
-function isLeadershipEmployeeId(id: string) {
-  return /^(TL|CL|OP|HR|RTM)/i.test(String(id || "").trim());
-}
 
 function parseTlSourceFromReason(reason: string | undefined | null) {
   const m = String(reason || "").match(/\(deducted from\s+([^)]+)\)/i);
@@ -94,6 +91,13 @@ function canManageBonuses(user: Record<string, unknown> | null | undefined) {
   return ["admin", "ceo", "hr"].includes(String(user.role || "").toLowerCase());
 }
 
+function canAddBonusTransfer(user: Record<string, unknown> | null | undefined) {
+  if (!user) return false;
+  if (canManageBonuses(user)) return true;
+  if (user.canTransferBonus === true) return true;
+  return ["tl", "op", "quality", "rtm"].includes(String(user.role || "").toLowerCase());
+}
+
 export function BonusesPage() {
   const month = useAppStore((s) => s.month);
   const { path, companyContext } = useCompanyScope();
@@ -112,6 +116,8 @@ export function BonusesPage() {
   const canSubmit = canSubmitBonusRequest(user);
   const canApprove = canApproveBonusRequest(user);
   const canManage = canManageBonuses(user);
+  const canAdd = canAddBonusTransfer(user);
+  const transferOnly = canAdd && !canManage;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["bonuses", month, companyContext],
@@ -129,7 +135,21 @@ export function BonusesPage() {
 
   const { data: emps } = useQuery({
     queryKey: ["employees-bonus", companyContext],
-    queryFn: () => api<{ employees: { id: string; american_name?: string }[] }>(path("/employees")),
+    queryFn: () =>
+      api<{ employees: { id: string; american_name?: string; unit?: string; team?: string; status?: string }[] }>(
+        path("/employees")
+      ),
+  });
+
+  const { data: pickerScope } = useQuery({
+    queryKey: ["bonuses-picker-scope", companyContext],
+    queryFn: () =>
+      api<{
+        recipients: { id: string; american_name?: string; unit?: string; team?: string }[];
+        payers: { id: string; american_name?: string; unit?: string; team?: string }[];
+        canManageWide?: boolean;
+      }>(path("/bonuses/picker-scope")),
+    enabled: canAdd || canSubmit,
   });
 
   const invalidate = () => {
@@ -236,7 +256,11 @@ export function BonusesPage() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm(month));
+    const base = emptyForm(month);
+    if (transferOnly) {
+      base.type = TL_BONUS_TYPE;
+    }
+    setForm(base);
     setDialogOpen(true);
   };
 
@@ -248,9 +272,18 @@ export function BonusesPage() {
 
   const rows = data?.bonuses || [];
   const requests = reqData?.requests || [];
-  const agents = (emps?.employees || []).filter((e) => !isLeadershipEmployeeId(e.id));
-  const tlPayers = (emps?.employees || []).filter((e) => isLeadershipEmployeeId(e.id));
+  const recipientOptions =
+    pickerScope?.recipients?.length
+      ? pickerScope.recipients
+      : (emps?.employees || []).filter((e) => !isLeadershipEmployeeId(e.id));
+  const payerOptions =
+    pickerScope?.payers?.length
+      ? pickerScope.payers
+      : (emps?.employees || []).filter((e) => isBonusTransferPayerId(e.id));
   const isTlBonusForm = form.type === TL_BONUS_TYPE;
+  const bonusTypes = transferOnly
+    ? [TL_BONUS_TYPE]
+    : data?.types || [];
 
   const columns = useMemo<ColumnDef<Row>[]>(() => {
     const cols: ColumnDef<Row>[] = [
@@ -304,7 +337,11 @@ export function BonusesPage() {
       <SectionHeader
         title="Bonuses"
         subtitle={monthLabel(month)}
-        actions={canManage ? <Button onClick={openAdd}>Add bonus</Button> : undefined}
+        actions={
+          canAdd ? (
+            <Button onClick={openAdd}>{transferOnly ? "Add bonus (transfer)" : "Add bonus"}</Button>
+          ) : undefined
+        }
       />
 
       {(canSubmit || canApprove) && (
@@ -424,13 +461,14 @@ export function BonusesPage() {
         <FormGrid wide>
           <FormField label="Employee">
             <Select
+              searchable
               value={form.employeeId}
               onChange={(employeeId) => setForm({ ...form, employeeId })}
               options={[
                 { value: "", label: "—" },
-                ...(emps?.employees || []).map((e) => ({
+                ...recipientOptions.map((e) => ({
                   value: e.id,
-                  label: `${e.id} — ${e.american_name || ""}`,
+                  label: `${e.id} — ${e.american_name || ""}${e.unit ? ` (${e.unit}${e.team ? ` / ${e.team}` : ""})` : ""}`,
                 })),
               ]}
             />
@@ -439,27 +477,34 @@ export function BonusesPage() {
             <Select
               value={form.type}
               onChange={(type) => setForm({ ...form, type, deductFromEmployeeId: "" })}
+              disabled={transferOnly}
               options={[
                 { value: "", label: "—" },
-                ...(data?.types || []).map((t) => ({ value: t, label: t })),
+                ...bonusTypes.map((t) => ({ value: t, label: t })),
               ]}
             />
           </FormField>
-          {isTlBonusForm && (
-            <FormField label="Deduct from (TL/OP pays)" span="full">
+          {isTlBonusForm ? (
+            <FormField label="Deduct from (pays)" span="full">
               <Select
+                searchable
                 value={form.deductFromEmployeeId}
                 onChange={(deductFromEmployeeId) => setForm({ ...form, deductFromEmployeeId })}
                 options={[
-                  { value: "", label: "— Select TL/OP —" },
-                  ...tlPayers.map((e) => ({
+                  {
+                    value: "",
+                    label: canManage
+                      ? "— Select anyone —"
+                      : "— Select payer (TL / OP / RTM / Quality / HR) —",
+                  },
+                  ...payerOptions.map((e) => ({
                     value: e.id,
-                    label: `${e.id} — ${e.american_name || ""}`,
+                    label: `${e.id} — ${e.american_name || ""}${e.unit ? ` (${e.unit})` : ""}`,
                   })),
                 ]}
               />
             </FormField>
-          )}
+          ) : null}
           <FormField label="Amount">
             <input
               type="number"
@@ -519,13 +564,14 @@ export function BonusesPage() {
         <FormGrid wide>
           <FormField label="Agent">
             <Select
+              searchable
               value={reqForm.employeeId}
               onChange={(employeeId) => setReqForm({ ...reqForm, employeeId })}
               options={[
                 { value: "", label: "—" },
-                ...agents.map((e) => ({
+                ...recipientOptions.map((e) => ({
                   value: e.id,
-                  label: `${e.id} — ${e.american_name || ""}`,
+                  label: `${e.id} — ${e.american_name || ""}${e.unit ? ` (${e.unit}${e.team ? ` / ${e.team}` : ""})` : ""}`,
                 })),
               ]}
             />

@@ -2,7 +2,21 @@
 
 All notable changes to the Hangup Portal desktop app.
 
-## [Unreleased]
+## [2.6.0] — 2026-09-13
+
+### Added
+- **Office PO** — catalog + month prediction (headcount AvgAuto, days-in-scope overrides, pack ceil, cadence), purchases with variance badges, notify on generate/bought/postpone/overbuy. Permissions: `viewOfficePo`, `manageOfficePoItems`, `editOfficePoPurchases`. Nav: Sales → Office PO.
+- **Loan schedule v2** — `loan_schedule_lines` with skip/defer, start-month shift, dual-read payroll; backfill `scripts/backfill-loan-schedules.js`. **Adjust payment** per salary month via `loan_month_overrides` (kept).
+- **Auth MFA + Google (dual-run)** — behind `AUTH_BACKEND` (`legacy` default). Soft `pending_setup` for MFA enroll + Link Google after password login; TOTP only for enroll / change-password / unlink (never at login). Electron `hangup-portal://` OAuth. Ops: `docs/AUTH_MFA_OPS.md`.
+- **Training lifecycle makeover** — local calendar dates; MLA vs RPM sales counts for phases; Monday Cairo HR notify `training_phase_outcome_due`; unpaid training Quarter Day-Off pays **0.75** units.
+- **Bonus transfer pickers** — TL unit-wide; HR/Admin anyone; RTM Active in unit; Quality dialing agents (`GET /bonuses/picker-scope`).
+
+### Changed
+- Training pay preview and payroll share Quarter Day-Off **0.75** units; ship clears temporary `payroll_adjustments.extra_days` for HS3-81/2026-08 and HS3-27/2026-06 (`20260913_clear_training_quarter_extra_days.sql`).
+
+### Fixed
+- Deduct-from list includes RTM/Quality/IT/`O#` IDs (e.g. Oliver `O1`).
+- Hire/probation/depart date UTC shifts; training sales undercount on HS-2 (now `rpm_sales`).
 
 ## [2.5.0] — 2026-08-31
 

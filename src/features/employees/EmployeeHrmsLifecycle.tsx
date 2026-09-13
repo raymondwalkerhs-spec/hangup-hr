@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "@/api/client";
@@ -43,7 +43,25 @@ type TrainingPhase = {
   status?: string;
   salesPassed?: number;
   salesTotal?: number;
+  minSalesRequired?: number;
 };
+
+const PHASE_STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "passed", label: "Passed" },
+  { value: "rejected", label: "Rejected" },
+  { value: "passed_exception", label: "Passed (Exception)" },
+] as const;
+
+const OUTCOME_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "passed", label: "Passed" },
+  { value: "failed", label: "Failed" },
+  { value: "voluntary_leave", label: "Agent left" },
+  { value: "company_terminated", label: "Company terminated" },
+] as const;
+
+const MIN_SALES_PROGRAM = 12;
 
 function labelKey(key: string) {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -117,7 +135,26 @@ export function EmployeeHrmsLifecycle({
       }),
     [clearance]
   );
-  const program = data?.training?.program as (Record<string, unknown> & { phases?: TrainingPhase[]; active?: boolean }) | null;
+  const program = data?.training?.program as (Record<string, unknown> & {
+    phases?: TrainingPhase[];
+    active?: boolean;
+    outcome?: string;
+    promotionEffectiveDate?: string;
+    passedOnDate?: string;
+    exitNotes?: string;
+    salesEvaluation?: { totalPassed?: number; meetsMinimum12?: boolean };
+  }) | null;
+
+  useEffect(() => {
+    if (!program) return;
+    setOutcomeForm({
+      outcome: String(program.outcome || "active"),
+      promotionEffectiveDate: String(program.promotionEffectiveDate || "").slice(0, 10),
+      passedOnDate: String(program.passedOnDate || "").slice(0, 10),
+      exitNotes: String(program.exitNotes || ""),
+      exceptionFlag: false,
+    });
+  }, [program?.outcome, program?.promotionEffectiveDate, program?.passedOnDate, program?.exitNotes, id]);
 
   const needsComplianceData = focus === "offboarding" || focus === "clearance" || focus === "all";
 
@@ -221,14 +258,14 @@ export function EmployeeHrmsLifecycle({
   });
 
   const savePhase = useMutation({
-    mutationFn: (p: TrainingPhase) =>
+    mutationFn: (p: TrainingPhase & { recalculateFollowing?: boolean }) =>
       api(path(`/hrms/training/phases/${p.id}`), {
         method: "PATCH",
         body: JSON.stringify({
           weekStart: p.weekStart,
           weekEnd: p.weekEnd,
           status: p.status,
-          recalculateFollowing: false,
+          recalculateFollowing: p.recalculateFollowing === true,
         }),
       }),
     onSuccess: invalidate,
@@ -247,20 +284,38 @@ export function EmployeeHrmsLifecycle({
 
   const saveOutcome = useMutation({
     mutationFn: () =>
-      api(path(`/hrms/training/${id}/outcome`), { method: "PATCH", body: JSON.stringify(outcomeForm) }),
+      api(path(`/hrms/training/${id}/outcome`), {
+        method: "PATCH",
+        body: JSON.stringify({
+          outcome: outcomeForm.outcome,
+          promotionEffectiveDate: outcomeForm.promotionEffectiveDate || null,
+          passedOnDate: outcomeForm.passedOnDate || null,
+          exitNotes: outcomeForm.exitNotes,
+        }),
+      }),
     onSuccess: invalidate,
   });
 
   const promoteTraining = useMutation({
-    mutationFn: () => api(path(`/hrms/training/${id}/promote`), { method: "POST", body: JSON.stringify({ effectiveFromMonth: month }) }),
+    mutationFn: () =>
+      api(path(`/hrms/training/${id}/promote`), {
+        method: "POST",
+        body: JSON.stringify({
+          promotionEffectiveDate: outcomeForm.promotionEffectiveDate || undefined,
+          passedOnDate: outcomeForm.passedOnDate || undefined,
+          exception: outcomeForm.exceptionFlag === true,
+        }),
+      }),
     onSuccess: invalidate,
   });
 
-  const { data: payPreview, refetch: refetchPayPreview } = useQuery({
+  const { data: payPreviewRes, refetch: refetchPayPreview } = useQuery({
     queryKey: ["train-pay-preview", id, month],
-    queryFn: () => api<Record<string, unknown>>(path(`/hrms/training/${id}/pay-preview`, { month })),
+    queryFn: () =>
+      api<{ preview?: Record<string, unknown>; month?: string }>(path(`/hrms/training/${id}/pay-preview`, { month })),
     enabled: !!program,
   });
+  const payPreview = payPreviewRes?.preview;
 
   if (!canEdit && focus === "all") return null;
   if (isLoading) return <p className="muted">Loading HR lifecycle…</p>;
@@ -370,10 +425,27 @@ export function EmployeeHrmsLifecycle({
             </>
           ) : (
             <>
-              <p className="muted">{program.active ? "Active program" : "Paused program"}</p>
+              <div className={styles.row} style={{ marginBottom: "0.5rem" }}>
+                <span className={program.active ? styles.badgeOk : styles.badgeMuted}>
+                  {program.active ? "Active program" : "Paused program"}
+                </span>
+                <span className={styles.badgeMuted}>Outcome: {String(program.outcome || "active")}</span>
+                {(() => {
+                  const total = Number(program.salesEvaluation?.totalPassed ?? 0);
+                  const ok = program.salesEvaluation?.meetsMinimum12 === true || total >= MIN_SALES_PROGRAM;
+                  return (
+                    <span className={ok ? styles.badgeOk : styles.badgeWarn}>
+                      Sales {total}/{MIN_SALES_PROGRAM}
+                    </span>
+                  );
+                })()}
+                {payPreview?.dualPayroll ? <span className={styles.badgeOk}>Dual payslip</span> : null}
+              </div>
               <div className={styles.row} style={{ marginBottom: "0.5rem" }}>
                 <Button size="sm" variant="secondary" onClick={() => refetchPayPreview()}>Refresh pay preview</Button>
-                <Button size="sm" onClick={() => promoteTraining.mutate()}>Promote to Agent</Button>
+                <Button size="sm" onClick={() => promoteTraining.mutate()} disabled={promoteTraining.isPending}>
+                  Promote to Agent
+                </Button>
                 <Button size="sm" variant="secondary" onClick={() => toggleTrainingActive.mutate(!program.active)}>
                   {program.active ? "Pause program" : "Resume program"}
                 </Button>
@@ -381,26 +453,48 @@ export function EmployeeHrmsLifecycle({
               </div>
               {payPreview && (
                 <p className="muted" style={{ fontSize: "0.85rem" }}>
-                  Pay preview: training days {String(payPreview.trainingDayCount ?? "—")}, agent days {String(payPreview.agentDayCount ?? "—")}
+                  Pay preview ({payPreviewRes?.month || month}): training units{" "}
+                  <strong>{String(payPreview.trainingDayCount ?? "—")}</strong>, agent days{" "}
+                  <strong>{String(payPreview.agentDayCount ?? "—")}</strong>
+                  {payPreview.estimatedTrainingBasic != null
+                    ? ` · est. training basic ${String(payPreview.estimatedTrainingBasic)} EGP`
+                    : ""}
                 </p>
               )}
               <table className={styles.table}>
                 <thead><tr><th>Phase</th><th>Week</th><th>Status</th><th>Sales</th><th /></tr></thead>
                 <tbody>
                   {(program.phases || []).map((p) => (
-                    <TrainingPhaseRow key={p.id} phase={p} canEdit={!!canEdit} onSave={(patch) => savePhase.mutate({ ...p, ...patch })} />
+                    <TrainingPhaseRow
+                      key={p.id}
+                      phase={p}
+                      canEdit={!!canEdit}
+                      onSave={(patch) => savePhase.mutate({ ...p, ...patch })}
+                    />
                   ))}
                 </tbody>
               </table>
               <FormGrid wide>
                 <FormField label="Outcome">
                   <select value={outcomeForm.outcome} onChange={(e) => setOutcomeForm({ ...outcomeForm, outcome: e.target.value })}>
-                    {["active", "passed", "failed", "dropped", "cancelled"].map((o) => <option key={o} value={o}>{o}</option>)}
+                    {OUTCOME_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
                   </select>
                 </FormField>
                 <FormField label="Promotion date"><input type="date" value={outcomeForm.promotionEffectiveDate} onChange={(e) => setOutcomeForm({ ...outcomeForm, promotionEffectiveDate: e.target.value })} /></FormField>
                 <FormField label="Passed on"><input type="date" value={outcomeForm.passedOnDate} onChange={(e) => setOutcomeForm({ ...outcomeForm, passedOnDate: e.target.value })} /></FormField>
                 <FormField label="Exit notes" span="full"><input value={outcomeForm.exitNotes} onChange={(e) => setOutcomeForm({ ...outcomeForm, exitNotes: e.target.value })} /></FormField>
+                <FormField label="Exception promote">
+                  <label className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={outcomeForm.exceptionFlag}
+                      onChange={(e) => setOutcomeForm({ ...outcomeForm, exceptionFlag: e.target.checked })}
+                    />
+                    Allow promote without 12 sales
+                  </label>
+                </FormField>
               </FormGrid>
               <Button size="sm" style={{ marginTop: "0.5rem" }} onClick={() => saveOutcome.mutate()}>Save outcome</Button>
             </>
@@ -609,9 +703,16 @@ function TrainingPhaseRow({
 }: {
   phase: TrainingPhase;
   canEdit: boolean;
-  onSave: (patch: Partial<TrainingPhase>) => void;
+  onSave: (patch: Partial<TrainingPhase> & { recalculateFollowing?: boolean }) => void;
 }) {
   const [draft, setDraft] = useState(phase);
+  useEffect(() => {
+    setDraft(phase);
+  }, [phase.id, phase.weekStart, phase.weekEnd, phase.status]);
+  const salesOk =
+    phase.phaseNumber != null && phase.phaseNumber >= 2
+      ? (phase.salesPassed ?? 0) >= (phase.minSalesRequired ?? 4)
+      : true;
   return (
     <tr>
       <td>Phase {phase.phaseNumber}</td>
@@ -621,12 +722,32 @@ function TrainingPhaseRow({
         <input type="date" value={draft.weekEnd || ""} disabled={!canEdit} onChange={(e) => setDraft({ ...draft, weekEnd: e.target.value })} />
       </td>
       <td>
-        <select value={draft.status || ""} disabled={!canEdit} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
-          {["scheduled", "active", "passed", "failed", "skipped", "cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
+        <select value={draft.status || "pending"} disabled={!canEdit} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
+          {PHASE_STATUS_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
         </select>
       </td>
-      <td>{phase.salesPassed ?? 0} / {phase.salesTotal ?? 0}</td>
-      <td>{canEdit && <Button size="sm" onClick={() => onSave(draft)}>Save</Button>}</td>
+      <td>
+        <span className={salesOk ? undefined : styles.badgeWarnInline}>
+          {phase.salesPassed ?? 0} / {phase.salesTotal ?? 0}
+        </span>
+      </td>
+      <td>
+        {canEdit && (
+          <div className={styles.row}>
+            <Button size="sm" onClick={() => onSave(draft)}>Save</Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              title="Snap week to Monday and shift following phases"
+              onClick={() => onSave({ ...draft, recalculateFollowing: true })}
+            >
+              Save + shift
+            </Button>
+          </div>
+        )}
+      </td>
     </tr>
   );
 }

@@ -756,6 +756,20 @@ test("phase 1 pay exception adds week 1 basic", () => {
   assert.equal(row.trainingPayBreakdown.deductions.length, 0);
 });
 
+test("Quarter Day-Off training pay unit is 0.75 (not 0.25)", () => {
+  assert.equal(rules.trainingPayUnitForRecord({ status: "Quarter Day-Off" }), 0.75);
+  const program = {
+    outcome: "active",
+    allPhases: [
+      { phaseNumber: 2, weekStart: "2026-07-13", weekEnd: "2026-07-17", status: "pending" },
+    ],
+  };
+  const att = [{ date: "2026-07-14", status: "Quarter Day-Off" }];
+  const preview = rules.trainingPayPreview(program, att, "2026-07");
+  assert.equal(preview.trainingPayUnits, 0.75);
+  assert.equal(preview.estimatedTrainingBasic, Math.round(0.75 * rules.TRAINING_DAILY_RATE * 100) / 100);
+});
+
 console.log("resignation-payroll");
 test("notice pay scale 5-10 sales", () => {
   assert.equal(resignation.noticePayPercent(4), 0);

@@ -63,6 +63,20 @@ router.post("/", async (req, res) => {
   if (!assertEmployeeInCompanyContext(emp, req)) {
     return res.status(403).json({ error: "No access to this employee" });
   }
+  {
+    const bonusScope = require("../lib/bonus-scope");
+    const company = companyContext.resolveCompanyContextForUser(
+      req.query.company || req.body?.company,
+      req.userRole
+    );
+    const scoped = bonusScope.employeesForBonusRecipient(
+      req.userRole,
+      companyContext.filterEmployeesByCompany(store.getEmployees({ hideOut: false }), company)
+    );
+    if (!scoped.some((e) => e.id === emp.id)) {
+      return res.status(403).json({ error: "Employee out of bonus request scope" });
+    }
+  }
   try {
     assertBonusAllowedForEmployee(emp, date);
   } catch (err) {

@@ -24,6 +24,9 @@ export type StatusUser = Record<string, unknown> & {
   canViewEmployeeDirectory?: boolean;
   canAccessCosts?: boolean;
   canSubmitExpense?: boolean;
+  canViewOfficePo?: boolean;
+  canManageOfficePoItems?: boolean;
+  canEditOfficePoPurchases?: boolean;
   canApproveLoan?: boolean;
   canViewEquipmentInventory?: boolean;
   hasAssignedEquipment?: boolean;
@@ -120,6 +123,7 @@ export function canAccessPage(user: StatusUser | undefined | null, page: string)
     return role(user) !== "checker";
   }
   if (page === "costs") return user?.canAccessCosts === true || user?.canSubmitExpense === true;
+  if (page === "office-po") return user?.canViewOfficePo === true;
   if (page === "loan-approvals") {
     return user?.canApproveLoan === true && !["agent", "office_assistant", "tl"].includes(role(user));
   }

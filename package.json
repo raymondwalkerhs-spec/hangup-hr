@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Hangup Portal desktop app ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -74,6 +74,12 @@
   "build": {
     "appId": "com.hangup.hr",
     "productName": "Hangup Portal",
+    "protocols": [
+      {
+        "name": "Hangup Portal",
+        "schemes": ["hangup-portal"]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

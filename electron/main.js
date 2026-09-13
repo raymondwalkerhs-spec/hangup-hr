@@ -25,6 +25,8 @@ const HOST = "127.0.0.1";
 
 const POLL_MS = 5 * 60 * 1000;
 
+const PROTOCOL = "hangup-portal";
+
 let mainWindow = null;
 
 let pollTimer = null;
@@ -32,6 +34,33 @@ let pollTimer = null;
 let currentSessionId = null;
 
 let httpServer = null;
+
+function parseOAuthCallbackUrl(url) {
+  try {
+    const raw = String(url || "");
+    if (!raw.toLowerCase().startsWith(`${PROTOCOL}://`)) return null;
+    // hangup-portal://auth/callback?code=...
+    const normalized = raw.replace(/^hangup-portal:/i, "https:");
+    const u = new URL(normalized);
+    const code = u.searchParams.get("code");
+    if (!code) return { url: raw };
+    return { code, url: raw };
+  } catch {
+    return null;
+  }
+}
+
+function deliverOAuthCallback(url) {
+  const payload = parseOAuthCallbackUrl(url);
+  if (!payload) return false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("oauth-callback", payload);
+    mainWindow.loadURL(`http://${HOST}:${PORT}/oauth-pending`);
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  return true;
+}
 
 function showFatalError(title, message) {
   dialog.showErrorBox(title, message);
@@ -298,6 +327,15 @@ let allowedWriteRoot = null;
     githubUpdater.relaunchApp();
   });
 
+  ipcMain.handle("open-external", async (_evt, url) => {
+    const target = String(url || "");
+    if (!/^https:\/\//i.test(target) && !target.toLowerCase().startsWith(`${PROTOCOL}://`)) {
+      throw new Error("Only https or hangup-portal URLs allowed");
+    }
+    await shell.openExternal(target);
+    return true;
+  });
+
   pollTimer = setInterval(pollSession, POLL_MS);
 }
 
@@ -306,11 +344,27 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
+    const deepLink = (argv || []).find((a) => String(a).toLowerCase().startsWith(`${PROTOCOL}://`));
+    if (deepLink) deliverOAuthCallback(deepLink);
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+  });
+
+  // Protocol registration stub — packaging also needs protocols in package.json
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(PROTOCOL);
+  }
+
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    deliverOAuthCallback(url);
   });
 
   configurePortablePaths();
@@ -325,7 +379,11 @@ if (!gotSingleInstanceLock) {
       process.env.HR_INSTALL_HEALTH = JSON.stringify(recovery.installHealth);
     }
 
+    // Cold-start deep link (Windows passes protocol URL in argv)
+    const bootLink = (process.argv || []).find((a) => String(a).toLowerCase().startsWith(`${PROTOCOL}://`));
+
     await bootstrap();
+    if (bootLink) deliverOAuthCallback(bootLink);
   }).catch((err) => {
     showFatalError("Hangup Portal — Startup error", err.message || String(err));
     app.quit();

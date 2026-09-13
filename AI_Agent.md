@@ -21,13 +21,18 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.5.0` (`package.json` → `version`)
-- **Previous:** `2.4.9`
-- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.5.0`); Supabase zip on third-segment (`2.5.0` → `2.5.1`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Current version:** `2.6.0` (`package.json` → `version`)
+- **Previous:** `2.5.0`
+- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.6.0`); Supabase zip on third-segment (`2.6.0` → `2.6.1`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Office PO:** `/office-po` — prediction by AvgAuto headcount + days-in-scope; permissions `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`.
+- **Loans schedule v2:** `loan_schedule_lines` + skip/defer; dual-read with legacy counters; `loan_month_overrides` for adjust payment; backfill `scripts/backfill-loan-schedules.js`.
+- **Auth MFA/Google:** `AUTH_BACKEND=legacy|dual` (default legacy). Soft pending_setup for MFA + Google link; no OTP at login. Ops: [`docs/AUTH_MFA_OPS.md`](docs/AUTH_MFA_OPS.md). Protocol `hangup-portal://`.
+- **Training:** local dates; MLA=`sales` / HS-2=`rpm_sales` phase counts; Quarter Day-Off unpaid = **0.75**; Monday Cairo `training_phase_outcome_due`. Clear temporary extra_days: `20260913_clear_training_quarter_extra_days.sql`.
 - **Premium themes:** Per-theme RPM sent/closed unlock targets in `app_config.themeUnlockThresholds` (defaults: Gotham/Hello Kitty/Spiderman **10**, Turtle Grove **15**). Always unlocked without sales: **admin, ceo, hr, it, finance, quality, checker, rtm**. Settings admin card gated by **`settingsThemeUnlocks`**.
 - **Sales Rankings:** `GET /api/reports/sales-rankings` + Reports tab; gated by **`viewSalesRankings`** (`lib/sales-rankings-report.js`). Company-scoped roster/attendance.
 - **Out login sync:** `shouldDisableLoginForEmployee` uses Out status only; backfill `scripts/backfill-out-user-deactivation.js`.
 - **Checks Q feedback shortcut:** `POST /api/rpm-checks` accepts optional `feedbackStatus` + `closerId` on Q create. UI on Checks **New check**; **Q Feedback** page remains the main workflow.
+- **Bonus transfer scopes:** `lib/bonus-scope.js` + `GET /bonuses/picker-scope` — TL unit-wide; HR/Admin anyone to/from; RTM Active in unit; Quality dialing agents.
 
 ---
 
@@ -523,7 +528,7 @@ npm run rebuild:native             # after npm install / Electron version change
 
 | version | is_current | notes |
 |---------|------------|-------|
-| **2.5.0** | **true** | Sales Rankings; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill; Google Forms RPM1; company-scope hardenings. Optional update (`min_compatible=1.0.0`). GitHub Latest 2026-08-31. |
+| **2.5.0** | **true** | Sales Rankings; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill; Google Forms RPM1; company-scope hardenings. Optional update (`min_compatible=1.0.0`). GitHub Latest 2026-08-31 — Setup.exe, Web-Setup, `win-x64-latest.json`, patch-from-2.4.9. |
 | **2.4.9** | false | Turtle Grove premium (15 RPM sent or 15 closed); spinning turtle loader + slow turtles on `/cats`; Gotham/Kitty/Spidey stay at 10. Optional update (`min_compatible=1.0.0`). Was Latest before 2.5.0. |
 | **2.4.8** | false | Checks MCN uniqueness (409 same day); Wrong MCN / letters name / digits phone; RPM create red glow + soft dup warn (Quality/RTM/Admin); same-day Sale↔Q auto-link; Supabase→Airtable RPM Edge sync; Q closer from sale triggers. Optional update (`min_compatible=1.0.0`). Was Latest before 2.4.9. |
 | **2.4.7** | false | Dead form fields / Electron confirm residue; Employee Out lag + depart date; deductions/bonuses Edit-Delete; Select search lag in dialogs; RPM Airtable Client RPM3; Import from open Q closer scope. Was Latest before 2.4.8. |

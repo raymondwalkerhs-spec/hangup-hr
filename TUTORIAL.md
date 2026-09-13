@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.5.0`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.6.0`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -45,6 +45,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | **Bonuses / Deductions / Loans / Salaries** | Payroll inputs; **Loan approvals** (Mark/Phoebe/Raymond only) |
 | **Reports** | Monthly report, turnover, rankings, **saved custom reports** |
 | **Costs** | Expenses, petty cash, monthly bills *(finance + HR submit)* |
+| **Office PO** | Predict office buys by headcount / working days; record purchases *(HR/finance)* |
 | **Requests** | Annual, unpaid, medical, and same-day off (replaces Leave) |
 | **Equipment** | Company asset registry (inventory vs own devices) |
 | **Offboarding** | Leaver table — revoke access and final pay in the row |
@@ -104,10 +105,19 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 ## 5a. Costs (finance)
 
+
 - **HR / RTM** submit receipts → **pending approval** until finance approves.  
 - **Finance** (Mark, Phoebe, Raymond): approve/deny, mark paid, petty cash, monthly bills.  
 - **Petty cash:** balance shown before pay; insufficient funds blocked; **Edit** on posted deposits in the ledger.  
 - **Own pocket:** mark paid → **Settle** with employee Instapay reference.
+
+### Office PO (HR / finance)
+
+1. Open **Office PO** (Sales group) — pick month.  
+2. **Catalog** — add items (employee-scaled or office-fixed; monthly / every N months / one-time).  
+3. Set **Overrides** if needed (avg headcount or days in scope; days override requires a note).  
+4. **Generate / refresh** — creates predicted lines (never overwrites bought/cancelled).  
+5. **Buy** records a purchase (qty + optional order ref); postpone/cancel as needed. Variance badges flag over/under buy.
 
 ---
 
@@ -126,10 +136,11 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 1. Set **Trainee** monthly rate on **Salaries** before hiring trainees (live: **7,000 EGP** for July 2026 — adjust per month as needed).  
 2. New employee with **In training** → position **Trainee** + 4-week program from Phase 1 Monday.  
-3. Employee card → **Training program**: phase status, sales counts (4/phase, 12 total), outcome, promotion date.  
+3. Employee card → **Training program**: phase status, sales counts (4/phase, 12 total — Hang-Up uses MLA sales; HS-2 uses RPM sales), outcome, promotion date.  
 4. **Promote to Agent** when 12+ passed sales — sets dual payslip if promotion is mid-month.  
 5. Payroll payslip modal: **Training** / **Agent** tabs; export PDFs with `Training PDF` / `Agent PDF`.
 6. **Training payroll anchor (HR)** — on training or deferred payslips, override which month pays the training net when the default anchor is wrong (e.g. graduated trainee still accruing before anchor). Pre-anchor months show **—** net until the anchor month.
+7. Unpaid **Quarter Day-Off** in training counts as **0.75** pay units. Mondays, HR is notified of overdue phase outcomes (due Friday).
 
 ---
 
@@ -138,6 +149,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 - **HR** submits loan requests from employee **Loans** (no longer creates active loans directly).  
 - **Mark / Phoebe / Raymond** use **Loan approvals** sidebar (hidden from everyone else).  
 - Any one executive can approve → loan becomes active for payroll deductions.
+- On **Loans**: view installment **schedule**, **skip** a month (pushes due), change **start month**, or **Adjust payment** for one salary month.
 
 ---
 
@@ -221,9 +233,10 @@ Files are stored in **Supabase Storage** (`hr-documents` bucket).
 | **office_assistant** | Same as agent |
 
 ### Bonus requests
-- **TL / OP / quality / RTM** can **request** a bonus for a dialing agent (Bonuses page → pending queue).
-- **HR / admin / CEO** approve or deny; approved bonuses post to payroll.
-- **Add bonus** and **Add deduction** (direct) are **HR / admin / CEO** only; others use Request bonus.
+- **TL / OP / quality / RTM** can **request** a bonus for an in-scope agent (Bonuses page → pending queue), or use **Add bonus (transfer)** (Bonus from TL / OP) when they have transfer permission.
+- **Scopes for transfer / request recipients:** TL = anyone in their **unit(s)** (any team); RTM = **Active** in their unit; Quality = agents in dialing units (HS-1/HS-2/HS-3); HR/Admin/CEO = anyone.
+- **Deduct from:** HR/Admin can pick anyone; others pick leaders / self in the same scope (`GET /bonuses/picker-scope`).
+- **HR / admin / CEO** approve or deny requests; approved bonuses post to payroll. Direct non-transfer **Add bonus** / **Add deduction** remain HR/admin/CEO.
 - **HR / RTM / quality / admin / office_assistant** cannot receive bonuses via requests — only via **payslip** direct add by HR+.
 
 ### Updates (1.3.2+)

@@ -205,6 +205,7 @@ test("export rows use display net metrics", () => {
     arabicName: "أحمد",
     name: "Ahmed",
     employeeId: "E1",
+    paymentMethod: "Bank transfer",
     basicSalary: 8000,
     transportAllowance: 500,
     commissionAmount: 0,
@@ -218,6 +219,7 @@ test("export rows use display net metrics", () => {
   const paid = {
     name: "Sara",
     employeeId: "E2",
+    payment_method: "Cash",
     basicSalary: 7000,
     netSalary: 7000,
     payrollStatus: "paid",
@@ -226,8 +228,12 @@ test("export rows use display net metrics", () => {
   const rows = buildPayrollExportRows([unpaid, paid]);
   assert.equal(rows[0].netRemaining, 8500);
   assert.equal(rows[0].paidNet, 0);
+  assert.equal(rows[0].americanName, "Ahmed");
+  assert.equal(rows[0].paymentMethod, "Bank transfer");
   assert.equal(rows[1].netRemaining, 0);
   assert.equal(rows[1].paidNet, 7000);
+  assert.equal(rows[1].americanName, "Sara");
+  assert.equal(rows[1].paymentMethod, "Cash");
   const totals = buildPayrollExportTotals([unpaid, paid]);
   assert.equal(totals.totalNet, 8500);
   assert.equal(totals.totalPaidNet, 7000);

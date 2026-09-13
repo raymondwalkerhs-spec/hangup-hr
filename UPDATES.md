@@ -1,6 +1,34 @@
+## v2.6.0 release checklist
+
+**Shipped 2026-09-13 (installer + patch from 2.5.0):** GitHub [v2.6.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.0) is **Latest**. Supabase `app_versions` `2.6.0` is `is_current` with `min_compatible_version=1.0.0`.
+
+### Shipped in 2.6.0
+- Office PO planner (catalog, headcount/days overrides, purchases, notifications)
+- Loan schedule v2 (skip/defer) + adjust payment overrides
+- Auth MFA + Google dual-run (`AUTH_BACKEND`, default legacy) + `hangup-portal://`
+- Training lifecycle: local dates, MLA/RPM sales, Quarter Day-Off **0.75**, Monday HR phase notify
+- Clear temporary quarter `extra_days` (HS3-81 Aug / HS3-27 Jun)
+- Bonus transfer picker scopes
+
+### Checklist
+- [x] Bump `package.json` to **2.6.0**; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`)
+- [ ] Apply migrations: office_po, loan_schedule, loan_month_overrides, auth_google_mfa, clear_training_quarter_extra_days
+- [ ] `gh workflow run "Release (update packages)"` → Latest + `publish-app-version.js` + web installer
+- [ ] Ops: Google OAuth client + `AUTH_BACKEND=dual` when ready (`docs/AUTH_MFA_OPS.md`)
+- [ ] Optional: `node scripts/backfill-loan-schedules.js`
+
+### Access Control keys (new)
+| Key | Default roles | Gates |
+|-----|---------------|--------|
+| `viewOfficePo` | hr, admin, ceo, finance, op, rtm | Office PO page |
+| `manageOfficePoItems` | hr, admin, ceo | Catalog CRUD |
+| `editOfficePoPurchases` | hr, admin, ceo, finance | Generate / buy / overrides |
+
+---
+
 ## v2.5.0 release checklist
 
-**Shipped 2026-08-31 (optional installer / not breaking):** GitHub [v2.5.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.5.0) is **Latest**. Supabase `app_versions` `2.5.0` is `is_current` with `min_compatible_version=1.0.0`.
+**Shipped 2026-08-31 (optional installer + patch from 2.4.9 / not breaking):** GitHub [v2.5.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.5.0) is **Latest**. Supabase `app_versions` `2.5.0` is `is_current` with `min_compatible_version=1.0.0`.
 
 ### Shipped in 2.5.0
 - Sales Rankings (filters, check status columns, no Team on closers)
@@ -10,9 +38,10 @@
 
 ### Checklist
 - [x] Bump `package.json` to **2.5.0**; docs (`CHANGELOG`, `README`, `AI_Agent`, `TUTORIAL`, `UPDATES`, `FEATURES`, `SALES_LOG`)
-- [ ] `npm run build:web`; `npm run test:pages`
-- [ ] NSIS + web installer + GitHub Latest + Supabase `is_current`
-- [ ] Run backfill: `node scripts/backfill-out-user-deactivation.js`
+- [x] `npm run build:web`; `npm run test:pages`
+- [x] NSIS + web installer + GitHub Latest + Supabase `is_current`
+- [x] Patch `Hangup-Portal-2.5.0-win-x64-patch-from-2.4.9.zip` on GitHub release
+- [x] Run backfill: Out → inactive logins (26 disabled)
 
 ### Access Control keys
 | Key | Default roles | Gates |

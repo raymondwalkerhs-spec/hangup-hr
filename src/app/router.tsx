@@ -3,11 +3,15 @@ import { AppShell } from "./AppShell";
 import { RequireAccess } from "./RequireAccess";
 import { TrailingSlashRedirect } from "./TrailingSlashRedirect";
 import { LoginPage } from "@/pages/auth/LoginPage";
+import { Setup2faPage } from "@/pages/auth/Setup2faPage";
+import { LinkGooglePage } from "@/pages/auth/LinkGooglePage";
+import { OauthPendingPage } from "@/pages/auth/OauthPendingPage";
 import { CatsPage } from "@/pages/cats/CatsPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { SalesPage } from "@/pages/SalesPage";
 import { CostsPage } from "@/pages/CostsPage";
+import { OfficePoPage } from "@/pages/office-po/OfficePoPage";
 import ChecksPage from "@/pages/checks/ChecksPage";
 import QFeedbackPage from "@/pages/checks/QFeedbackPage";
 import CheckDuplicatesPage from "@/pages/checks/CheckDuplicatesPage";
@@ -56,8 +60,10 @@ import { firstAllowedPage, type StatusUser } from "@/lib/nav-access";
 import styles from "./RequireAccess.module.css";
 import { CatOrbitLoader } from "@/features/shell/PageLoadingOverlay";
 
+const SETUP_PATHS = new Set(["/setup-2fa", "/link-google", "/oauth-pending"]);
+
 function ProtectedLayout() {
-  const { loading } = useAuth();
+  const { loading, status } = useAuth();
   const location = useLocation();
   if (!getSessionId()) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -68,6 +74,26 @@ function ProtectedLayout() {
         <CatOrbitLoader message="Loading workspace…" />
       </div>
     );
+  }
+  const security = status?.authSecurity as
+    | {
+        needsSetup?: boolean;
+        needsMfaEnroll?: boolean;
+        needsGoogleLink?: boolean;
+        sessionKind?: string;
+      }
+    | undefined;
+  if (
+    security?.needsSetup ||
+    security?.sessionKind === "pending_setup" ||
+    security?.needsMfaEnroll ||
+    security?.needsGoogleLink
+  ) {
+    if (!SETUP_PATHS.has(location.pathname)) {
+      if (security.needsMfaEnroll) return <Navigate to="/setup-2fa" replace />;
+      if (security.needsGoogleLink) return <Navigate to="/link-google" replace />;
+      return <Navigate to="/setup-2fa" replace />;
+    }
   }
   return <AppShell />;
 }
@@ -88,6 +114,9 @@ export function AppRouter() {
       <TrailingSlashRedirect />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/oauth-pending" element={<OauthPendingPage />} />
+        <Route path="/setup-2fa" element={<Setup2faPage />} />
+        <Route path="/link-google" element={<LinkGooglePage />} />
         <Route element={<ProtectedLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Guard page="dashboard"><DashboardPage /></Guard>} />
@@ -117,6 +146,7 @@ export function AppRouter() {
           <Route path="check-duplicates" element={<Guard page="check-duplicates"><CheckDuplicatesPage /></Guard>} />
           <Route path="team-dashboard" element={<Guard page="team-dashboard"><TeamDashboardPage /></Guard>} />
           <Route path="costs" element={<Guard page="costs"><CostsPage /></Guard>} />
+          <Route path="office-po" element={<Guard page="office-po"><OfficePoPage /></Guard>} />
           <Route path="reports" element={<Guard page="reports"><ReportsPage /></Guard>} />
           <Route path="analytics" element={<Guard page="analytics"><AnalyticsPage /></Guard>} />
           <Route path="users" element={<Guard page="users"><UsersPage /></Guard>} />

@@ -16,12 +16,9 @@ import { isPayrollSettled, payrollEarnedNet, settledLabel, isTrainingDeferredRow
 import { noticeTypeLabel } from "@/lib/employeeStatus";
 import { getTrainingPayBreakdown } from "@/lib/trainingPayBreakdown";
 import styles from "./PayslipDialog.module.css";
+import { isBonusTransferPayerId } from "@/lib/bonusTransferPayer";
 
 const TL_BONUS_TYPE = "Bonus from TL / OP";
-
-function isLeadershipEmployeeId(id: string) {
-  return /^(TL|CL|OP|HR|RTM)/i.test(String(id || "").trim());
-}
 
 type Split = {
   id: string;
@@ -205,10 +202,18 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
     enabled: open,
   });
 
-  const tlPayers = useMemo(
-    () => (empList?.employees || []).filter((e) => isLeadershipEmployeeId(e.id) && e.id !== employeeId),
-    [empList?.employees, employeeId]
-  );
+  const { data: pickerScope } = useQuery({
+    queryKey: ["bonuses-picker-scope", companyContext],
+    queryFn: () =>
+      api<{ payers: { id: string; american_name?: string; unit?: string }[] }>(path("/bonuses/picker-scope")),
+    enabled: open && canManagePayrollEvents,
+  });
+
+  const tlPayers = useMemo(() => {
+    const fromScope = (pickerScope?.payers || []).filter((e) => e.id !== employeeId);
+    if (fromScope.length) return fromScope;
+    return (empList?.employees || []).filter((e) => isBonusTransferPayerId(e.id) && e.id !== employeeId);
+  }, [pickerScope?.payers, empList?.employees, employeeId]);
   const isTlBonusForm = bonusForm.type === TL_BONUS_TYPE;
 
   const rootSlip = (data?.payslip || {}) as Record<string, unknown>;
@@ -1298,12 +1303,12 @@ export function PayslipDialog({ employeeId, employeeName, open, onOpenChange, mo
                   />
                 </FormField>
                 {isTlBonusForm && (
-                  <FormField label="Deduct from (TL/OP pays)" span="full">
+                  <FormField label="Deduct from (TL/OP / RTM / Quality / HR)" span="full">
                     <Select
                       value={bonusForm.deductFromEmployeeId}
                       onChange={(deductFromEmployeeId) => setBonusForm({ ...bonusForm, deductFromEmployeeId })}
                       options={[
-                        { value: "", label: "— Select TL/OP —" },
+                        { value: "", label: "— Select payer (TL / OP / RTM / Quality / HR) —" },
                         ...tlPayers.map((e) => ({ value: e.id, label: `${e.id} — ${e.american_name || ""}` })),
                       ]}
                     />

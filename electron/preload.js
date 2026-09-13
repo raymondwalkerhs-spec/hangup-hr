@@ -9,5 +9,11 @@ contextBridge.exposeInMainWorld("hrDesktop", {
   checkGitHubUpdate: () => ipcRenderer.invoke("check-github-update"),
   applyGitHubUpdate: () => ipcRenderer.invoke("apply-github-update"),
   relaunchApp: () => ipcRenderer.invoke("relaunch-app"),
+  openExternal: (url) => ipcRenderer.invoke("open-external", url),
+  onOAuthCallback: (cb) => {
+    const handler = (_event, payload) => cb(payload || {});
+    ipcRenderer.on("oauth-callback", handler);
+    return () => ipcRenderer.removeListener("oauth-callback", handler);
+  },
   isDesktop: true,
 });

@@ -100,10 +100,17 @@ function formatMemberIdDisplay(raw: unknown) {
 /** Google Form DOB field expects MM/DD/YYYY with slashes (not ISO dashes). */
 function formatDobForGoogleForm(val: unknown) {
   if (val == null) return "";
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    const mo = String(val.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(val.getUTCDate()).padStart(2, "0");
+    const yr = String(val.getUTCFullYear());
+    return `${mo}/${da}/${yr}`;
+  }
   const s = String(val).trim();
   if (!s) return "";
 
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // ISO date or timestamp: 1949-01-03 or 1949-01-03T00:00:00.000Z
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
   if (m) {
     const [, yr, mo, da] = m;
     return `${mo}/${da}/${yr}`;
@@ -121,11 +128,11 @@ function formatDobForGoogleForm(val: unknown) {
     return `${mo.padStart(2, "0")}/${da.padStart(2, "0")}/${yr}`;
   }
 
-  const d = new Date(s.includes("T") ? s : `${s.slice(0, 10)}T12:00:00`);
+  const d = new Date(s.includes("T") ? s : `${s.slice(0, 10)}T12:00:00Z`);
   if (!Number.isNaN(d.getTime())) {
-    const mo = String(d.getMonth() + 1).padStart(2, "0");
-    const da = String(d.getDate()).padStart(2, "0");
-    const yr = String(d.getFullYear());
+    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(d.getUTCDate()).padStart(2, "0");
+    const yr = String(d.getUTCFullYear());
     return `${mo}/${da}/${yr}`;
   }
 
@@ -141,10 +148,17 @@ function saleClient(record: Record<string, unknown>) {
 
 function pickFields(record: Record<string, unknown>) {
   const fd = (record.form_data || record.formData || {}) as Record<string, unknown>;
+  const rawDob =
+    fd.dateOfBirth ||
+    fd.date_of_birth ||
+    record.dateOfBirth ||
+    record.date_of_birth ||
+    record.dob ||
+    "";
   return {
     fullName: asText(record.full_name || record.fullName || fd.fullName),
     phone: digitsPhone(record.phone_number || record.phoneNumber || fd.phoneNumber),
-    dob: formatDobForGoogleForm(fd.dateOfBirth || record.dateOfBirth),
+    dob: formatDobForGoogleForm(rawDob),
     mcn: formatMemberIdDisplay(record.member_id || record.memberId || fd.memberId),
     medicalConditions: asText(fd.medicalConditions || record.medicalConditions),
   };

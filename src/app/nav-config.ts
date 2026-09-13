@@ -47,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/checks", page: "checks", label: "Checks", icon: "clipboard-check", group: "Sales", navId: "nav-checks" },
   { path: "/check-duplicates", page: "check-duplicates", label: "Check duplicates", icon: "copy", group: "Sales", navId: "nav-check-duplicates" },
   { path: "/costs", page: "costs", label: "Costs", icon: "pie-chart", group: "Sales", navId: "nav-costs" },
+  { path: "/office-po", page: "office-po", label: "Office PO", icon: "shopping-cart", group: "Sales", navId: "nav-office-po" },
   { path: "/reports", page: "reports", label: "Reports", icon: "file-bar-chart", group: "Insights" },
   { path: "/analytics", page: "analytics", label: "Analytics", icon: "activity", group: "Insights" },
   { path: "/users", page: "users", label: "Users", icon: "user-cog", group: "Administration", navId: "nav-users" },

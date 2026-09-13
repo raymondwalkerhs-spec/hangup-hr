@@ -4,9 +4,9 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `2.5.0`
+**Current version:** `2.6.0`
 
-**Latest installer:** GitHub release [v2.5.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.5.0) (`Hangup-Portal-Setup-2.5.0.exe`). Same-line hotfixes after a GitHub baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+**Latest installer:** GitHub release [v2.6.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.0) (`Hangup-Portal-Setup-2.6.0.exe`). Patch from 2.5.0: `Hangup-Portal-2.6.0-win-x64-patch-from-2.5.0.zip`. Same-line hotfixes after this baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
 
 | Document | Purpose |
 |----------|---------|
@@ -264,7 +264,7 @@ App updates are **not** delivered via Supabase Storage (installers are ~90 MB). 
 
 Settings → **Appearance** — free themes plus premiums (Gotham Night, Hello Kitty, Spiderman, Turtle Grove). Unlock thresholds are admin-configurable under **Premium theme unlock targets** (Admin/HR/CEO). Saved per device.
 
-**2.5.0:** Reports → **Sales Rankings**; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill. See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).
+**2.5.0 (shipped):** Reports → **Sales Rankings**; theme unlock admin + staff premiums without sales; Checks Q shortcut; Out login backfill. GitHub Latest includes Setup.exe, Web-Setup, patch-from-2.4.9, `win-x64-latest.json`. See [`CHANGELOG.md`](CHANGELOG.md) and [`UPDATES.md`](UPDATES.md).
 
 ---
 
