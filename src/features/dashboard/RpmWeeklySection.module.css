@@ -316,29 +316,29 @@
 }
 
 .bandRed {
-  color: #b42318;
+  color: var(--err);
 }
 .bandAmber {
-  color: #b54708;
+  color: var(--warn);
 }
 .bandGreen {
-  color: #067647;
+  color: var(--ok);
 }
 .bandTeal {
-  color: #0e7490;
+  color: var(--accent);
 }
 
 .fillRed {
-  background: #f04438;
+  background: var(--err);
 }
 .fillAmber {
-  background: #f79009;
+  background: var(--warn);
 }
 .fillGreen {
-  background: #12b76a;
+  background: var(--ok);
 }
 .fillTeal {
-  background: #15b8a6;
+  background: var(--accent);
 }
 
 .editRow {
@@ -363,7 +363,7 @@
   width: 100%;
   margin: 0;
   font-size: 0.75rem;
-  color: #b42318;
+  color: var(--err);
 }
 
 .dimmed {

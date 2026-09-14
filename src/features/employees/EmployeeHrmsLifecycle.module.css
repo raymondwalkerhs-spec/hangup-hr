@@ -58,7 +58,7 @@
 .badgeMuted {
   display: inline-block;
   padding: 0.2rem 0.5rem;
-  background: color-mix(in srgb, var(--muted, #64748b) 12%, transparent);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
 }

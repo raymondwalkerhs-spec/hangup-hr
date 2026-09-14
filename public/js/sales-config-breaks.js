@@ -142,6 +142,11 @@ window.HRSalesConfigBreaks = (function () {
   }
 
   function handleActiveBreak(brk) {
+    // React SPA owns BreakOverlay — skip legacy dual overlay.
+    if (document.getElementById("root")?.dataset?.spa === "1" || window.__HANGUP_REACT_SHELL__) {
+      window.__hrActiveBreak = brk || null;
+      return;
+    }
     if (!brk) {
       if (breakOverlayEl) breakOverlayEl.classList.add("hidden");
       return;

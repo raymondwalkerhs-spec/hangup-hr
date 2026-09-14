@@ -1,8 +1,64 @@
 .section {
   margin-bottom: 1rem;
 }
-.section h3 {
+.section h3,
+.section h4 {
   margin: 0 0 0.75rem;
+  color: var(--text);
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.fieldInline {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.fieldInline input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  min-width: 12rem;
+}
+.fieldInline input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--theme-glow);
+}
+.group {
+  margin-bottom: 1.25rem;
+}
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.table th,
+.table td {
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.table th {
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.table tr:last-child td {
+  border-bottom: none;
 }
 .list {
   list-style: none;
@@ -25,4 +81,40 @@
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.chipGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0 0.85rem;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
+}
+.err {
+  color: var(--err);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
 }

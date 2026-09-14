@@ -290,6 +290,10 @@ export function LoginPage() {
   const [forgotNewPassword, setForgotNewPassword] = useState("");
   const [forgotConfirm, setForgotConfirm] = useState("");
   const [forgotDone, setForgotDone] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"otp" | "password">("otp");
+  const [forgotResetToken, setForgotResetToken] = useState("");
+  const [forgotExpiresAt, setForgotExpiresAt] = useState(0);
+  const [forgotSecondsLeft, setForgotSecondsLeft] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [regStep, setRegStep] = useState(1);
@@ -458,15 +462,45 @@ export function LoginPage() {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (forgotNewPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+  const resetForgotFlow = () => {
+    setForgotStep("otp");
+    setForgotResetToken("");
+    setForgotExpiresAt(0);
+    setForgotSecondsLeft(0);
+    setForgotTotp("");
+    setForgotNewPassword("");
+    setForgotConfirm("");
+    setForgotDone(false);
+  };
+
+  useEffect(() => {
+    if (forgotStep !== "password" || !forgotExpiresAt) {
+      setForgotSecondsLeft(0);
       return;
     }
-    if (forgotNewPassword !== forgotConfirm) {
-      setError("New password and confirmation do not match.");
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((forgotExpiresAt - Date.now()) / 1000));
+      setForgotSecondsLeft(left);
+      if (left <= 0) {
+        setError("Time expired. Enter a new Authenticator code.");
+        setForgotStep("otp");
+        setForgotResetToken("");
+        setForgotExpiresAt(0);
+        setForgotTotp("");
+        setForgotNewPassword("");
+        setForgotConfirm("");
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [forgotStep, forgotExpiresAt]);
+
+  const handleForgotVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!username.trim()) {
+      setError("Enter your username.");
       return;
     }
     if (forgotTotp.replace(/\D/g, "").length < 6) {
@@ -475,21 +509,80 @@ export function LoginPage() {
     }
     setLoading(true);
     try {
-      await api("/auth/forgot-password", {
-        method: "POST",
-        body: JSON.stringify({
-          username: username.trim(),
-          totpCode: forgotTotp.replace(/\D/g, "").slice(0, 6),
-          newPassword: forgotNewPassword,
-        }),
-      });
-      setForgotDone(true);
-      setPassword("");
+      const data = await api<{ resetToken: string; expiresAt: number; expiresInSec: number }>(
+        "/auth/forgot-password/verify",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            username: username.trim(),
+            totpCode: forgotTotp.replace(/\D/g, "").slice(0, 6),
+          }),
+        }
+      );
+      setForgotResetToken(data.resetToken);
+      setForgotExpiresAt(Number(data.expiresAt) || Date.now() + (data.expiresInSec || 120) * 1000);
+      setForgotSecondsLeft(data.expiresInSec || 120);
+      setForgotStep("password");
       setForgotTotp("");
       setForgotNewPassword("");
       setForgotConfirm("");
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotConfirmPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!forgotResetToken || forgotSecondsLeft <= 0) {
+      setError("Time expired. Enter a new Authenticator code.");
+      setForgotStep("otp");
+      setForgotResetToken("");
+      setForgotExpiresAt(0);
+      setForgotTotp("");
+      setForgotNewPassword("");
+      setForgotConfirm("");
+      return;
+    }
+    if (forgotNewPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirm) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await api("/auth/forgot-password/confirm", {
+        method: "POST",
+        body: JSON.stringify({
+          resetToken: forgotResetToken,
+          newPassword: forgotNewPassword,
+        }),
+      });
+      setPassword("");
+      setForgotResetToken("");
+      setForgotExpiresAt(0);
+      setForgotSecondsLeft(0);
+      setForgotTotp("");
+      setForgotNewPassword("");
+      setForgotConfirm("");
+      setForgotStep("otp");
+      setForgotDone(true);
+    } catch (err) {
+      const msg = (err as Error).message;
+      setError(msg);
+      if (/expired|new Authenticator/i.test(msg)) {
+        setForgotStep("otp");
+        setForgotResetToken("");
+        setForgotExpiresAt(0);
+        setForgotTotp("");
+        setForgotNewPassword("");
+        setForgotConfirm("");
+      }
     } finally {
       setLoading(false);
     }
@@ -628,10 +721,7 @@ export function LoginPage() {
                 onClick={() => {
                   setView("forgot");
                   setError("");
-                  setForgotDone(false);
-                  setForgotTotp("");
-                  setForgotNewPassword("");
-                  setForgotConfirm("");
+                  resetForgotFlow();
                 }}
               >
                 Forgot password?
@@ -670,16 +760,17 @@ export function LoginPage() {
                   onClick={() => {
                     setView("login");
                     setError("");
-                    setForgotDone(false);
+                    resetForgotFlow();
                   }}
                 >
                   ← Back to sign in
                 </Button>
               </>
-            ) : (
-              <form onSubmit={handleForgotPassword} className={styles.form}>
+            ) : forgotStep === "otp" ? (
+              <form onSubmit={handleForgotVerifyOtp} className={styles.form}>
                 <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: 1.45 }}>
-                  Enter your username and Authenticator code, then choose a new password.
+                  Step 1 of 2 — enter your username and Authenticator code. You will then have{" "}
+                  <strong>2 minutes</strong> to set a new password.
                 </p>
                 <label className={styles.field}>
                   <span>Username</span>
@@ -700,6 +791,35 @@ export function LoginPage() {
                     aria-label="Authenticator code"
                   />
                 </label>
+                {error && <p className={styles.error}>{error}</p>}
+                <Button type="submit" className={styles.submit} disabled={loading || Boolean(loginBlocked)}>
+                  {loading ? "Verifying…" : "Continue"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className={styles.submit}
+                  onClick={() => {
+                    setView("login");
+                    setError("");
+                    resetForgotFlow();
+                  }}
+                >
+                  ← Back to sign in
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleForgotConfirmPassword} className={styles.form}>
+                <p className="muted" style={{ marginBottom: "0.5rem", lineHeight: 1.45 }}>
+                  Step 2 of 2 — choose a new password for <strong>{username.trim() || "your account"}</strong>.
+                </p>
+                <p
+                  className={forgotSecondsLeft <= 30 ? styles.error : "muted"}
+                  style={{ marginBottom: "0.75rem", fontVariantNumeric: "tabular-nums" }}
+                >
+                  Time left: {Math.floor(forgotSecondsLeft / 60)}:
+                  {String(forgotSecondsLeft % 60).padStart(2, "0")}
+                </p>
                 <label className={styles.field}>
                   <span>New password</span>
                   <input
@@ -709,6 +829,7 @@ export function LoginPage() {
                     required
                     minLength={8}
                     autoComplete="new-password"
+                    autoFocus
                   />
                 </label>
                 <label className={styles.field}>
@@ -723,19 +844,23 @@ export function LoginPage() {
                   />
                 </label>
                 {error && <p className={styles.error}>{error}</p>}
-                <Button type="submit" className={styles.submit} disabled={loading || Boolean(loginBlocked)}>
-                  {loading ? "Saving…" : "Reset password"}
+                <Button
+                  type="submit"
+                  className={styles.submit}
+                  disabled={loading || Boolean(loginBlocked) || forgotSecondsLeft <= 0}
+                >
+                  {loading ? "Saving…" : "Set new password"}
                 </Button>
                 <Button
                   type="button"
                   variant="secondary"
                   className={styles.submit}
                   onClick={() => {
-                    setView("login");
                     setError("");
+                    resetForgotFlow();
                   }}
                 >
-                  ← Back to sign in
+                  ← New Authenticator code
                 </Button>
               </form>
             )}

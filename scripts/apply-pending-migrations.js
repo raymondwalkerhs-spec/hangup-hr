@@ -235,6 +235,9 @@ async function probeState(db) {
   state.app_users_auth_google_mfa = !authCols.error;
   const wfhCol = await db.from("employees").select("wfh").limit(1);
   state.employee_wfh = !wfhCol.error;
+  const breakTakes = await db.from("break_takes").select("id").limit(1);
+  const breakCompany = await db.from("break_schedules").select("company").limit(1);
+  state.break_takes_v2 = !breakTakes.error && !breakCompany.error;
   return state;
 }
 
@@ -604,6 +607,9 @@ function filesToApply(state) {
   }
   if (!state.employee_wfh) {
     files.push("20260914_employee_wfh.sql");
+  }
+  if (!state.break_takes_v2) {
+    files.push("20260914_break_takes_and_schedule_v2.sql");
   }
   return files;
 }

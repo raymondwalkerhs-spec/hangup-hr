@@ -822,7 +822,84 @@ router.post("/auth/google/cold-start", async (req, res) => {
   }
 });
 
-/** Forgot password (public): username + Authenticator OTP → new password. No email. */
+/** Forgot password step 1 (public): username + Authenticator OTP → short-lived resetToken (2 min). */
+router.post("/auth/forgot-password/verify", async (req, res) => {
+  try {
+    if (!authBridge.isAuthBridgeEnabled()) {
+      return res.status(400).json({
+        error: "Password reset with Authenticator is unavailable right now. Contact HR.",
+        code: "auth_bridge_off",
+      });
+    }
+    const rateLimit = rateLimiter.checkLogin(req);
+    if (rateLimit.limited) {
+      return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
+    }
+    await requireOnline();
+    const username = String(req.body?.username || "").trim();
+    const totpCode = String(req.body?.totpCode || req.body?.code || "").trim();
+    if (!username || !totpCode) {
+      return res.status(400).json({
+        error: "Username and Authenticator code are required",
+        code: "missing_fields",
+      });
+    }
+    const result = await authBridge.beginPasswordResetWithTotp(username, totpCode);
+    authDebug("forgot-password.verify.ok", { username: result.username, expiresInSec: result.expiresInSec });
+    res.json({
+      ok: true,
+      resetToken: result.resetToken,
+      expiresAt: result.expiresAt,
+      expiresInSec: result.expiresInSec,
+    });
+  } catch (e) {
+    authDebugError("forgot-password.verify", e, { username: req.body?.username });
+    const code = e.code || authBridge.mapAuthError(e).code;
+    const message =
+      e.code === "mfa_required" || e.code === "account_blocked" || e.code === "invalid_reset"
+        ? e.message
+        : authBridge.mapAuthError(e).message || e.message;
+    res.status(400).json({ error: message, code });
+  }
+});
+
+/** Forgot password step 2 (public): resetToken + new password (must be within 2 min of OTP). */
+router.post("/auth/forgot-password/confirm", async (req, res) => {
+  try {
+    if (!authBridge.isAuthBridgeEnabled()) {
+      return res.status(400).json({
+        error: "Password reset with Authenticator is unavailable right now. Contact HR.",
+        code: "auth_bridge_off",
+      });
+    }
+    const rateLimit = rateLimiter.checkLogin(req);
+    if (rateLimit.limited) {
+      return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
+    }
+    await requireOnline();
+    const resetToken = String(req.body?.resetToken || "").trim();
+    const newPassword = String(req.body?.newPassword || "").trim();
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({
+        error: "Reset session and new password are required",
+        code: "missing_fields",
+      });
+    }
+    const result = await authBridge.completePasswordResetWithToken(resetToken, newPassword);
+    authDebug("forgot-password.confirm.ok", { username: result.username });
+    res.json({ ok: true });
+  } catch (e) {
+    authDebugError("forgot-password.confirm", e);
+    const code = e.code || authBridge.mapAuthError(e).code;
+    const message =
+      e.code === "reset_expired" || e.code === "account_blocked" || e.code === "invalid_reset"
+        ? e.message
+        : authBridge.mapAuthError(e).message || e.message;
+    res.status(400).json({ error: message, code });
+  }
+});
+
+/** Legacy one-shot forgot password (kept for compatibility). Prefer verify → confirm. */
 router.post("/auth/forgot-password", async (req, res) => {
   try {
     if (!authBridge.isAuthBridgeEnabled()) {
@@ -852,7 +929,10 @@ router.post("/auth/forgot-password", async (req, res) => {
     authDebugError("forgot-password", e, { username: req.body?.username });
     const code = e.code || authBridge.mapAuthError(e).code;
     const message =
-      e.code === "mfa_required" || e.code === "account_blocked" || e.code === "invalid_reset"
+      e.code === "mfa_required" ||
+      e.code === "account_blocked" ||
+      e.code === "invalid_reset" ||
+      e.code === "reset_expired"
         ? e.message
         : authBridge.mapAuthError(e).message || e.message;
     res.status(400).json({ error: message, code });
@@ -903,6 +983,15 @@ router.post("/auth/google/cold-complete", async (req, res) => {
     const normalizedRole = roles.normalizeRole(appUser.role);
     const needs = authBridge.setupNeeds(appUser);
     const sessionKind = needs.needsSetup ? "pending_setup" : "full";
+    // Prefer full auth row so password_changed_at snapshot matches validateSession
+    // (Google email lookup used to omit it → immediate session_revoked → /login).
+    let passwordChangedAt = appUser.password_changed_at || null;
+    try {
+      const full = await authBridge.fetchAppUserAuthRow(appUser.username);
+      if (full?.password_changed_at) passwordChangedAt = full.password_changed_at;
+    } catch {
+      /* keep lookup value */
+    }
     try {
       await new Promise((resolve, reject) => {
         if (!req.session) return resolve();
@@ -914,7 +1003,7 @@ router.post("/auth/google/cold-complete", async (req, res) => {
     const session = createSession(appUser.username, normalizedRole, {
       deviceLabel: req.body.deviceLabel || "Desktop",
       ip: req.ip,
-      passwordChangedAtSnapshot: appUser.password_changed_at || null,
+      passwordChangedAtSnapshot: passwordChangedAt,
       sessionKind,
       authUserId: exchanged.user?.id || appUser.auth_user_id || null,
       loginMethod: "google",
@@ -937,6 +1026,11 @@ router.post("/auth/google/cold-complete", async (req, res) => {
       });
     } catch (err) {
       throw err;
+    }
+    try {
+      oauthPendingStore.clearOauthPending();
+    } catch {
+      /* ignore */
     }
     res.json({
       ok: true,
@@ -1018,17 +1112,8 @@ router.get("/session-check", async (req, res) => {
     }
     try {
       const { getRevision } = require("../lib/settings-revision");
-      const breaksRepo = require("../lib/break-schedules-repo");
       payload.settingsRevision = await getRevision();
-      const empLink = store.getAppUserEmployeeId(valid.username);
-      const enriched = roles.enrichUserRole(
-        roles.resolveUserRole(valid.username, valid.role),
-        store.getEmployees(),
-        empLink ? { employee_id: empLink } : null
-      );
-      const breaks = await breaksRepo.readBreakSchedules();
-      const activeBreak = breaksRepo.activeBreakForUser(breaks, enriched);
-      if (activeBreak) payload.activeBreak = activeBreak;
+      // Break overlay is React-owned via GET /sales-config/breaks/active (no legacy activeBreak).
     } catch {
       /* optional */
     }

@@ -188,6 +188,24 @@
   gap: 0.5rem;
   margin-top: 0.25rem;
 }
+.factorList {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.factorList li {
+  margin: 0.15rem 0;
+}
+.securityForm select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
 .securityMsg {
   margin: 0;
   font-size: 0.85rem;

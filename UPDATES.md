@@ -1,10 +1,25 @@
+## v2.7.0 release checklist
+
+**Shipped 2026-09-14:** Breaks take system + premium critters (Gotham bats, Spiderman webs) + dark CSS readability. Replaces **2.6.2** as GitHub Latest + Supabase `is_current`.
+
+### Shipped in 2.7.0
+- Breaks page management (not Settings); Start/Close/End takes; Cairo / company / `HS-*`
+- Gotham bats; Spiderman red/blue + webs; Hello Kitty pink cats kept
+- `--muted` alias + brighter dark muted text
+
+### Checklist
+- [x] Bump `package.json` to **2.7.0**; docs
+- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+
+---
+
 ## v2.6.2 release checklist
 
 **Hotfix 2026-09-14 (from 2.6.1):** Restores auth-bridge MFA helpers that crashed app load. Replaces broken **2.6.1** as GitHub Latest + Supabase `is_current`.
 
 ### Checklist
 - [x] Bump `package.json` to **2.6.2**; docs
-- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+- [x] Release CI + Latest + `publish-app-version.js` + web installer
 
 ---
 

@@ -42,6 +42,10 @@ export function SettingsPage() {
   const [newCompany, setNewCompany] = useState({ slug: "", name: "", shortName: "" });
   const [changePwTotp, setChangePwTotp] = useState("");
   const [unlinkTotp, setUnlinkTotp] = useState("");
+  const [mfaManageMode, setMfaManageMode] = useState<"none" | "replace" | "remove">("none");
+  const [mfaManagePassword, setMfaManagePassword] = useState("");
+  const [mfaManageTotp, setMfaManageTotp] = useState("");
+  const [mfaRemoveFactorId, setMfaRemoveFactorId] = useState("");
 
   const { status, loading: isLoading, refreshStatus } = useAppStatus();
   const { path, companyContext } = useCompanyScope();
@@ -132,12 +136,44 @@ export function SettingsPage() {
       }>("/auth/security-status"),
   });
 
+  const { data: mfaFactorsData, refetch: refetchMfaFactors } = useQuery({
+    queryKey: ["auth-mfa-factors"],
+    queryFn: () =>
+      api<{ factors?: { id: string; friendlyName?: string; status?: string }[] }>("/auth/mfa/factors"),
+    enabled: securityStatus?.bridgeEnabled === true && securityStatus?.mfaEnrolled === true,
+  });
+
   const unlinkGoogle = useMutation({
     mutationFn: (body: { password: string; totpCode: string }) =>
       api("/auth/google/unlink", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["auth-security-status"] });
       window.location.href = "/link-google";
+    },
+  });
+
+  const selfResetMfa = useMutation({
+    mutationFn: (body: { password: string }) =>
+      api("/auth/mfa/self-reset", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["auth-security-status"] });
+      window.location.href = "/setup-2fa?from=settings";
+    },
+  });
+
+  const removeMfaFactor = useMutation({
+    mutationFn: (body: { password: string; totpCode: string; factorId: string }) =>
+      api<{ remaining?: number }>("/auth/mfa/factors/remove", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: (data) => {
+      setMfaManageMode("none");
+      setMfaManagePassword("");
+      setMfaManageTotp("");
+      setMfaRemoveFactorId("");
+      qc.invalidateQueries({ queryKey: ["auth-security-status"] });
+      refetchMfaFactors();
+      if (!data.remaining) {
+        window.location.href = "/setup-2fa?from=settings";
+      }
     },
   });
 
@@ -526,12 +562,50 @@ export function SettingsPage() {
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          window.location.href = "/setup-2fa";
+                          window.location.href = "/setup-2fa?from=settings";
                         }}
                       >
                         Set up Authenticator
                       </Button>
-                    ) : null}
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            window.location.href = "/setup-2fa?add=1&from=settings";
+                          }}
+                        >
+                          Add another Authenticator
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setMfaManageMode("replace");
+                            setMfaManagePassword("");
+                            setMfaManageTotp("");
+                          }}
+                        >
+                          Change / replace Authenticator
+                        </Button>
+                        {(mfaFactorsData?.factors || []).filter((f) => String(f.status || "").toLowerCase() === "verified").length >
+                        1 ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setMfaManageMode("remove");
+                              setMfaManagePassword("");
+                              setMfaManageTotp("");
+                              setMfaRemoveFactorId("");
+                            }}
+                          >
+                            Remove one
+                          </Button>
+                        ) : null}
+                      </>
+                    )}
                     {securityStatus.mfaEnrolled && !securityStatus.googleLinked ? (
                       <Button
                         size="sm"
@@ -544,6 +618,136 @@ export function SettingsPage() {
                       </Button>
                     ) : null}
                   </div>
+                  {securityStatus.mfaEnrolled && (mfaFactorsData?.factors?.length || 0) > 0 ? (
+                    <ul className={styles.factorList}>
+                      {(mfaFactorsData?.factors || []).map((f) => (
+                        <li key={f.id}>
+                          {f.friendlyName || "Authenticator"}
+                          <span className="muted"> · {f.status || "verified"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {mfaManageMode === "replace" ? (
+                    <form
+                      className={styles.securityForm}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        selfResetMfa.mutate({
+                          password: mfaManagePassword,
+                        });
+                      }}
+                    >
+                      <h4>Change Authenticator</h4>
+                      <p className={styles.securityMsg}>
+                        Lost your phone or authenticator app? Enter your account password only — no code needed.
+                        This removes all authenticators, then you scan a new QR.
+                      </p>
+                      <label>
+                        Password
+                        <input
+                          type="password"
+                          autoComplete="current-password"
+                          required
+                          value={mfaManagePassword}
+                          onChange={(e) => setMfaManagePassword(e.target.value)}
+                        />
+                      </label>
+                      <div className={styles.securityActions}>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="danger"
+                          disabled={selfResetMfa.isPending || mfaManagePassword.length < 8}
+                        >
+                          Remove and set up new
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setMfaManageMode("none")}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                      {selfResetMfa.isError ? (
+                        <p className={styles.securityErr}>{(selfResetMfa.error as Error).message}</p>
+                      ) : null}
+                    </form>
+                  ) : null}
+                  {mfaManageMode === "remove" ? (
+                    <form
+                      className={styles.securityForm}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        removeMfaFactor.mutate({
+                          password: mfaManagePassword,
+                          totpCode: mfaManageTotp,
+                          factorId: mfaRemoveFactorId,
+                        });
+                      }}
+                    >
+                      <h4>Remove one Authenticator</h4>
+                      <label>
+                        Device
+                        <select
+                          value={mfaRemoveFactorId}
+                          onChange={(e) => setMfaRemoveFactorId(e.target.value)}
+                          required
+                        >
+                          <option value="">Select…</option>
+                          {(mfaFactorsData?.factors || [])
+                            .filter((f) => String(f.status || "").toLowerCase() === "verified")
+                            .map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.friendlyName || "Authenticator"}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label>
+                        Password
+                        <input
+                          type="password"
+                          autoComplete="current-password"
+                          required
+                          value={mfaManagePassword}
+                          onChange={(e) => setMfaManagePassword(e.target.value)}
+                        />
+                      </label>
+                      <div className={styles.securityField}>
+                        <span className="muted">Authenticator code (any enrolled device)</span>
+                        <TotpCodeInput value={mfaManageTotp} onChange={setMfaManageTotp} />
+                      </div>
+                      <div className={styles.securityActions}>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="danger"
+                          disabled={
+                            removeMfaFactor.isPending ||
+                            !mfaRemoveFactorId ||
+                            mfaManagePassword.length < 8 ||
+                            mfaManageTotp.length !== 6
+                          }
+                        >
+                          Remove device
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setMfaManageMode("none")}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                      {removeMfaFactor.isError ? (
+                        <p className={styles.securityErr}>{(removeMfaFactor.error as Error).message}</p>
+                      ) : null}
+                    </form>
+                  ) : null}
                 </div>
               ) : (
                 <p className={styles.securityMsg}>
@@ -722,7 +926,6 @@ export function SettingsPage() {
       )}
 
       <SettingsAdminExtras
-        canManageBreaks={canManageSalesConfig}
         canManageClients={canManageSalesConfig}
         canManageHs2={user.canManageHs2Company === true}
       />

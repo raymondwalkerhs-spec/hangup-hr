@@ -38,15 +38,33 @@ async function ensureAuthSessionTokens(session, passwordHint = null) {
   if (!passwordHint) {
     throw new Error("Auth session expired for MFA. Sign in again with password.");
   }
+  return refreshAuthSessionWithPassword(session, passwordHint);
+}
+
+/** Always sign in with password so MFA enroll/reset gets a fresh AAL1 JWT (not a stale Google token). */
+async function refreshAuthSessionWithPassword(session, password) {
   const row = await authBridge.fetchAppUserAuthRow(session.username);
   const synthetic = row?.synthetic_email || authBridge.syntheticEmailForUsername(session.username);
-  const data = await authBridge.signInAuthWithPassword(synthetic, passwordHint);
+  const data = await authBridge.signInAuthWithPassword(synthetic, password);
+  const access = data.session?.access_token || null;
+  if (!access) throw new Error("Could not refresh Auth session");
   updateSession(session.id, {
-    supabaseAccessToken: data.session?.access_token || null,
+    supabaseAccessToken: access,
     supabaseRefreshToken: data.session?.refresh_token || null,
     authUserId: data.user?.id || session.authUserId || null,
   });
-  return data.session?.access_token;
+  return access;
+}
+
+async function applyMfaVerifySession(session, verifyData) {
+  const access = verifyData?.access_token || verifyData?.session?.access_token || null;
+  const refresh = verifyData?.refresh_token || verifyData?.session?.refresh_token || null;
+  if (!access) return session.supabaseAccessToken;
+  updateSession(session.id, {
+    supabaseAccessToken: access,
+    supabaseRefreshToken: refresh || session.supabaseRefreshToken || null,
+  });
+  return access;
 }
 
 async function promoteSessionIfReady(session) {
@@ -97,18 +115,35 @@ router.post("/mfa/enroll/start", async (req, res) => {
   if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
-    let token = session.supabaseAccessToken;
-    if (!token && req.body?.password) {
-      await authBridge.syncPasswordToAuth(session.username, req.body.password);
-      token = await ensureAuthSessionTokens(session, req.body.password);
-    }
-    if (!token) {
+    const password = String(req.body?.password || "");
+    const totpCode = String(req.body?.totpCode || "").trim();
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
       return res.status(400).json({
         error: "Re-enter your password to start Authenticator setup.",
         code: "password_required",
       });
     }
-    const enroll = await authBridge.enrollMfaStart(token);
+
+    await authBridge.syncPasswordToAuth(session.username, password);
+    let token = await refreshAuthSessionWithPassword(session, password);
+
+    // Supabase blocks enroll at AAL1 when any verified factor remains.
+    // Password-only path (lost device / Change-replace / stuck flag): wipe then enroll.
+    // Add-another path: step up to AAL2 with the current authenticator code.
+    const existing = await authBridge.listMfaFactorsForUsername(session.username);
+    const verified = existing.filter((f) => String(f.status).toLowerCase() === "verified");
+    if (verified.length > 0) {
+      if (totpCode && totpCode.length >= 6) {
+        const stepped = await authBridge.verifyTotpForUser(token, totpCode);
+        token = await applyMfaVerifySession(session, stepped);
+      } else {
+        await authBridge.adminResetMfa(session.username);
+        token = await refreshAuthSessionWithPassword(session, password);
+      }
+    }
+
+    const friendlyName = String(req.body?.friendlyName || "").trim() || undefined;
+    const enroll = await authBridge.enrollMfaStart(token, { friendlyName });
     updateSession(session.id, { mfaFactorId: enroll.factorId });
     res.json({
       ok: true,
@@ -116,10 +151,97 @@ router.post("/mfa/enroll/start", async (req, res) => {
       qrCode: enroll.qrCode,
       secret: enroll.secret,
       uri: enroll.uri,
+      friendlyName: enroll.friendlyName,
     });
   } catch (e) {
     const mapped = authBridge.mapAuthError(e);
     authDebugError("mfa.enroll.start", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+router.get("/mfa/factors", async (req, res) => {
+  if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
+  try {
+    const session = req.appSession;
+    let factors = [];
+    if (session.supabaseAccessToken) {
+      factors = await authBridge.listMfaFactorsForToken(session.supabaseAccessToken);
+    } else {
+      factors = await authBridge.listMfaFactorsForUsername(session.username);
+    }
+    res.json({ ok: true, factors });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("mfa.factors.list", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+router.post("/mfa/factors/remove", async (req, res) => {
+  if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
+  try {
+    const session = req.appSession;
+    const password = String(req.body?.password || "");
+    const totpCode = String(req.body?.totpCode || "").trim();
+    const factorId = String(req.body?.factorId || "").trim();
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: "Password required", code: "password_required" });
+    }
+    if (!totpCode || totpCode.length < 6) {
+      return res.status(400).json({ error: "Authenticator code required", code: "invalid_totp" });
+    }
+    if (!factorId) {
+      return res.status(400).json({ error: "Select an authenticator to remove", code: "factor_required" });
+    }
+    await authBridge.syncPasswordToAuth(session.username, password);
+    const token = await ensureAuthSessionTokens(session, password);
+    await authBridge.verifyTotpForUser(token, totpCode);
+    const result = await authBridge.deleteMfaFactor(session.username, factorId);
+    if (!result.remaining) {
+      updateSession(session.id, { mfaFactorId: null, sessionKind: "pending_setup" });
+    }
+    res.json({ ok: true, remaining: result.remaining, factors: result.factors });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("mfa.factors.remove", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+/** Clear all authenticators with password only (lost-device recovery), then user re-enrolls. */
+router.post("/mfa/self-reset", async (req, res) => {
+  if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
+  try {
+    const session = req.appSession;
+    const password = String(req.body?.password || "");
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: "Password required", code: "password_required" });
+    }
+
+    const users = await fetchAuthUsers();
+    const record = users.find((u) => u.user.toLowerCase() === session.username.toLowerCase());
+    if (!record) return res.status(400).json({ error: "User not found" });
+
+    const valid = record.passwordIsHash
+      ? await bcrypt.compare(password, record.password)
+      : record.password === password;
+    if (!valid) {
+      return res.status(400).json({ error: "Password is incorrect", code: "bad_password" });
+    }
+
+    await authBridge.adminResetMfa(session.username);
+    await authBridge.syncPasswordToAuth(session.username, password);
+    // Fresh password JWT at AAL1 with zero factors so enroll works without AAL2.
+    await refreshAuthSessionWithPassword(session, password);
+    updateSession(session.id, { mfaFactorId: null, sessionKind: "pending_setup" });
+    res.json({ ok: true, needsMfaEnroll: true });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("mfa.self-reset", e);
     res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
   }
 });
@@ -138,13 +260,14 @@ router.post("/mfa/enroll/verify", async (req, res) => {
       return res.status(400).json({ error: "Start MFA enroll first", code: "enroll_required" });
     }
     let token = session.supabaseAccessToken;
-    if (!token && req.body?.password) {
-      token = await ensureAuthSessionTokens(session, req.body.password);
+    if (req.body?.password) {
+      token = await refreshAuthSessionWithPassword(session, String(req.body.password));
     }
     if (!token) {
       return res.status(400).json({ error: "Auth session missing. Sign in again.", code: "auth_session_missing" });
     }
-    await authBridge.enrollMfaVerify(token, factorId, code);
+    const verified = await authBridge.enrollMfaVerify(token, factorId, code);
+    await applyMfaVerifySession(session, verified);
     await authBridge.patchAppUserAuth(session.username, {
       mfa_enrolled_at: new Date().toISOString(),
     });
@@ -424,6 +547,11 @@ router.post("/google/complete-link", async (req, res) => {
     });
     const promo = await promoteSessionIfReady(session);
     const row = await authBridge.fetchAppUserAuthRow(session.username);
+    try {
+      require("../lib/oauth-pending-store").clearOauthPending();
+    } catch {
+      /* ignore */
+    }
     res.json({
       ok: true,
       googleEmail: row?.google_email || null,

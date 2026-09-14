@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
+import { useCompanyScope } from "@/hooks/useCompanyScope";
 import { Button } from "@/ui/Button";
 import { formatTimeAmPm } from "@/lib/breakTime";
 import styles from "./BreakOverlay.module.css";
@@ -15,13 +15,13 @@ type Break = {
   message?: string;
 };
 
-function parseEndMs(startTime: string, durationMinutes: number) {
-  const m = String(startTime || "").match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return Date.now() + durationMinutes * 60000;
-  const d = new Date();
-  d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
-  return d.getTime() + durationMinutes * 60000;
-}
+type Take = {
+  id: string;
+  scheduleId?: string | null;
+  startedAt?: string | null;
+  allowedMinutes?: number;
+  status?: string;
+};
 
 function formatCountdown(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -30,82 +30,159 @@ function formatCountdown(ms: number) {
   return `${mm}:${ss}`;
 }
 
-export function BreakOverlay() {
-  const location = useLocation();
-  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
-  const [countdown, setCountdown] = useState("");
+function playBreakRing(ctxRef: { current: AudioContext | null }) {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    if (!ctxRef.current) ctxRef.current = new Ctx();
+    const ctx = ctxRef.current;
+    void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const t0 = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.2, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+    osc.start(t0);
+    osc.stop(t0 + 0.5);
+  } catch {
+    /* audio may be blocked */
+  }
+}
 
-  const { data } = useQuery({
+export function BreakOverlay() {
+  const qc = useQueryClient();
+  const { path } = useCompanyScope();
+  const audioRef = useRef<AudioContext | null>(null);
+  const rangForTake = useRef<string | null>(null);
+  const [sessionDismissed, setSessionDismissed] = useState<Set<string>>(() => new Set());
+  const [countdown, setCountdown] = useState("");
+  const [overdue, setOverdue] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data, refetch } = useQuery({
     queryKey: ["active-break"],
-    queryFn: () => api<{ break?: Break | null; activeBreak?: Break | null }>("/sales-config/breaks/active"),
-    refetchInterval: 60000,
+    queryFn: () =>
+      api<{ activeBreak?: Break | null; openTake?: Take | null }>(path("/sales-config/breaks/active")),
+    refetchInterval: 15000,
   });
 
-  const brk = data?.break || data?.activeBreak || null;
-  const visible = brk && !dismissed.has(brk.id);
+  const brk = data?.activeBreak || null;
+  const openTake = data?.openTake || null;
+  const inProgress = openTake && ["in_progress", "overdue"].includes(String(openTake.status || ""));
+  const promptVisible = Boolean(brk && !sessionDismissed.has(brk.id) && !inProgress);
+  const timerVisible = Boolean(inProgress);
+
+  const start = useMutation({
+    mutationFn: () => api(path(`/sales-config/breaks/${encodeURIComponent(brk!.id)}/start`), { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      setError(null);
+      playBreakRing(audioRef); // unlock audio context on gesture
+      qc.invalidateQueries({ queryKey: ["active-break"] });
+      qc.invalidateQueries({ queryKey: ["break-takes"] });
+      refetch();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const dismiss = useMutation({
+    mutationFn: () => api(path(`/sales-config/breaks/${encodeURIComponent(brk!.id)}/dismiss`), { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      if (brk) setSessionDismissed((s) => new Set(s).add(brk.id));
+      setError(null);
+      qc.invalidateQueries({ queryKey: ["active-break"] });
+      qc.invalidateQueries({ queryKey: ["break-takes"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const end = useMutation({
+    mutationFn: () =>
+      api(path(`/sales-config/breaks/takes/${encodeURIComponent(openTake!.id)}/end`), {
+        method: "POST",
+        body: "{}",
+      }),
+    onSuccess: () => {
+      setError(null);
+      setOverdue(false);
+      rangForTake.current = null;
+      qc.invalidateQueries({ queryKey: ["active-break"] });
+      qc.invalidateQueries({ queryKey: ["break-takes"] });
+      refetch();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
 
   useEffect(() => {
-    if (!brk) return;
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(brk.id);
-      return next;
-    });
-  }, [location.pathname, location.key]);
-
-  useEffect(() => {
-    if (!visible || !brk) return;
-    const endMs = parseEndMs(brk.startTime || "", brk.durationMinutes || 15);
-    const tick = () => setCountdown(formatCountdown(endMs - Date.now()));
+    if (!inProgress || !openTake?.startedAt) return;
+    const allowedMs = (Number(openTake.allowedMinutes) || 15) * 60000;
+    const startMs = new Date(openTake.startedAt).getTime();
+    const tick = () => {
+      const left = startMs + allowedMs - Date.now();
+      setCountdown(formatCountdown(left));
+      const isOver = left <= 0;
+      setOverdue(isOver);
+      if (isOver && rangForTake.current !== openTake.id) {
+        rangForTake.current = openTake.id;
+        playBreakRing(audioRef);
+      }
+    };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [visible, brk]);
+  }, [inProgress, openTake?.id, openTake?.startedAt, openTake?.allowedMinutes]);
 
-  useEffect(() => {
-    if (!visible || !brk) return;
-    const onPointerDown = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest(`.${styles.card}`)) return;
-      setDismissed((s) => new Set(s).add(brk.id));
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDismissed((s) => new Set(s).add(brk.id));
-    };
-    document.addEventListener("mousedown", onPointerDown, true);
-    document.addEventListener("touchstart", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown, true);
-      document.removeEventListener("touchstart", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [visible, brk]);
-
-  const dismiss = () => {
-    if (!brk) return;
-    setDismissed((s) => new Set(s).add(brk.id));
-  };
-
-  if (!visible || !brk) return null;
+  if (!promptVisible && !timerVisible) return null;
 
   return (
-    <div className={styles.overlay} onClick={dismiss} role="presentation">
-      <div
-        className={styles.card}
-        role="dialog"
-        aria-label="Break time"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button className={styles.close} size="sm" variant="ghost" onClick={dismiss}>✕</Button>
-        <h2>Break time</h2>
-        <p>{brk.name || "Scheduled break"}</p>
-        <div className={styles.timer}>{countdown}</div>
-        <p className="muted">{brk.durationMinutes || 15} min · ends ~{formatTimeAmPm(brk.endTime)}</p>
-        {brk.message && <p>{brk.message}</p>}
-        <p className="muted" style={{ fontSize: "0.8rem", marginTop: "1rem" }}>
-          Click outside or open Breaks in the sidebar to dismiss.
-        </p>
+    <div className={styles.overlay} role="presentation">
+      <div className={styles.card} role="dialog" aria-label="Break time" onClick={(e) => e.stopPropagation()}>
+        {promptVisible && brk ? (
+          <>
+            <h2>Break time</h2>
+            <p>{brk.name || "Scheduled break"}</p>
+            <p className="muted">
+              {brk.durationMinutes || 15} min · window {formatTimeAmPm(brk.startTime)} – {formatTimeAmPm(brk.endTime)}
+            </p>
+            {brk.message ? <p>{brk.message}</p> : null}
+            <div className={styles.actions}>
+              <Button
+                onClick={() => start.mutate()}
+                disabled={start.isPending}
+              >
+                Start break now
+              </Button>
+              <Button variant="secondary" onClick={() => dismiss.mutate()} disabled={dismiss.isPending}>
+                Close
+              </Button>
+            </div>
+          </>
+        ) : null}
+
+        {timerVisible && openTake ? (
+          <>
+            <h2>{overdue ? "Break overtime" : "On break"}</h2>
+            <div className={styles.timer} data-overdue={overdue ? "1" : "0"}>
+              {countdown}
+            </div>
+            <p className="muted">
+              {overdue
+                ? "Time is up — tap End break when you are back."
+                : `${openTake.allowedMinutes || 15} min allotted`}
+            </p>
+            <div className={styles.actions}>
+              <Button variant={overdue ? "danger" : "primary"} onClick={() => end.mutate()} disabled={end.isPending}>
+                End break
+              </Button>
+            </div>
+          </>
+        ) : null}
+
+        {error ? <p className={styles.err}>{error}</p> : null}
       </div>
     </div>
   );

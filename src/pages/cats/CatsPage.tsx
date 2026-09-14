@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { RunningCat } from "@/features/shell/CatOrbitStage";
 import { AmblingTurtle } from "@/features/shell/TurtleStage";
+import { AmblingBat } from "@/features/shell/BatStage";
 import { useThemeStore } from "@/stores/theme-store";
 import styles from "./CatsPage.module.css";
 
@@ -57,7 +58,15 @@ const PATHS: PathFn[] = [
 const CAT_COUNT = 10;
 const TURTLE_COUNT = 8;
 
-function PlayCritter({ index, slow, useTurtle }: { index: number; slow?: boolean; useTurtle?: boolean }) {
+function PlayCritter({
+  index,
+  slow,
+  mode,
+}: {
+  index: number;
+  slow?: boolean;
+  mode: "cat" | "turtle" | "bat";
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const faceRef = useRef<HTMLDivElement>(null);
 
@@ -102,30 +111,40 @@ function PlayCritter({ index, slow, useTurtle }: { index: number; slow?: boolean
 
   return (
     <div
-      className={useTurtle ? styles.turtle : styles.cat}
+      className={mode === "turtle" ? styles.turtle : styles.cat}
       ref={wrapRef}
       aria-hidden
-      data-cat={useTurtle ? undefined : "orbit"}
-      data-turtle={useTurtle ? "amble" : undefined}
+      data-cat={mode === "turtle" ? undefined : "orbit"}
+      data-turtle={mode === "turtle" ? "amble" : undefined}
+      data-bat={mode === "bat" ? "amble" : undefined}
     >
-      <div ref={faceRef}>{useTurtle ? <AmblingTurtle /> : <RunningCat />}</div>
+      <div ref={faceRef}>
+        {mode === "turtle" ? <AmblingTurtle /> : mode === "bat" ? <AmblingBat /> : <RunningCat />}
+      </div>
     </div>
   );
 }
 
 export function CatsPage() {
   const theme = useThemeStore((s) => s.theme);
-  const turtles = theme === "turtles";
-  const count = turtles ? TURTLE_COUNT : CAT_COUNT;
+  const mode: "cat" | "turtle" | "bat" =
+    theme === "turtles" ? "turtle" : theme === "gotham" ? "bat" : "cat";
+  const count = mode === "turtle" ? TURTLE_COUNT : CAT_COUNT;
+  const caption =
+    mode === "turtle"
+      ? "Hangup turtles — no HR data here. Slow and steady."
+      : mode === "bat"
+        ? "Gotham bats — no HR data here. Watch the wings."
+        : theme === "spiderman"
+          ? "Spidey cats — red, blue, and webs. No HR data here."
+          : "Hangup cats — no HR data here. Sit back.";
 
   return (
-    <div className={styles.page}>
-      <p className={styles.caption}>
-        {turtles ? "Hangup turtles — no HR data here. Slow and steady." : "Hangup cats — no HR data here. Sit back."}
-      </p>
+    <div className={`${styles.page} ${theme === "spiderman" ? styles.spideyWebs : ""}`}>
+      <p className={styles.caption}>{caption}</p>
       <div className={styles.stage}>
         {Array.from({ length: count }, (_, i) => (
-          <PlayCritter key={`${turtles ? "t" : "c"}-${i}`} index={i} slow={turtles} useTurtle={turtles} />
+          <PlayCritter key={`${mode}-${i}`} index={i} slow={mode !== "cat"} mode={mode} />
         ))}
       </div>
     </div>

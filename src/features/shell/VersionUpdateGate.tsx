@@ -42,6 +42,9 @@ export function VersionUpdateGate() {
         if (cancelled) return;
 
         if (session.action === "session_revoked") {
+          // Soft fail: clear and send home, but never during the oauth/setup surfaces.
+          const path = typeof window !== "undefined" ? window.location.pathname : "";
+          if (/\/(login|oauth-pending|setup-2fa|link-google)/.test(path)) return;
           clearSessionId();
           window.location.href = "/login";
           return;

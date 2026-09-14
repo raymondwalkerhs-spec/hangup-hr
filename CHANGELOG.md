@@ -2,6 +2,17 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [2.7.0] — 2026-09-14
+
+### Added
+- **Breaks take system** — manage schedules on the Breaks page (not Settings); Start / Close / End overlay with personal timers; `break_takes` snapshots + Egypt Cairo matching; dialing-agent default audience + extra roles; company / `HS-*` units / effective dates; day picker + American-name search with Agent/TL/OP scopes.
+- **Gotham bats** — theme loaders and `/cats` use bat silhouettes with wing motion (replaces cats for Gotham).
+- **Spiderman web accents** — red/blue cats plus web motif on orbit / Cats page.
+- **MFA self-service** — Settings Account security can add/replace authenticator (replace is password-only for lost device).
+
+### Fixed
+- **Dark / premium readability** — `--muted` aliases every theme; brighter muted text on dark / Gotham / Spiderman / Turtles / red-wine; status bands use `--ok` / `--warn` / `--err`.
+
 ## [2.6.2] — 2026-09-14
 
 ### Fixed

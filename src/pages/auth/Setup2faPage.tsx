@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
 import { useAuth } from "@/app/AuthProvider";
 import { Button } from "@/ui/Button";
@@ -17,8 +17,13 @@ type EnrollStart = {
 
 export function Setup2faPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromSettings = searchParams.get("from") === "settings" || searchParams.get("add") === "1";
+  const addAnother = searchParams.get("add") === "1";
   const { refreshStatus } = useAuth();
   const [password, setPassword] = useState("");
+  const [currentTotp, setCurrentTotp] = useState("");
+  const [label, setLabel] = useState(addAnother ? "Phone / backup" : "Hangup Portal");
   const [code, setCode] = useState("");
   const [factorId, setFactorId] = useState("");
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -55,7 +60,11 @@ export function Setup2faPage() {
       const data = await withTimeout(() =>
         api<EnrollStart>("/auth/mfa/enroll/start", {
           method: "POST",
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({
+            password,
+            friendlyName: label,
+            ...(addAnother && currentTotp ? { totpCode: currentTotp } : {}),
+          }),
         }, 25000)
       );
       setFactorId(data.factorId);
@@ -79,7 +88,9 @@ export function Setup2faPage() {
         }, 25000)
       );
       await refreshStatus().catch(() => null);
-      if (data.needsGoogleLink || data.needsSetup) {
+      if (fromSettings) {
+        navigate("/settings#account-security", { replace: true });
+      } else if (data.needsGoogleLink || data.needsSetup) {
         navigate("/link-google", { replace: true });
       } else {
         navigate("/dashboard", { replace: true });
@@ -93,8 +104,12 @@ export function Setup2faPage() {
 
   return (
     <AuthSetupShell
-      title="Set up Authenticator"
-      subtitle="Scan the QR with Google Authenticator or Authy. You will need this code to change or reset your password, and to unlink Google — not for daily sign-in."
+      title={addAnother ? "Add another Authenticator" : "Set up Authenticator"}
+      subtitle={
+        addAnother
+          ? "Scan a new QR on another phone or app. Keep at least one working code for password changes and Google unlink."
+          : "Scan the QR with Google Authenticator or Authy. You will need this code to change or reset your password, and to unlink Google — not for daily sign-in."
+      }
       step={2}
       error={error}
       loading={loading}
@@ -112,7 +127,28 @@ export function Setup2faPage() {
               autoComplete="current-password"
             />
           </label>
-          <Button onClick={startEnroll} disabled={loading || password.length < 8}>
+          {addAnother ? (
+            <>
+              <label className={styles.field}>
+                <span>Device label (optional)</span>
+                <input
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  maxLength={64}
+                  placeholder="Phone / backup"
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Current Authenticator code</span>
+                <TotpCodeInput value={currentTotp} onChange={setCurrentTotp} disabled={loading} />
+              </label>
+            </>
+          ) : null}
+          <Button
+            onClick={startEnroll}
+            disabled={loading || password.length < 8 || (addAnother && currentTotp.length !== 6)}
+          >
             Show QR code
           </Button>
         </>

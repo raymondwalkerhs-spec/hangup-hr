@@ -48,6 +48,8 @@ function createApp() {
   }
 
   // Google OAuth browser callback (public) — stores code for the Electron window to poll.
+  // Do NOT auto-launch hangup-portal:// here: that remounts the Electron window mid-login
+  // and races cold-complete / session setup (sends users back to /login).
   const oauthPending = require("./lib/oauth-pending-store");
   app.get("/auth/callback", (req, res) => {
     const code = String(req.query.code || "").trim();
@@ -65,6 +67,7 @@ function createApp() {
   body{font-family:Segoe UI,system-ui,sans-serif;background:#1a1520;color:#f6f1ef;
   display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
   .box{max-width:28rem;padding:2rem;text-align:center;line-height:1.45}
+  code{font-size:0.85em;word-break:break-all}
 </style></head><body><div class="box">
   <h1>${error && !already ? "Google sign-in failed" : "Return to Hangup Portal"}</h1>
   <p>${
@@ -72,10 +75,12 @@ function createApp() {
       ? "Google is already connected. Go back to the Hangup window — it will finish linking automatically."
       : error
         ? error
-        : "Signed in with Google. Return to the Hangup Portal window — it should continue automatically. You can close this browser tab."
+        : code
+          ? "Signed in with Google. Switch back to the Hangup Portal window — it should continue automatically. You can close this browser tab."
+          : "No sign-in code was returned. Close this tab and try Google again from Hangup Portal."
   }</p>
+  ${code ? `<p class="muted">If the app is still waiting, paste this code there:<br/><code>${String(code).replace(/</g, "")}</code></p>` : ""}
 </div>
-<script>try{window.close()}catch(e){}</script>
 </body></html>`);
   });
 

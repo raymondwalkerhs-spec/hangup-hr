@@ -11,6 +11,8 @@
 .card {
   position: relative;
   background: var(--surface-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 2rem;
   max-width: 420px;
@@ -18,14 +20,29 @@
   text-align: center;
   box-shadow: var(--shadow-lg);
 }
+.card h2 {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+}
 .timer {
   font-size: 3rem;
   font-weight: 700;
   margin: 0.75rem 0;
   font-variant-numeric: tabular-nums;
+  color: var(--primary);
 }
-.close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+.timer[data-overdue="1"] {
+  color: var(--err);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.err {
+  margin: 0.75rem 0 0;
+  color: var(--err);
+  font-size: 0.85rem;
 }

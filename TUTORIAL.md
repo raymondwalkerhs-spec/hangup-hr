@@ -22,7 +22,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | Issue | What to do |
 |-------|------------|
 | No access assigned | Raymond must set your **role** in **Users** |
-| Forgot password | Login → **Forgot password?** → username + Authenticator code + new password. If you have no Authenticator yet, contact HR. |
+| Forgot password | Login → **Forgot password?** → Step 1: username + Authenticator code → Step 2: new password within **2 minutes** (then a new code is required). If you have no Authenticator yet, contact HR. |
 | Version blocked | Click **Update now** (or install the latest EXE). Patches never raise the minimum version. |
 | Update available (login or in-app) | Click **Update now** — small zip on the same `2.4.x` line after 2.4.1; Setup.exe when the line changes. See [`PUSH_UPDATE.md`](PUSH_UPDATE.md). |
 
@@ -51,7 +51,8 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | **Offboarding** | Leaver table — revoke access and final pay in the row |
 | **Clearance** | Leaver table — form, devices, files |
 | **Organization** | Unit → team → agent; OP/TL assignment; registrations |
-| **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, **break schedules**, refresh |
+| **Breaks** | Schedule manage (RTM/Admin), day reports, Start/Close/End overlay takes |
+| **Settings** | Theme, password, holidays, tax rules, **sales clients/products/prices**, refresh |
 | **Sales** | Sales log, add/edit sale, quality tickets, exports |
 | **Sales permissions** | Role-first field View/Edit access *(Admin / RTM / HR)* |
 | **Log columns** | Which columns show on Sales log *(Admin / RTM / HR)* |
@@ -193,7 +194,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 
 | Section | Who | What |
 |---------|-----|------|
-| **Appearance** | Everyone | Free themes + premiums; unlock counts shown from admin-configured RPM targets (see below). Turtle Grove uses a spinning turtle loader and slow turtles on Cats. |
+| **Appearance** | Everyone | Free themes + premiums; unlock counts shown from admin-configured RPM targets (see below). Gotham uses bats; Spiderman red/blue cats + webs; Hello Kitty pink cats; Turtle Grove turtles. |
 | **Premium theme unlock targets** | Admin / HR / CEO (`settingsThemeUnlocks`) | Per-theme RPM sent-as-agent and closed-as-closer thresholds (Gotham / Hello Kitty / Spiderman / Turtle Grove) |
 | **Change password** | Everyone | Current + new password |
 | **Display** | HR | Hide out / inactive employees |
@@ -201,10 +202,18 @@ Edits outside an employee’s **active employment period** are rejected (after d
 | **Tax rules** | HR / Finance | Rates (default 0% until configured) |
 | **Active sessions** | Raymond | List and revoke logged-in devices |
 | **Commission types** | Admin / CEO | Manage commission type rates |
-| **Sales clients & breaks** | RTM / Admin | Clients, devices, price tiers; break schedules |
+| **Sales clients** | RTM / Admin | Clients, devices, price tiers |
 | **Refresh** | Everyone | Full re-sync from Supabase |
 | **Notification routing** | Admin / RTM | Who gets alerts for leave, sales, bonuses, notes, **new registrations**; **Reset defaults** after upgrade |
 | **View as user** | Raymond | Test the app as any login |
+
+---
+
+## 8b. Breaks
+
+- **Overlay:** when a schedule matches you — **Start break now** (personal timer), **Close** (log dismissed), then at 0:00 ring + **End break**. Timer survives navigation; you cannot dismiss via nav while in progress.
+- **Breaks page:** day picker + American-name search; tables scoped for Agent / TL / OP. **RTM / Admin** create schedules (dialing default, units `HS-*`, roles, effective dates) and edit notifier extra roles.
+- Matching uses **Egypt (Cairo)** time and company scope.
 
 ---
 

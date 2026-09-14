@@ -40,7 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const month = useAppStore.getState().month;
     const data = await api<Record<string, unknown>>(
-      scopedPath("/status", month ? { month } : {}, getCompanyContext())
+      scopedPath("/status", month ? { month } : {}, getCompanyContext()),
+      { skipAuthRedirect: true }
     );
     setStatus(data);
     const authUser = (data.user as AuthUser) || null;

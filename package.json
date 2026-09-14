@@ -1,6 +1,6 @@
 {
   "name": "hangup-hr",
-  "version": "2.6.2",
+  "version": "2.7.0",
   "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
@@ -29,6 +29,7 @@
     "verify:native": "node scripts/verify-native-modules.js",
     "postinstall": "node scripts/postinstall-native.js",
     "fix:electron": "node node_modules/electron/install.js",
+    "test:breaks": "node scripts/test-break-schedules.js",
     "test:supabase": "node scripts/test-supabase.js",
     "test:training-payroll": "node scripts/test-training-payroll.js",
     "qa:training-payroll": "node scripts/qa-training-payroll-check.js",

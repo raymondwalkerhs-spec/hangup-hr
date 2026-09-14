@@ -44,6 +44,10 @@
 
 ### New in 2.4.9
 - **Turtle Grove** premium theme — moss/earth art; spinning turtle loader; slow turtles on `/cats`.
+- **Gotham Night** — bat silhouettes with wing motion on loaders / `/cats` (not cats).
+- **Spiderman** — scarlet/blue cats plus web accents on orbit and `/cats`.
+- **Hello Kitty** — pink cats kept.
+- **Breaks take system** — manage on Breaks page; Start/Close/End overlay; day reports by American name.
 - **Unlock tiers** — Gotham / Hello Kitty / Spiderman at 10 RPM sent or 10 closed; Turtle Grove at 15 sent or 15 closed (Admin/CEO/HR always unlocked).
 
 ### New in 2.4.8
@@ -470,8 +474,8 @@ Per-user exceptions inherit live role defaults from Access Control.
 ### Settings
 
 - Free themes plus premiums: **Gotham Night**, **Hello Kitty**, **Spiderman**, **Turtle Grove** — unlock thresholds configurable per theme (Admin/HR/CEO via **`settingsThemeUnlocks`**); defaults 10 sent or 10 closed (Turtle Grove 15); includes **Emerald** (jade on mint)
-- **Page loading overlay** — cat orbit by default; **spinning turtle** under Turtle Grove. `/cats` playground shows cats, or slow turtles on Turtle Grove
-- Federal holidays, tax rules, break schedules (timed pop-up reminders)
+- **Page loading overlay** — cat orbit by default; **bats** under Gotham; **spinning turtle** under Turtle Grove; Spiderman web accents. `/cats` playground matches theme critters
+- Federal holidays, tax rules; **break schedules + takes** on the Breaks page (timed Start/Close/End, dialing default audience)
 - Sales catalog (clients, products, prices)
 - Notification routing (includes **new agent registration** and **RPM duplicate phone / Member ID**)
 - Live 5s refresh on Dashboard, Payroll, Attendance, Sales log, and the notification bell (only the page you are on; unchanged data does not re-render)

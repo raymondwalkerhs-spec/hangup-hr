@@ -35,7 +35,7 @@ export function setCompanyContext(ctx: string) {
 
 export async function api<T = unknown>(
   path: string,
-  options: RequestInit & { skipSilentRefresh?: boolean } = {},
+  options: RequestInit & { skipSilentRefresh?: boolean; skipAuthRedirect?: boolean } = {},
   timeoutMs = 120000
 ): Promise<T> {
   const sessionId = getSessionId();
@@ -44,7 +44,7 @@ export async function api<T = unknown>(
   // Pull headers out so `...rest` cannot wipe Content-Type / session
   // (Checks + Q Feedback pass Idempotency-Key; that used to replace headers and
   // Express left req.body empty → "agentId required").
-  const { headers: optionHeaders, skipSilentRefresh: _skip, ...rest } = options;
+  const { headers: optionHeaders, skipSilentRefresh: _skip, skipAuthRedirect, ...rest } = options;
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
@@ -66,8 +66,14 @@ export async function api<T = unknown>(
     clearTimeout(timer);
   }
   if (res.status === 401) {
-    clearSessionId();
-    window.location.href = "/login";
+    // Never hard-navigate away during Google OAuth / setup — callers handle auth failures.
+    const onAuthSurface =
+      typeof window !== "undefined" &&
+      /\/(login|oauth-pending|setup-2fa|link-google)(\?|$)/.test(window.location.pathname);
+    if (!skipAuthRedirect && !onAuthSurface) {
+      clearSessionId();
+      window.location.href = "/login";
+    }
     throw new Error("Unauthorized");
   }
   const data = await res.json().catch(() => ({}));

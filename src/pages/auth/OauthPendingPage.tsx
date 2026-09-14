@@ -43,12 +43,11 @@ export function OauthPendingPage() {
     setError(null);
     setLoading(true);
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (pollRef.current) clearInterval(pollRef.current);
     try {
       if (finishMode === "link") {
         const data = await api<{ needsMfaEnroll?: boolean; needsSetup?: boolean }>(
           "/auth/google/complete-link",
-          { method: "POST", body: JSON.stringify({ code: trimmed }) },
+          { method: "POST", body: JSON.stringify({ code: trimmed }), skipAuthRedirect: true },
           25000
         );
         await refreshStatus().catch(() => null);
@@ -70,12 +69,14 @@ export function OauthPendingPage() {
           {
             method: "POST",
             body: JSON.stringify({ code: trimmed }),
+            skipAuthRedirect: true,
           },
           25000
         );
         setSessionId(data.sessionId);
         const desktop = getHrDesktop();
         desktop?.setSession?.(data.sessionId);
+        // Avoid hard /login bounce if status races the new session.
         await refreshStatus().catch(() => null);
         try {
           sessionStorage.removeItem("hr_oauth_mode");
@@ -104,14 +105,13 @@ export function OauthPendingPage() {
       if (mode === "link") {
         const data = await api<{ needsMfaEnroll?: boolean }>(
           "/auth/google/sync-link",
-          { method: "POST", body: "{}" },
+          { method: "POST", body: "{}", skipAuthRedirect: true },
           25000
         );
         await refreshStatus().catch(() => null);
         if (data.needsMfaEnroll) navigate("/setup-2fa", { replace: true });
         else navigate("/dashboard", { replace: true });
       } else {
-        // Cold login with "already linked" on wrong path — send user to password → link
         setError("Sign in with password first, then link Google from the setup screen.");
         setLoading(false);
         finishingRef.current = false;
@@ -160,7 +160,7 @@ export function OauthPendingPage() {
           error?: string | null;
           syncLinked?: boolean;
           mode?: string;
-        }>("/auth/oauth-poll", { method: "GET" }, 8000);
+        }>("/auth/oauth-poll", { method: "GET", skipAuthRedirect: true }, 8000);
         if (data?.syncLinked) {
           await syncLinkedIdentity();
           return;
@@ -198,7 +198,7 @@ export function OauthPendingPage() {
       title="Waiting for Google"
       subtitle="Finish signing in with Google in your browser, then return here — this window continues automatically."
       error={error}
-      loading={loading && !timedOut}
+      loading={loading && !timedOut && !error}
       timedOut={timedOut}
       onRetry={() => {
         setTimedOut(false);
@@ -209,18 +209,24 @@ export function OauthPendingPage() {
       }}
     >
       <p className={styles.muted}>
-        After Google, your browser should open a Hangup “Signed in” page. Come back to this app window. If it still
-        waits, paste the <code>code</code> from the browser address bar below.
+        Finish Google in your browser, then return to this window — Hangup Portal continues automatically.
+        If nothing happens, use Cancel and try again, or paste the code from the browser address bar below.
       </p>
       <label className={styles.field}>
-        <span>OAuth code (manual fallback)</span>
+        <span>Sign-in code (optional)</span>
         <input
           value={manualCode}
           onChange={(e) => setManualCode(e.target.value)}
-          placeholder="Paste code= value from the URL"
+          placeholder="Only if the app is still waiting"
         />
       </label>
-      <Button onClick={() => finish(manualCode.trim())} disabled={!manualCode.trim()}>
+      <Button
+        onClick={() => {
+          finishingRef.current = false;
+          finish(manualCode.trim());
+        }}
+        disabled={!manualCode.trim()}
+      >
         Submit code
       </Button>
       <Button

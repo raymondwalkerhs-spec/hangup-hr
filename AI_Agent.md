@@ -21,9 +21,11 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.6.2` (`package.json` → `version`)
-- **Previous:** `2.6.1` (broken load — do not ship; use 2.6.2)
-- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.6.0`); Supabase zip on third-segment (`2.6.1` → `2.6.2`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Current version:** `2.7.0` (`package.json` → `version`)
+- **Previous:** `2.6.2` (auth-bridge hotfix)
+- **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.7.0`); Supabase zip on third-segment patches. Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+- **Breaks:** Schedules + notifier roles on **Breaks page** (RTM/Admin). Overlay Start/Close/End with `break_takes`. Cairo matching, company column, `HS-*` units. Tests: `npm run test:breaks`.
+- **Premium critters:** Gotham → bats; Spiderman → red/blue cats + webs; Hello Kitty → pink cats; Turtles → turtle stage.
 - **Office PO:** `/office-po` — prediction by AvgAuto headcount (excludes `employees.wfh`) + days-in-scope; permissions `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`.
 - **Loans schedule v2:** `loan_schedule_lines` + skip/defer; dual-read with legacy counters; `loan_month_overrides` for adjust payment; backfill `scripts/backfill-loan-schedules.js`.
 - **Auth MFA/Google:** `AUTH_BACKEND=legacy|dual` (default legacy). Soft `pending_setup` satisfied by MFA **or** Google; forgot password = username+TOTP; OAuth loopback `127.0.0.1:3847` + poll. Ops: [`docs/AUTH_MFA_OPS.md`](docs/AUTH_MFA_OPS.md). Protocol `hangup-portal://`.
