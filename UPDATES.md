@@ -1,6 +1,6 @@
 ## v2.6.1 release checklist
 
-**Shipping 2026-09-14 (patch from 2.6.0):** Auth/Office PO/loans gap fixes + WFH AvgAuto exclusion. Target: GitHub [v2.6.1](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.1) **Latest** + Supabase `app_versions` `is_current`.
+**Shipped 2026-09-14 (patch from 2.6.0):** GitHub [v2.6.1](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.1) is **Latest**. Supabase `app_versions` `2.6.1` is `is_current` with `min_compatible_version=1.0.0`.
 
 ### Shipped in 2.6.1
 - WFH employee flag → excluded from Office PO AvgAuto
@@ -12,13 +12,13 @@
 - [x] Bump `package.json` to **2.6.1**; docs
 - [x] Migration `20260914_employee_wfh.sql`; Kate marked WFH
 - [x] Backfill loan schedules: `node scripts/backfill-loan-schedules.js`
-- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+- [x] Release CI + Latest + `publish-app-version.js` + web installer
 
 ---
 
 ## v2.6.0 release checklist
 
-**Shipped 2026-09-13 (installer + patch from 2.5.0):** GitHub [v2.6.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.0) is **Latest**. Supabase `app_versions` `2.6.0` is `is_current` with `min_compatible_version=1.0.0`.
+**Shipped 2026-09-13 (installer + patch from 2.5.0):** GitHub [v2.6.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.0). Succeeded by **2.6.1** as Latest.
 
 ### Shipped in 2.6.0
 - Office PO planner (catalog, headcount/days overrides, purchases, notifications)
