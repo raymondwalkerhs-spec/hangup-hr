@@ -4,9 +4,9 @@
 
 **Hangup Portal** is a Windows desktop application for employee records, attendance, payroll, documents, and HR operations. The live backend is **Supabase** (`DATA_BACKEND=supabase`). Each PC keeps a **local SQLite cache** for fast reads; every edit is saved to Supabase and re-synced automatically.
 
-**Current version:** `2.6.1`
+**Current version:** `2.6.2`
 
-**Latest installer:** GitHub release [v2.6.1](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.1) (`Hangup-Portal-Setup-2.6.1.exe`). Patch from 2.6.0: `Hangup-Portal-2.6.1-win-x64-patch-from-2.6.0.zip`. Same-line hotfixes after this baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
+**Latest installer:** GitHub release [v2.6.2](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.2) (`Hangup-Portal-Setup-2.6.2.exe`). Patch from 2.6.1: `Hangup-Portal-2.6.2-win-x64-patch-from-2.6.1.zip`. Same-line hotfixes after this baseline may be Supabase zips — see [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
 
 | Document | Purpose |
 |----------|---------|

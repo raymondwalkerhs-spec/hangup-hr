@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.6.1 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.6.2 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -20,6 +20,9 @@
 | **Governance** | Role-based access, field-level sales permissions, full audit trail |
 
 **One-line pitch:** A fast, offline-friendly desktop HR system that keeps workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
+
+### New in 2.6.2
+- **Hotfix** — app load crash from missing auth MFA helpers (use 2.6.2, not 2.6.1).
 
 ### New in 2.6.1
 - **WFH agents** — employee flag excludes permanent WFH from Office PO AvgAuto (office supply headcount).

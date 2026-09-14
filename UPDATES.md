@@ -1,6 +1,16 @@
+## v2.6.2 release checklist
+
+**Hotfix 2026-09-14 (from 2.6.1):** Restores auth-bridge MFA helpers that crashed app load. Replaces broken **2.6.1** as GitHub Latest + Supabase `is_current`.
+
+### Checklist
+- [x] Bump `package.json` to **2.6.2**; docs
+- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+
+---
+
 ## v2.6.1 release checklist
 
-**Shipped 2026-09-14 (patch from 2.6.0):** GitHub [v2.6.1](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.1) is **Latest**. Supabase `app_versions` `2.6.1` is `is_current` with `min_compatible_version=1.0.0`.
+**Shipped 2026-09-14 then superseded by 2.6.2:** Auth/Office PO/loans gap fixes + WFH AvgAuto. **2.6.1 installer crashed on load** (`verifyTotpForUser is not defined`) — use **2.6.2**.
 
 ### Shipped in 2.6.1
 - WFH employee flag → excluded from Office PO AvgAuto

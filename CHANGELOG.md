@@ -2,6 +2,11 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [2.6.2] — 2026-09-14
+
+### Fixed
+- **Startup crash** — restored missing `verifyTotpForUser` / `createAuthSessionWithoutPassword` / `resetPasswordWithTotp` in `lib/auth-bridge.js` (ReferenceError on load in 2.6.1).
+
 ## [2.6.1] — 2026-09-14
 
 ### Added
