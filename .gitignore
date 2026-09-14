@@ -28,6 +28,9 @@ cache/
 *.log
 credentials/*.json
 !credentials/.gitkeep
+Asset/client_secret*.json
+Asset/*apps.googleusercontent.com.json
+Asset/client_secret2*.json
 cursor_chat_hr_app_version_management.json
 cursor_hr_app_version_management.md
 # Local release zips (ship via GitHub Releases only)

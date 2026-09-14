@@ -233,6 +233,8 @@ async function probeState(db) {
   state.loan_month_overrides = !loanOv.error;
   const authCols = await db.from("app_users").select("auth_user_id,google_email,mfa_required").limit(1);
   state.app_users_auth_google_mfa = !authCols.error;
+  const wfhCol = await db.from("employees").select("wfh").limit(1);
+  state.employee_wfh = !wfhCol.error;
   return state;
 }
 
@@ -599,6 +601,9 @@ function filesToApply(state) {
   }
   if (!state.app_users_auth_google_mfa) {
     files.push("20260913_app_users_auth_google_mfa.sql");
+  }
+  if (!state.employee_wfh) {
+    files.push("20260914_employee_wfh.sql");
   }
   return files;
 }

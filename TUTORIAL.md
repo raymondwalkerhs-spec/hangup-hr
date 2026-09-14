@@ -3,7 +3,7 @@
 > **Data backend:** Supabase only. **Do not use Google Sheets.** See [`LEGACY_GOOGLE_SHEETS.md`](LEGACY_GOOGLE_SHEETS.md).
 
 Quick guide for daily use of the **Hangup Portal** desktop app.  
-**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.6.0`
+**Backend:** Supabase · **Local cache:** SQLite on your PC · **Version:** `2.6.1`
 
 For a feature overview suitable for presentations, see [`FEATURES.md`](FEATURES.md).  
 For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LOG.md).
@@ -22,7 +22,7 @@ For sales log, filters, and permissions in detail, see [`SALES_LOG.md`](SALES_LO
 | Issue | What to do |
 |-------|------------|
 | No access assigned | Raymond must set your **role** in **Users** |
-| Forgot password | Contact Raymond, or use **Settings → Change password** if you know the current one |
+| Forgot password | Login → **Forgot password?** → username + Authenticator code + new password. If you have no Authenticator yet, contact HR. |
 | Version blocked | Click **Update now** (or install the latest EXE). Patches never raise the minimum version. |
 | Update available (login or in-app) | Click **Update now** — small zip on the same `2.4.x` line after 2.4.1; Setup.exe when the line changes. See [`PUSH_UPDATE.md`](PUSH_UPDATE.md). |
 
@@ -116,7 +116,7 @@ Edits outside an employee’s **active employment period** are rejected (after d
 1. Open **Office PO** (Sales group) — pick month.  
 2. **Catalog** — add items (employee-scaled or office-fixed; monthly / every N months / one-time).  
 3. Set **Overrides** if needed (avg headcount or days in scope; days override requires a note).  
-4. **Generate / refresh** — creates predicted lines (never overwrites bought/cancelled).  
+4. **Generate / refresh** — creates predicted lines (never overwrites bought/cancelled). **AvgAuto** skips employees marked **WFH agent** (Employee → Payroll).  
 5. **Buy** records a purchase (qty + optional order ref); postpone/cancel as needed. Variance badges flag over/under buy.
 
 ---

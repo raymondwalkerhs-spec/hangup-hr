@@ -46,6 +46,39 @@ function createApp() {
       "[startup] public/dist/index.html is missing. The login screen will fall back to the legacy page. Run npm run build:web."
     );
   }
+
+  // Google OAuth browser callback (public) — stores code for the Electron window to poll.
+  const oauthPending = require("./lib/oauth-pending-store");
+  app.get("/auth/callback", (req, res) => {
+    const code = String(req.query.code || "").trim();
+    const error = String(req.query.error_description || req.query.error || "").trim();
+    const modeQ = String(req.query.mode || "").trim();
+    const modeCookie = String(req.cookies?.hr_oauth_mode || "").trim();
+    const mode = modeQ || modeCookie || oauthPending.getPendingMode() || "cold";
+    if (code || error) {
+      oauthPending.completeOauthFromCallback({ code, error, mode });
+    }
+    const already = error && /already linked/i.test(error);
+    res.status(200).type("html").send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Hangup Portal</title>
+<style>
+  body{font-family:Segoe UI,system-ui,sans-serif;background:#1a1520;color:#f6f1ef;
+  display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+  .box{max-width:28rem;padding:2rem;text-align:center;line-height:1.45}
+</style></head><body><div class="box">
+  <h1>${error && !already ? "Google sign-in failed" : "Return to Hangup Portal"}</h1>
+  <p>${
+    already
+      ? "Google is already connected. Go back to the Hangup window — it will finish linking automatically."
+      : error
+        ? error
+        : "Signed in with Google. Return to the Hangup Portal window — it should continue automatically. You can close this browser tab."
+  }</p>
+</div>
+<script>try{window.close()}catch(e){}</script>
+</body></html>`);
+  });
+
   app.use("/api", apiRoutes);
   app.use("/api/supabase", require("./routes/supabase"));
   // Start the shared Supabase Realtime -> SSE subscription for live attendance
@@ -57,6 +90,11 @@ function createApp() {
   }
   try {
     require("./lib/training-phase-outcome-notify").startTrainingPhaseOutcomeNotifyLoop();
+    try {
+      require("./lib/office-po-overdue-notify").startOfficePoOverdueNotifyLoop();
+    } catch (err) {
+      console.warn("[office-po-overdue] loop start failed:", err.message);
+    }
   } catch (e) {
     console.warn("[startup] training phase outcome notify unavailable:", e?.message || e);
   }
@@ -107,9 +145,12 @@ function createApp() {
     res.sendFile(path.join(__dirname, "public", "index.html"));
   });
 
-  // SPA fallback for client-side routes (React Router)
+  // SPA fallback for React Router paths (auth gates + app pages).
+  // Keep this after static + /api so real files and APIs win first.
   if (hasReactBuild) {
-    app.get(/^\/(dashboard|announcements|cats|employees|org|equipment|interviews|training|coaching|attendance|breaks|requests|meeting-requests|it-requests|payroll|salaries|bonuses|deductions|loans|loan-approvals|payslip|sales|team-dashboard|costs|reports|analytics|users|access-control|sales-permissions|sales-log-columns|rules|changes|settings|backup|offboarding|clearance|recycle)(\/.*)?$/, (_req, res) => {
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api")) return next();
+      if (path.extname(req.path)) return next();
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

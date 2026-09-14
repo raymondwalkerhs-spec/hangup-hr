@@ -52,18 +52,36 @@ export function LinkGooglePage() {
     setLoading(true);
     armTimeout();
     try {
-      const data = await api<{ url: string }>("/auth/google/start-link", {
+      const data = await api<{
+        url?: string;
+        alreadyLinked?: boolean;
+        needsMfaEnroll?: boolean;
+        needsSetup?: boolean;
+        needsGoogleLink?: boolean;
+      }>("/auth/google/start-link", {
         method: "POST",
         body: JSON.stringify({ password }),
       }, 25000);
+      if (data.alreadyLinked || (data.needsGoogleLink === false && !data.url)) {
+        await refreshStatus().catch(() => null);
+        if (data.needsMfaEnroll) navigate("/setup-2fa", { replace: true });
+        else navigate("/dashboard", { replace: true });
+        return;
+      }
       setWaitingBrowser(true);
+      try {
+        sessionStorage.setItem("hr_oauth_mode", "link");
+        document.cookie = "hr_oauth_mode=link; path=/; max-age=600; SameSite=Lax";
+      } catch {
+        /* ignore */
+      }
       const desktop = getHrDesktop() as { openExternal?: (url: string) => Promise<void> } | null;
       if (desktop?.openExternal) {
-        await desktop.openExternal(data.url);
+        await desktop.openExternal(data.url!);
       } else {
         window.open(data.url, "_blank", "noopener,noreferrer");
       }
-      navigate("/oauth-pending", { replace: true, state: { mode: "link" } });
+      navigate("/oauth-pending?mode=link", { replace: true, state: { mode: "link" } });
     } catch (err) {
       setError((err as Error).message);
       setWaitingBrowser(false);
@@ -103,14 +121,15 @@ export function LinkGooglePage() {
   return (
     <AuthSetupShell
       title="Link Google"
-      subtitle="Confirm your Gmail with Google. The address from Google becomes your confirmed email on the employee card. Registration email stays claimed-only."
+      subtitle="Confirm your Gmail with Google. That address becomes the email on your employee card."
+      step={3}
       error={error}
       loading={loading || waitingBrowser}
       timedOut={timedOut}
       onRetry={startLink}
     >
       <p className={styles.muted}>
-        Use the same Google account you want for future Sign in with Google. Unlinked accounts cannot cold-login.
+        Use the Google account you want for Sign in with Google next time.
       </p>
       <label className={styles.field}>
         <span>Confirm password</span>

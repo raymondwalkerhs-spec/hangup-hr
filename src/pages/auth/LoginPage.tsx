@@ -5,6 +5,7 @@ import { api, setSessionId } from "@/api/client";
 import { canAccessPage, firstAllowedPage, type StatusUser } from "@/lib/nav-access";
 import { useAuth } from "@/app/AuthProvider";
 import { Button } from "@/ui/Button";
+import { TotpCodeInput } from "@/ui/TotpCodeInput";
 import {
   applyDesktopUpdate,
   canApplyDesktopUpdate,
@@ -282,9 +283,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { refreshStatus } = useAuth();
-  const [view, setView] = useState<"login" | "register">("login");
+  const [view, setView] = useState<"login" | "register" | "forgot">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [forgotTotp, setForgotTotp] = useState("");
+  const [forgotNewPassword, setForgotNewPassword] = useState("");
+  const [forgotConfirm, setForgotConfirm] = useState("");
+  const [forgotDone, setForgotDone] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [regStep, setRegStep] = useState(1);
@@ -439,7 +444,50 @@ export function LoginPage() {
       } else {
         window.open(data.url, "_blank", "noopener,noreferrer");
       }
-      navigate("/oauth-pending", { replace: true, state: { mode: "cold" } });
+      try {
+        sessionStorage.setItem("hr_oauth_mode", "cold");
+        document.cookie = "hr_oauth_mode=cold; path=/; max-age=600; SameSite=Lax";
+      } catch {
+        /* ignore */
+      }
+      navigate("/oauth-pending?mode=cold", { replace: true, state: { mode: "cold" } });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (forgotNewPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (forgotNewPassword !== forgotConfirm) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+    if (forgotTotp.replace(/\D/g, "").length < 6) {
+      setError("Enter your 6-digit Authenticator code.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await api("/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({
+          username: username.trim(),
+          totpCode: forgotTotp.replace(/\D/g, "").slice(0, 6),
+          newPassword: forgotNewPassword,
+        }),
+      });
+      setForgotDone(true);
+      setPassword("");
+      setForgotTotp("");
+      setForgotNewPassword("");
+      setForgotConfirm("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -573,6 +621,22 @@ export function LoginPage() {
                 <span className={styles.btnDnaText}>{loading ? "Signing in…" : "Sign in"}</span>
               </Button>
             </form>
+            <p style={{ margin: "0.35rem 0 0.75rem", textAlign: "right" }}>
+              <button
+                type="button"
+                className={styles.link}
+                onClick={() => {
+                  setView("forgot");
+                  setError("");
+                  setForgotDone(false);
+                  setForgotTotp("");
+                  setForgotNewPassword("");
+                  setForgotConfirm("");
+                }}
+              >
+                Forgot password?
+              </button>
+            </p>
             <Button
               type="button"
               variant="secondary"
@@ -583,7 +647,7 @@ export function LoginPage() {
               Sign in with Google
             </Button>
             <p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.35rem" }}>
-              Google works only after you link it once (password login → Link Google). No Authenticator code at login.
+              Available after you link Google once from your account.
             </p>
             <p className="muted">
               New agent?{" "}
@@ -592,6 +656,89 @@ export function LoginPage() {
               </button>
             </p>
             {appVersion && <p className={styles.versionLine}>App version {appVersion}</p>}
+          </>
+        ) : view === "forgot" ? (
+          <>
+            <h2>Reset password</h2>
+            {forgotDone ? (
+              <>
+                <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: 1.45 }}>
+                  Password updated. Sign in with your username and new password.
+                </p>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setView("login");
+                    setError("");
+                    setForgotDone(false);
+                  }}
+                >
+                  ← Back to sign in
+                </Button>
+              </>
+            ) : (
+              <form onSubmit={handleForgotPassword} className={styles.form}>
+                <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: 1.45 }}>
+                  Enter your username and Authenticator code, then choose a new password.
+                </p>
+                <label className={styles.field}>
+                  <span>Username</span>
+                  <input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Authenticator code</span>
+                  <TotpCodeInput
+                    value={forgotTotp}
+                    onChange={setForgotTotp}
+                    disabled={loading}
+                    aria-label="Authenticator code"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>New password</span>
+                  <input
+                    type="password"
+                    value={forgotNewPassword}
+                    onChange={(e) => setForgotNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Confirm new password</span>
+                  <input
+                    type="password"
+                    value={forgotConfirm}
+                    onChange={(e) => setForgotConfirm(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </label>
+                {error && <p className={styles.error}>{error}</p>}
+                <Button type="submit" className={styles.submit} disabled={loading || Boolean(loginBlocked)}>
+                  {loading ? "Saving…" : "Reset password"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className={styles.submit}
+                  onClick={() => {
+                    setView("login");
+                    setError("");
+                  }}
+                >
+                  ← Back to sign in
+                </Button>
+              </form>
+            )}
           </>
         ) : (
           <>

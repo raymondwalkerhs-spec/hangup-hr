@@ -87,7 +87,8 @@ async function computeAvgAuto(company, ym) {
     store.getEmployees({ hideOut: false }),
     company
   );
-  const ids = new Set(employees.map((e) => e.id));
+  // Permanent WFH agents do not consume office supplies — exclude from AvgAuto.
+  const ids = new Set(employees.filter((e) => !e.wfh).map((e) => e.id));
   let periods = [];
   try {
     const hrms = require("../lib/hrms-repo");

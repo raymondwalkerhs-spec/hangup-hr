@@ -21,12 +21,12 @@ Hangup Portal. Keep it updated when architecture, release process, or key decisi
 - **Hangup Portal** — Windows **Electron + Express** desktop HR app (installer + portable EXE only).
 - **Workspace:** repo root (e.g. `F:\download app hr`) — **single codebase**; no `hr-app/` mirror
 - **Product name in builds:** `Hangup Portal` (`package.json` → `build.productName`)
-- **Current version:** `2.6.0` (`package.json` → `version`)
-- **Previous:** `2.5.0`
+- **Current version:** `2.6.1` (`package.json` → `version`)
+- **Previous:** `2.6.0`
 - **Updates:** GitHub Setup.exe on `major.minor` change or optional installer ships (`2.6.0`); Supabase zip on third-segment (`2.6.0` → `2.6.1`). Pipeline: [`PUSH_UPDATE.md`](PUSH_UPDATE.md).
-- **Office PO:** `/office-po` — prediction by AvgAuto headcount + days-in-scope; permissions `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`.
+- **Office PO:** `/office-po` — prediction by AvgAuto headcount (excludes `employees.wfh`) + days-in-scope; permissions `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`.
 - **Loans schedule v2:** `loan_schedule_lines` + skip/defer; dual-read with legacy counters; `loan_month_overrides` for adjust payment; backfill `scripts/backfill-loan-schedules.js`.
-- **Auth MFA/Google:** `AUTH_BACKEND=legacy|dual` (default legacy). Soft pending_setup for MFA + Google link; no OTP at login. Ops: [`docs/AUTH_MFA_OPS.md`](docs/AUTH_MFA_OPS.md). Protocol `hangup-portal://`.
+- **Auth MFA/Google:** `AUTH_BACKEND=legacy|dual` (default legacy). Soft `pending_setup` satisfied by MFA **or** Google; forgot password = username+TOTP; OAuth loopback `127.0.0.1:3847` + poll. Ops: [`docs/AUTH_MFA_OPS.md`](docs/AUTH_MFA_OPS.md). Protocol `hangup-portal://`.
 - **Training:** local dates; MLA=`sales` / HS-2=`rpm_sales` phase counts; Quarter Day-Off unpaid = **0.75**; Monday Cairo `training_phase_outcome_due`. Clear temporary extra_days: `20260913_clear_training_quarter_extra_days.sql`.
 - **Premium themes:** Per-theme RPM sent/closed unlock targets in `app_config.themeUnlockThresholds` (defaults: Gotham/Hello Kitty/Spiderman **10**, Turtle Grove **15**). Always unlocked without sales: **admin, ceo, hr, it, finance, quality, checker, rtm**. Settings admin card gated by **`settingsThemeUnlocks`**.
 - **Sales Rankings:** `GET /api/reports/sales-rankings` + Reports tab; gated by **`viewSalesRankings`** (`lib/sales-rankings-report.js`). Company-scoped roster/attendance.
@@ -88,8 +88,8 @@ to Supabase via Express, then re-sync.
 
 - **Users admin** (`/api/admin/users`, **Users** sidebar tab): **Mark and Raymond** — activate inactive employee logins; Raymond manages all users.
 - **Changes tab:** `admin` + `ceo` only (`canViewLogs`).
-- **Forgot password:** not implemented; Raymond resets via **Users → Edit**. `app_users.email` is for
-  future email reset.
+- **Forgot password:** self-service on login — username + Authenticator OTP → new password (no email).
+  Admin **Users → Reset password** is for lost phone / no MFA. `app_users.email` is not used for reset.
 
 ---
 

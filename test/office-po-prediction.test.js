@@ -14,10 +14,14 @@ function assert(cond, msg) {
     { employeeId: "A", startDate: "2025-01-01", endDate: null },
     { employeeId: "B", startDate: "2026-09-10", endDate: null },
     { employeeId: "C", startDate: "2024-01-01", endDate: "2026-08-31" },
+    { employeeId: "WFH1", startDate: "2025-01-01", endDate: null },
   ];
-  const avg = pred.avgEmployeesAuto("2026-09", periods);
-  // A + B active; B is new starter → 2 + 0.5 = 2.5
-  assert(avg === 2.5, `expected 2.5 got ${avg}`);
+  const avgAll = pred.avgEmployeesAuto("2026-09", periods);
+  assert(avgAll === 3.5, `expected 3.5 with WFH included got ${avgAll}`);
+  const officeOnly = new Set(["A", "B", "C"]);
+  const avgExWfh = pred.avgEmployeesAuto("2026-09", periods, officeOnly);
+  // A + B active; B starter → 2.5 (WFH1 excluded via employeeIds)
+  assert(avgExWfh === 2.5, `expected 2.5 excluding WFH got ${avgExWfh}`);
 }
 
 {

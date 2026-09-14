@@ -4,7 +4,7 @@
 
 *Board-ready summary of what the application does today.*
 
-**Version:** 2.6.0 · **Platform:** Windows + macOS desktop (Electron)
+**Version:** 2.6.1 · **Platform:** Windows + macOS desktop (Electron)
 
 ---
 
@@ -21,10 +21,15 @@
 
 **One-line pitch:** A fast, offline-friendly desktop HR system that keeps workforce, attendance, and payroll in sync with the cloud — built for real operations teams, not generic HR software.
 
+### New in 2.6.1
+- **WFH agents** — employee flag excludes permanent WFH from Office PO AvgAuto (office supply headcount).
+- **Auth recovery** — forgot password via Authenticator OTP; Google OAuth loopback + identity sync; MFA **or** Google completes setup.
+- **Office PO hardening** — RLS deny-all, overdue notifies, clearer catalog/purchase UI.
+
 ### New in 2.6.0
 - **Office PO** — predict and track office purchases by headcount and working days (Sales → Office PO).
 - **Loan schedules** — skip/defer installments; adjust payment for a salary month; dual-read with legacy counters.
-- **Auth hardening (optional dual)** — MFA enroll + Link Google after password login; no OTP at login (`AUTH_BACKEND`).
+- **Auth hardening (optional dual)** — MFA enroll + Link Google after password login; no OTP at daily login; forgot password uses Authenticator (`AUTH_BACKEND`).
 - **Training** — correct MLA vs RPM sales for phases; Quarter Day-Off pays 0.75; Monday HR phase-outcome reminders.
 - **Bonus transfer pickers** — role-scoped deduct-from / pay-to lists.
 
@@ -397,7 +402,7 @@ Per-user exceptions inherit live role defaults from Access Control.
 - **Expenses / receipts** — upload, status workflow (paid, pending, on hold, archived)
 - **Petty cash** — fund balance + ledger (deposits editable after posting)
 - **Monthly bills** — landline, internet, utilities, etc.
-- **Office PO** — catalog + monthly predicted qty/cost from AvgAuto headcount and days-in-scope; purchases with variance; Access Control keys `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`
+- **Office PO** — catalog + monthly predicted qty/cost from AvgAuto headcount (excludes employees marked **WFH**) and days-in-scope; purchases with variance; Access Control keys `viewOfficePo` / `manageOfficePoItems` / `editOfficePoPurchases`
 - Access: finance role, Mark, Phoebe, Raymond; HR can submit expenses
 - Full costs view gated by Access Control
 

@@ -1,404 +1,426 @@
-/* Premium themes: backgrounds, chrome, tables, forms, contrast */
-
-/* —— Shared layered backdrop —— */
-html[data-theme="gotham"] body,
-html[data-theme="hello-kitty"] body,
-html[data-theme="spiderman"] body,
-html[data-theme="turtles"] body {
-  background-image: none;
-  isolation: isolate;
-}
-
-html[data-theme="gotham"] body::before,
-html[data-theme="hello-kitty"] body::before,
-html[data-theme="spiderman"] body::before,
-html[data-theme="turtles"] body::before,
-html[data-theme="gotham"] body::after,
-html[data-theme="hello-kitty"] body::after,
-html[data-theme="spiderman"] body::after,
-html[data-theme="turtles"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-html[data-theme="gotham"] #root,
-html[data-theme="hello-kitty"] #root,
-html[data-theme="spiderman"] #root,
-html[data-theme="turtles"] #root {
-  position: relative;
-  z-index: 1;
-  background: transparent;
-}
-
-/* Opaque shell was covering body::before/::after art — keep chrome (sidebar/topbar/cards) solid */
-html[data-theme="gotham"] [data-ui="shell"],
-html[data-theme="hello-kitty"] [data-ui="shell"],
-html[data-theme="spiderman"] [data-ui="shell"],
-html[data-theme="turtles"] [data-ui="shell"] {
-  background: transparent;
-}
-
-/* —— Gotham —— */
-html[data-theme="gotham"] body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 60% 42% at 50% 0%, rgba(240, 193, 75, 0.16), transparent 68%),
-    linear-gradient(180deg, #04060c 0%, #070b16 48%, #04060c 100%);
-  letter-spacing: 0.01em;
-}
-
-html[data-theme="gotham"] body::before {
-  background: url("/img/themes/gotham-skyline.svg") bottom center / 100% min(62vh, 520px) no-repeat;
-  opacity: 1;
-}
-
-html[data-theme="gotham"] body::after {
-  background:
-    repeating-linear-gradient(
-      105deg,
-      transparent 0,
-      transparent 2px,
-      rgba(180, 200, 255, 0.04) 2px,
-      rgba(180, 200, 255, 0.04) 3px
-    ),
-    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(0, 0, 0, 0.55), transparent 70%),
-    linear-gradient(180deg, transparent 35%, var(--theme-fog) 100%);
-  opacity: 0.65;
-  animation: gotham-rain 8s linear infinite;
-}
-
-@keyframes gotham-rain {
-  from { background-position: 0 0, 0 0, 0 0; }
-  to { background-position: 40px 120px, 0 0, 0 0; }
-}
-
-/* —— Hello Kitty —— */
-html[data-theme="hello-kitty"] body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 80% 50% at 15% 8%, rgba(255, 183, 213, 0.5), transparent 55%),
-    radial-gradient(ellipse 70% 45% at 92% 85%, rgba(255, 143, 191, 0.32), transparent 50%),
-    linear-gradient(165deg, #fff5f9 0%, #ffeaf3 52%, #ffe0ec 100%);
-  letter-spacing: 0.015em;
-}
-
-html[data-theme="hello-kitty"] body::before {
-  background: url("/img/themes/hello-kitty-tile.svg") 0 0 / 220px 220px repeat;
-  opacity: 0.65;
-}
-
-html[data-theme="hello-kitty"] body::after {
-  background:
-    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.75) 0 2px, transparent 3px),
-    radial-gradient(circle at 72% 38%, rgba(255, 143, 191, 0.55) 0 1.5px, transparent 3px),
-    radial-gradient(circle at 42% 78%, rgba(255, 255, 255, 0.65) 0 2px, transparent 3px),
-    radial-gradient(circle at 88% 12%, rgba(255, 77, 141, 0.35) 0 1.5px, transparent 3px);
-  animation: kitty-sparkle 6s ease-in-out infinite alternate;
-  opacity: 0.85;
-}
-
-@keyframes kitty-sparkle {
-  from { transform: translateY(0) scale(1); opacity: 0.65; }
-  to { transform: translateY(-10px) scale(1.03); opacity: 1; }
-}
-
-/* —— Spiderman —— */
-html[data-theme="spiderman"] body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 50% 40% at 20% 0%, rgba(225, 29, 46, 0.22), transparent 60%),
-    radial-gradient(ellipse 55% 45% at 90% 10%, rgba(37, 99, 235, 0.28), transparent 55%),
-    linear-gradient(180deg, #070b18 0%, #0c1430 50%, #070b18 100%);
-}
-
-html[data-theme="spiderman"] body::before {
-  background: url("/img/themes/spiderman-web.svg") center / 280px 280px repeat;
-  opacity: 0.55;
-}
-
-html[data-theme="spiderman"] body::after {
-  background:
-    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(0, 0, 0, 0.5), transparent 65%),
-    linear-gradient(180deg, transparent 40%, var(--theme-fog) 100%);
-  animation: spidey-web-shimmer 10s ease-in-out infinite alternate;
-  opacity: 0.7;
-}
-
-@keyframes spidey-web-shimmer {
-  from { opacity: 0.55; }
-  to { opacity: 0.85; }
-}
-
-/* —— Turtle Grove —— */
-html[data-theme="turtles"] body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 55% 40% at 20% 0%, rgba(61, 155, 106, 0.22), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 88% 8%, rgba(196, 165, 116, 0.16), transparent 55%),
-    linear-gradient(180deg, #0a1610 0%, #0e2218 48%, #0a1610 100%);
-}
-
-html[data-theme="turtles"] body::before {
-  background:
-    url("/img/themes/turtles-leaf-tile.svg") 0 0 / 180px 180px repeat,
-    url("/img/themes/turtles-grove.svg") bottom center / 100% min(58vh, 480px) no-repeat;
-  opacity: 0.85;
-}
-
-html[data-theme="turtles"] body::after {
-  background:
-    radial-gradient(ellipse 70% 45% at 50% 100%, rgba(0, 0, 0, 0.45), transparent 68%),
-    linear-gradient(180deg, transparent 38%, var(--theme-fog) 100%);
-  animation: grove-breathe 12s ease-in-out infinite alternate;
-  opacity: 0.72;
-}
-
-@keyframes grove-breathe {
-  from { opacity: 0.55; }
-  to { opacity: 0.88; }
-}
-
-/* —— Chrome: sidebar / dock —— */
-html[data-theme="gotham"] [data-chrome="sidebar"] {
-  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.55), inset -1px 0 0 rgba(240, 193, 75, 0.12);
-}
-html[data-theme="gotham"] [data-chrome="sidebar"] a[aria-current="page"] {
-  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 18px color-mix(in srgb, var(--theme-glow) 45%, transparent);
-}
-html[data-theme="gotham"] [data-chrome="dock"] {
-  border-color: rgba(240, 193, 75, 0.25);
-  border-radius: 12px;
-  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.45), 0 0 24px rgba(240, 193, 75, 0.1);
-}
-html[data-theme="gotham"] [data-chrome="dock"] button:hover {
-  box-shadow: 0 0 0 1px rgba(240, 193, 75, 0.4);
-}
-
-html[data-theme="hello-kitty"] [data-chrome="sidebar"] {
-  background: linear-gradient(180deg, #ff5a96 0%, color-mix(in srgb, var(--sidebar) 92%, #ff9ec4) 55%, #e83a7a 100%);
-  box-shadow: 6px 0 28px rgba(255, 77, 141, 0.28);
-}
-html[data-theme="hello-kitty"] [data-chrome="sidebar"] a[aria-current="page"] {
-  background: rgba(255, 255, 255, 0.28);
-  color: var(--chrome-fg);
-  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-lg);
-}
-html[data-theme="hello-kitty"] [data-chrome="dock"] {
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 8px 32px rgba(255, 77, 141, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  backdrop-filter: blur(16px);
-}
-html[data-theme="hello-kitty"] [data-chrome="dock"] button:hover {
-  transform: translateY(-3px) scale(1.06);
-  background: var(--dock-hover);
-}
-
-html[data-theme="spiderman"] [data-chrome="sidebar"] {
-  background: linear-gradient(180deg, #0e1a40 0%, #0a1028 55%, #1a0a14 100%);
-  box-shadow: 4px 0 28px rgba(225, 29, 46, 0.2), inset -1px 0 0 rgba(37, 99, 235, 0.35);
-}
-html[data-theme="spiderman"] [data-chrome="sidebar"] a[aria-current="page"] {
-  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 16px rgba(225, 29, 46, 0.35);
-}
-html[data-theme="spiderman"] [data-chrome="dock"] {
-  border-color: rgba(225, 29, 46, 0.4);
-  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.5), 0 0 20px rgba(37, 99, 235, 0.2);
-}
-html[data-theme="spiderman"] [data-chrome="dock"] button:hover {
-  box-shadow: 0 0 0 1px rgba(225, 29, 46, 0.55);
-}
-
-html[data-theme="turtles"] [data-chrome="sidebar"] {
-  background: linear-gradient(180deg, #0e2418 0%, #07140c 55%, #0a1c12 100%);
-  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.45), inset -1px 0 0 rgba(107, 196, 143, 0.2);
-}
-html[data-theme="turtles"] [data-chrome="sidebar"] a[aria-current="page"] {
-  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 16px color-mix(in srgb, var(--theme-glow) 40%, transparent);
-}
-html[data-theme="turtles"] [data-chrome="dock"] {
-  border-color: rgba(107, 196, 143, 0.35);
-  border-radius: 14px;
-  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.4), 0 0 22px rgba(61, 155, 106, 0.14);
-}
-html[data-theme="turtles"] [data-chrome="dock"] button:hover {
-  box-shadow: 0 0 0 1px rgba(107, 196, 143, 0.5);
-}
-
-/* —— Cards / topbar float above art —— */
-html[data-theme="gotham"] [data-ui="card"],
-html[data-theme="hello-kitty"] [data-ui="card"],
-html[data-theme="spiderman"] [data-ui="card"],
-html[data-theme="turtles"] [data-ui="card"],
-html[data-theme="gotham"] [data-ui="topbar"],
-html[data-theme="hello-kitty"] [data-ui="topbar"],
-html[data-theme="spiderman"] [data-ui="topbar"],
-html[data-theme="turtles"] [data-ui="topbar"] {
-  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
-  backdrop-filter: blur(12px);
-  border-color: var(--border);
-  box-shadow: var(--shadow-soft);
-}
-
-html[data-theme="hello-kitty"] [data-ui="card"],
-html[data-theme="hello-kitty"] [data-ui="topbar"] {
-  border-color: color-mix(in srgb, var(--border) 85%, #ff8fbf);
-}
-
-html[data-theme="turtles"] [data-ui="card"],
-html[data-theme="turtles"] [data-ui="topbar"] {
-  background: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
-  border-color: color-mix(in srgb, var(--border) 80%, #3d9b6a);
-  box-shadow: var(--shadow-soft), 0 0 0 1px rgba(61, 155, 106, 0.06);
-}
-
-/* —— Tables —— */
-html[data-theme="gotham"] .table-wrap,
-html[data-theme="hello-kitty"] .table-wrap,
-html[data-theme="spiderman"] .table-wrap,
-html[data-theme="turtles"] .table-wrap,
-html[data-theme="gotham"] table,
-html[data-theme="hello-kitty"] table,
-html[data-theme="spiderman"] table,
-html[data-theme="turtles"] table {
-  background: var(--surface-elevated);
-  color: var(--text);
-  border-radius: var(--radius-md);
-}
-
-html[data-theme="gotham"] thead th,
-html[data-theme="hello-kitty"] thead th,
-html[data-theme="spiderman"] thead th,
-html[data-theme="turtles"] thead th,
-html[data-theme="gotham"] .table th,
-html[data-theme="hello-kitty"] .table th,
-html[data-theme="spiderman"] .table th,
-html[data-theme="turtles"] .table th {
-  background: var(--table-header-bg);
-  color: var(--text);
-  border-bottom-color: var(--border);
-}
-
-html[data-theme="gotham"] tbody tr:nth-child(even),
-html[data-theme="hello-kitty"] tbody tr:nth-child(even),
-html[data-theme="spiderman"] tbody tr:nth-child(even),
-html[data-theme="turtles"] tbody tr:nth-child(even) {
-  background: var(--table-stripe);
-}
-
-html[data-theme="gotham"] tbody tr:hover,
-html[data-theme="hello-kitty"] tbody tr:hover,
-html[data-theme="spiderman"] tbody tr:hover,
-html[data-theme="turtles"] tbody tr:hover {
-  background: var(--table-row-hover);
-}
-
-html[data-theme="gotham"] td,
-html[data-theme="hello-kitty"] td,
-html[data-theme="spiderman"] td,
-html[data-theme="turtles"] td {
-  color: var(--text);
-  border-bottom-color: var(--border);
-}
-
-/* —— Forms —— */
-html[data-theme="gotham"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-html[data-theme="gotham"] select,
-html[data-theme="gotham"] textarea,
-html[data-theme="spiderman"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-html[data-theme="spiderman"] select,
-html[data-theme="spiderman"] textarea,
-html[data-theme="turtles"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-html[data-theme="turtles"] select,
-html[data-theme="turtles"] textarea {
-  background: color-mix(in srgb, var(--surface) 88%, #000);
-  caret-color: var(--primary);
-  color: var(--text);
-}
-
-html[data-theme="hello-kitty"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-html[data-theme="hello-kitty"] select,
-html[data-theme="hello-kitty"] textarea {
-  background: color-mix(in srgb, var(--surface-elevated) 94%, #ffe0ec);
-  border-radius: var(--radius-md);
-  color: var(--text);
-}
-
-html[data-theme="gotham"] input:focus-visible,
-html[data-theme="gotham"] select:focus-visible,
-html[data-theme="gotham"] textarea:focus-visible,
-html[data-theme="gotham"] button[aria-haspopup="listbox"]:focus-visible,
-html[data-theme="hello-kitty"] input:focus-visible,
-html[data-theme="hello-kitty"] select:focus-visible,
-html[data-theme="hello-kitty"] textarea:focus-visible,
-html[data-theme="hello-kitty"] button[aria-haspopup="listbox"]:focus-visible,
-html[data-theme="spiderman"] input:focus-visible,
-html[data-theme="spiderman"] select:focus-visible,
-html[data-theme="spiderman"] textarea:focus-visible,
-html[data-theme="spiderman"] button[aria-haspopup="listbox"]:focus-visible,
-html[data-theme="turtles"] input:focus-visible,
-html[data-theme="turtles"] select:focus-visible,
-html[data-theme="turtles"] textarea:focus-visible,
-html[data-theme="turtles"] button[aria-haspopup="listbox"]:focus-visible {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--theme-glow);
-}
-
-html[data-theme="gotham"] button[data-variant="primary"],
-html[data-theme="spiderman"] button[data-variant="primary"],
-html[data-theme="hello-kitty"] button[data-variant="primary"],
-html[data-theme="turtles"] button[data-variant="primary"] {
-  color: var(--on-primary);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--theme-glow) 40%, transparent);
-}
-
-html[data-theme="gotham"] button[data-variant="ghost"]:hover,
-html[data-theme="spiderman"] button[data-variant="ghost"]:hover,
-html[data-theme="turtles"] button[data-variant="ghost"]:hover {
-  background: var(--primary-light);
-  color: var(--primary);
-}
-
-/* —— Dialogs —— */
-html[data-theme="gotham"] [class*="overlay"],
-html[data-theme="hello-kitty"] [class*="overlay"],
-html[data-theme="spiderman"] [class*="overlay"],
-html[data-theme="turtles"] [class*="overlay"] {
-  background: var(--dialog-scrim);
-}
-
-/* —— Cats / turtles —— */
-html[data-theme="gotham"] [data-cat="orbit"] {
-  filter: drop-shadow(0 0 6px rgba(240, 193, 75, 0.28));
-}
-html[data-theme="hello-kitty"] [data-cat="orbit"] {
-  filter: drop-shadow(0 4px 8px rgba(255, 77, 141, 0.28));
-  animation: kitty-bounce 2.4s var(--spring-snappy) infinite;
-}
-html[data-theme="spiderman"] [data-cat="orbit"] {
-  filter: drop-shadow(0 0 8px rgba(225, 29, 46, 0.45)) drop-shadow(0 0 14px rgba(37, 99, 235, 0.25));
-}
-html[data-theme="turtles"] [data-turtle="spin"],
-html[data-theme="turtles"] [data-turtle="amble"] {
-  filter: drop-shadow(0 0 8px rgba(61, 155, 106, 0.35));
-}
-
-@keyframes kitty-bounce {
-  0%, 100% { filter: drop-shadow(0 4px 8px rgba(255, 77, 141, 0.25)); }
-  50% { filter: drop-shadow(0 8px 14px rgba(255, 77, 141, 0.4)); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-theme="gotham"] body::after,
-  html[data-theme="hello-kitty"] body::after,
-  html[data-theme="spiderman"] body::after,
-  html[data-theme="turtles"] body::after,
-  html[data-theme="hello-kitty"] [data-cat="orbit"],
-  html[data-theme="turtles"] [data-turtle="spin"] {
-    animation: none !important;
-  }
-}
+/* Premium themes: backgrounds, chrome, tables, forms, contrast */
+
+/* —— Shared layered backdrop —— */
+html[data-theme="gotham"] body,
+html[data-theme="hello-kitty"] body,
+html[data-theme="spiderman"] body,
+html[data-theme="turtles"] body {
+  background-image: none;
+  isolation: isolate;
+}
+
+html[data-theme="gotham"] body::before,
+html[data-theme="hello-kitty"] body::before,
+html[data-theme="spiderman"] body::before,
+html[data-theme="turtles"] body::before,
+html[data-theme="gotham"] body::after,
+html[data-theme="hello-kitty"] body::after,
+html[data-theme="spiderman"] body::after,
+html[data-theme="turtles"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+html[data-theme="gotham"] #root,
+html[data-theme="hello-kitty"] #root,
+html[data-theme="spiderman"] #root,
+html[data-theme="turtles"] #root {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+/* Opaque shell was covering body::before/::after art — keep chrome (sidebar/topbar/cards) solid */
+html[data-theme="gotham"] [data-ui="shell"],
+html[data-theme="hello-kitty"] [data-ui="shell"],
+html[data-theme="spiderman"] [data-ui="shell"],
+html[data-theme="turtles"] [data-ui="shell"] {
+  background: transparent;
+}
+
+/* —— Gotham —— */
+html[data-theme="gotham"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 60% 42% at 50% 0%, rgba(240, 193, 75, 0.16), transparent 68%),
+    linear-gradient(180deg, #04060c 0%, #070b16 48%, #04060c 100%);
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="gotham"] body::before {
+  background: url("/img/themes/gotham-skyline.svg") bottom center / 100% min(62vh, 520px) no-repeat;
+  opacity: 1;
+}
+
+html[data-theme="gotham"] body::after {
+  background:
+    repeating-linear-gradient(
+      105deg,
+      transparent 0,
+      transparent 2px,
+      rgba(180, 200, 255, 0.04) 2px,
+      rgba(180, 200, 255, 0.04) 3px
+    ),
+    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(0, 0, 0, 0.55), transparent 70%),
+    linear-gradient(180deg, transparent 35%, var(--theme-fog) 100%);
+  opacity: 0.65;
+  animation: gotham-rain 8s linear infinite;
+}
+
+@keyframes gotham-rain {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 40px 120px, 0 0, 0 0; }
+}
+
+/* —— Hello Kitty —— */
+html[data-theme="hello-kitty"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 15% 8%, rgba(255, 183, 213, 0.5), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 92% 85%, rgba(255, 143, 191, 0.32), transparent 50%),
+    linear-gradient(165deg, #fff5f9 0%, #ffeaf3 52%, #ffe0ec 100%);
+  letter-spacing: 0.015em;
+}
+
+html[data-theme="hello-kitty"] body::before {
+  background: url("/img/themes/hello-kitty-tile.svg") 0 0 / 220px 220px repeat;
+  opacity: 0.65;
+}
+
+html[data-theme="hello-kitty"] body::after {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.75) 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 38%, rgba(255, 143, 191, 0.55) 0 1.5px, transparent 3px),
+    radial-gradient(circle at 42% 78%, rgba(255, 255, 255, 0.65) 0 2px, transparent 3px),
+    radial-gradient(circle at 88% 12%, rgba(255, 77, 141, 0.35) 0 1.5px, transparent 3px);
+  animation: kitty-sparkle 6s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+
+@keyframes kitty-sparkle {
+  from { transform: translateY(0) scale(1); opacity: 0.65; }
+  to { transform: translateY(-10px) scale(1.03); opacity: 1; }
+}
+
+/* —— Spiderman —— */
+html[data-theme="spiderman"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 50% 40% at 20% 0%, rgba(225, 29, 46, 0.22), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 90% 10%, rgba(37, 99, 235, 0.28), transparent 55%),
+    linear-gradient(180deg, #070b18 0%, #0c1430 50%, #070b18 100%);
+}
+
+html[data-theme="spiderman"] body::before {
+  background: url("/img/themes/spiderman-web.svg") center / 280px 280px repeat;
+  opacity: 0.55;
+}
+
+html[data-theme="spiderman"] body::after {
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(0, 0, 0, 0.5), transparent 65%),
+    linear-gradient(180deg, transparent 40%, var(--theme-fog) 100%);
+  animation: spidey-web-shimmer 10s ease-in-out infinite alternate;
+  opacity: 0.7;
+}
+
+@keyframes spidey-web-shimmer {
+  from { opacity: 0.55; }
+  to { opacity: 0.85; }
+}
+
+/* —— Turtle Grove —— */
+html[data-theme="turtles"] body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 55% 40% at 20% 0%, rgba(61, 155, 106, 0.22), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 88% 8%, rgba(196, 165, 116, 0.16), transparent 55%),
+    linear-gradient(180deg, #0a1610 0%, #0e2218 48%, #0a1610 100%);
+}
+
+html[data-theme="turtles"] body::before {
+  background:
+    url("/img/themes/turtles-leaf-tile.svg") 0 0 / 180px 180px repeat,
+    url("/img/themes/turtles-grove.svg") bottom center / 100% min(58vh, 480px) no-repeat;
+  opacity: 0.85;
+}
+
+html[data-theme="turtles"] body::after {
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 100%, rgba(0, 0, 0, 0.45), transparent 68%),
+    linear-gradient(180deg, transparent 38%, var(--theme-fog) 100%);
+  animation: grove-breathe 12s ease-in-out infinite alternate;
+  opacity: 0.72;
+}
+
+@keyframes grove-breathe {
+  from { opacity: 0.55; }
+  to { opacity: 0.88; }
+}
+
+/* —— Chrome: sidebar / dock —— */
+html[data-theme="gotham"] [data-chrome="sidebar"] {
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.55), inset -1px 0 0 rgba(240, 193, 75, 0.12);
+}
+html[data-theme="gotham"] [data-chrome="sidebar"] a[aria-current="page"] {
+  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 18px color-mix(in srgb, var(--theme-glow) 45%, transparent);
+}
+html[data-theme="gotham"] [data-chrome="dock"] {
+  border-color: rgba(240, 193, 75, 0.25);
+  border-radius: 12px;
+  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.45), 0 0 24px rgba(240, 193, 75, 0.1);
+}
+html[data-theme="gotham"] [data-chrome="dock"] button:hover {
+  box-shadow: 0 0 0 1px rgba(240, 193, 75, 0.4);
+}
+
+html[data-theme="hello-kitty"] [data-chrome="sidebar"] {
+  background: linear-gradient(180deg, #ff5a96 0%, color-mix(in srgb, var(--sidebar) 92%, #ff9ec4) 55%, #e83a7a 100%);
+  box-shadow: 6px 0 28px rgba(255, 77, 141, 0.28);
+}
+html[data-theme="hello-kitty"] [data-chrome="sidebar"] a[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.28);
+  color: var(--chrome-fg);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+}
+html[data-theme="hello-kitty"] [data-chrome="dock"] {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 32px rgba(255, 77, 141, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(16px);
+}
+html[data-theme="hello-kitty"] [data-chrome="dock"] button:hover {
+  transform: translateY(-3px) scale(1.06);
+  background: var(--dock-hover);
+}
+
+html[data-theme="spiderman"] [data-chrome="sidebar"] {
+  background: linear-gradient(180deg, #0e1a40 0%, #0a1028 55%, #1a0a14 100%);
+  box-shadow: 4px 0 28px rgba(225, 29, 46, 0.2), inset -1px 0 0 rgba(37, 99, 235, 0.35);
+}
+html[data-theme="spiderman"] [data-chrome="sidebar"] a[aria-current="page"] {
+  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 16px rgba(225, 29, 46, 0.35);
+}
+html[data-theme="spiderman"] [data-chrome="dock"] {
+  border-color: rgba(225, 29, 46, 0.4);
+  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.5), 0 0 20px rgba(37, 99, 235, 0.2);
+}
+html[data-theme="spiderman"] [data-chrome="dock"] button:hover {
+  box-shadow: 0 0 0 1px rgba(225, 29, 46, 0.55);
+}
+
+html[data-theme="turtles"] [data-chrome="sidebar"] {
+  background: linear-gradient(180deg, #0e2418 0%, #07140c 55%, #0a1c12 100%);
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.45), inset -1px 0 0 rgba(107, 196, 143, 0.2);
+}
+html[data-theme="turtles"] [data-chrome="sidebar"] a[aria-current="page"] {
+  box-shadow: inset 3px 0 0 var(--sidebar-active), 0 0 16px color-mix(in srgb, var(--theme-glow) 40%, transparent);
+}
+html[data-theme="turtles"] [data-chrome="dock"] {
+  border-color: rgba(107, 196, 143, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 -4px 28px rgba(0, 0, 0, 0.4), 0 0 22px rgba(61, 155, 106, 0.14);
+}
+html[data-theme="turtles"] [data-chrome="dock"] button:hover {
+  box-shadow: 0 0 0 1px rgba(107, 196, 143, 0.5);
+}
+
+/* —— Cards / topbar float above art —— */
+html[data-theme="gotham"] [data-ui="card"],
+html[data-theme="hello-kitty"] [data-ui="card"],
+html[data-theme="spiderman"] [data-ui="card"],
+html[data-theme="turtles"] [data-ui="card"],
+html[data-theme="gotham"] [data-ui="topbar"],
+html[data-theme="hello-kitty"] [data-ui="topbar"],
+html[data-theme="spiderman"] [data-ui="topbar"],
+html[data-theme="turtles"] [data-ui="topbar"] {
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  backdrop-filter: blur(12px);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+html[data-theme="hello-kitty"] [data-ui="card"],
+html[data-theme="hello-kitty"] [data-ui="topbar"] {
+  border-color: color-mix(in srgb, var(--border) 85%, #ff8fbf);
+}
+
+html[data-theme="turtles"] [data-ui="card"],
+html[data-theme="turtles"] [data-ui="topbar"] {
+  background: color-mix(in srgb, var(--surface-elevated) 90%, transparent);
+  border-color: color-mix(in srgb, var(--border) 80%, #3d9b6a);
+  box-shadow: var(--shadow-soft), 0 0 0 1px rgba(61, 155, 106, 0.06);
+}
+
+/* —— Tables —— */
+html[data-theme="gotham"] .table-wrap,
+html[data-theme="hello-kitty"] .table-wrap,
+html[data-theme="spiderman"] .table-wrap,
+html[data-theme="turtles"] .table-wrap,
+html[data-theme="gotham"] table,
+html[data-theme="hello-kitty"] table,
+html[data-theme="spiderman"] table,
+html[data-theme="turtles"] table {
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-radius: var(--radius-md);
+}
+
+html[data-theme="gotham"] thead th,
+html[data-theme="hello-kitty"] thead th,
+html[data-theme="spiderman"] thead th,
+html[data-theme="turtles"] thead th,
+html[data-theme="gotham"] .table th,
+html[data-theme="hello-kitty"] .table th,
+html[data-theme="spiderman"] .table th,
+html[data-theme="turtles"] .table th {
+  background: var(--table-header-bg);
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+
+html[data-theme="gotham"] tbody tr:nth-child(even),
+html[data-theme="hello-kitty"] tbody tr:nth-child(even),
+html[data-theme="spiderman"] tbody tr:nth-child(even),
+html[data-theme="turtles"] tbody tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+html[data-theme="gotham"] tbody tr:hover,
+html[data-theme="hello-kitty"] tbody tr:hover,
+html[data-theme="spiderman"] tbody tr:hover,
+html[data-theme="turtles"] tbody tr:hover {
+  background: var(--table-row-hover);
+}
+
+html[data-theme="gotham"] td,
+html[data-theme="hello-kitty"] td,
+html[data-theme="spiderman"] td,
+html[data-theme="turtles"] td {
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+
+/* —— Forms —— */
+html[data-theme="gotham"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="gotham"] select,
+html[data-theme="gotham"] textarea,
+html[data-theme="spiderman"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="spiderman"] select,
+html[data-theme="spiderman"] textarea,
+html[data-theme="turtles"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="turtles"] select,
+html[data-theme="turtles"] textarea {
+  background: color-mix(in srgb, var(--surface) 88%, #000);
+  caret-color: var(--primary);
+  color: var(--text);
+}
+
+html[data-theme="hello-kitty"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="hello-kitty"] select,
+html[data-theme="hello-kitty"] textarea {
+  background: color-mix(in srgb, var(--surface-elevated) 94%, #ffe0ec);
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+
+html[data-theme="gotham"] input:focus-visible,
+html[data-theme="gotham"] select:focus-visible,
+html[data-theme="gotham"] textarea:focus-visible,
+html[data-theme="gotham"] button[aria-haspopup="listbox"]:focus-visible,
+html[data-theme="hello-kitty"] input:focus-visible,
+html[data-theme="hello-kitty"] select:focus-visible,
+html[data-theme="hello-kitty"] textarea:focus-visible,
+html[data-theme="hello-kitty"] button[aria-haspopup="listbox"]:focus-visible,
+html[data-theme="spiderman"] input:focus-visible,
+html[data-theme="spiderman"] select:focus-visible,
+html[data-theme="spiderman"] textarea:focus-visible,
+html[data-theme="spiderman"] button[aria-haspopup="listbox"]:focus-visible,
+html[data-theme="turtles"] input:focus-visible,
+html[data-theme="turtles"] select:focus-visible,
+html[data-theme="turtles"] textarea:focus-visible,
+html[data-theme="turtles"] button[aria-haspopup="listbox"]:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--theme-glow);
+}
+
+html[data-theme="gotham"] button[data-variant="primary"],
+html[data-theme="spiderman"] button[data-variant="primary"],
+html[data-theme="hello-kitty"] button[data-variant="primary"],
+html[data-theme="turtles"] button[data-variant="primary"] {
+  color: var(--on-primary);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--theme-glow) 40%, transparent);
+}
+
+html[data-theme="gotham"] button[data-variant="ghost"]:hover,
+html[data-theme="spiderman"] button[data-variant="ghost"]:hover,
+html[data-theme="turtles"] button[data-variant="ghost"]:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* —— Auth setup / TOTP (roadmap) —— */
+html[data-theme="gotham"] [data-ui="auth-setup"],
+html[data-theme="hello-kitty"] [data-ui="auth-setup"],
+html[data-theme="spiderman"] [data-ui="auth-setup"],
+html[data-theme="turtles"] [data-ui="auth-setup"] {
+  background-color: var(--bg);
+}
+
+html[data-theme="gotham"] [data-ui="totp"] > div > div,
+html[data-theme="spiderman"] [data-ui="totp"] > div > div,
+html[data-theme="turtles"] [data-ui="totp"] > div > div {
+  background: color-mix(in srgb, var(--surface-elevated) 88%, #000);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="hello-kitty"] [data-ui="totp"] > div > div {
+  background: color-mix(in srgb, var(--surface-elevated) 92%, #ffe0ec);
+  border-color: color-mix(in srgb, var(--border) 80%, #ff8fbf);
+  color: var(--text);
+}
+
+/* —— Dialogs —— */
+html[data-theme="gotham"] [class*="overlay"],
+html[data-theme="hello-kitty"] [class*="overlay"],
+html[data-theme="spiderman"] [class*="overlay"],
+html[data-theme="turtles"] [class*="overlay"] {
+  background: var(--dialog-scrim);
+}
+
+/* —— Cats / turtles —— */
+html[data-theme="gotham"] [data-cat="orbit"] {
+  filter: drop-shadow(0 0 6px rgba(240, 193, 75, 0.28));
+}
+html[data-theme="hello-kitty"] [data-cat="orbit"] {
+  filter: drop-shadow(0 4px 8px rgba(255, 77, 141, 0.28));
+  animation: kitty-bounce 2.4s var(--spring-snappy) infinite;
+}
+html[data-theme="spiderman"] [data-cat="orbit"] {
+  filter: drop-shadow(0 0 8px rgba(225, 29, 46, 0.45)) drop-shadow(0 0 14px rgba(37, 99, 235, 0.25));
+}
+html[data-theme="turtles"] [data-turtle="spin"],
+html[data-theme="turtles"] [data-turtle="amble"] {
+  filter: drop-shadow(0 0 8px rgba(61, 155, 106, 0.35));
+}
+
+@keyframes kitty-bounce {
+  0%, 100% { filter: drop-shadow(0 4px 8px rgba(255, 77, 141, 0.25)); }
+  50% { filter: drop-shadow(0 8px 14px rgba(255, 77, 141, 0.4)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="gotham"] body::after,
+  html[data-theme="hello-kitty"] body::after,
+  html[data-theme="spiderman"] body::after,
+  html[data-theme="turtles"] body::after,
+  html[data-theme="hello-kitty"] [data-cat="orbit"],
+  html[data-theme="turtles"] [data-turtle="spin"] {
+    animation: none !important;
+  }
+}

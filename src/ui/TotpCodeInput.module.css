@@ -1,0 +1,48 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  cursor: text;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  caret-color: transparent;
+}
+
+.row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cell {
+  width: 2.25rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-elevated);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.filled {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-light) 55%, var(--surface-elevated));
+}
+
+.active {
+  box-shadow: 0 0 0 2px var(--theme-glow);
+  border-color: var(--primary);
+}

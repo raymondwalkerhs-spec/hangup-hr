@@ -42,9 +42,10 @@ function parseOAuthCallbackUrl(url) {
     // hangup-portal://auth/callback?code=...
     const normalized = raw.replace(/^hangup-portal:/i, "https:");
     const u = new URL(normalized);
-    const code = u.searchParams.get("code");
-    if (!code) return { url: raw };
-    return { code, url: raw };
+    const code = u.searchParams.get("code") || new URLSearchParams(u.hash.replace(/^#/, "")).get("code");
+    const error = u.searchParams.get("error_description") || u.searchParams.get("error");
+    if (!code && !error) return { url: raw };
+    return { code: code || null, error: error || null, url: raw };
   } catch {
     return null;
   }
@@ -53,9 +54,32 @@ function parseOAuthCallbackUrl(url) {
 function deliverOAuthCallback(url) {
   const payload = parseOAuthCallbackUrl(url);
   if (!payload) return false;
+  try {
+    const store = require("../lib/oauth-pending-store");
+    if (payload.code || payload.error) {
+      store.completeOauthFromCallback({
+        code: payload.code,
+        error: payload.error,
+        mode: store.getPendingMode() || "cold",
+      });
+    }
+  } catch {
+    /* ignore */
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("oauth-callback", payload);
-    mainWindow.loadURL(`http://${HOST}:${PORT}/oauth-pending`);
+    // Put code in the URL so a remount still sees it (do not IPC-then-reload).
+    const mode = (() => {
+      try {
+        return new URL(mainWindow.webContents.getURL()).searchParams.get("mode") || "cold";
+      } catch {
+        return "cold";
+      }
+    })();
+    const qs = new URLSearchParams();
+    if (payload.code) qs.set("code", payload.code);
+    if (payload.error) qs.set("error", payload.error);
+    qs.set("mode", mode);
+    mainWindow.loadURL(`http://${HOST}:${PORT}/oauth-pending?${qs.toString()}`);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
   }

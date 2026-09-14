@@ -14,9 +14,58 @@ import styles from "./OfficePoPage.module.css";
 
 type Row = Record<string, unknown>;
 
+const PO_CATEGORIES = [
+  "Kitchen / Pantry",
+  "Cleaning",
+  "Bathroom",
+  "Office supplies",
+  "Break room",
+  "IT / Electronics",
+  "Safety",
+  "Other",
+] as const;
+
+const PO_UNITS = ["box", "pack", "bottle", "bag", "roll", "piece", "GM", "kg", "L", "set"] as const;
+
+const SCALE_MODES = [
+  {
+    value: "employee",
+    label: "By headcount",
+    hint: "Quantity scales with employee count (and pack size).",
+  },
+  {
+    value: "office_fixed",
+    label: "Fixed office amount",
+    hint: "Same base quantity for the office, not per person.",
+  },
+] as const;
+
+const CADENCES = [
+  { value: "monthly", label: "Every month" },
+  { value: "every_n_months", label: "Every N months" },
+  { value: "one_time", label: "One time only" },
+] as const;
+
 function currentYm() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function blankItemForm(): Row {
+  return {
+    name: "",
+    category: PO_CATEGORIES[0],
+    unit: "box",
+    scaleMode: "employee",
+    cadence: "monthly",
+    perEmployees: 1,
+    packQty: 1,
+    officeQty: 1,
+    everyNMonths: 2,
+    anchorYearMonth: currentYm(),
+    ignoreDaysScale: false,
+    active: true,
+  };
 }
 
 export function OfficePoPage() {
@@ -148,7 +197,22 @@ export function OfficePoPage() {
         header: "Category",
         cell: ({ row }) => String((row.original.item as Row)?.category || "—"),
       },
-      { accessorKey: "status", header: "Status" },
+      {
+        id: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const st = String(row.original.status || "predicted");
+          const cls =
+            st === "bought"
+              ? styles.badgeBought
+              : st === "postponed"
+                ? styles.badgePostponed
+                : st === "cancelled"
+                  ? styles.badgeCancelled
+                  : styles.badgePredicted;
+          return <span className={`${styles.badge} ${cls}`}>{st}</span>;
+        },
+      },
       { accessorKey: "predictedQty", header: "Predicted qty" },
       {
         accessorKey: "predictedCost",
@@ -305,6 +369,37 @@ export function OfficePoPage() {
           <Card>
             <DataGrid columns={lineCols} data={lines} emptyMessage={monthQ.isLoading ? "Loading…" : "No lines — generate a prediction"} />
           </Card>
+          {(data?.purchases as Row[])?.length ? (
+            <Card>
+              <h3 style={{ margin: "0 0 0.75rem", fontSize: "1rem" }}>Purchase history</h3>
+              <div className="table-wrap">
+                <table style={{ width: "100%", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr>
+                      <th align="left">When</th>
+                      <th align="left">Line</th>
+                      <th align="right">Qty</th>
+                      <th align="right">Unit $</th>
+                      <th align="left">Order ref</th>
+                      <th align="left">By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.purchases as Row[]).map((p) => (
+                      <tr key={String(p.id)}>
+                        <td>{String(p.boughtAt || "").slice(0, 16).replace("T", " ")}</td>
+                        <td className="muted">{String(p.monthLineId || "").slice(0, 8)}</td>
+                        <td align="right">{String(p.qty)}</td>
+                        <td align="right">{p.unitPrice != null ? fmt(p.unitPrice as number) : "—"}</td>
+                        <td>{String(p.orderRef || "—")}</td>
+                        <td>{String(p.boughtBy || "—")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : null}
         </Tabs.Content>
 
         <Tabs.Content value="overrides">
@@ -340,6 +435,8 @@ export function OfficePoPage() {
             </div>
             <p className={styles.hint}>
               Auto avg: {String(data?.avgAuto ?? "—")} · Auto days (Mon–Fri): {String(data?.daysAuto ?? "—")}
+              <br />
+              AvgAuto excludes employees marked WFH (Employee → Payroll → WFH agent).
             </p>
           </Card>
         </Tabs.Content>
@@ -348,20 +445,7 @@ export function OfficePoPage() {
           <Card>
             {canManageItems ? (
               <div className={styles.catalogBar}>
-                <Button
-                  onClick={() =>
-                    setItemForm({
-                      name: "",
-                      scaleMode: "employee",
-                      cadence: "monthly",
-                      perEmployees: 1,
-                      packQty: 1,
-                      active: true,
-                    })
-                  }
-                >
-                  Add item
-                </Button>
+                <Button onClick={() => setItemForm(blankItemForm())}>Add item</Button>
               </div>
             ) : null}
             <DataGrid
@@ -401,37 +485,187 @@ export function OfficePoPage() {
       >
         {itemForm ? (
           <div className={styles.formGrid}>
-            {(
-              [
-                ["name", "Name"],
-                ["category", "Category"],
-                ["unit", "Unit"],
-                ["scaleMode", "Scale mode (employee|office_fixed)"],
-                ["perEmployees", "Per employees"],
-                ["packQty", "Pack qty"],
-                ["officeQty", "Office qty"],
-                ["cadence", "Cadence (monthly|every_n_months|one_time)"],
-                ["everyNMonths", "Every N months"],
-                ["anchorYearMonth", "Anchor YYYY-MM"],
-                ["unitPrice", "Unit price"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className={key === "name" || key === "category" ? styles.full : undefined}>
-                {label}
+            <label className={styles.full}>
+              Name
+              <input
+                value={String(itemForm.name ?? "")}
+                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                placeholder="e.g. Bottled water"
+                autoFocus
+              />
+            </label>
+
+            <label>
+              Category
+              <select
+                value={String(itemForm.category ?? "")}
+                onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+              >
+                <option value="">Select category…</option>
+                {Array.from(
+                  new Set([
+                    ...PO_CATEGORIES,
+                    ...((itemsQ.data?.items || [])
+                      .map((i) => String(i.category || "").trim())
+                      .filter(Boolean) as string[]),
+                    String(itemForm.category || "").trim(),
+                  ].filter(Boolean))
+                )
+                  .sort((a, b) => a.localeCompare(b))
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <label>
+              Unit
+              <select
+                value={String(itemForm.unit ?? "")}
+                onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+              >
+                <option value="">Select unit…</option>
+                {Array.from(
+                  new Set([
+                    ...PO_UNITS,
+                    String(itemForm.unit || "").trim(),
+                  ].filter(Boolean))
+                ).map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.full}>
+              How quantity is calculated
+              <select
+                value={String(itemForm.scaleMode || "employee")}
+                onChange={(e) => setItemForm({ ...itemForm, scaleMode: e.target.value })}
+              >
+                {SCALE_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <p className={styles.fieldHint}>
+                {SCALE_MODES.find((m) => m.value === itemForm.scaleMode)?.hint ||
+                  SCALE_MODES[0].hint}
+              </p>
+            </label>
+
+            {String(itemForm.scaleMode || "employee") === "office_fixed" ? (
+              <label>
+                Office quantity
                 <input
-                  value={String(itemForm[key] ?? "")}
-                  onChange={(e) => setItemForm({ ...itemForm, [key]: e.target.value })}
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={String(itemForm.officeQty ?? "")}
+                  onChange={(e) => setItemForm({ ...itemForm, officeQty: e.target.value })}
+                />
+                <p className={styles.fieldHint}>Fixed amount for the whole office each buy.</p>
+              </label>
+            ) : (
+              <label>
+                Per employees
+                <input
+                  type="number"
+                  min={1}
+                  step="any"
+                  value={String(itemForm.perEmployees ?? "")}
+                  onChange={(e) => setItemForm({ ...itemForm, perEmployees: e.target.value })}
+                />
+                <p className={styles.fieldHint}>e.g. 1 pack per this many people.</p>
+              </label>
+            )}
+
+            <label>
+              Pack size
+              <input
+                type="number"
+                min={1}
+                step="any"
+                value={String(itemForm.packQty ?? "")}
+                onChange={(e) => setItemForm({ ...itemForm, packQty: e.target.value })}
+              />
+              <p className={styles.fieldHint}>Rounds buys up to whole packs.</p>
+            </label>
+
+            <label>
+              How often to buy
+              <select
+                value={String(itemForm.cadence || "monthly")}
+                onChange={(e) => setItemForm({ ...itemForm, cadence: e.target.value })}
+              >
+                {CADENCES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {String(itemForm.cadence) === "every_n_months" ? (
+              <label>
+                Every N months
+                <input
+                  type="number"
+                  min={2}
+                  step={1}
+                  value={String(itemForm.everyNMonths ?? "2")}
+                  onChange={(e) => setItemForm({ ...itemForm, everyNMonths: e.target.value })}
                 />
               </label>
-            ))}
+            ) : null}
+
+            {String(itemForm.cadence) === "every_n_months" ||
+            String(itemForm.cadence) === "one_time" ? (
+              <label>
+                Anchor month
+                <input
+                  type="month"
+                  value={String(itemForm.anchorYearMonth ?? "")}
+                  onChange={(e) => setItemForm({ ...itemForm, anchorYearMonth: e.target.value })}
+                />
+                <p className={styles.fieldHint}>
+                  {String(itemForm.cadence) === "one_time"
+                    ? "Month this one-time buy is due."
+                    : "Starting month for the every-N schedule."}
+                </p>
+              </label>
+            ) : null}
+
             <label>
+              Unit price (optional)
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={String(itemForm.unitPrice ?? "")}
+                onChange={(e) => setItemForm({ ...itemForm, unitPrice: e.target.value })}
+              />
+            </label>
+
+            <label className={styles.checkRow}>
               <input
                 type="checkbox"
                 checked={!!itemForm.ignoreDaysScale}
                 onChange={(e) => setItemForm({ ...itemForm, ignoreDaysScale: e.target.checked })}
-              />{" "}
-              Ignore days scale
+              />
+              <span>
+                Keep full quantity on short months
+                <p className={styles.fieldHint}>
+                  Off by default: if the office is open fewer days (partial month), predicted qty is reduced.
+                  Turn on for items that should stay the same even on short months.
+                </p>
+              </span>
             </label>
+
             <Button onClick={() => saveItem.mutate()} disabled={saveItem.isPending || !itemForm.name}>
               Save item
             </Button>

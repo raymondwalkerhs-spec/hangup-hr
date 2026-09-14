@@ -63,6 +63,7 @@ function toForm(emp: Emp): Record<string, string> {
     national_id: String(emp.national_id || ""),
     passport_id: String(emp.passport_id || ""),
     payroll_exempt: emp.payroll_exempt ? "1" : "",
+    wfh: emp.wfh ? "1" : "",
     sales_mla_enabled: emp.sales_mla_enabled === true || emp.salesMlaEnabled === true ? "1" : "",
     sales_rpm_enabled: emp.sales_rpm_enabled === true || emp.salesRpmEnabled === true ? "1" : "",
   };
@@ -139,6 +140,7 @@ export function EmployeeEditDialog({
         body: JSON.stringify({
           ...body,
           payroll_exempt: body.payroll_exempt === true || body.payroll_exempt === "1",
+          wfh: body.wfh === true || body.wfh === "1",
         }),
       }),
     onSuccess: () => {
@@ -164,6 +166,7 @@ export function EmployeeEditDialog({
             body: JSON.stringify({
               ...rest,
               payroll_exempt: rest.payroll_exempt === true || rest.payroll_exempt === "1",
+              wfh: rest.wfh === true || rest.wfh === "1",
             }),
           });
         } catch (putErr) {
@@ -478,6 +481,15 @@ export function EmployeeEditDialog({
                 disabled={!canEdit}
               />
               <span>Never pay (trial / test employee)</span>
+            </label>
+            <label className={styles.checkRow} style={{ marginTop: "0.75rem" }}>
+              <input
+                type="checkbox"
+                checked={!!form.wfh}
+                onChange={(e) => set("wfh", e.target.checked ? "1" : "")}
+                disabled={!canEdit}
+              />
+              <span>WFH agent (exclude from Office PO headcount)</span>
             </label>
             <p className="muted" style={{ marginTop: "0.75rem" }}>
               Month-specific salary, bonuses, and deductions are edited from the Payroll tab payslip editor.

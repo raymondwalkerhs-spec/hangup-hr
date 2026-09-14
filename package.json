@@ -1,7 +1,7 @@
 {
   "name": "hangup-hr",
-  "version": "2.6.0",
-  "description": "Hangup Portal desktop app ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Supabase backend",
+  "version": "2.6.1",
+  "description": "Hangup Portal desktop app — Supabase backend",
   "main": "electron/main.js",
   "scripts": {
     "start": "node scripts/ensure-electron.js && electron .",
@@ -77,7 +77,9 @@
     "protocols": [
       {
         "name": "Hangup Portal",
-        "schemes": ["hangup-portal"]
+        "schemes": [
+          "hangup-portal"
+        ]
       }
     ],
     "directories": {

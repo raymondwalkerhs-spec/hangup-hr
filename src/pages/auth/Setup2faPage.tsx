@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import { useAuth } from "@/app/AuthProvider";
 import { Button } from "@/ui/Button";
+import { TotpCodeInput } from "@/ui/TotpCodeInput";
 import { AuthSetupShell } from "./AuthSetupShell";
 import styles from "./AuthSetupShell.module.css";
 
@@ -93,7 +94,8 @@ export function Setup2faPage() {
   return (
     <AuthSetupShell
       title="Set up Authenticator"
-      subtitle="Scan the QR with Google Authenticator or Authy. Login itself never asks for this code — only setup, password change, and unlinking Google."
+      subtitle="Scan the QR with Google Authenticator or Authy. You will need this code to change or reset your password, and to unlink Google — not for daily sign-in."
+      step={2}
       error={error}
       loading={loading}
       timedOut={timedOut}
@@ -123,14 +125,8 @@ export function Setup2faPage() {
           )}
           {secret ? <p className={styles.secret}>Secret: {secret}</p> : null}
           <label className={styles.field}>
-            <span>6-digit code</span>
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              placeholder="123456"
-            />
+            <span>6-digit Authenticator code</span>
+            <TotpCodeInput value={code} onChange={setCode} autoFocus disabled={loading} />
           </label>
           <Button onClick={verify} disabled={loading || code.length < 6}>
             Confirm and continue

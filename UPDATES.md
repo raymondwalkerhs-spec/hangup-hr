@@ -1,3 +1,21 @@
+## v2.6.1 release checklist
+
+**Shipping 2026-09-14 (patch from 2.6.0):** Auth/Office PO/loans gap fixes + WFH AvgAuto exclusion. Target: GitHub [v2.6.1](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.1) **Latest** + Supabase `app_versions` `is_current`.
+
+### Shipped in 2.6.1
+- WFH employee flag → excluded from Office PO AvgAuto
+- Forgot-password via username + Authenticator OTP
+- Google OAuth loopback + identity sync; either MFA or Google completes setup
+- Office PO RLS + overdue notify; loan schedule line id preserved
+
+### Checklist
+- [x] Bump `package.json` to **2.6.1**; docs
+- [x] Migration `20260914_employee_wfh.sql`; Kate marked WFH
+- [x] Backfill loan schedules: `node scripts/backfill-loan-schedules.js`
+- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+
+---
+
 ## v2.6.0 release checklist
 
 **Shipped 2026-09-13 (installer + patch from 2.5.0):** GitHub [v2.6.0](https://github.com/raymondwalkerhs-spec/hangup-hr/releases/tag/v2.6.0) is **Latest**. Supabase `app_versions` `2.6.0` is `is_current` with `min_compatible_version=1.0.0`.

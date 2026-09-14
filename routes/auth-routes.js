@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const roles = require("../lib/roles");
 const usersAdmin = require("../lib/users-admin");
 const hrms = require("../lib/hrms-repo");
-const { getSession, destroySession, updateSession } = require("../lib/session-store");
+const { getSession, destroySession, updateSession, demoteSessionsForUser } = require("../lib/session-store");
 const { fetchAuthUsers } = require("../lib/auth");
 const authBridge = require("../lib/auth-bridge");
 const { authDebug, authDebugError } = require("../lib/auth-debug");
@@ -20,6 +20,17 @@ function requireBridge(res) {
     return false;
   }
   return true;
+}
+
+function blockIfImpersonating(req, res) {
+  if (req.impersonatingAs) {
+    res.status(403).json({
+      error: "Exit impersonation before changing account security",
+      code: "impersonation_blocked",
+    });
+    return true;
+  }
+  return false;
 }
 
 async function ensureAuthSessionTokens(session, passwordHint = null) {
@@ -83,6 +94,7 @@ router.get("/security-status", async (req, res) => {
 
 router.post("/mfa/enroll/start", async (req, res) => {
   if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
     let token = session.supabaseAccessToken;
@@ -114,6 +126,7 @@ router.post("/mfa/enroll/start", async (req, res) => {
 
 router.post("/mfa/enroll/verify", async (req, res) => {
   if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
     const code = String(req.body?.code || "").trim();
@@ -153,6 +166,7 @@ router.post("/mfa/enroll/verify", async (req, res) => {
 });
 
 router.put("/change-password", async (req, res) => {
+  if (blockIfImpersonating(req, res)) return;
   authDebug("change-password.start", { username: req.appSession?.username });
   const { currentPassword, newPassword, totpCode } = req.body || {};
   if (!currentPassword || !newPassword || String(newPassword).length < MIN_PASSWORD_LENGTH) {
@@ -236,8 +250,28 @@ router.put("/change-password", async (req, res) => {
 
 router.post("/google/start-link", async (req, res) => {
   if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
+    // Recover: Google may already be on Auth from a prior attempt while app_users is empty.
+    try {
+      const synced = await authBridge.syncGoogleLinkFromAuthUser(session.username);
+      if (synced.synced) {
+        const promo = await promoteSessionIfReady(session);
+        return res.json({
+          ok: true,
+          alreadyLinked: true,
+          googleEmail: synced.googleEmail,
+          sessionKind: getSession(session.id)?.sessionKind || session.sessionKind,
+          needsMfaEnroll: promo.needs.needsMfaEnroll,
+          needsGoogleLink: promo.needs.needsGoogleLink,
+          needsSetup: promo.needs.needsSetup,
+        });
+      }
+    } catch (syncErr) {
+      authDebugError("google.start-link.syncExisting", syncErr, { username: session.username });
+    }
+
     let token = session.supabaseAccessToken;
     if (!token && req.body?.password) {
       await authBridge.syncPasswordToAuth(session.username, req.body.password);
@@ -253,39 +287,140 @@ router.post("/google/start-link", async (req, res) => {
     if (!oauth.url) {
       return res.status(500).json({ error: "Could not build Google OAuth URL", code: "oauth_url_missing" });
     }
+    require("../lib/oauth-pending-store").beginOauth("link");
     updateSession(session.id, { googleLinkPending: true });
     res.json({ ok: true, url: oauth.url, redirectTo: oauth.redirectTo, mode: "link" });
   } catch (e) {
     const mapped = authBridge.mapAuthError(e);
+    // If linkIdentity failed because Auth already has Google, sync Hangup row and continue.
+    if (mapped.code === "identity_already_linked") {
+      try {
+        const synced = await authBridge.syncGoogleLinkFromAuthUser(req.appSession.username);
+        if (synced.synced) {
+          const promo = await promoteSessionIfReady(req.appSession);
+          return res.json({
+            ok: true,
+            alreadyLinked: true,
+            googleEmail: synced.googleEmail,
+            needsMfaEnroll: promo.needs.needsMfaEnroll,
+            needsGoogleLink: promo.needs.needsGoogleLink,
+            needsSetup: promo.needs.needsSetup,
+          });
+        }
+      } catch (syncErr) {
+        authDebugError("google.start-link.recoverAlreadyLinked", syncErr);
+      }
+    }
     authDebugError("google.start-link", e);
+    res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+router.post("/google/sync-link", async (req, res) => {
+  if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
+  try {
+    const session = req.appSession;
+    const synced = await authBridge.syncGoogleLinkFromAuthUser(session.username);
+    if (!synced.synced) {
+      return res.status(400).json({
+        error:
+          synced.reason === "no_google_identity"
+            ? "No Google account is connected yet. Use Continue with Google."
+            : "Could not sync Google link. Sign in with password and try again.",
+        code: synced.reason || "sync_failed",
+      });
+    }
+    const promo = await promoteSessionIfReady(session);
+    res.json({
+      ok: true,
+      alreadyLinked: true,
+      googleEmail: synced.googleEmail,
+      sessionKind: getSession(session.id)?.sessionKind || session.sessionKind,
+      needsMfaEnroll: promo.needs.needsMfaEnroll,
+      needsGoogleLink: promo.needs.needsGoogleLink,
+      needsSetup: promo.needs.needsSetup,
+    });
+  } catch (e) {
+    const mapped = authBridge.mapAuthError(e);
+    authDebugError("google.sync-link", e);
     res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
   }
 });
 
 router.post("/google/complete-link", async (req, res) => {
   if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
+    const rowPre = await authBridge.fetchAppUserAuthRow(session.username);
+    // Either-or policy: Google link is allowed without MFA when user chose Google as their setup path.
     const code = String(req.body?.code || "").trim();
-    if (!code) return res.status(400).json({ error: "Missing OAuth code", code: "oauth_code_missing" });
+    if (!code) {
+      // No code — try Auth identity sync (browser returned "already linked").
+      const synced = await authBridge.syncGoogleLinkFromAuthUser(session.username);
+      if (synced.synced) {
+        const promo = await promoteSessionIfReady(session);
+        return res.json({
+          ok: true,
+          alreadyLinked: true,
+          googleEmail: synced.googleEmail,
+          sessionKind: getSession(session.id)?.sessionKind || session.sessionKind,
+          needsMfaEnroll: promo.needs.needsMfaEnroll,
+          needsGoogleLink: promo.needs.needsGoogleLink,
+          needsSetup: promo.needs.needsSetup,
+        });
+      }
+      return res.status(400).json({ error: "Missing OAuth code", code: "oauth_code_missing" });
+    }
 
-    const exchanged = await authBridge.exchangeOAuthCode(code);
+    let exchanged;
+    try {
+      exchanged = await authBridge.exchangeOAuthCode(code);
+    } catch (exErr) {
+      const mapped = authBridge.mapAuthError(exErr);
+      if (mapped.code === "identity_already_linked") {
+        const synced = await authBridge.syncGoogleLinkFromAuthUser(session.username);
+        if (synced.synced) {
+          const promo = await promoteSessionIfReady(session);
+          return res.json({
+            ok: true,
+            alreadyLinked: true,
+            googleEmail: synced.googleEmail,
+            needsMfaEnroll: promo.needs.needsMfaEnroll,
+            needsGoogleLink: promo.needs.needsGoogleLink,
+            needsSetup: promo.needs.needsSetup,
+          });
+        }
+      }
+      throw exErr;
+    }
     const googleEmail =
       exchanged.user?.email ||
       exchanged.user?.user_metadata?.email ||
       exchanged.session?.user?.email;
     const authUserId = exchanged.user?.id || exchanged.session?.user?.id || null;
     const identities = exchanged.user?.identities || exchanged.session?.user?.identities || [];
-    const googleIdent = identities.find((i) => i.provider === "google");
-    const fromIdentity =
-      googleIdent?.identity_data?.email || googleIdent?.identity_data?.email_address || null;
+    const fromIdentity = authBridge.googleEmailFromIdentities(identities);
 
-    await authBridge.applyGoogleLink(session.username, fromIdentity || googleEmail, authUserId);
+    // Prefer Hangup user's auth_user_id when exchange returns a different Auth user.
+    const hangupRow = await authBridge.fetchAppUserAuthRow(session.username);
+    const hangupAuthId = hangupRow?.auth_user_id || null;
+    let emailToApply = fromIdentity || googleEmail;
+    if (hangupAuthId && authUserId && hangupAuthId !== authUserId) {
+      // OAuth session is a different Auth user — read Google off the Hangup Auth user instead.
+      const synced = await authBridge.syncGoogleLinkFromAuthUser(session.username);
+      if (synced.synced) {
+        emailToApply = synced.googleEmail;
+      }
+    }
+
+    await authBridge.applyGoogleLink(session.username, emailToApply, hangupAuthId || authUserId);
     updateSession(session.id, {
       googleLinkPending: false,
       supabaseAccessToken: exchanged.session?.access_token || session.supabaseAccessToken,
       supabaseRefreshToken: exchanged.session?.refresh_token || session.supabaseRefreshToken,
-      authUserId: authUserId || session.authUserId,
+      authUserId: hangupAuthId || authUserId || session.authUserId,
     });
     const promo = await promoteSessionIfReady(session);
     const row = await authBridge.fetchAppUserAuthRow(session.username);
@@ -299,6 +434,24 @@ router.post("/google/complete-link", async (req, res) => {
     });
   } catch (e) {
     const mapped = authBridge.mapAuthError(e);
+    if (mapped.code === "identity_already_linked") {
+      try {
+        const synced = await authBridge.syncGoogleLinkFromAuthUser(req.appSession.username);
+        if (synced.synced) {
+          const promo = await promoteSessionIfReady(req.appSession);
+          return res.json({
+            ok: true,
+            alreadyLinked: true,
+            googleEmail: synced.googleEmail,
+            needsMfaEnroll: promo.needs.needsMfaEnroll,
+            needsGoogleLink: promo.needs.needsGoogleLink,
+            needsSetup: promo.needs.needsSetup,
+          });
+        }
+      } catch (syncErr) {
+        authDebugError("google.complete-link.recover", syncErr);
+      }
+    }
     authDebugError("google.complete-link", e);
     res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
   }
@@ -306,6 +459,7 @@ router.post("/google/complete-link", async (req, res) => {
 
 router.post("/google/unlink", async (req, res) => {
   if (!requireBridge(res)) return;
+  if (blockIfImpersonating(req, res)) return;
   try {
     const session = req.appSession;
     const totpCode = String(req.body?.totpCode || "").trim();
@@ -369,7 +523,73 @@ router.post("/mfa/admin-reset/:username", async (req, res) => {
   try {
     const target = String(req.params.username || "").trim();
     const result = await authBridge.adminResetMfa(target);
+    demoteSessionsForUser(target);
     res.json({ ok: true, ...result, message: "MFA cleared. User must re-enroll on next login." });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/admin/reset-password/:username", async (req, res) => {
+  if (!roles.canManageAppUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  try {
+    const target = String(req.params.username || "").trim();
+    const password = String(req.body?.password || "");
+    const clearMfa = req.body?.clearMfa !== false;
+    const unlinkGoogle = req.body?.unlinkGoogle !== false;
+    const result = await authBridge.adminResetPassword(target, password, {
+      clearMfa: authBridge.isAuthBridgeEnabled() ? clearMfa : false,
+      unlinkGoogle: authBridge.isAuthBridgeEnabled() ? unlinkGoogle : false,
+      actor: req.realUsername || req.username,
+    });
+    if (result.clearedMfa || result.unlinkedGoogle) demoteSessionsForUser(target);
+    res.json({
+      ok: true,
+      ...result,
+      message:
+        "Password reset. User should sign in with the new password" +
+        (result.clearedMfa || result.unlinkedGoogle
+          ? " and complete Authenticator + Google setup again."
+          : "."),
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/admin/unlink-google/:username", async (req, res) => {
+  if (!roles.canManageAppUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  if (!requireBridge(res)) return;
+  try {
+    const target = String(req.params.username || "").trim();
+    await authBridge.unlinkGoogle(target);
+    demoteSessionsForUser(target);
+    res.json({ ok: true, message: "Google unlinked. User must link again on next login." });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post("/admin/force-resetup/:username", async (req, res) => {
+  if (!roles.canManageAppUsers(req.realUsername || req.username)) {
+    return res.status(403).json({ error: "Admin only" });
+  }
+  if (!requireBridge(res)) return;
+  try {
+    const target = String(req.params.username || "").trim();
+    const result = await authBridge.adminForceResetup(target, {
+      actor: req.realUsername || req.username,
+    });
+    demoteSessionsForUser(target);
+    res.json({
+      ok: true,
+      ...result,
+      message: "MFA + Google cleared. User must complete setup again after password login.",
+    });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

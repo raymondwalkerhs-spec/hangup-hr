@@ -70,6 +70,12 @@ export function UsersPage() {
   const [permUser, setPermUser] = useState<UserRow | null>(null);
   const [activateUser, setActivateUser] = useState<UserRow | null>(null);
   const [activateForm, setActivateForm] = useState({ password: "", role: "agent" });
+  const [resetPwUser, setResetPwUser] = useState<UserRow | null>(null);
+  const [resetPwForm, setResetPwForm] = useState({
+    password: "",
+    clearMfa: true,
+    unlinkGoogle: true,
+  });
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "agent", status: "active", employeeId: "", isIt: false });
   const [approveRegTarget, setApproveRegTarget] = useState<PendingReg | null>(null);
   const [approveUnit, setApproveUnit] = useState("");
@@ -152,6 +158,42 @@ export function UsersPage() {
       api(`/auth/mfa/admin-reset/${encodeURIComponent(username)}`, { method: "POST", body: "{}" }),
     onSuccess: () => {
       alert("MFA cleared — user must re-enroll on next login.");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: () =>
+      api(`/auth/admin/reset-password/${encodeURIComponent(resetPwUser!.username)}`, {
+        method: "POST",
+        body: JSON.stringify({
+          password: resetPwForm.password,
+          clearMfa: resetPwForm.clearMfa,
+          unlinkGoogle: resetPwForm.unlinkGoogle,
+        }),
+      }),
+    onSuccess: (res) => {
+      alert((res as { message?: string }).message || "Password reset.");
+      setResetPwUser(null);
+      setResetPwForm({ password: "", clearMfa: true, unlinkGoogle: true });
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+
+  const unlinkGoogleAdmin = useMutation({
+    mutationFn: (username: string) =>
+      api(`/auth/admin/unlink-google/${encodeURIComponent(username)}`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      alert("Google unlinked — user must link again after password login.");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+
+  const forceResetup = useMutation({
+    mutationFn: (username: string) =>
+      api(`/auth/admin/force-resetup/${encodeURIComponent(username)}`, { method: "POST", body: "{}" }),
+    onSuccess: () => {
+      alert("Forced re-setup — MFA + Google cleared.");
       qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
@@ -368,11 +410,43 @@ export function UsersPage() {
                         size="sm"
                         variant="secondary"
                         onClick={() => {
+                          setResetPwUser(u);
+                          setResetPwForm({ password: "", clearMfa: true, unlinkGoogle: true });
+                        }}
+                      >
+                        Reset password
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
                           if (!confirm(`Reset Authenticator MFA for ${u.username}? They must re-enroll.`)) return;
                           resetMfa.mutate(u.username);
                         }}
                       >
                         Reset MFA
+                      </Button>
+                      {u.googleEmail ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            if (!confirm(`Unlink Google (${u.googleEmail}) for ${u.username}?`)) return;
+                            unlinkGoogleAdmin.mutate(u.username);
+                          }}
+                        >
+                          Unlink Google
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (!confirm(`Force full security re-setup for ${u.username}? Clears MFA + Google.`)) return;
+                          forceResetup.mutate(u.username);
+                        }}
+                      >
+                        Force re-setup
                       </Button>
                       {u.status === "inactive" && u.employeeId && (
                         <Button size="sm" onClick={() => { setActivateUser(u); setActivateForm({ password: "", role: u.role || "agent" }); }}>Activate</Button>
@@ -464,6 +538,59 @@ export function UsersPage() {
             />
           </FormField>
         </FormGrid>
+      </Dialog>
+
+      <Dialog
+        open={!!resetPwUser}
+        onOpenChange={(o) => !o && setResetPwUser(null)}
+        title={`Reset password — ${resetPwUser?.username || ""}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetPwUser(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => resetPassword.mutate()}
+              disabled={resetPassword.isPending || resetPwForm.password.length < 8}
+            >
+              {resetPassword.isPending ? "Saving…" : "Reset password"}
+            </Button>
+          </>
+        }
+      >
+        <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: 1.4 }}>
+          Hand the temporary password to the user securely. By default Authenticator and Google are cleared so they
+          re-complete setup on next login (use when they lost their phone).
+        </p>
+        <FormGrid>
+          <FormField label="New temporary password (min 8)">
+            <input
+              type="password"
+              value={resetPwForm.password}
+              onChange={(e) => setResetPwForm((f) => ({ ...f, password: e.target.value }))}
+              autoComplete="new-password"
+            />
+          </FormField>
+          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={resetPwForm.clearMfa}
+              onChange={(e) => setResetPwForm((f) => ({ ...f, clearMfa: e.target.checked }))}
+            />
+            Clear MFA (re-enroll required)
+          </label>
+          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={resetPwForm.unlinkGoogle}
+              onChange={(e) => setResetPwForm((f) => ({ ...f, unlinkGoogle: e.target.checked }))}
+            />
+            Unlink Google (relink required)
+          </label>
+        </FormGrid>
+        {resetPassword.isError ? (
+          <p style={{ color: "var(--err)" }}>{(resetPassword.error as Error).message}</p>
+        ) : null}
       </Dialog>
 
       <Dialog open={!!creds} onOpenChange={(o) => !o && setCreds(null)} title="Registration approved" footer={<Button onClick={() => setCreds(null)}>Done</Button>}>

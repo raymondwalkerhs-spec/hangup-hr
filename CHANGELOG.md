@@ -2,6 +2,25 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [2.6.1] — 2026-09-14
+
+### Added
+- Employee **WFH agent** flag — excluded from Office PO **AvgAuto** headcount (office supplies). Example: Kate Riddle.
+- Auth OAuth loopback: `http://127.0.0.1:3847/auth/callback` + `/api/auth/oauth-poll` so Google completes when the system browser is used.
+- Office PO overdue notify loop + deny-all RLS on `office_po_*` tables.
+
+### Fixed
+- Auth: impersonation blocked from MFA/Google mutations; admin reset demotes sessions to `pending_setup`; registration no longer stamps claimed email on employee card; Google identity sync/unlink when Auth link drifts from `app_users`.
+- Loans: schedule regenerate/upsert preserves `loan_payments.schedule_line_id` (no delete-all).
+- Office PO: status badges + purchase history; theme-aware forms.
+- Training quarter: clear migration ordered after temporary `extra_days` fix (greenfield-safe).
+- SPA catch-all serves React Router auth routes (`/oauth-pending`, `/auth/callback`, etc.).
+
+### Changed
+- Login **Forgot password?** is self-service: username + Authenticator OTP + new password (no email, no admin lecture).
+- Users admin: Reset password / Unlink Google / Force re-setup (lost-phone recovery).
+- Setup completion: MFA **or** Google link satisfies `pending_setup` (either-or).
+
 ## [2.6.0] — 2026-09-13
 
 ### Added

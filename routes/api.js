@@ -785,6 +785,17 @@ router.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
+/** Public OAuth bridge — Electron window polls after external browser hits /auth/callback. */
+const oauthPendingStore = require("../lib/oauth-pending-store");
+router.post("/auth/oauth-begin", (req, res) => {
+  const mode = String(req.body?.mode || "cold");
+  oauthPendingStore.beginOauth(mode);
+  res.json({ ok: true, mode: mode === "link" ? "link" : "cold" });
+});
+router.get("/auth/oauth-poll", (_req, res) => {
+  res.json(oauthPendingStore.pollOauth());
+});
+
 /** Cold Google login (public) — only if google_email already linked; never auto-creates users. */
 router.post("/auth/google/cold-start", async (req, res) => {
   try {
@@ -798,6 +809,7 @@ router.post("/auth/google/cold-start", async (req, res) => {
     if (rateLimit.limited) {
       return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
     }
+    oauthPendingStore.beginOauth("cold");
     const oauth = await authBridge.getGoogleAuthUrlViaClient({});
     if (!oauth.url) {
       return res.status(500).json({ error: "Could not build Google OAuth URL", code: "oauth_url_missing" });
@@ -807,6 +819,43 @@ router.post("/auth/google/cold-start", async (req, res) => {
     const mapped = authBridge.mapAuthError(e);
     authDebugError("google.cold-start", e);
     res.status(400).json({ error: mapped.message, code: mapped.code, retryable: mapped.retryable });
+  }
+});
+
+/** Forgot password (public): username + Authenticator OTP → new password. No email. */
+router.post("/auth/forgot-password", async (req, res) => {
+  try {
+    if (!authBridge.isAuthBridgeEnabled()) {
+      return res.status(400).json({
+        error: "Password reset with Authenticator is unavailable right now. Contact HR.",
+        code: "auth_bridge_off",
+      });
+    }
+    const rateLimit = rateLimiter.checkLogin(req);
+    if (rateLimit.limited) {
+      return res.status(429).json({ error: "Too many attempts. Try again later.", limited: true });
+    }
+    await requireOnline();
+    const username = String(req.body?.username || "").trim();
+    const totpCode = String(req.body?.totpCode || req.body?.code || "").trim();
+    const newPassword = String(req.body?.newPassword || "").trim();
+    if (!username || !totpCode || !newPassword) {
+      return res.status(400).json({
+        error: "Username, Authenticator code, and new password are required",
+        code: "missing_fields",
+      });
+    }
+    const result = await authBridge.resetPasswordWithTotp(username, totpCode, newPassword);
+    authDebug("forgot-password.ok", { username: result.username });
+    res.json({ ok: true });
+  } catch (e) {
+    authDebugError("forgot-password", e, { username: req.body?.username });
+    const code = e.code || authBridge.mapAuthError(e).code;
+    const message =
+      e.code === "mfa_required" || e.code === "account_blocked" || e.code === "invalid_reset"
+        ? e.message
+        : authBridge.mapAuthError(e).message || e.message;
+    res.status(400).json({ error: message, code });
   }
 });
 
@@ -1051,8 +1100,11 @@ router.get("/status", async (req, res) => {
   let authSecurity = null;
   if (authBridge.isAuthBridgeEnabled()) {
     try {
-      const row = await authBridge.fetchAppUserAuthRow(req.username);
+      // While impersonating, security gates belong to the real actor — never the target.
+      const securityUsername = req.realUsername || req.username;
+      const row = await authBridge.fetchAppUserAuthRow(securityUsername);
       const needs = authBridge.setupNeeds(row);
+      const impersonating = Boolean(req.impersonatingAs);
       authSecurity = {
         authBackend: authBridge.getAuthBackendMode(),
         sessionKind: req.appSession?.sessionKind || "full",
@@ -1061,9 +1113,12 @@ router.get("/status", async (req, res) => {
         googleLinked: Boolean(row?.google_linked_at && row?.google_email),
         googleEmail: row?.google_email || null,
         emailClaimed: row?.email_claimed || row?.email || null,
-        needsMfaEnroll: needs.needsMfaEnroll,
-        needsGoogleLink: needs.needsGoogleLink,
-        needsSetup: needs.needsSetup || req.appSession?.sessionKind === "pending_setup",
+        needsMfaEnroll: impersonating ? false : needs.needsMfaEnroll,
+        needsGoogleLink: impersonating ? false : needs.needsGoogleLink,
+        needsSetup: impersonating
+          ? false
+          : needs.needsSetup || req.appSession?.sessionKind === "pending_setup",
+        impersonationBlocksSecurity: impersonating,
       };
     } catch {
       authSecurity = { authBackend: authBridge.getAuthBackendMode(), needsSetup: false };

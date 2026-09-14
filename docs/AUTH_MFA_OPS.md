@@ -12,21 +12,34 @@ Electron redirect: `hangup-portal://auth/callback`
 | Daily password login | **No** |
 | Daily Google login (after link) | **No** |
 | MFA enroll (`/setup-2fa`) | **Yes** |
-| Change password | **Yes** (when enrolled) |
+| Forgot password (login screen) | **Yes** — username + TOTP → new password |
+| Change password (Settings → Account security) | **Yes** (when enrolled) |
 | Unlink Google | **Yes** |
 | Registration email | Claimed only (`email_claimed`) |
 | Confirmed Gmail | After OAuth / `linkIdentity` → `google_email` + employee card |
 | Cold Google login | Only if `google_email` already linked — **never** auto-create users |
+| Email magic-link / SMTP reset | **Never** (out of scope) |
+
+## Password recovery
+
+- **Self-service (users):** Login → **Forgot password?** → username + Authenticator code + new password. No email; do **not** show admin menu paths on that screen.
+- **Admin (lost phone / no MFA):** **Users → Reset password** (temp password; default clears MFA + unlinks Google so they re-enroll).
+- **Signed-in change:** **Settings → Account security → Change password** (current password + TOTP).
 
 ## Google Cloud Console (ops)
 
-1. Create OAuth 2.0 Client (Desktop or Web as required by Supabase Google provider docs).
+1. Create OAuth 2.0 Client (**Web application** preferred for Supabase; Desktop “installed” often fails redirects).
 2. Authorized redirect URIs must include Supabase callback, e.g.  
    `https://ugntjwqimgosuiodsnnk.supabase.co/auth/v1/callback`
 3. Add custom scheme allowlist where supported: `hangup-portal://auth/callback` (Electron deep link).
 4. Copy Client ID + Secret into **Supabase Dashboard → Authentication → Providers → Google**.
-5. Supabase Auth → URL configuration: add `hangup-portal://auth/callback` to Redirect URLs.
+5. Supabase Auth → URL configuration: add redirect URLs:
+   - `http://127.0.0.1:3847/auth/callback` (primary — external browser → local app poll)
+   - `http://localhost:3847/auth/callback`
+   - `hangup-portal://auth/callback` (optional deep link)
 6. Enable Google provider; leave email confirmation off for synthetic `@users.hangup.local` identities.
+7. **Enable Manual linking** (Authentication settings) — required for `linkIdentity()` Google link.
+8. Hangup `.env`: `AUTH_BACKEND=dual` and `AUTH_GOOGLE_REDIRECT_URI=http://127.0.0.1:3847/auth/callback`. Never commit secrets.
 
 ## Supabase
 
@@ -47,15 +60,16 @@ Electron redirect: `hangup-portal://auth/callback`
 1. **Legacy login** — `AUTH_BACKEND` unset/legacy → username/password works; no `/setup-2fa` gate.
 2. **Dual first login** — password OK → `pending_setup` → `/setup-2fa` → QR + TOTP → `/link-google` → browser OAuth → full session.
 3. **Login has no OTP** — after enroll, daily login is password or Google only.
-4. **Cold Google linked** — Sign in with Google succeeds for matching `google_email`.
-5. **Cold Google unknown** — rejected `google_not_linked`; no user created.
-6. **Change password** — requires TOTP when enrolled; syncs Auth password.
-7. **Unlink Google** — requires TOTP; session returns to `pending_setup` / link gate.
-8. **Admin Reset MFA** — Users page → Reset MFA → user must re-enroll.
-9. **Electron deep link** — `hangup-portal://auth/callback?code=…` focuses second-instance and opens `/oauth-pending`.
-10. **20s hang** — setup/OAuth pages show Retry (no blank hang).
-11. **Registration email** — stored as `email_claimed`; employee email overwritten only after Google link.
-12. **Redirect mismatch** — error map returns `redirect_uri_mismatch` with ops hint.
+4. **Forgot password** — username + TOTP → new password → sign in (no email copy on screen).
+5. **Cold Google linked** — Sign in with Google succeeds for matching `google_email`.
+6. **Cold Google unknown** — rejected `google_not_linked`; no user created.
+7. **Change password** — requires TOTP when enrolled; syncs Auth password.
+8. **Unlink Google** — requires TOTP; session returns to `pending_setup` / link gate.
+9. **Admin Reset MFA** — Users page → Reset MFA → user must re-enroll.
+10. **Electron deep link** — `hangup-portal://auth/callback?code=…` focuses second-instance and opens `/oauth-pending`.
+11. **20s hang** — setup/OAuth pages show Retry (no blank hang).
+12. **Registration email** — stored as `email_claimed`; employee email overwritten only after Google link.
+13. **Redirect mismatch** — error map returns `redirect_uri_mismatch` with ops hint.
 
 ## Remaining packaging / ops notes
 
