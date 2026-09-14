@@ -9,7 +9,7 @@
 
 ### Checklist
 - [x] Bump `package.json` to **2.7.0**; docs
-- [ ] Release CI + Latest + `publish-app-version.js` + web installer
+- [x] Release CI + Latest + `publish-app-version.js` + web installer
 
 ---
 
