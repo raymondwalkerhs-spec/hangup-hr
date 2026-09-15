@@ -1,3 +1,13 @@
+## v2.7.1 release checklist
+
+**Shipped 2026-09-15:** MFA/Google bridge defaults to **dual** (no per-PC `AUTH_BACKEND`). Patch from 2.7.0 via Supabase zip + `is_current`.
+
+### Checklist
+- [x] Bump `package.json` to **2.7.1**; docs
+- [ ] `npm run push:update` + confirm Update now
+
+---
+
 ## v2.7.0 release checklist
 
 **Shipped 2026-09-14:** Breaks take system + premium critters (Gotham bats, Spiderman webs) + dark CSS readability. Replaces **2.6.2** as GitHub Latest + Supabase `is_current`.

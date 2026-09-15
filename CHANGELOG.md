@@ -2,6 +2,11 @@
 
 All notable changes to the Hangup Portal desktop app.
 
+## [2.7.1] — 2026-09-15
+
+### Fixed
+- **MFA / Google bridge on by default** — no per-PC `AUTH_BACKEND=.env` required. Fleet default is `dual`; optional `app_config.authBackend` remote toggle; set `AUTH_BACKEND=legacy` only for emergency rollback.
+
 ## [2.7.0] — 2026-09-14
 
 ### Added

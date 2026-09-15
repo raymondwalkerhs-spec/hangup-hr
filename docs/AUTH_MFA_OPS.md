@@ -1,6 +1,10 @@
 # Auth MFA + Google — ops checklist (Hangup Portal)
 
-Feature flag: `AUTH_BACKEND=legacy` (default, bcrypt only) or `AUTH_BACKEND=dual` (bcrypt login + Auth sync + MFA/Google gates).
+Feature flag: MFA/Google bridge defaults to **dual** (no per-PC `.env` required).
+
+Optional controls:
+- Supabase `app_config.authBackend` = `"dual"` | `"legacy"` (synced to all PCs)
+- Local emergency only: `AUTH_BACKEND=legacy` in Hangup `.env`
 
 OIDC project host: `ugntjwqimgosuiodsnnk.supabase.co`  
 Electron redirect: `hangup-portal://auth/callback`
@@ -49,11 +53,11 @@ Electron redirect: `hangup-portal://auth/callback`
 
 ## Dual-run cutover
 
-1. Keep `AUTH_BACKEND=legacy` in production until migration + Google client are ready.
-2. Staging: set `AUTH_BACKEND=dual`.
+1. Fleet default is **dual** from 2.7.1+ (no per-PC `.env`).
+2. Seed/confirm `app_config.authBackend` = `"dual"` (migration `20260915_app_config_auth_backend_dual.sql`).
 3. On each password login: bcrypt still validates; bridge syncs password into Auth (`auth_user_id`, `synthetic_email`, `auth_password_synced_at`).
-4. Soft session `pending_setup` until MFA enrolled **and** Google linked.
-5. Rollback: set `AUTH_BACKEND=legacy` — bcrypt path unchanged; setup gates off.
+4. Soft session `pending_setup` until MFA enrolled **or** Google linked (product: either completes setup).
+5. Rollback: set `app_config.authBackend` to `"legacy"` (or local `AUTH_BACKEND=legacy`) — bcrypt path unchanged; setup gates off.
 
 ## QA scenarios
 

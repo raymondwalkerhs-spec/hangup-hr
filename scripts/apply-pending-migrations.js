@@ -238,6 +238,8 @@ async function probeState(db) {
   const breakTakes = await db.from("break_takes").select("id").limit(1);
   const breakCompany = await db.from("break_schedules").select("company").limit(1);
   state.break_takes_v2 = !breakTakes.error && !breakCompany.error;
+  const authBackendCfg = await db.from("app_config").select("key, value").eq("key", "authBackend").limit(1);
+  state.auth_backend_config = !authBackendCfg.error && Array.isArray(authBackendCfg.data) && authBackendCfg.data.length > 0;
   return state;
 }
 
@@ -610,6 +612,9 @@ function filesToApply(state) {
   }
   if (!state.break_takes_v2) {
     files.push("20260914_break_takes_and_schedule_v2.sql");
+  }
+  if (!state.auth_backend_config) {
+    files.push("20260915_app_config_auth_backend_dual.sql");
   }
   return files;
 }
