@@ -4,7 +4,7 @@
 
 ### Checklist
 - [x] Bump `package.json` to **2.7.1**; docs
-- [ ] `npm run push:update` + confirm Update now
+- [x] `npm run push:update` + confirm Update now
 
 ---
 
